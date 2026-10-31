@@ -75,6 +75,16 @@ enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3, 
  * control byte; hyphens: manual (default; auto reads as manual) or none. */
 #define WE_SHY '\x1f'
 enum { WE_HYPHENS_MANUAL = 0, WE_HYPHENS_NONE = 1 };
+/* Lot 64: one background-image layer after the first (see we_node_t). */
+#define WE_BG_LAYERS 4
+#define WE_COLUMNS_MAX 8    /* lot 64: multi-column count cap */
+typedef struct {
+    uint16_t off, len;
+    uint8_t repeat, size_kind, pos_pct, space;
+    int16_t pos[2], size[2];
+} we_bg_layer_t;
+enum { WE_BGR_PLAIN = 0, WE_BGR_SPACE = 1, WE_BGR_ROUND = 2 };
+enum { WE_WM_HORIZONTAL = 0, WE_WM_VERTICAL_RL = 1, WE_WM_VERTICAL_LR = 2 };
 enum { WE_BGS_AUTO = 0, WE_BGS_CONTAIN = 1, WE_BGS_COVER = 2, WE_BGS_EXPLICIT = 3 };
 enum { WE_INSET_LEFT = 1, WE_INSET_TOP = 2, WE_INSET_RIGHT = 4, WE_INSET_BOTTOM = 8 };
 enum { WE_AUTO_LEFT = 1, WE_AUTO_RIGHT = 2, WE_AUTO_TOP = 4, WE_AUTO_BOTTOM = 8 };
@@ -175,6 +185,18 @@ typedef struct {
     uint8_t grid_cols;         /* 1..8 when display:grid, else 0 */
     uint8_t flex_wrap, float_side, grid_rows, relative;
     uint8_t list_style;
+    uint16_t lsi_off, lsi_len;
+    uint8_t own_edges;          /* lot 64: per-side borders painted on a box outside a collapsed table */
+    /* Lot 64: multi-column layout: column-count (0 auto), column-width (-1
+     * auto), column-fill auto (1) or balance, column-rule width (0: none),
+     * style (WE_BS_*) and colour (set: 1; else currentColor). The gap is
+     * col_gap (normal: 8 px, one glyph). */
+    uint8_t col_count, col_fill_auto, rule_w, rule_style, rule_color_set;
+    int16_t col_width;
+    uint32_t rule_color;
+    /* Lot 64: column-span all (1) on a block child of a multi-column box,
+     * and the forced column breaks: bit 0 break-before, bit 1 break-after. */
+    uint8_t col_span_all, col_break;
     uint8_t justify_content, align_items, align_self, align_content;
     uint8_t justify_items, justify_self;
     uint8_t width_kind, basis_content, border_box;
@@ -220,6 +242,12 @@ typedef struct {
     /* Lot 63: inherited tab-size in px (0..255, default 8 spaces). */
     uint8_t tab_px;
     uint8_t hyphens;           /* lot 63: WE_HYPHENS_*, inherited */
+    /* Lot 64: inherited writing-mode (WE_WM_*), direction (1 rtl) and
+     * text-orientation (1 upright; mixed paints upright too). */
+    uint8_t wmode, dir_rtl, upright;
+    /* Lot 64: text-align / text-align-last given as start or end (bits 0-1
+     * and 2-3: 1 start, 2 end), resolved against direction after the cascade. */
+    uint8_t align_logical;
     int16_t border_spacing;    /* horizontal; separate borders; collapse forces 0 */
     int16_t border_spacing_y;  /* vertical; one value sets both */
     int16_t line_height;       /* 0 uses WE_LINE_H; glyphs stay at the top */
@@ -275,6 +303,11 @@ typedef struct {
     uint16_t bgi_off, bgi_len;
     uint8_t bgi_repeat, bgi_size_kind, bgi_pos_pct;
     int16_t bgi_pos[2], bgi_size[2];
+    /* Lot 64: repeat style per axis (bits 0-1 x, 2-3 y: WE_BGR_*), and the
+     * layers listed after the first one (painted under it, the last one
+     * lowest): bgi_layers of them in bgi_more, same fields. */
+    uint8_t bgi_space, bgi_layers;
+    we_bg_layer_t bgi_more[WE_BG_LAYERS - 1];
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
@@ -289,6 +322,7 @@ typedef struct {
     /* Lot 62: ol start / li value (list_value_set), ol reversed, ol type. */
     int16_t list_value;
     uint8_t list_value_set, list_reversed, list_type_attr;
+    uint8_t dir_attr;               /* lot 64: dir= hint, 0 none, 1 ltr, 2 rtl */
     /* Lot 62: border radii, corners top-left, top-right, bottom-right,
      * bottom-left; horizontal then vertical, px or percent of the border
      * box width / height (rad_pct bit c for x, bit 4 + c for y). */

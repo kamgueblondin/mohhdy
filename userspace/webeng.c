@@ -42,6 +42,7 @@ static void w_itoa(int v, char* out) {
     out[j] = 0;
 }
 
+static int value_is(const char *v, int len, const char *s);
 static void diag(we_doc_t* d, const char* msg, int pos) {
     char num[12];
     int n;
@@ -331,6 +332,13 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                         else { n->list_value = (int16_t)number; n->list_value_set = 1; }
                     }
                     else if (w_eq(an, "reversed") && w_eq(name, "ol")) n->list_reversed = 1;
+                    else if (w_eq(an, "dir")) {
+                        /* lot 64: no bidi, so auto finds no strong rtl text */
+                        if (value_is(av, vk, "rtl")) n->dir_attr = 2;
+                        else if (value_is(av, vk, "ltr") || value_is(av, vk, "auto")) n->dir_attr = 1;
+                        else diag(d, "dir attribute refused", idx);
+                        if (value_is(av, vk, "auto")) diag(d, "dir auto taken as ltr", idx);
+                    }
                     else if (w_eq(an, "type") && (w_eq(name, "ol") || w_eq(name, "ul"))) {
                         static const char types[] = "1aAiI";
                         static const uint8_t styles[] = { WE_LIST_DECIMAL, WE_LIST_LOWER_ALPHA, WE_LIST_UPPER_ALPHA,
@@ -727,7 +735,6 @@ static int match_rule(we_doc_t* d, int idx, const we_rule_t* r) {
  * pass resolves it against the backdrop and clears it, since the kernel
  * painter masks the byte. */
 #define WE_ALPHA_SHIFT 24
-static int value_is(const char *v, int len, const char *s);
 static int color_alpha_of(uint32_t c);
 static uint32_t with_alpha(uint32_t rgb, int alpha) {
     if (alpha < 0) alpha = 0;
@@ -2028,11 +2035,13 @@ static int radial_shape(we_node_t *n, const char *a, int l, int *shape) {
     return any;
 }
 
-/* text-align keywords, left-to-right; other values give fallback */
-static int align_keyword(const char *v, int len, int fallback) {
-    if (value_is(v, len, "left") || value_is(v, len, "start")) return WE_ALIGN_LEFT;
+/* text-align keywords; other values give fallback. Lot 64: start and end
+ * also set *logical (1, 2) for the resolution against direction. */
+static int align_keyword(const char *v, int len, int fallback, int *logical) {
+    *logical = value_is(v, len, "start") ? 1 : value_is(v, len, "end") ? 2 : 0;
+    if (value_is(v, len, "left") || *logical == 1) return WE_ALIGN_LEFT;
     if (value_is(v, len, "center")) return WE_ALIGN_CENTER;
-    if (value_is(v, len, "right") || value_is(v, len, "end")) return WE_ALIGN_RIGHT;
+    if (value_is(v, len, "right") || *logical == 2) return WE_ALIGN_RIGHT;
     if (value_is(v, len, "justify")) return WE_ALIGN_JUSTIFY;
     return fallback;
 }
@@ -2077,7 +2086,6 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
         int l = length[first + k], t[4], tl[4], c = tokens(a, l, t, tl), tenths;
         pos[k] = -1;
         if (c < 1 || c > 2 || parse_color(a + t[0], tl[0], &color[k])) return -1;
-        if (radial && (color[k] >> WE_ALPHA_SHIFT)) return -1;   /* rings are painted over each other */
         if (c == 2) {
             if (spacing_percent(a + t[1], tl[1], 1, &tenths) || tenths > 1000) return -1;
             pos[k] = tenths < 0 ? 0 : tenths * 10;
@@ -2138,21 +2146,64 @@ static int margin_auto_box(we_node_t *n, const char *v, int vl) {
     return 1;
 }
 
-static const char *logical_property(const char *prop) {
-    static const char *const logical[] = {
-        "inline-size", "block-size", "min-inline-size", "max-inline-size", "min-block-size", "max-block-size",
-        "margin-inline-start", "margin-inline-end", "margin-block-start", "margin-block-end",
-        "padding-inline-start", "padding-inline-end", "padding-block-start", "padding-block-end",
-        "inset-inline-start", "inset-inline-end", "inset-block-start", "inset-block-end", "word-wrap"
-    };
-    static const char *const physical[] = {
-        "width", "height", "min-width", "max-width", "min-height", "max-height",
-        "margin-left", "margin-right", "margin-top", "margin-bottom",
-        "padding-left", "padding-right", "padding-top", "padding-bottom",
-        "left", "right", "top", "bottom", "overflow-wrap"
-    };
-    int i;
-    for (i = 0; i < 19; i++) if (w_eq(prop, logical[i])) return physical[i];
+/* Lot 64: the physical side (0 top, 1 right, 2 bottom, 3 left) of a
+ * logical edge under the element's writing-mode and direction. */
+static int logical_side(const we_node_t *n, int block, int end) {
+    int side;
+    if (block) side = n->wmode == WE_WM_VERTICAL_RL ? 1 : n->wmode == WE_WM_VERTICAL_LR ? 3 : 0;
+    else if (n->wmode != WE_WM_HORIZONTAL) side = n->dir_rtl ? 2 : 0;
+    else side = n->dir_rtl ? 1 : 3;
+    return end ? (side + 2) & 3 : side;
+}
+
+/* Lot 64: the physical corner radius property between a block side and an
+ * inline side (perpendicular sides 0 top, 1 right, 2 bottom, 3 left). */
+static const char *corner_property(int block, int inline_side) {
+    int top = block == 0 || inline_side == 0, left = block == 3 || inline_side == 3;
+    return top ? (left ? "border-top-left-radius" : "border-top-right-radius") :
+                 (left ? "border-bottom-left-radius" : "border-bottom-right-radius");
+}
+
+static const char *logical_property(const we_node_t *n, const char *prop) {
+    static const char *const sized[] = {"inline-size", "block-size", "min-inline-size", "max-inline-size",
+                                        "min-block-size", "max-block-size"};
+    static const char *const width_height[] = {"width", "height", "min-width", "max-width", "min-height", "max-height"};
+    static const char *const prefixes[] = {"margin-", "padding-", "inset-"};
+    static const char *const sides[3][4] = {
+        {"margin-top", "margin-right", "margin-bottom", "margin-left"},
+        {"padding-top", "padding-right", "padding-bottom", "padding-left"},
+        {"top", "right", "bottom", "left"}};
+    static const char *const edges[] = {"inline-start", "inline-end", "block-start", "block-end"};
+    static const uint8_t swapped[6] = {1, 0, 4, 5, 2, 3};
+    /* lot 64: logical borders and corner radii */
+    static const char *const edge_props[4][4] = {
+        {"border-top", "border-top-width", "border-top-style", "border-top-color"},
+        {"border-right", "border-right-width", "border-right-style", "border-right-color"},
+        {"border-bottom", "border-bottom-width", "border-bottom-style", "border-bottom-color"},
+        {"border-left", "border-left-width", "border-left-style", "border-left-color"}};
+    static const char *const suffixes[4] = {"", "-width", "-style", "-color"};
+    static const char *const corners[] = {"border-start-start-radius", "border-start-end-radius",
+                                          "border-end-start-radius", "border-end-end-radius"};
+    int i, k, vertical = n->wmode != WE_WM_HORIZONTAL;
+    if (w_eq(prop, "word-wrap")) return "overflow-wrap";
+    if (w_ieq_n(prop, 7, "border-")) {
+        for (k = 0; k < 4; k++) {
+            int len = 7 + w_len(edges[k]);
+            if (!w_ieq_n(prop + 7, w_len(edges[k]), edges[k])) continue;
+            for (i = 0; i < 4; i++)
+                if (w_eq(prop + len, suffixes[i])) return edge_props[logical_side(n, k >= 2, k & 1)][i];
+        }
+        for (k = 0; k < 4; k++)
+            if (w_eq(prop, corners[k])) return corner_property(logical_side(n, 1, k >> 1), logical_side(n, 0, k & 1));
+    }
+    for (i = 0; i < 6; i++)
+        if (w_eq(prop, sized[i])) return width_height[vertical ? swapped[i] : i];
+    for (i = 0; i < 3; i++) {
+        int len = w_len(prefixes[i]);
+        if (!w_ieq_n(prop, len, prefixes[i])) continue;
+        for (k = 0; k < 4; k++)
+            if (w_eq(prop + len, edges[k])) return sides[i][logical_side(n, k >= 2, k & 1)];
+    }
     return prop;
 }
 
@@ -2202,7 +2253,7 @@ static int logical_pair(we_node_t *n, const char *prop, const char *v, int len) 
     int margin = w_eq(prop, "margin-inline") || w_eq(prop, "margin-block");
     int block = w_eq(prop, "margin-block") || w_eq(prop, "padding-block");
     int starts[4], lengths[4], count = tokens(v, len, starts, lengths), k, values[2], auto_bits[2] = {0, 0}, pcts[2];
-    int sides[2] = {block ? 0 : 3, block ? 2 : 1};
+    int sides[2] = {logical_side(n, block, 0), logical_side(n, block, 1)};
     static const uint8_t flags[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
     if (count < 1 || count > 2) return -1;
     for (k = 0; k < count; k++) {
@@ -2325,8 +2376,9 @@ static int inset_declaration(we_node_t *n, const char *prop, const char *v, int 
         slots[2] = WE_LEN_BOTTOM; slots[3] = WE_LEN_LEFT;
     } else {
         if (count > 2) return -1;
-        slots[0] = w_eq(prop, "inset-inline") ? WE_LEN_LEFT : WE_LEN_TOP;
-        slots[1] = w_eq(prop, "inset-inline") ? WE_LEN_RIGHT : WE_LEN_BOTTOM;
+        static const uint8_t side_slot[4] = {WE_LEN_TOP, WE_LEN_RIGHT, WE_LEN_BOTTOM, WE_LEN_LEFT};
+        slots[0] = side_slot[logical_side(n, w_eq(prop, "inset-block"), 0)];
+        slots[1] = side_slot[logical_side(n, w_eq(prop, "inset-block"), 1)];
     }
     w_zero(expression, sizeof(expression));
     for (k = 0; k < count; k++) {
@@ -2435,6 +2487,66 @@ static int border_list_decl(we_node_t *n, int kind, const char *v, int vl) {
         } else if (kind == 0) n->edge_style[side] = (uint8_t)vals[k];
         else if (kind == 1) n->edge_w[side] = (int8_t)(vals[k] > 8 ? 8 : vals[k]);
         else { n->edge_color[side] = cols[k]; n->edge_color_set = (uint8_t)(n->edge_color_set | (1u << side)); }
+    }
+    return 0;
+}
+
+/* Lot 64: border-<side>-width / -style / -color: side * 4 + part (1 width,
+ * 2 style, 3 colour), -1 for other names. */
+static int edge_longhand(const char *prop) {
+    static const char *const sides[4] = {"top", "right", "bottom", "left"};
+    static const char *const parts[4] = {"", "width", "style", "color"};
+    int side, part, len;
+    if (!w_ieq_n(prop, 7, "border-")) return -1;
+    for (side = 0; side < 4; side++) {
+        len = w_len(sides[side]);
+        if (!w_ieq_n(prop + 7, len, sides[side]) || prop[7 + len] != '-') continue;
+        for (part = 1; part < 4; part++) if (w_eq(prop + 8 + len, parts[part])) return side * 4 + part;
+    }
+    return -1;
+}
+
+static int border_edge_part(we_node_t *n, int side, int part, const char *v, int vl) {
+    int px, code;
+    uint32_t col;
+    if (part == 1) {
+        if (parse_len(v, vl, &px, 0) || px < 0 || px > 64) return -1;
+        n->edge_w[side] = (int8_t)(px > 8 ? 8 : px);
+    } else if (part == 2) {
+        if (!(code = border_style_code(v, vl))) return -1;
+        n->edge_style[side] = (uint8_t)code;
+    } else {
+        if (parse_color(v, vl, &col)) return -1;
+        n->edge_color[side] = col;
+        n->edge_color_set = (uint8_t)(n->edge_color_set | (1u << side));
+    }
+    return 0;
+}
+
+/* Lot 64: border-inline / border-block (one edge value for both sides) and
+ * their -width / -style / -color (one value, or start and end). */
+static int logical_side(const we_node_t *n, int block, int end);
+static int border_logical_pair(we_node_t *n, const char *prop, const char *v, int vl) {
+    int block = prop[7] == 'b', len = block ? 12 : 13, part, a[4], l[4], c, k, side[2];
+    static const char *const parts[4] = {"", "-width", "-style", "-color"};
+    for (part = 0; part < 4 && !w_eq(prop + len, parts[part]); part++) {}
+    if (part == 4) return -1;
+    side[0] = logical_side(n, block, 0); side[1] = logical_side(n, block, 1);
+    if (part == 0) {
+        static we_node_t probe;
+        probe = *n;                          /* both sides or neither */
+        if (border_edge_decl(&probe, side[0], v, vl)) return -1;
+        (void)border_edge_decl(n, side[0], v, vl);
+        (void)border_edge_decl(n, side[1], v, vl);
+        return 0;
+    }
+    c = tokens(v, vl, a, l);
+    if (c < 1 || c > 2 || tokens_more(v, vl, a, l, c)) return -1;
+    {
+        static we_node_t probe;
+        probe = *n;
+        for (k = 0; k < 2; k++) if (border_edge_part(&probe, side[k], part, v + a[k % c], l[k % c])) return -1;
+        *n = probe;
     }
     return 0;
 }
@@ -2644,31 +2756,55 @@ static int position_pair(const char *v, int len, int16_t out[2], uint8_t *pct_bi
 /* The url stays in the pool where the declaration already lives; the
  * path rules are those of <img src> and are checked when the box paints.
  * An <img> keeps its own source and refuses a background image. */
-static int background_url(we_doc_t *d, we_node_t *n, const char *v, int len) {
+/* lot 64: the url() span in the pool, shared by list-style-image */
+static int url_span(const we_doc_t *d, const char *v, int len, uint16_t *off, uint16_t *ulen) {
     int a = 4, b = len - 1;
-    if (w_eq(n->tag, "img") || len < 6 || !w_ieq_n(v, 4, "url(") || v[len - 1] != ')') return -1;
+    if (len < 6 || !w_ieq_n(v, 4, "url(") || v[len - 1] != ')') return -1;
     while (a < b && w_space(v[a])) a++;
     while (b > a && w_space(v[b - 1])) b--;
     if (b - a >= 2 && (v[a] == '"' || v[a] == '\'') && v[b - 1] == v[a]) { a++; b--; }
     if (b <= a || v < d->pool || v + len > d->pool + d->pool_used) return -1;
-    n->bgi_off = (uint16_t)(v + a - d->pool);
-    n->bgi_len = (uint16_t)(b - a);
+    *off = (uint16_t)(v + a - d->pool);
+    *ulen = (uint16_t)(b - a);
     return 0;
 }
 
-/* repeat, no-repeat, repeat-x, repeat-y, or one repeat/no-repeat per axis. */
+static int background_url(we_doc_t *d, we_node_t *n, const char *v, int len) {
+    if (w_eq(n->tag, "img")) return -1;
+    return url_span(d, v, len, &n->bgi_off, &n->bgi_len);
+}
+
+/* repeat, no-repeat, repeat-x, repeat-y, or one repeat/no-repeat per axis.
+ * Lot 64: space and round repeat too, with their style in bgi_space. */
 static int background_repeat(we_node_t *n, const char *v, int len) {
-    int a[4], l[4], c = tokens(v, len, a, l), k, bits = 0;
+    int a[4], l[4], c = tokens(v, len, a, l), k, bits = 0, space = 0;
     if (c == 1 && value_is(v, len, "repeat-x")) bits = 1;
     else if (c == 1 && value_is(v, len, "repeat-y")) bits = 2;
     else if (c == 1 || c == 2) {
         for (k = 0; k < c; k++) {
-            if (value_is(v + a[k], l[k], "repeat")) bits |= c == 1 ? 3 : 1 << k;
+            int axes = c == 1 ? 3 : 1 << k, style = value_is(v + a[k], l[k], "space") ? WE_BGR_SPACE :
+                       value_is(v + a[k], l[k], "round") ? WE_BGR_ROUND : WE_BGR_PLAIN;
+            if (style || value_is(v + a[k], l[k], "repeat")) bits |= axes;
             else if (!value_is(v + a[k], l[k], "no-repeat")) return -1;
+            if (axes & 1) space |= style;
+            if (axes & 2) space |= style << 2;
         }
     } else return -1;
     n->bgi_repeat = (uint8_t)bits;
+    n->bgi_space = (uint8_t)space;
     return 0;
+}
+
+/* Lot 64: exchanges the first background layer with layer k (k >= 1), so
+ * that the one-layer parsers and painter serve every layer. */
+static void bgi_layer_swap(we_node_t *n, int k) {
+    we_bg_layer_t *l = &n->bgi_more[k - 1], t = *l;
+    l->off = n->bgi_off; l->len = n->bgi_len; l->repeat = n->bgi_repeat; l->size_kind = n->bgi_size_kind;
+    l->pos_pct = n->bgi_pos_pct; l->space = n->bgi_space;
+    l->pos[0] = n->bgi_pos[0]; l->pos[1] = n->bgi_pos[1]; l->size[0] = n->bgi_size[0]; l->size[1] = n->bgi_size[1];
+    n->bgi_off = t.off; n->bgi_len = t.len; n->bgi_repeat = t.repeat; n->bgi_size_kind = t.size_kind;
+    n->bgi_pos_pct = t.pos_pct; n->bgi_space = t.space;
+    n->bgi_pos[0] = t.pos[0]; n->bgi_pos[1] = t.pos[1]; n->bgi_size[0] = t.size[0]; n->bgi_size[1] = t.size[1];
 }
 
 /* auto, contain, cover, or one or two lengths/percentages (auto allowed). */
@@ -2686,7 +2822,227 @@ static int background_size(we_node_t *n, const char *v, int len) {
     }
     n->bgi_size_kind = size[0] < 0 && size[1] < 0 ? WE_BGS_AUTO : WE_BGS_EXPLICIT;
     n->bgi_size[0] = size[0]; n->bgi_size[1] = size[1];
-    n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 3) | bits);
+    n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 0x33) | bits);
+    return 0;
+}
+
+/* Lot 64: one axis of a position: a keyword, a length or percentage, or
+ * an edge keyword with its offset (right 10px). Offsets from the far edge
+ * set *far for a length and become 100 - p for a percentage. want is the
+ * axis (0 x, 1 y); a centre or a bare length fits either. */
+static int axis_offset(const char *v, int len, int want, int16_t *value, int *pct, int *far) {
+    int a[4], l[4], c = tokens(v, len, a, l), axis, oaxis, opct;
+    int16_t off;
+    *far = 0;
+    if (c == 1) {
+        if (origin_value(v, len, &axis, value, pct)) return -1;
+        return axis >= 0 && axis != want ? -1 : 0;
+    }
+    if (c != 2 || origin_value(v + a[0], l[0], &axis, value, pct) || axis != want ||
+        origin_value(v + a[1], l[1], &oaxis, &off, &opct) || oaxis != -2) return -1;
+    if (*value == 0) { *value = off; *pct = opct; return 0; }
+    if (opct) { *value = (int16_t)(100 - off); *pct = 1; return 0; }
+    *value = off; *pct = 0; *far = 1;
+    return 0;
+}
+
+/* three or four values: two groups of an edge keyword, each with an
+ * optional offset; centre takes none and the axes are told by the keywords */
+static int position_edges(const char *v, int len, int16_t out[2], uint8_t *bits) {
+    int a[4], l[4], c = tokens(v, len, a, l), k = 0, g = 0, start[2], end[2], axis[2], dummy, pct, far, ax;
+    int16_t value;
+    if (c < 3 || c > 4) return -1;
+    for (k = a[c - 1] + l[c - 1]; k < len; k++) if (!w_space(v[k])) return -1;   /* tokens() stops at four */
+    k = 0;
+    while (k < c) {
+        if (g == 2 || origin_value(v + a[k], l[k], &axis[g], &value, &pct) || axis[g] == -2) return -1;
+        start[g] = k++;
+        if (k < c && !origin_value(v + a[k], l[k], &dummy, &value, &pct) && dummy == -2) k++;   /* centre + offset: refused below */
+        end[g++] = k;
+    }
+    if (g != 2 || (axis[0] >= 0 && axis[0] == axis[1])) return -1;
+    if (axis[0] < 0) axis[0] = axis[1] < 0 ? 0 : 1 - axis[1];
+    if (axis[1] < 0) axis[1] = 1 - axis[0];
+    *bits = 0;
+    for (k = 0; k < 2; k++) {
+        const char *t = v + a[start[k]];
+        ax = axis[k];
+        if (axis_offset(t, (int)(v + a[end[k] - 1] + l[end[k] - 1] - t), ax, &value, &pct, &far)) return -1;
+        out[ax] = value;
+        *bits |= (uint8_t)((pct ? 1 << ax : 0) | (far ? 16 << ax : 0));
+    }
+    return 0;
+}
+
+static int background_position(we_node_t *n, const char *v, int len) {
+    uint8_t bits;
+    int a[4], l[4];
+    if (tokens(v, len, a, l) > 2 ? position_edges(v, len, n->bgi_pos, &bits) : position_pair(v, len, n->bgi_pos, &bits)) return -1;
+    n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 12) | bits);
+    return 0;
+}
+
+/* background-position-x and -y (axis 0 or 1) */
+static int background_position_axis(we_node_t *n, const char *v, int len, int axis) {
+    int16_t value;
+    int pct, far;
+    if (axis_offset(v, len, axis, &value, &pct, &far)) return -1;
+    n->bgi_pos[axis] = value;
+    n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & ~(0x11 << axis)) | (pct ? 1 << axis : 0) | (far ? 16 << axis : 0));
+    return 0;
+}
+
+/* Lot 64: a comma list of background-repeat (kind 0), -position (1) or
+ * -size (2) values: layer k takes item k modulo the count (CSS repeats a
+ * short list). The node is changed only when every item parses. */
+static we_node_t layer_scratch;
+
+/* initial values of every background-image layer */
+static void bgi_reset(we_node_t *n) {
+    int k;
+    n->bgi_len = 0; n->bgi_repeat = 3; n->bgi_size_kind = WE_BGS_AUTO; n->bgi_pos_pct = 3;
+    n->bgi_pos[0] = n->bgi_pos[1] = 0; n->bgi_size[0] = n->bgi_size[1] = -1;
+    n->bgi_space = 0; n->bgi_layers = 0;
+    for (k = 0; k < WE_BG_LAYERS - 1; k++) {
+        we_bg_layer_t *l = &n->bgi_more[k];
+        l->repeat = 3;            /* off/len are read only below bgi_layers */ l->size_kind = WE_BGS_AUTO; l->pos_pct = 3; l->space = 0;
+        l->pos[0] = l->pos[1] = 0; l->size[0] = l->size[1] = -1;
+    }
+}
+static int list_count(const char *v, int len) {
+    int a[WE_BG_LAYERS + 1], l[WE_BG_LAYERS + 1];
+    return comma_args(v, len, a, l, WE_BG_LAYERS + 1);
+}
+static int background_list(we_node_t *n, const char *v, int len, int kind) {
+    int a[WE_BG_LAYERS], l[WE_BG_LAYERS], c = comma_args(v, len, a, l, WE_BG_LAYERS), k, bad = 0;
+    if (c < 1) return -1;
+    layer_scratch = *n;
+    for (k = 0; k < WE_BG_LAYERS && !bad; k++) {
+        const char *item = v + a[k % c];
+        int il = l[k % c];
+        if (k) bgi_layer_swap(&layer_scratch, k);
+        bad = kind == 0 ? background_repeat(&layer_scratch, item, il) :
+              kind == 1 ? background_position(&layer_scratch, item, il) :
+              kind == 2 ? background_size(&layer_scratch, item, il) : background_position_axis(&layer_scratch, item, il, kind - 3);
+        if (k) bgi_layer_swap(&layer_scratch, k);
+    }
+    if (bad) return -1;
+    *n = layer_scratch;
+    return 0;
+}
+
+/* Lot 64: the background shorthand with images: comma layers of
+ * [url() | none | gradient] [repeat style] [position [/ size]], the last one
+ * also a colour; a gradient only in the last layer. Every background
+ * property not given returns to its initial value. Box keywords
+ * (border-box ...) and attachment are refused with the declaration. */
+static int parse_color(const char* v, int n, uint32_t* out);
+static int shorthand_kind(const char *t, int l) {
+    static const char *const repeats[] = {"repeat", "no-repeat", "repeat-x", "repeat-y", "space", "round", 0};
+    static const char *const places[] = {"left", "right", "top", "bottom", "center", 0};
+    int k;
+    if (l > 4 && w_ieq_n(t, 4, "url(")) return 1;
+    if (value_is(t, l, "none")) return 1;
+    if (l > 16 && (w_ieq_n(t, 16, "linear-gradient(") || w_ieq_n(t, 16, "radial-gradient("))) return 2;
+    for (k = 0; repeats[k]; k++) if (value_is(t, l, repeats[k])) return 3;
+    for (k = 0; places[k]; k++) if (value_is(t, l, places[k])) return 4;
+    if ((t[0] >= '0' && t[0] <= '9') || t[0] == '-' || t[0] == '.') return 4;
+    if (value_is(t, l, "auto") || value_is(t, l, "contain") || value_is(t, l, "cover")) return 5;
+    return 6;                                                    /* a colour, or nothing valid */
+}
+
+/* the shorthand takes this path with a url, a list or several tokens */
+static int shorthand_layers(const char *v, int len) {
+    int k, depth = 0;
+    for (k = 0; k < len; k++) {
+        if (v[k] == '(') depth++;
+        else if (v[k] == ')') depth--;
+        else if (!depth && (w_space(v[k]) || v[k] == ',' || v[k] == '/')) return 1;
+        if (k + 4 <= len && w_ieq_n(v + k, 4, "url(")) return 1;
+    }
+    return 0;
+}
+
+static int background_shorthand(we_doc_t *d, we_node_t *n, const char *v, int len) {
+    int a[WE_BG_LAYERS], l[WE_BG_LAYERS], c = comma_args(v, len, a, l, WE_BG_LAYERS), k, urls = 0;
+    if (c < 1) return -1;
+    layer_scratch = *n;
+    layer_scratch.has_bg = 0; layer_scratch.grad_dir = 0;
+    bgi_reset(&layer_scratch);
+    for (k = 0; k < c; k++) {
+        const char *s = v + a[k];
+        int sl = l[k], at = 0, span[6][2], slash = 0, kind, bad = 0, m;
+        for (m = 0; m < 6; m++) span[m][0] = span[m][1] = -1;
+        while (at < sl && !bad) {
+            int t, depth = 0;
+            if (w_space(s[at])) { at++; continue; }
+            if (s[at] == '/') { if (slash || span[3][0] < 0) return -1; slash = 1; at++; continue; }
+            for (t = at; t < sl && (depth || (!w_space(s[t]) && s[t] != '/')); t++) {
+                if (s[t] == '(') depth++;
+                else if (s[t] == ')') depth--;
+            }
+            kind = shorthand_kind(s + at, t - at);
+            if (slash && (kind == 4 || kind == 5)) kind = 5;
+            else if (kind == 5) return -1;                      /* a size needs the slash */
+            if (kind == 1 || kind == 2 || kind == 6) {
+                if (span[kind - 1][0] >= 0 && kind != 6) return -1;   /* one image per layer */
+                if (kind == 6 && (span[5][0] >= 0 || k != c - 1)) return -1;
+            }
+            /* a group split by other tokens spans them and fails its parser */
+            if (span[kind - 1][0] < 0) span[kind - 1][0] = at;
+            span[kind - 1][1] = t;
+            at = t;
+        }
+        if (slash && span[4][0] < 0) return -1;
+        if (span[1][0] >= 0 && k != c - 1) return -1;           /* a gradient only lowest */
+        if (span[0][0] >= 0 && span[1][0] >= 0) return -1;
+        if (span[1][0] >= 0 && parse_gradient(&layer_scratch, s + span[1][0], span[1][1] - span[1][0])) return -1;
+        if (span[5][0] >= 0) {
+            uint32_t col;
+            if (parse_color(s + span[5][0], span[5][1] - span[5][0], &col)) return -1;
+            if (!w_ieq_n(s + span[5][0], span[5][1] - span[5][0], "transparent")) { layer_scratch.bg = col; layer_scratch.has_bg = 1; }
+        }
+        if (span[1][0] >= 0) continue;
+        if (urls >= WE_BG_LAYERS) return -1;
+        if (urls) bgi_layer_swap(&layer_scratch, urls);
+        if (span[0][0] >= 0 && !value_is(s + span[0][0], span[0][1] - span[0][0], "none"))
+            bad = background_url(d, &layer_scratch, s + span[0][0], span[0][1] - span[0][0]);
+        if (!bad && span[2][0] >= 0) bad = background_repeat(&layer_scratch, s + span[2][0], span[2][1] - span[2][0]);
+        if (!bad && span[3][0] >= 0) bad = background_position(&layer_scratch, s + span[3][0], span[3][1] - span[3][0]);
+        if (!bad && span[4][0] >= 0) bad = background_size(&layer_scratch, s + span[4][0], span[4][1] - span[4][0]);
+        if (urls) bgi_layer_swap(&layer_scratch, urls);
+        if (bad) return -1;
+        urls++;
+    }
+    layer_scratch.bgi_layers = (uint8_t)(urls > 1 ? urls - 1 : 0);
+    *n = layer_scratch;
+    return 0;
+}
+
+/* Lot 64: background-image as a comma list: url() or none layers, the
+ * first on top; a gradient may only be the last (lowest) one, since the
+ * gradient paints under every image. */
+static int parse_gradient(we_node_t *n, const char *v, int len);
+static int background_layers(we_doc_t *d, we_node_t *n, const char *v, int len) {
+    int a[WE_BG_LAYERS], l[WE_BG_LAYERS], c = comma_args(v, len, a, l, WE_BG_LAYERS), k, urls = 0, bad = 0;
+    if (c < 1) return -1;
+    layer_scratch = *n;
+    layer_scratch.grad_dir = 0; layer_scratch.bgi_len = 0; layer_scratch.bgi_layers = 0;
+    for (k = 0; k < c && !bad; k++) {
+        const char *item = v + a[k];
+        if (l[k] > 16 && (w_ieq_n(item, 16, "linear-gradient(") || w_ieq_n(item, 16, "radial-gradient("))) {
+            bad = k != c - 1 || parse_gradient(&layer_scratch, item, l[k]);
+            continue;
+        }
+        if (urls) bgi_layer_swap(&layer_scratch, urls);
+        if (value_is(item, l[k], "none")) layer_scratch.bgi_len = 0;
+        else bad = background_url(d, &layer_scratch, item, l[k]);
+        if (urls) bgi_layer_swap(&layer_scratch, urls);
+        urls++;
+    }
+    if (bad) return -1;
+    layer_scratch.bgi_layers = (uint8_t)(urls ? urls - 1 : 0);
+    *n = layer_scratch;
     return 0;
 }
 
@@ -2710,6 +3066,64 @@ static int outline_width_value(const char *v, int len, int *out) {
 static int outline_style_value(const char *v, int len) {
     int code = value_is(v, len, "auto") ? WE_BS_SOLID : border_style_code(v, len);
     return code == WE_BS_HIDDEN ? 0 : code;
+}
+
+/* ---------- Lot 64: multi-column properties ---------- */
+static int column_count_value(const char *v, int len, int *out) {
+    int k, value = 0;
+    if (value_is(v, len, "auto")) { *out = 0; return 0; }
+    if (len < 1 || len > 3) return -1;
+    for (k = 0; k < len; k++) {
+        if (v[k] < '0' || v[k] > '9') return -1;
+        value = value * 10 + v[k] - '0';
+    }
+    if (value < 1 || value > WE_COLUMNS_MAX) return -1;
+    *out = value;
+    return 0;
+}
+
+static int column_width_value(const char *v, int len, int *out) {
+    int px;
+    if (value_is(v, len, "auto")) { *out = -1; return 0; }
+    /* no percentage pointer: parse_len refuses a percentage */
+    if (len < 1 || v[0] < '0' || v[0] > '9' || parse_len(v, len, &px, 0) != 0 || px < 1) return -1;
+    *out = px;
+    return 0;
+}
+
+/* columns: one or two of <count> and <width> (auto for either) */
+static int parse_columns(we_node_t *n, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), k, count = -1, width = -2, value, autos = 0;
+    if (c < 1 || c > 2 || tokens_more(v, len, a, l, c)) return -1;
+    for (k = 0; k < c; k++) {
+        if (value_is(v + a[k], l[k], "auto")) { autos++; continue; }
+        if (column_count_value(v + a[k], l[k], &value) == 0) { if (count >= 0) return -1; count = value; }
+        else if (column_width_value(v + a[k], l[k], &value) == 0) { if (width != -2) return -1; width = value; }
+        else return -1;
+    }
+    if (autos == 2 && c == 2) { count = 0; width = -1; }
+    n->col_count = (uint8_t)(count < 0 ? 0 : count);
+    n->col_width = (int16_t)(width == -2 ? -1 : width);
+    return 0;
+}
+
+/* column-rule: width, style and colour in any order, each once */
+static int parse_column_rule(we_node_t *n, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), k, style = 0, width = -1, has_color = 0;
+    uint32_t color = 0;
+    if (c < 1 || c > 3 || tokens_more(v, len, a, l, c)) return -1;
+    for (k = 0; k < c; k++) {
+        int code = border_style_code(v + a[k], l[k]), w;
+        if (code) { if (style) return -1; style = code; }
+        else if (outline_width_value(v + a[k], l[k], &w) == 0) { if (width >= 0) return -1; width = w; }
+        else if (parse_color(v + a[k], l[k], &color) == 0) { if (has_color) return -1; has_color = 1; }
+        else return -1;
+    }
+    n->rule_style = (uint8_t)style;
+    n->rule_w = (uint8_t)(width < 0 ? 3 : width);
+    n->rule_color_set = (uint8_t)has_color;
+    n->rule_color = color;
+    return 0;
 }
 
 static int parse_outline(we_node_t *n, const char *v, int len) {
@@ -3162,13 +3576,15 @@ static int white_space_longhand(we_node_t *n, const char *prop, const char *v, i
     return 0;
 }
 
+static int mode_pass;   /* lot 64: 1 while only writing-mode/direction apply */
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[40];
     int px, pct, k;
     uint32_t col;
     w_cpy(prop, sizeof(prop), p, pl);
     for (k = 0; prop[k]; k++) prop[k] = w_low(prop[k]);
-    { const char *mapped = logical_property(prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
+    if (mode_pass && !w_eq(prop, "writing-mode") && !w_eq(prop, "direction") && !w_eq(prop, "text-orientation")) return;
+    { const char *mapped = logical_property(n, prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
     while (vl > 0 && w_space(v[vl - 1])) vl--;
     d->perf.decls_applied++;
     if (w_eq(prop, "inset") || w_eq(prop, "inset-inline") || w_eq(prop, "inset-block") ||
@@ -3203,9 +3619,16 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "margin-inline") || w_eq(prop, "margin-block") || w_eq(prop, "padding-inline") || w_eq(prop, "padding-block")) {
         if (logical_pair(n, prop, v, vl)) diag(d, "logical spacing refused", -1);
     } else if (w_eq(prop, "writing-mode")) {
-        if (!value_is(v, vl, "horizontal-tb")) diag(d, "writing mode refused", -1);
+        if (value_is(v, vl, "horizontal-tb")) n->wmode = WE_WM_HORIZONTAL;
+        else if (value_is(v, vl, "vertical-rl")) n->wmode = WE_WM_VERTICAL_RL;
+        else if (value_is(v, vl, "vertical-lr")) n->wmode = WE_WM_VERTICAL_LR;
+        else if (!mode_pass) diag(d, "writing mode refused", -1);
     } else if (w_eq(prop, "direction")) {
-        if (!value_is(v, vl, "ltr")) diag(d, "direction refused", -1);
+        if (value_is(v, vl, "ltr") || value_is(v, vl, "rtl")) n->dir_rtl = (uint8_t)value_is(v, vl, "rtl");
+        else if (!mode_pass) diag(d, "direction refused", -1);
+    } else if (w_eq(prop, "text-orientation")) {
+        if (value_is(v, vl, "mixed") || value_is(v, vl, "upright")) n->upright = (uint8_t)value_is(v, vl, "upright");
+        else if (!mode_pass) diag(d, "text orientation refused", -1);   /* sideways needs rotated glyphs */
     } else if (w_eq(prop, "padding-top") || w_eq(prop, "padding-right") || w_eq(prop, "padding-bottom")) {
         int side = w_eq(prop, "padding-top") ? 0 : w_eq(prop, "padding-right") ? 1 : 2;
         if (spacing_percent(v, vl, 0, &pct) == 0) spacing_set(n, 1, side, pct);
@@ -3473,16 +3896,69 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "square")) n->list_style = WE_LIST_SQUARE;
         else if (list_keyword(v, vl) >= 0) n->list_style = (uint8_t)list_keyword(v, vl);
         else diag(d, "list marker refused", -1);
+    } else if (w_eq(prop, "column-count")) {
+        int value;
+        if (column_count_value(v, vl, &value)) diag(d, "columns refused", -1);
+        else n->col_count = (uint8_t)value;
+    } else if (w_eq(prop, "column-width")) {
+        int value;
+        if (column_width_value(v, vl, &value)) diag(d, "columns refused", -1);
+        else n->col_width = (int16_t)value;
+    } else if (w_eq(prop, "columns")) {
+        if (parse_columns(n, v, vl)) diag(d, "columns refused", -1);
+    } else if (w_eq(prop, "column-fill")) {
+        if (value_is(v, vl, "auto")) n->col_fill_auto = 1;
+        else if (value_is(v, vl, "balance")) n->col_fill_auto = 0;
+        else diag(d, "columns refused", -1);
+    } else if (w_eq(prop, "column-span")) {
+        if (value_is(v, vl, "none") || value_is(v, vl, "all")) n->col_span_all = (uint8_t)value_is(v, vl, "all");
+        else diag(d, "column span refused", -1);
+    } else if (w_eq(prop, "break-before") || w_eq(prop, "break-after")) {
+        /* a forced break is kept between columns only; avoid has nothing to
+         * do since a box is never fragmented and units break between boxes */
+        int bit = prop[6] == 'b' ? 1 : 2;
+        if (value_is(v, vl, "column")) n->col_break |= (uint8_t)bit;
+        else if (value_is(v, vl, "auto") || value_is(v, vl, "avoid") || value_is(v, vl, "avoid-column")) n->col_break &= (uint8_t)~bit;
+        else diag(d, "break refused", -1);
+    } else if (w_eq(prop, "break-inside")) {
+        if (!value_is(v, vl, "auto") && !value_is(v, vl, "avoid") && !value_is(v, vl, "avoid-column")) diag(d, "break refused", -1);
+    } else if (w_eq(prop, "column-rule")) {
+        if (parse_column_rule(n, v, vl)) diag(d, "column rule refused", -1);
+    } else if (w_eq(prop, "column-rule-style")) {
+        int code = border_style_code(v, vl);
+        if (!code) diag(d, "column rule refused", -1);
+        else n->rule_style = (uint8_t)code;
+    } else if (w_eq(prop, "column-rule-width")) {
+        int w;
+        if (outline_width_value(v, vl, &w)) diag(d, "column rule refused", -1);
+        else n->rule_w = (uint8_t)w;
+    } else if (w_eq(prop, "column-rule-color")) {
+        uint32_t color;
+        if (parse_color(v, vl, &color)) diag(d, "column rule refused", -1);
+        else { n->rule_color = color; n->rule_color_set = 1; }
+    } else if (w_eq(prop, "list-style-image")) {
+        /* lot 64: an image marker; the type stays the fallback */
+        if (value_is(v, vl, "none")) n->lsi_len = 0;
+        else if (url_span(d, v, vl, &n->lsi_off, &n->lsi_len)) diag(d, "list marker refused", -1);
     } else if (w_eq(prop, "list-style")) {
-        int a[4], l[4], c = tokens(v, vl, a, l), k, style = -1, ok = c >= 1;
+        int a[4], l[4], c = tokens(v, vl, a, l), k, style = -1, ok = c >= 1, image = -1;
+        uint16_t off = 0, len = 0;
         for (k = 0; k < c && ok; k++) {
             int kw = list_keyword(v + a[k], l[k]);
             if (value_is(v + a[k], l[k], "outside")) continue;
+            if (l[k] > 4 && w_ieq_n(v + a[k], 4, "url(")) {      /* lot 64: list-style-image */
+                if (image >= 0 || url_span(d, v + a[k], l[k], &off, &len)) ok = 0;
+                image = k;
+                continue;
+            }
             if (kw < 0 || style >= 0) ok = 0;
             else style = kw;
         }
         if (!ok) diag(d, "list marker refused", -1);
-        else n->list_style = (uint8_t)(style < 0 ? WE_LIST_DISC : style);
+        else {
+            n->list_style = (uint8_t)(style < 0 ? WE_LIST_DISC : style);
+            n->lsi_off = off; n->lsi_len = len;
+        }
     } else if (w_eq(prop, "min-width") || w_eq(prop, "max-width")) {
         int is_min = w_eq(prop, "min-width");
         int rc = parse_len(v, vl, &px, &pct);
@@ -3536,32 +4012,36 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (parse_color(v, vl, &col) == 0) n->color = col;
         else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
     }
+    else if (w_eq(prop, "background") && shorthand_layers(v, vl)) {
+        if (background_shorthand(d, n, v, vl)) diag(d, "background refused", -1);
+    }
     else if ((w_eq(prop, "background") || w_eq(prop, "background-image")) && vl > 16 &&
              (w_ieq_n(v, 16, "linear-gradient(") || w_ieq_n(v, 16, "radial-gradient("))) {
-        if (parse_gradient(n, v, vl)) diag(d, "gradient refused", -1);
+        if (w_eq(prop, "background-image") && list_count(v, vl) > 1) {
+            if (background_layers(d, n, v, vl)) diag(d, "background image refused", -1);
+        } else if (parse_gradient(n, v, vl)) diag(d, "gradient refused", -1);
         else {
-            n->bgi_len = 0;
+            n->bgi_len = 0; n->bgi_layers = 0;
             if (w_eq(prop, "background")) n->has_bg = 0;
         }
     }
     else if (w_eq(prop, "background-image")) {
-        if (value_is(v, vl, "none")) n->grad_dir = 0, n->bgi_len = 0;
-        else if (background_url(d, n, v, vl)) diag(d, "background image refused", -1);
-        else n->grad_dir = 0;
+        if (background_layers(d, n, v, vl)) diag(d, "background image refused", -1);
     }
     else if (w_eq(prop, "background-repeat")) {
-        if (background_repeat(n, v, vl)) diag(d, "background repeat refused", -1);
+        if (background_list(n, v, vl, 0)) diag(d, "background repeat refused", -1);
     }
     else if (w_eq(prop, "background-position")) {
-        uint8_t bits;
-        if (position_pair(v, vl, n->bgi_pos, &bits)) diag(d, "background position refused", -1);
-        else n->bgi_pos_pct = (uint8_t)((n->bgi_pos_pct & 12) | bits);
+        if (background_list(n, v, vl, 1)) diag(d, "background position refused", -1);
+    }
+    else if (w_eq(prop, "background-position-x") || w_eq(prop, "background-position-y")) {
+        if (background_list(n, v, vl, prop[20] == 'x' ? 3 : 4)) diag(d, "background position refused", -1);
     }
     else if (w_eq(prop, "background-size")) {
-        if (background_size(n, v, vl)) diag(d, "background size refused", -1);
+        if (background_list(n, v, vl, 2)) diag(d, "background size refused", -1);
     }
     else if (w_eq(prop, "background") || w_eq(prop, "background-color")) {
-        if (w_eq(prop, "background")) n->grad_dir = 0, n->bgi_len = 0;
+        if (w_eq(prop, "background")) n->grad_dir = 0, n->bgi_len = 0, n->bgi_layers = 0;
         if (w_ieq_n(v, vl, "none") || w_ieq_n(v, vl, "transparent")) n->has_bg = 0;
         else if (parse_color(v, vl, &col) == 0) { n->bg = col; n->has_bg = 1; }
         else if (vl > 0 && v[vl - 1] == ')') diag(d, "color refused", -1);
@@ -3633,19 +4113,28 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
                w_eq(prop, "border-bottom") || w_eq(prop, "border-left")) {
         int side = w_eq(prop, "border-top") ? 0 : w_eq(prop, "border-right") ? 1 : w_eq(prop, "border-bottom") ? 2 : 3;
         if (border_edge_decl(n, side, v, vl)) diag(d, "border edge refused", -1);
+    } else if (edge_longhand(prop) >= 0) {
+        if (border_edge_part(n, edge_longhand(prop) >> 2, edge_longhand(prop) & 3, v, vl)) diag(d, "border edge refused", -1);
+    } else if (w_ieq_n(prop, 13, "border-inline") || w_ieq_n(prop, 12, "border-block")) {
+        if (border_logical_pair(n, prop, v, vl)) diag(d, "border edge refused", -1);
     } else if (w_eq(prop, "border-style") || w_eq(prop, "border-width") || w_eq(prop, "border-color")) {
         int kind = w_eq(prop, "border-style") ? 0 : w_eq(prop, "border-width") ? 1 : 2;
         if (border_list_decl(n, kind, v, vl)) diag(d, "border edge refused", -1);
     } else if (w_eq(prop, "font-weight")) {
         n->bold = (uint8_t)(w_ieq_n(v, vl, "bold") || w_ieq_n(v, vl, "700") || w_ieq_n(v, vl, "800") || w_ieq_n(v, vl, "900"));
     } else if (w_eq(prop, "text-align")) {
-        n->align = (uint8_t)align_keyword(v, vl, WE_ALIGN_LEFT);
+        int logical;
+        n->align = (uint8_t)align_keyword(v, vl, WE_ALIGN_LEFT, &logical);
+        n->align_logical = (uint8_t)((n->align_logical & 12) | logical);
     } else if (w_eq(prop, "text-align-last")) {
         /* Lot 62 round 2: alignment of the last line and of lines before a
          * forced break (left-to-right: start is left, end is right) */
-        int a = value_is(v, vl, "auto") ? -1 : align_keyword(v, vl, -2);
+        int logical = 0, a = value_is(v, vl, "auto") ? -1 : align_keyword(v, vl, -2, &logical);
         if (a == -2) diag(d, "text-align-last refused", -1);
-        else n->align_last = (uint8_t)(a + 1);
+        else {
+            n->align_last = (uint8_t)(a + 1);
+            n->align_logical = (uint8_t)((n->align_logical & 3) | logical << 2);
+        }
     } else if (w_eq(prop, "text-justify")) {
         if (value_is(v, vl, "none")) n->justify_none = 1;
         else if (value_is(v, vl, "auto") || value_is(v, vl, "inter-word")) n->justify_none = 0;
@@ -3748,6 +4237,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->color = p ? p->color : 0x000000;
         n->bold = p ? p->bold : 0;
         n->align = p ? p->align : WE_ALIGN_LEFT;
+        n->align_logical = p ? p->align_logical : 1;    /* initial text-align: start */
         n->width = -1; n->height = -1; n->width_pct = 0;
         w_zero(n->length, sizeof(n->length)); n->aspect_num = 0; n->aspect_den = 1;
         n->flex_grow = -1;
@@ -3790,8 +4280,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
         n->spacing_pct = 0; n->grad_dir = 0;
         n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING; n->text_overflow = 0;
-        n->bgi_len = 0; n->bgi_repeat = 3; n->bgi_size_kind = WE_BGS_AUTO; n->bgi_pos_pct = 3;
-        n->bgi_pos[0] = n->bgi_pos[1] = 0; n->bgi_size[0] = n->bgi_size[1] = -1;
+        bgi_reset(n);
         w_zero(n->rad_x, sizeof(n->rad_x)); w_zero(n->rad_y, sizeof(n->rad_y)); n->rad_pct = 0;
         n->text_transform = p ? p->text_transform : WE_TT_NONE;
         n->letter_spacing = p ? p->letter_spacing : 0;
@@ -3806,6 +4295,9 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->ws_mode = p ? p->ws_mode : 0;
         n->tab_px = p ? p->tab_px : 8 * WE_CHAR_W;
         n->hyphens = p ? p->hyphens : WE_HYPHENS_MANUAL;
+        n->wmode = p ? p->wmode : WE_WM_HORIZONTAL;
+        n->dir_rtl = p ? p->dir_rtl : 0;
+        n->upright = p ? p->upright : 0;
         n->nowrap = p ? p->nowrap : 0;
         n->break_word = p ? p->break_word : 0;
         n->break_all = p ? p->break_all : 0;
@@ -3817,6 +4309,9 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
             n->col_floor[track] = n->row_floor[track] = n->col_cap[track] = n->row_cap[track] = -1;
         } }
         n->list_style = p ? p->list_style : WE_LIST_NONE;
+        n->lsi_off = p ? p->lsi_off : 0; n->lsi_len = p ? p->lsi_len : 0;
+        n->col_count = 0; n->col_width = -1; n->col_fill_auto = 0; n->col_span_all = 0; n->col_break = 0;
+        n->rule_w = 3; n->rule_style = 0; n->rule_color_set = 0; n->rule_color = 0;
         n->border_color = n->color;
         n->quotes_kind = p ? p->quotes_kind : WE_QUOTES_AUTO;
         n->quotes_off = p ? p->quotes_off : 0; n->quotes_len = p ? p->quotes_len : 0;
@@ -3828,8 +4323,21 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
             n->display = WE_DISP_INLINE;
             if (w_eq(d->nodes[match].tag, "q")) n->content_kind = pseudo == WE_PSEUDO_BEFORE ? WE_CONTENT_UA_OPEN : WE_CONTENT_UA_CLOSE;
         } else ua_defaults(n);
+        if (!pseudo && n->dir_attr) n->dir_rtl = (uint8_t)(n->dir_attr == 2);
+        /* lot 64: writing-mode and direction first, so that the logical
+         * properties of the same element map to the right sides */
+        mode_pass = 1;
         cascade_rules(d, match, n, pseudo, 0);
         cascade_rules(d, match, n, pseudo, 1);
+        mode_pass = 0;
+        /* lot 64: the UA list indent is padding-inline-start: the right in rtl */
+        if (!pseudo && n->dir_rtl && n->wmode == WE_WM_HORIZONTAL && (w_eq(n->tag, "ul") || w_eq(n->tag, "ol")))
+            n->padding[1] = n->padding[3], n->padding[3] = 0;
+        cascade_rules(d, match, n, pseudo, 0);
+        cascade_rules(d, match, n, pseudo, 1);
+        /* lot 64: start is left in ltr and right in rtl, end the other way */
+        if (n->align_logical & 3) n->align = ((n->align_logical & 3) == 1) != n->dir_rtl ? WE_ALIGN_LEFT : WE_ALIGN_RIGHT;
+        if (n->align_logical >> 2) n->align_last = (uint8_t)(1 + (((n->align_logical >> 2) == 1) != n->dir_rtl ? WE_ALIGN_LEFT : WE_ALIGN_RIGHT));
         if (n->border && n->border_color == (p ? p->color : 0)) n->border_color = n->color;
         if (p && p->display == WE_DISP_NONE) n->display = WE_DISP_NONE;
     }
@@ -4074,6 +4582,8 @@ static int image_open(we_doc_t *d, int idx) {
     if (image_work.ready_idx == idx) return 0;
     image_work.ready_idx = -1;
     if (!(w_eq(n->tag, "img") ? n->src_len : n->bgi_len)) return -1;
+    if (n->parent >= 0 && d->nodes[n->parent].wmode != WE_WM_HORIZONTAL)   /* lot 64: runs would be transposed */
+        return image_fail(d, "image in vertical flow refused", idx);
     if (image_local_path(d, n)) return image_fail(d, "image local path refused", idx);
     if (!image_read) return image_fail(d, "image reader unavailable", idx);
     bytes = image_read(image_ctx, image_work.path, image_work.source, WE_IMAGE_SOURCE_MAX);
@@ -4209,7 +4719,7 @@ typedef struct {
     struct { const char* s; int len; int node; int space_before; } w[WE_LINE_WORDS];
     int lines;
     int pending_space, measuring;
-    int line_h, indent, indent_used, atom_h, pending_x;
+    int line_h, indent, indent_used, indent_shift, atom_h, pending_x;
     int baseline, origin_y;
     /* Lot 61: last measured baseline, painted first/last baselines (page y),
      * text seen on the open line and its baseline-aligned atomic boxes. */
@@ -4218,10 +4728,12 @@ typedef struct {
     int wrapped;   /* lot 62: the line being flushed ends at a soft wrap */
     int glue;      /* lot 63: the next piece joins the line without a break */
     int align_last, justify_none;
+    int start;     /* lot 64: WE_ALIGN_RIGHT in rtl, where justify falls back */
 } we_inline_t;
 #define WE_NO_BASELINE (-32768)
 #define WE_LINE_ATOMS 8
 
+static void inline_image(we_doc_t *d, int idx, int x, int y, int w, int h);
 static int limit_coord(int n) {
     if (n < -WE_LAYOUT_MAX) return -WE_LAYOUT_MAX;
     if (n > WE_LAYOUT_MAX) return WE_LAYOUT_MAX;
@@ -4245,13 +4757,14 @@ static void flow_region(we_inline_t *f, int need) {
         }
         f->x0 = left;
         f->width = right > left ? right - left : 0;
-        f->indent_used = 0;
+        f->indent_used = f->indent_shift = 0;
         if (f->lines == 0 && f->indent > 0 && f->width > 0) {
             int take = f->indent;
             if (f->width - take < WE_CHAR_W && f->width > WE_CHAR_W) take = f->width - WE_CHAR_W;
             if (take > f->width) take = f->width;
             if (take < 0) take = 0;
-            f->x0 += take;
+            /* lot 64: in rtl the indent is at the right, the line start */
+            if (f->start != WE_ALIGN_RIGHT) f->x0 += take, f->indent_shift = take;
             f->width -= take;
             f->indent_used = take;
         }
@@ -4475,8 +4988,8 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
     x = f->x0 + f->pending_x;
     /* the last line and a line before a forced break: text-align-last,
      * auto meaning text-align with justify falling back to start */
-    if (!wrapped) align = f->align_last ? f->align_last - 1 : align == WE_ALIGN_JUSTIFY ? WE_ALIGN_LEFT : align;
-    if (f->justify_none && align == WE_ALIGN_JUSTIFY) align = WE_ALIGN_LEFT;
+    if (!wrapped) align = f->align_last ? f->align_last - 1 : align == WE_ALIGN_JUSTIFY ? f->start : align;
+    if (f->justify_none && align == WE_ALIGN_JUSTIFY) align = f->start;
     if (advance && f->pending_x == 0 && f->atom_h == 0) {
         if (align == WE_ALIGN_CENTER && total < f->width) x += (f->width - total) / 2;
         else if (align == WE_ALIGN_RIGHT && total < f->width) x += f->width - total;
@@ -4513,6 +5026,8 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         n = &d->nodes[d->nodes[node].parent >= 0 ? d->nodes[node].parent : node];
         run_w = len * glyph_adv(d, node);
         if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, run_w, box_h, n->bg);
+        if ((n->bgi_len || n->bgi_layers) && n->display == WE_DISP_INLINE && run_w > 0)
+            inline_image(d, d->nodes[node].parent >= 0 ? d->nodes[node].parent : node, xs, f->y, run_w, box_h);
         before = (int)d->nitems;
         paint_run(d, node, xs, f->y + 1, buf, len);
         if ((int)d->nitems > before) paint_decorations(d, node, xs, f->y + 1, run_w);
@@ -4780,8 +5295,17 @@ static int is_box(uint8_t display) {
 
 /* Border width on one side of the box. A cell of a collapsed table uses
  * its resolved content inset (collapse_insets) instead of its border. */
+static void edge_of(const we_node_t *n, int side, int *w, int *style, uint32_t *color);
 static int box_edge(const we_node_t *n, int side) {
-    return n->collapse_cell ? n->cin[side] : n->border;
+    if (n->collapse_cell) return n->cin[side];
+    if (n->own_edges) {
+        /* lot 64: the side's own width (hidden is none outside tables) */
+        int w, style;
+        uint32_t color;
+        edge_of(n, side, &w, &style, &color);
+        return style == WE_BS_HIDDEN ? 0 : w;
+    }
+    return n->border;
 }
 
 static int node_border_extra(const we_node_t *n) {
@@ -4863,9 +5387,13 @@ static int ratio_height(const we_node_t *n, int width) {
     return height < 0 ? 0 : height > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : height;
 }
 
-static int horizontal_auto(const we_node_t *n, int containing, int outer) {
+/* Lot 64: rtl is the containing block's direction; a box without auto
+ * margins then takes the free space on its left (the end side). */
+static int horizontal_auto(const we_node_t *n, int containing, int outer, int rtl) {
     int free = containing - outer - n->margin[1] - n->margin[3];
-    if (free <= 0 || !(n->margin_auto & WE_AUTO_LEFT)) return 0;
+    if (free <= 0) return 0;
+    if (!(n->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT))) return rtl ? free : 0;
+    if (!(n->margin_auto & WE_AUTO_LEFT)) return 0;
     return n->margin_auto & WE_AUTO_RIGHT ? free / 2 : free;
 }
 
@@ -4987,6 +5515,9 @@ static void intrinsic_inline(we_doc_t *d, int idx, we_intrinsic_flow_t *flow, in
 
 static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maximum);
 
+static int16_t vertical_inline[WE_MAX_NODES];   /* lot 64: logical max-content of an orthogonal root */
+static int vertical_root(const we_doc_t *d, int idx);
+
 static void intrinsic_sizes(we_doc_t *d) {
     int i;
     for (i = (int)d->nnodes - 1; i >= 0; i--) {
@@ -5025,13 +5556,24 @@ static void intrinsic_sizes(we_doc_t *d) {
         }
         n->min_content = (int16_t)limit_coord(n->nowrap ? flow.maximum : flow.minimum);
         n->max_content = (int16_t)limit_coord(flow.maximum);
+        if (vertical_root(d, i)) {
+            /* lot 64: an orthogonal root contributes its block extent:
+             * the lines its max-content needs at its inline size */
+            int size = n->height > 0 ? n->height : flow.maximum, lines;
+            vertical_inline[i] = (int16_t)limit_coord(flow.maximum);
+            lines = size > 0 ? (flow.maximum + size - 1) / size : 1;
+            if (lines < 1) lines = 1;
+            n->min_content = n->max_content = (int16_t)limit_coord(lines * (n->line_height ? n->line_height : WE_LINE_H));
+        }
     }
 }
 
+static int vertical_now = -1, vertical_block;   /* lot 64: root being laid out, its logical block size */
 static int definite_height(const we_doc_t *d, int idx, int depth) {
     const we_node_t *n;
     int value, parent, low, high;
     if (idx < 0 || depth > WE_DEPTH_MAX) return -1;
+    if (idx == vertical_now) return vertical_block;
     n = &d->nodes[idx];
     if (forced_height[idx] >= 0)
         return content_value(forced_height[idx] - n->margin[0] - n->margin[2], vertical_extra(n), 1);
@@ -5187,7 +5729,7 @@ static void place_float(we_inline_t *f, int idx, int depth) {
     if (width > f->base_width) width = f->base_width;
     flow_region(f, width);
     /* text-indent shifts the first inline line, not the float. */
-    x = n->float_side == WE_FLOAT_RIGHT ? f->x0 + f->width - width : f->x0 - f->indent_used;
+    x = n->float_side == WE_FLOAT_RIGHT ? f->x0 + f->width - width : f->x0 - f->indent_shift;
     if (x < f->base_x) x = f->base_x;
     height = f->measuring ? measure_area_height(d, idx, width, depth) : layout_assigned(d, idx, x, f->y, width, depth);
     slot = f->nfloat++;
@@ -5236,6 +5778,7 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->align = d->nodes[idx].align;
     f->align_last = d->nodes[idx].align_last;
     f->justify_none = d->nodes[idx].justify_none;
+    f->start = d->nodes[idx].dir_rtl ? WE_ALIGN_RIGHT : WE_ALIGN_LEFT;
     f->line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
     f->indent = d->nodes[idx].text_indent;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
@@ -5258,7 +5801,7 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
             /* A block child is not the indented first line. */
             {
                 int height = measuring ? measure_height(d, c, f->width + f->indent_used, depth + 1) :
-                    layout_block(d, c, f->x0 - f->indent_used, f->y, f->width + f->indent_used, depth + 1);
+                    layout_block(d, c, f->x0 - f->indent_shift, f->y, f->width + f->indent_used, depth + 1);
                 if (measuring && baseline_probe) {
                     int outer = preferred_outer(n, f->width, f->width - node_border_extra(n) - n->margin[1] - n->margin[3]);
                     int real, base;
@@ -5412,11 +5955,21 @@ static uint32_t gradient_at(const we_node_t *n, int p) {
 
 #define WE_RADIAL_RINGS 3
 #define WE_RADIAL_SLOTS (1 + WE_RADIAL_RINGS * 8)   /* 5 ellipse cuts + 2 clip cuts per ring */
+/* lot 64: a translucent stop paints disjoint rings, two pieces per row */
+#define WE_RADIAL_ALPHA_SLOTS 64
+static int radial_translucent(const we_node_t *n) {
+    int k;
+    for (k = 0; k < n->grad_count; k++) if (n->grad_color[k] >> WE_ALPHA_SHIFT) return 1;
+    return 0;
+}
+
 static int gradient_reserve(we_doc_t *d, int idx, int *count) {
-    int first = (int)d->nitems, k;
+    int first = (int)d->nitems, k, want;
     *count = 0;
     if (!d->nodes[idx].grad_dir) return first;
-    for (k = 0; k < (d->nodes[idx].grad_dir == WE_GRAD_RADIAL ? WE_RADIAL_SLOTS : WE_GRAD_BANDS); k++) {
+    want = d->nodes[idx].grad_dir != WE_GRAD_RADIAL ? WE_GRAD_BANDS :
+           radial_translucent(&d->nodes[idx]) ? WE_RADIAL_ALPHA_SLOTS : WE_RADIAL_SLOTS;
+    for (k = 0; k < want; k++) {
         os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
         if (!it) break;
         it->kind = 0;
@@ -5790,22 +6343,79 @@ static void radius_border(we_doc_t *d, int idx, const we_radii_t *r, int x, int 
 /* Lot 63: rounded dashed and dotted borders. The ring is painted, then
  * kept only inside the four corner boxes (rx x ry at each rounded corner),
  * so the arcs are solid; the straight parts between the corners take the
- * dash or dot pattern of edge_paint(), each side restarting its pattern. */
+ * dash or dot pattern of edge_paint(), each side restarting its pattern.
+ * Lot 64: an arc long enough for one period takes the pattern too (see
+ * arc_pattern()); a shorter one stays solid. */
+/* cos of k * 90 / 16 degrees, times 1024 (sin is the table read backwards) */
+static const int16_t quarter_cos[17] = {1024, 1019, 1004, 980, 946, 903, 851, 792, 724, 650, 569, 483, 392, 297, 200, 100, 0};
+
+static int quarter_trig(int at, int span, int sine) {
+    /* the angle at / span of 90 degrees, interpolated over the table */
+    int pos = span > 0 ? at * 16 * 64 / span : 0, k, f;
+    if (pos < 0) pos = 0;
+    if (pos > 16 * 64) pos = 16 * 64;
+    if (sine) pos = 16 * 64 - pos;
+    k = pos / 64; f = pos % 64;
+    if (k >= 16) return quarter_cos[16];
+    return quarter_cos[k] + (quarter_cos[k + 1] - quarter_cos[k]) * f / 64;
+}
+
+/* Lot 64: the dash or dot pattern along one corner arc. The arc's centre
+ * line (radii less t / 2) has length L ~ pi / 4 (rx + ry); it holds
+ * round(L / period) periods (at most WE_ARC_PERIODS), each painting its
+ * piece centred in it as t x t squares one t apart along the line (one
+ * square for a dot), cut to the corner box. Returns 0 when L is shorter
+ * than one period (the arc stays solid). */
+#define WE_ARC_PERIODS 4
+static int arc_pattern(we_doc_t *d, int idx, int corner, int x0, int y0, int rx, int ry, int t, int style, uint32_t color) {
+    int piece = style == 5 ? (2 * t > 3 ? 2 * t : 3) : t, period = 2 * piece;
+    int ax = rx - t / 2, ay = ry - t / 2, len, count, j, sx, sy, cx, cy;
+    if (ax < 1) ax = 1;
+    if (ay < 1) ay = 1;
+    len = 157 * (ax + ay) / 200;
+    if (len < period) return 0;
+    count = (len + period / 2) / period;
+    if (count > WE_ARC_PERIODS) count = WE_ARC_PERIODS;
+    sx = corner == 0 || corner == 3 ? -1 : 1;
+    sy = corner < 2 ? -1 : 1;
+    cx = corner == 0 || corner == 3 ? x0 + rx : x0;            /* the ellipse centre */
+    cy = corner < 2 ? y0 + ry : y0;
+    for (j = 0; j < count; j++) {
+        int mid = (2 * j + 1) * len / (2 * count), squares = style == 5 ? (piece + t - 1) / t : 1, q;
+        for (q = 0; q < squares; q++) {
+            int at = mid - (squares - 1) * t / 2 + q * t;
+            int px = cx + sx * ax * quarter_trig(at, len, 0) / 1024, py = cy + sy * ay * quarter_trig(at, len, 1) / 1024;
+            int bx = px - t / 2, by = py - t / 2, ex = bx + t, ey = by + t;
+            if (bx < x0) bx = x0;
+            if (by < y0) by = y0;
+            if (ex > x0 + rx) ex = x0 + rx;
+            if (ey > y0 + ry) ey = y0 + ry;
+            if (ex > bx && ey > by) (void)emit(d, idx, OS_FB_WEB_RECT, bx, by, ex - bx, ey - by, color);
+        }
+    }
+    return 1;
+}
+
 static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len);
 static void radius_dashed(we_doc_t *d, int idx, const we_radii_t *r, int x, int y, int w, int h, int t, int style, uint32_t color) {
     static os_fb_web_item_t ring[OS_FB_WEB_ITEMS];
     int start = (int)d->nitems, count, i, k;
-    int cx[4], cy[4], from[4];
+    int cx[4], cy[4], from[4], patterned[4];
     radius_ring(d, idx, r, x, y, w, h, t, color, color);
     count = (int)d->nitems - start;
     for (i = 0; i < count; i++) ring[i] = d->items[start + i];
     d->nitems = (uint32_t)start;
     cx[0] = cx[3] = x; cx[1] = cx[2] = x + w;
     cy[0] = cy[1] = y; cy[2] = cy[3] = y + h;
+    for (k = 0; k < 4; k++) {
+        int x0 = k == 0 || k == 3 ? cx[k] : cx[k] - r->rx[k], y0 = k < 2 ? cy[k] : cy[k] - r->ry[k];
+        patterned[k] = r->rx[k] && r->ry[k] && arc_pattern(d, idx, k, x0, y0, r->rx[k], r->ry[k], t, style, color);
+    }
     for (i = 0; i < count; i++)
         for (k = 0; k < 4; k++) {
             int x0 = k == 0 || k == 3 ? cx[k] : cx[k] - r->rx[k], x1 = x0 + r->rx[k];
             int y0 = k < 2 ? cy[k] : cy[k] - r->ry[k], y1 = y0 + r->ry[k];
+            if (patterned[k]) continue;
             if (ring[i].x > x0) x0 = ring[i].x;
             if (ring[i].y > y0) y0 = ring[i].y;
             if (ring[i].x + ring[i].w < x1) x1 = ring[i].x + ring[i].w;
@@ -5842,11 +6452,14 @@ static void background_box(const we_node_t *n, int box, int bx, int by, int bw, 
  * to the corner, the distances taken from the centre. Painted as the last stop
  * over the clip box, then WE_RADIAL_RINGS nested ellipses from the
  * outside in, each taking the colour at its band's middle radius and cut
- * to the clip box (opaque stops only). */
+ * to the clip box. Lot 64: with a translucent stop the rings must not
+ * overlap, so radial_rings() paints each one minus the next inner one. */
+static int radial_rings(we_doc_t *d, int idx, int slot, int count, const int *c, int cx, int cy, int rx, int ry);
 static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o, const int *c) {
     const we_node_t *n = &d->nodes[idx];
     static int band[WE_ROUND_BANDS][4];
     int extent = n->grad_shape >> 1, rx, ry, ring, used = 1, k, far, sx, sy;
+    uint32_t opaque = 0xFFFFFFFFu;
     int cx = o[0] + (n->grad_at_pct & 1 ? o[2] * n->grad_at[0] / 100 : n->grad_at[0]);
     int cy = o[1] + (n->grad_at_pct & 2 ? o[3] * n->grad_at[1] / 100 : n->grad_at[1]);
     we_shape_t clip, ring_shape;
@@ -5875,10 +6488,15 @@ static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o,
     }
     if (rx < 1) rx = 1;
     if (ry < 1) ry = 1;
+    if (radial_translucent(n)) {
+        if (radial_rings(d, idx, slot, count, c, cx, cy, rx, ry)) return;
+        diag(d, "radial alpha painted opaque", idx);     /* the nested rings, without their alpha */
+        opaque = 0xFFFFFFu;
+    }
     w_zero(&zero, sizeof(zero));
     shape_set(&clip, c[0], c[1], c[2], c[3], &zero);
     d->items[slot].kind = OS_FB_WEB_RECT;
-    d->items[slot].color = gradient_at(n, 10000);
+    d->items[slot].color = gradient_at(n, 10000) & opaque;
     d->items[slot].x = (int16_t)c[0]; d->items[slot].y = (int16_t)c[1];
     d->items[slot].w = (uint16_t)c[2]; d->items[slot].h = (uint16_t)c[3];
     for (ring = WE_RADIAL_RINGS; ring >= 1; ring--) {
@@ -5887,9 +6505,59 @@ static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o,
         for (j = 0; j < 4; j++) { r.rx[j] = ex; r.ry[j] = ey; }
         shape_set(&ring_shape, cx - ex, cy - ey, 2 * ex, 2 * ey, &r);
         k = shape_bands(&ring_shape, &clip, band, count - used);
-        bands_into(d, slot + used, band, k, gradient_at(n, (2 * ring - 1) * 10000 / (2 * WE_RADIAL_RINGS)));
+        bands_into(d, slot + used, band, k, gradient_at(n, (2 * ring - 1) * 10000 / (2 * WE_RADIAL_RINGS)) & opaque);
         used += k;
     }
+}
+
+/* Lot 64: the ring between ellipse k (outer, the clip box for k = rings + 1)
+ * and ellipse k - 1, over one row partition shared by all the ellipses so
+ * that neighbouring rings meet exactly; a row gives up to two pieces, and
+ * a piece continuing the same columns of the row above is merged into it.
+ * Returns 0 (nothing painted) when the pieces need more than count slots. */
+static int radial_rings(we_doc_t *d, int idx, int slot, int count, const int *c, int cx, int cy, int rx, int ry) {
+    static int band[WE_RADIAL_ALPHA_SLOTS][4];
+    static uint32_t tone[WE_RADIAL_ALPHA_SLOTS];
+    const we_node_t *n = &d->nodes[idx];
+    int cut[WE_SHAPE_CUTS], ncut = 0, used = 0, ring, k, j, piece[2][2], np;
+    we_shape_t shape[WE_RADIAL_RINGS + 2];
+    we_radii_t zero, r;
+    w_zero(&zero, sizeof(zero));
+    shape_set(&shape[0], 0, 0, 0, 0, &zero);                          /* the innermost hole: none */
+    for (ring = 1; ring <= WE_RADIAL_RINGS; ring++) {
+        int ex = rx * ring / WE_RADIAL_RINGS, ey = ry * ring / WE_RADIAL_RINGS;
+        for (j = 0; j < 4; j++) { r.rx[j] = ex; r.ry[j] = ey; }
+        shape_set(&shape[ring], cx - ex, cy - ey, ex && ey ? 2 * ex : 0, ex && ey ? 2 * ey : 0, &r);
+        ncut = shape_cuts(&shape[ring], cut, ncut, c[1], c[1] + c[3]);
+    }
+    shape_set(&shape[WE_RADIAL_RINGS + 1], c[0], c[1], c[2], c[3], &zero);
+    sort_ints(cut, ncut);
+    for (ring = WE_RADIAL_RINGS + 1; ring >= 1; ring--) {
+        int first = used;
+        uint32_t color = gradient_at(n, ring > WE_RADIAL_RINGS ? 10000 : (2 * ring - 1) * 10000 / (2 * WE_RADIAL_RINGS));
+        for (k = 0; k <= ncut; k++) {
+            int y0 = k ? cut[k - 1] : c[1], y1 = k < ncut ? cut[k] : c[1] + c[3], x0, x1, u0, u1, p;
+            if (y1 <= y0 || !shape_span(&shape[ring], y0, y1, &x0, &x1)) continue;
+            if (x0 < c[0]) x0 = c[0];
+            if (x1 > c[0] + c[2]) x1 = c[0] + c[2];
+            np = 0;
+            if (shape[ring - 1].w > 0 && shape_span(&shape[ring - 1], y0, y1, &u0, &u1) && u1 > x0 && u0 < x1) {
+                if (u0 > x0) { piece[np][0] = x0; piece[np][1] = u0; np++; }
+                if (u1 < x1) { piece[np][0] = u1; piece[np][1] = x1; np++; }
+            } else if (x1 > x0) { piece[np][0] = x0; piece[np][1] = x1; np++; }
+            for (p = 0; p < np; p++) {
+                int merged = 0;
+                for (j = used - 1; j >= first && j >= used - 2 && !merged; j--)
+                    if (band[j][1] == y0 && band[j][2] == piece[p][0] && band[j][3] == piece[p][1]) { band[j][1] = y1; merged = 1; }
+                if (merged) continue;
+                if (used == count || used == WE_RADIAL_ALPHA_SLOTS) return 0;
+                band[used][0] = y0; band[used][1] = y1; band[used][2] = piece[p][0]; band[used][3] = piece[p][1];
+                tone[used++] = color;
+            }
+        }
+    }
+    for (k = 0; k < used; k++) bands_into(d, slot + k, band + k, 1, tone[k]);
+    return 1;
 }
 
 static void gradient_fill(we_doc_t *d, int idx, int slot, int count, int bx, int by, int bw, int bh) {
@@ -6025,24 +6693,68 @@ static int bgi_wrap(int v, int t) {
     return v < 0 ? v + t : v;
 }
 
+/* Lot 64: round fits a whole number of tiles in the area (the other axis
+ * keeps the ratio when its size is auto); space fits as many whole tiles
+ * as the area holds, the first and last at its edges, the free pixels
+ * shared out as equal gaps (one tile only: placed by position, no repeat). */
+static void bgi_round_space(const we_node_t *n, const int *area, int *tw, int *th, int *gap, int *repeat) {
+    int axis, style[2], size_auto[2];
+    style[0] = n->bgi_space & 3; style[1] = n->bgi_space >> 2 & 3;
+    size_auto[0] = n->bgi_size_kind == WE_BGS_AUTO || (n->bgi_size_kind == WE_BGS_EXPLICIT && n->bgi_size[0] < 0);
+    size_auto[1] = n->bgi_size_kind == WE_BGS_AUTO || (n->bgi_size_kind == WE_BGS_EXPLICIT && n->bgi_size[1] < 0);
+    gap[0] = gap[1] = 0;
+    for (axis = 0; axis < 2; axis++) {
+        int *t = axis ? th : tw, *o = axis ? tw : th, extent = area[2 + axis], count, fit;
+        if (!(*repeat & (1 << axis)) || *t < 1) continue;
+        if (style[axis] == WE_BGR_ROUND) {
+            count = (extent + *t / 2) / *t;
+            if (count < 1) count = 1;
+            fit = extent / count;
+            if (fit < 1) fit = 1;
+            if (style[!axis] != WE_BGR_ROUND && size_auto[!axis]) *o = *o * fit / *t;
+            *t = fit;
+            if (*o < 1) *o = 1;
+        } else if (style[axis] == WE_BGR_SPACE) {
+            count = extent / *t;
+            if (count >= 2) gap[axis] = (extent - count * *t) / (count - 1);
+            else *repeat &= ~(1 << axis);
+        }
+    }
+}
+
+/* the tile pixel at (col, row), 0 in a space gap */
+static int bgi_pixel(int col, int row, int ox, int oy, int tw, int th, const int *gap, uint32_t *color) {
+    int u = bgi_wrap(col - ox, tw + gap[0]), v = bgi_wrap(row - oy, th + gap[1]);
+    if (u >= tw || v >= th) return 0;
+    *color = image_sample(u, v, tw, th);
+    return 1;
+}
+
 static int bgi_fill(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh) {
     we_node_t *n = &d->nodes[idx];
     int area[4], clip[4], tw, th, ox, oy, x0, y0, x1, y1, row, col, nr = 0, room = OS_FB_WEB_ITEMS - (int)d->nitems;
+    int gap[2], repeat = n->bgi_repeat;
     if (!n->bgi_len || n->visibility || image_open(d, idx)) return 0;      /* an <img> never keeps a url */
     background_box(n, n->bg_origin, bx, by, bw, bh, area);
     background_box(n, n->bg_clip, bx, by, bw, bh, clip);
     bgi_tile(n, area[2], area[3], image_work.decoded.w, image_work.decoded.h, &tw, &th);
     if (tw < 1 || th < 1) return 0;
-    ox = area[0] + (n->bgi_pos_pct & 1 ? (area[2] - tw) * n->bgi_pos[0] / 100 : n->bgi_pos[0]);
-    oy = area[1] + (n->bgi_pos_pct & 2 ? (area[3] - th) * n->bgi_pos[1] / 100 : n->bgi_pos[1]);
+    bgi_round_space(n, area, &tw, &th, gap, &repeat);
+    ox = area[0] + (n->bgi_pos_pct & 1 ? (area[2] - tw) * n->bgi_pos[0] / 100 :
+                    n->bgi_pos_pct & 16 ? area[2] - tw - n->bgi_pos[0] : n->bgi_pos[0]);
+    oy = area[1] + (n->bgi_pos_pct & 2 ? (area[3] - th) * n->bgi_pos[1] / 100 :
+                    n->bgi_pos_pct & 32 ? area[3] - th - n->bgi_pos[1] : n->bgi_pos[1]);
+    if (gap[0]) ox = area[0];                                   /* space ignores the position */
+    if (gap[1]) oy = area[1];
     x0 = clip[0]; x1 = clip[0] + clip[2]; y0 = clip[1]; y1 = clip[1] + clip[3];
-    if (!(n->bgi_repeat & 1)) { if (x0 < ox) x0 = ox; if (x1 > ox + tw) x1 = ox + tw; }
-    if (!(n->bgi_repeat & 2)) { if (y0 < oy) y0 = oy; if (y1 > oy + th) y1 = oy + th; }
+    if (!(repeat & 1)) { if (x0 < ox) x0 = ox; if (x1 > ox + tw) x1 = ox + tw; }
+    if (!(repeat & 2)) { if (y0 < oy) y0 = oy; if (y1 > oy + th) y1 = oy + th; }
     for (row = y0; row < y1; row++) {
         for (col = x0; col < x1;) {
-            int first = col, r, found = -1, sy = bgi_wrap(row - oy, th);
-            uint32_t color = image_sample(bgi_wrap(col - ox, tw), sy, tw, th);
-            for (col++; col < x1 && image_sample(bgi_wrap(col - ox, tw), sy, tw, th) == color; col++) {}
+            int first = col, r, found = -1;
+            uint32_t color, next;
+            if (!bgi_pixel(col, row, ox, oy, tw, th, gap, &color)) { col++; continue; }
+            for (col++; col < x1 && bgi_pixel(col, row, ox, oy, tw, th, gap, &next) && next == color; col++) {}
             for (r = nr - 1; r >= 0; r--) {
                 os_fb_web_item_t *it = &image_work.rect[r];
                 if (it->x == first && it->w == col - first && it->color == color && it->y + it->h == row) { found = r; break; }
@@ -6070,6 +6782,76 @@ static int bgi_fill(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh
     }
     d->nitems += (uint32_t)nr;
     return nr;
+}
+
+/* Lot 64: an inline box's background images, painted per text run (each
+ * run is a fragment box with its own copy of the tiles, as
+ * box-decoration-break: clone), over the colour and under the text. */
+static int bgi_paint(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh);
+static void inline_image(we_doc_t *d, int idx, int x, int y, int w, int h) {
+    we_node_t *n = &d->nodes[idx];
+    uint8_t origin = n->bg_origin, clip = n->bg_clip;
+    n->bg_origin = n->bg_clip = WE_BOX_BORDER;          /* the fragment has no padding of its own */
+    (void)bgi_paint(d, idx, (int)d->nitems, x, y, w, h);
+    n->bg_origin = origin; n->bg_clip = clip;
+}
+
+/* Lot 64: list-style-image. The marker image is painted at its natural
+ * size (scaled down to the 8 px glyph height when taller, keeping its
+ * ratio: "list marker image scaled") outside the li, its right edge one
+ * glyph before the border box (in rtl its left edge one glyph after it) and its top 1 px below the box's top, as the
+ * text marker, through the background image painter (the
+ * li's first layer is borrowed for the call). It is refused like any
+ * image (path, reader, format, vertical flow, budget); the list-style-type
+ * marker is then painted instead, as CSS asks for an image that fails. */
+static int marker_image(we_doc_t *d, int idx, int bx, int by, int bw) {
+    we_node_t *n = &d->nodes[idx];
+    static we_node_t saved;
+    int painted = 0, mw, mh;
+    uint8_t failed = image_work.failed[idx];
+    saved = *n;
+    n->bgi_off = n->lsi_off; n->bgi_len = n->lsi_len;
+    n->bgi_repeat = 0; n->bgi_size_kind = WE_BGS_AUTO; n->bgi_pos_pct = 0; n->bgi_space = 0;
+    n->bgi_pos[0] = n->bgi_pos[1] = 0; n->bg_origin = n->bg_clip = WE_BOX_BORDER;
+    image_work.ready_idx = -1;
+    image_work.failed[idx] = 0;
+    if (!n->visibility && image_open(d, idx) == 0) {
+        mw = image_work.decoded.w; mh = image_work.decoded.h;
+        if (mh > 8) {
+            mw = mw * 8 / mh; mh = 8;
+            if (mw < 1) mw = 1;
+            n->bgi_size_kind = WE_BGS_EXPLICIT; n->bgi_size[0] = (int16_t)mw; n->bgi_size[1] = (int16_t)mh;
+            diag(d, "list marker image scaled", idx);
+        }
+        painted = bgi_fill(d, idx, (int)d->nitems, n->dir_rtl ? bx + bw + WE_CHAR_W : bx - mw - WE_CHAR_W, by + 1, mw, mh) > 0;
+    }
+    image_work.ready_idx = -1;
+    image_work.failed[idx] = failed;
+    n->bgi_off = saved.bgi_off; n->bgi_len = saved.bgi_len; n->bgi_repeat = saved.bgi_repeat;
+    n->bgi_size_kind = saved.bgi_size_kind; n->bgi_pos_pct = saved.bgi_pos_pct; n->bgi_space = saved.bgi_space;
+    n->bgi_pos[0] = saved.bgi_pos[0]; n->bgi_pos[1] = saved.bgi_pos[1];
+    n->bgi_size[0] = saved.bgi_size[0]; n->bgi_size[1] = saved.bgi_size[1];
+    n->bg_origin = saved.bg_origin; n->bg_clip = saved.bg_clip;
+    return painted;
+}
+
+/* Lot 64: the layers from the lowest up, each inserted over the previous */
+static int bgi_paint(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh) {
+    we_node_t *n = &d->nodes[idx];
+    int k, total = 0, failed = 0;
+    if (!n->bgi_layers) return bgi_fill(d, idx, at, bx, by, bw, bh);
+    for (k = n->bgi_layers; k >= 0; k--) {
+        /* each layer decodes its own url and may fail on its own */
+        image_work.ready_idx = -1;
+        image_work.failed[idx] = 0;
+        if (k) bgi_layer_swap(n, k);
+        total += bgi_fill(d, idx, at + total, bx, by, bw, bh);
+        if (k) bgi_layer_swap(n, k);
+        failed |= image_work.failed[idx];
+    }
+    image_work.ready_idx = -1;
+    image_work.failed[idx] = (uint8_t)failed;
+    return total;
 }
 
 static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, int bx, int by, int bw, int bh, const we_radii_t *radii) {
@@ -6113,6 +6895,463 @@ static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, in
     }
 }
 
+static int inside(const we_doc_t *d, int node, int root);
+
+/* Lot 64: direction rtl in a flex or grid container. The items are laid
+ * out left to right and then mirrored inside the content box with their
+ * subtrees, so the main start of a row (the cross start of a column, the
+ * first grid column) is the right edge. Text inside an item keeps its
+ * left-to-right order. */
+static void rtl_mirror(we_doc_t *d, int idx, int first, int x, int width) {
+    int c, i;
+    for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
+        const we_node_t *k = &d->nodes[c];
+        int delta;
+        if (k->absolute || k->display == WE_DISP_NONE) continue;
+        delta = 2 * x + width - 2 * k->x - k->w;
+        if (!delta) continue;
+        for (i = c; i < (int)d->nnodes; i++)
+            if (inside(d, i, c)) d->nodes[i].x = (int16_t)limit_coord(d->nodes[i].x + delta);
+        for (i = first; i < (int)d->nitems; i++)
+            if (inside(d, d->item_owner[i], c)) d->items[i].x = (int16_t)limit_coord(d->items[i].x + delta);
+    }
+}
+
+/* ---------- Lot 64: multi-column layout (subset) ----------
+ * A block with column-count or column-width lays its content out at the
+ * column width (count from column-width as CSS: as many as fit, capped by
+ * column-count and WE_COLUMNS_MAX; the gap is column-gap, normal 8 px),
+ * then cuts it into units: each in-flow child box whole (no fragmentation
+ * inside a box: break-inside avoid), and each line of the inline content.
+ * The units are packed in order into columns of height h: the smallest h
+ * that needs no more than the count (balance), or the definite height with
+ * column-fill auto (and as a cap when balancing). Units that do not fit go
+ * to further columns on the right (overflow columns). Each unit moves with
+ * its subtree and items to its column. column-rule paints in the middle of
+ * each gap between two used columns, over the column height, after the
+ * content. Vertical writing modes are refused. */
+typedef struct { int node, top, bottom, line, span, brk; } we_col_unit_t;
+static we_col_unit_t col_unit[OS_FB_WEB_ITEMS + WE_MAX_NODES];
+static int16_t col_of[OS_FB_WEB_ITEMS + WE_MAX_NODES];
+static uint8_t col_moved[OS_FB_WEB_ITEMS];
+
+static int multicol(const we_node_t *n) {
+    return (n->col_count || n->col_width > 0) && n->display != WE_DISP_FLEX && n->display != WE_DISP_GRID &&
+           n->display != WE_DISP_TABLE && n->wmode == WE_WM_HORIZONTAL;
+}
+
+static int column_plan(const we_node_t *n, int width, int *gap, int *cw) {
+    int count, g = n->col_gap >= 0 ? n->col_gap : WE_CHAR_W;
+    if (n->col_width > 0) {
+        count = (width + g) / (n->col_width + g);
+        if (count < 1) count = 1;
+        if (n->col_count && n->col_count < count) count = n->col_count;
+    } else count = n->col_count;
+    if (count > WE_COLUMNS_MAX) count = WE_COLUMNS_MAX;
+    while (count > 1 && (width - (count - 1) * g) / count < WE_CHAR_W) count--;
+    if (count < 1) count = 1;
+    *gap = g;
+    *cw = (width - (count - 1) * g) / count;
+    if (*cw < WE_CHAR_W) *cw = WE_CHAR_W;
+    return count;
+}
+
+/* the units in order; returns their count */
+static int column_units(we_doc_t *d, int idx, int first) {
+    int c, count = 0, line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
+    uint32_t i;
+    for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
+        const we_node_t *k = &d->nodes[c];
+        if (k->display == WE_DISP_NONE || k->absolute) continue;
+        if (k->is_text || k->display == WE_DISP_INLINE || k->display == WE_DISP_INLINE_BLOCK) {
+            int open = -1;
+            for (i = (uint32_t)first; i < d->nitems; i++) {
+                const os_fb_web_item_t *it = &d->items[i];
+                int top, bottom;
+                if (!it->kind || !inside(d, d->item_owner[i], c)) continue;
+                top = it->kind == OS_FB_WEB_TEXT ? it->y - 1 : it->y;
+                bottom = it->kind == OS_FB_WEB_TEXT ? top + line_h : it->y + it->h;
+                if (open >= 0 && top < col_unit[open].bottom) {
+                    if (top < col_unit[open].top) col_unit[open].top = top;
+                    if (bottom > col_unit[open].bottom) col_unit[open].bottom = bottom;
+                    continue;
+                }
+                open = count++;
+                col_unit[open].node = c; col_unit[open].line = 1; col_unit[open].span = col_unit[open].brk = 0;
+                col_unit[open].top = top; col_unit[open].bottom = bottom;
+            }
+        } else {
+            col_unit[count].node = c; col_unit[count].line = 0;
+            col_unit[count].span = k->col_span_all && k->display != WE_DISP_INLINE_BLOCK;
+            col_unit[count].brk = k->col_break;
+            col_unit[count].top = k->y - k->margin[0];
+            col_unit[count].bottom = k->y + k->h + k->margin[2];
+            count++;
+        }
+    }
+    return count;
+}
+
+/* columns used by packing units [from, to) at height h (col_of filled,
+ * relative to the segment); a forced break opens a column */
+static int column_pack(int from, int to, int h) {
+    int u, column = 0, start = 0;
+    for (u = from; u < to; u++) {
+        if (u == from) start = col_unit[u].top;
+        else if (col_unit[u].bottom - start > h || (col_unit[u].brk & 1) || (col_unit[u - 1].brk & 2)) {
+            column++;
+            start = col_unit[u].top;
+        }
+        col_of[u] = (int16_t)column;
+    }
+    return to > from ? column + 1 : 0;
+}
+
+static void column_shift(we_doc_t *d, int first, const we_col_unit_t *u, int dx, int dy) {
+    uint32_t i;
+    int k;
+    for (i = (uint32_t)first; i < d->nitems; i++) {
+        os_fb_web_item_t *it = &d->items[i];
+        int top;
+        if (!it->kind || col_moved[i] || !inside(d, d->item_owner[i], u->node)) continue;
+        top = it->kind == OS_FB_WEB_TEXT ? it->y - 1 : it->y;
+        if (u->line && (top < u->top || top >= u->bottom)) continue;
+        col_moved[i] = 1;
+        it->x = (int16_t)limit_coord(it->x + dx);
+        it->y = (int16_t)limit_coord(it->y + dy);
+    }
+    if (u->line) return;
+    for (k = u->node; k < (int)d->nnodes; k++)
+        if (inside(d, k, u->node)) {
+            d->nodes[k].x = (int16_t)limit_coord(d->nodes[k].x + dx);
+            d->nodes[k].y = (int16_t)limit_coord(d->nodes[k].y + dy);
+        }
+}
+
+static int width_auto(const we_node_t *n);
+
+/* Lot 64: one segment of units between spanners, its first column at
+ * top; returns its height */
+static int column_segment(we_doc_t *d, int idx, int first, int from, int to, int x, int top, int cw, int gap, int count,
+                          int fixed) {
+    const we_node_t *n = &d->nodes[idx];
+    int lo = 1, hi = col_unit[to - 1].bottom - col_unit[from].top, h, used, u, k, start[WE_COLUMNS_MAX * 4];
+    for (u = from; u < to; u++) if (col_unit[u].bottom - col_unit[u].top > lo) lo = col_unit[u].bottom - col_unit[u].top;
+    if (hi < lo) hi = lo;
+    if (n->col_fill_auto && fixed > 0) h = fixed;
+    else {
+        while (lo < hi) {                      /* the smallest height using at most count columns */
+            int mid = (lo + hi) / 2;
+            if (column_pack(from, to, mid) <= count) hi = mid;
+            else lo = mid + 1;
+        }
+        h = lo;
+        if (fixed > 0 && h > fixed) h = fixed;
+    }
+    used = column_pack(from, to, h);
+    if (used > WE_COLUMNS_MAX * 4) { diag(d, "columns overflow dropped", idx); used = WE_COLUMNS_MAX * 4; }
+    if (used > count) diag(d, "columns overflow", idx);
+    for (k = 0; k < used; k++) start[k] = -1;
+    for (u = from; u < to; u++) if (col_of[u] < used && start[col_of[u]] < 0) start[col_of[u]] = col_unit[u].top;
+    for (u = from; u < to; u++) {
+        int column = col_of[u] < used ? col_of[u] : used - 1;
+        column_shift(d, first, &col_unit[u], column * (cw + gap), top - start[column]);
+    }
+    if (n->rule_style > WE_BS_HIDDEN && n->rule_w > 0)
+        for (k = 1; k < used && k < count; k++) {
+            int rx = x + k * (cw + gap) - gap / 2 - n->rule_w / 2;
+            edge_paint(d, idx, n->rule_style, n->rule_color_set ? n->rule_color : n->color, 1, rx, top, n->rule_w, h);
+        }
+    return h;
+}
+
+/* A column-span: all block child (a spanner) is laid out at the full
+ * width (an auto width; a percentage resolves against the column) and
+ * cuts the content into segments: each segment is balanced on its own,
+ * the spanner goes below it and the next segment below the spanner. The
+ * fill and the definite height apply only without spanners. */
+static int layout_columns(we_doc_t *d, int idx, int x, int y, int width, int depth) {
+    const we_node_t *n = &d->nodes[idx];
+    int gap, cw, count = column_plan(n, width, &gap, &cw), first = (int)d->nitems, units, u, from = 0, top = y, spans = 0, c;
+    int fixed = definite_height(d, idx, 0);
+    for (c = n->first; c >= 0; c = d->nodes[c].next)
+        if (d->nodes[c].col_span_all && d->nodes[c].display != WE_DISP_INLINE && d->nodes[c].display != WE_DISP_INLINE_BLOCK &&
+            !d->nodes[c].is_text && !d->nodes[c].absolute && d->nodes[c].display != WE_DISP_NONE) {
+            spans++;
+            if (width_auto(&d->nodes[c])) forced_width[c] = (int16_t)width;
+            else if (d->nodes[c].width_pct > 0) diag(d, "column span width on the column", c);
+        }
+    (void)layout_children(d, idx, x, y, cw, depth);
+    for (c = n->first; c >= 0; c = d->nodes[c].next) if (d->nodes[c].col_span_all && width_auto(&d->nodes[c])) forced_width[c] = -1;
+    units = column_units(d, idx, first);
+    if (!units) return fixed > 0 ? fixed : 0;
+    if (spans) fixed = -1;
+    w_zero(col_moved, sizeof(col_moved));
+    for (u = 0; u <= units; u++) {
+        if (u < units && !col_unit[u].span) continue;
+        if (u > from) top += column_segment(d, idx, first, from, u, x, top, cw, gap, count, fixed);
+        if (u < units) {
+            column_shift(d, first, &col_unit[u], 0, top - col_unit[u].top);
+            top += col_unit[u].bottom - col_unit[u].top;
+        }
+        from = u + 1;
+    }
+    return top - y;
+}
+
+static int layout_content(we_doc_t *d, int idx, int x, int y, int width, int depth) {
+    const we_node_t *n = &d->nodes[idx];
+    if (multicol(n)) return layout_columns(d, idx, x, y, width, depth);
+    if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID) {
+        int first = (int)d->nitems, h = layout_flex(d, idx, x, y, width, depth);
+        if (n->dir_rtl) rtl_mirror(d, idx, first, x, width);
+        return h;
+    }
+    if (n->display == WE_DISP_TABLE) {
+        int first = (int)d->nitems, h = layout_table(d, idx, x, y, width, depth), r;
+        /* rtl: the first column at the right; each row's cells are mirrored */
+        if (n->dir_rtl)
+            for (r = idx + 1; r < (int)d->nnodes && inside(d, r, idx); r++)
+                if (d->nodes[r].display == WE_DISP_ROW) {
+                    int t = d->nodes[r].parent;
+                    while (t >= 0 && d->nodes[t].display != WE_DISP_TABLE) t = d->nodes[t].parent;
+                    if (t == idx) rtl_mirror(d, r, first, x, width);      /* not a nested table's rows */
+                }
+        return h;
+    }
+    return layout_children(d, idx, x, y, width, depth);
+}
+
+/* ---------- Lot 64: vertical writing modes ----------
+ * A block whose writing-mode is vertical-rl or vertical-lr under a
+ * horizontal container is an orthogonal root: its content is laid out in
+ * logical space (inline axis = physical down, inline size = its definite
+ * content height, else its max-content) and then mapped to physical space:
+ * vertical-rl puts the first line at the right, vertical-lr at the left.
+ * The box keeps its physical margins, borders and padding; an auto width
+ * becomes the block extent of its content. Text is stacked upright, one
+ * glyph per item and 8 px per glyph (no rotated font: mixed orientation is
+ * painted upright, "vertical text painted upright"); spaces paint nothing.
+ * Descendants share the root's mode: another writing-mode inside it is
+ * painted with the root's ("nested writing mode inherited"). */
+static os_fb_web_item_t vertical_out[OS_FB_WEB_ITEMS];
+static int16_t vertical_owner[OS_FB_WEB_ITEMS];
+
+static int vertical_root(const we_doc_t *d, int idx) {
+    const we_node_t *n = &d->nodes[idx];
+    return n->wmode != WE_WM_HORIZONTAL && (n->parent < 0 || d->nodes[n->parent].wmode == WE_WM_HORIZONTAL);
+}
+
+static int width_auto(const we_node_t *n) {
+    return !n->width_kind && n->width < 0 && n->width_pct <= 0 && !n->length[WE_LEN_WIDTH].count;
+}
+
+static int inside(const we_doc_t *d, int node, int root) {
+    int k;
+    for (k = 0; node >= 0 && k <= WE_DEPTH_MAX; k++, node = d->nodes[node].parent) if (node == root) return 1;
+    return 0;
+}
+
+static void vertical_map(int rl, int ox, int oy, int extent, int *x, int *y, int *w, int *h) {
+    int lx = *x - ox, ly = *y - oy, lw = *w, lh = *h;
+    *x = rl ? ox + extent - ly - lh : ox + ly;
+    *y = oy + lx;
+    *w = lh; *h = lw;
+}
+
+static void vertical_remap(we_doc_t *d, int idx, int first, int ox, int oy, int extent) {
+    int rl = d->nodes[idx].wmode == WE_WM_VERTICAL_RL, i, out = 0, room = OS_FB_WEB_ITEMS - first, dropped = 0, text = 0;
+    for (i = 0; i < (int)d->nnodes; i++) {
+        we_node_t *c = &d->nodes[i];
+        int x = c->x, y = c->y, w = c->w, h = c->h;
+        if (i == idx || !inside(d, i, idx)) continue;
+        vertical_map(rl, ox, oy, extent, &x, &y, &w, &h);
+        c->x = (int16_t)limit_coord(x); c->y = (int16_t)limit_coord(y); c->w = (int16_t)w; c->h = (int16_t)h;
+    }
+    for (i = first; i < (int)d->nitems; i++) {
+        os_fb_web_item_t it = d->items[i];
+        int x = it.x, y = it.y, w = it.w, h = it.h;
+        if (it.kind == OS_FB_WEB_TEXT) {
+            int len = 0, adv, k;
+            while (len < OS_FB_WEB_TEXT_LEN && it.text[len]) len++;
+            adv = len ? w / len : WE_CHAR_W;
+            if (adv < 1) adv = 1;
+            for (k = 0; k < len; k++) {
+                os_fb_web_item_t glyph = it;
+                int gx = x + k * adv, gy = y, gw = WE_CHAR_W, gh = h;
+                if (it.text[k] == ' ') continue;
+                if (out >= room) { dropped++; continue; }
+                vertical_map(rl, ox, oy, extent, &gx, &gy, &gw, &gh);
+                glyph.x = (int16_t)limit_coord(gx); glyph.y = (int16_t)limit_coord(gy);
+                glyph.w = (uint16_t)gw; glyph.h = (uint16_t)gh;
+                w_zero(glyph.text, sizeof(glyph.text));
+                glyph.text[0] = it.text[k];
+                vertical_out[out] = glyph;
+                vertical_owner[out++] = d->item_owner[i];
+                text = 1;
+            }
+            continue;
+        }
+        if (out >= room) { dropped++; continue; }
+        if (it.kind) {
+            vertical_map(rl, ox, oy, extent, &x, &y, &w, &h);
+            it.x = (int16_t)limit_coord(x); it.y = (int16_t)limit_coord(y); it.w = (uint16_t)w; it.h = (uint16_t)h;
+        }
+        vertical_out[out] = it;
+        vertical_owner[out++] = d->item_owner[i];
+    }
+    for (i = 0; i < out; i++) { d->items[first + i] = vertical_out[i]; d->item_owner[first + i] = vertical_owner[i]; }
+    d->nitems = (uint32_t)(first + out);
+    if (dropped) {
+        if (!d->perf.items_dropped) diag(d, "display budget exceeded", idx);
+        d->perf.items_dropped += (uint32_t)dropped;
+    }
+    if (text && !d->nodes[idx].upright) diag(d, "vertical text painted upright", idx);
+}
+
+/* Physical properties of the boxes inside an orthogonal root are turned
+ * into logical ones for the layout and turned back afterwards (the later
+ * passes read physical values): sides and corners rotate (logical top is
+ * the physical right in vertical-rl, the left in vertical-lr; logical left
+ * is the physical top), px widths and heights swap, radii, shadow and
+ * gradient axes swap. Percent or keyword sizes stay as declared ("vertical
+ * flow size kept physical"); background images inside are refused, images
+ * paint their alt text (the runs would be transposed). Relative offsets
+ * and absolute insets of boxes inside follow the logical axes. */
+static const uint8_t vertical_side[2][4] = {{3, 2, 1, 0}, {1, 2, 3, 0}};      /* [rl][logical] */
+static const uint8_t vertical_corner[2][4] = {{0, 3, 2, 1}, {1, 2, 3, 0}};
+
+static void permute16(int16_t *a, const uint8_t *map, int forward) {
+    int16_t t[4];
+    int k;
+    for (k = 0; k < 4; k++) t[k] = a[k];
+    for (k = 0; k < 4; k++) { if (forward) a[k] = t[map[k]]; else a[map[k]] = t[k]; }
+}
+
+static uint8_t permute_bits(uint8_t bits, const uint8_t *map, const uint8_t *weight, int forward) {
+    uint8_t out = (uint8_t)(bits & ~(weight[0] | weight[1] | weight[2] | weight[3]));
+    int k;
+    for (k = 0; k < 4; k++) {
+        if (forward) { if (bits & weight[map[k]]) out |= weight[k]; }
+        else if (bits & weight[k]) out |= weight[map[k]];
+    }
+    return out;
+}
+
+static int simple_size(const we_node_t *n) {
+    return !n->width_kind && n->width_pct <= 0 && !n->length[WE_LEN_WIDTH].count && !n->height_percent &&
+           !n->length[WE_LEN_HEIGHT].count && !n->min_width_kind && !n->max_width_kind && !n->min_pct && !n->max_pct &&
+           !n->min_height_percent && !n->max_height_percent && !n->length[WE_LEN_MIN_W].count &&
+           !n->length[WE_LEN_MAX_W].count && !n->length[WE_LEN_MIN_H].count && !n->length[WE_LEN_MAX_H].count;
+}
+
+static void swap16(int16_t *a, int16_t *b) { int16_t t = *a; *a = *b; *b = t; }
+
+static void vertical_style(we_doc_t *d, int i, int rl, int forward) {
+    static const uint8_t side_bit[4] = {WE_AUTO_TOP, WE_AUTO_RIGHT, WE_AUTO_BOTTOM, WE_AUTO_LEFT};
+    static const uint8_t margin_pct[4] = {1, 2, 4, 8}, padding_pct[4] = {16, 32, 64, 128};
+    static const uint8_t rad_x_bit[4] = {1, 2, 4, 8}, rad_y_bit[4] = {16, 32, 64, 128};
+    static const uint8_t grad_map[2][6] = {{0, WE_GRAD_RIGHT, WE_GRAD_BOTTOM, WE_GRAD_LEFT, WE_GRAD_TOP, WE_GRAD_RADIAL},
+                                          {0, WE_GRAD_RIGHT, WE_GRAD_TOP, WE_GRAD_LEFT, WE_GRAD_BOTTOM, WE_GRAD_RADIAL}};
+    we_node_t *n = &d->nodes[i];
+    const uint8_t *side = vertical_side[rl], *corner = vertical_corner[rl];
+    int k;
+    uint8_t x_bits, y_bits;
+    permute16(n->margin, side, forward);
+    permute16(n->padding, side, forward);
+    permute16(n->spacing_value, side, forward);
+    permute16(n->spacing_value + 4, side, forward);
+    n->spacing_pct = permute_bits(n->spacing_pct, side, margin_pct, forward);
+    n->spacing_pct = permute_bits(n->spacing_pct, side, padding_pct, forward);
+    n->margin_auto = permute_bits(n->margin_auto, side, side_bit, forward);
+    {   /* per-side borders rotate with the sides */
+        static const uint8_t edge_bit[4] = {1, 2, 4, 8};
+        int8_t w[4];
+        uint8_t st[4];
+        uint32_t col[4];
+        for (k = 0; k < 4; k++) { w[k] = n->edge_w[k]; st[k] = n->edge_style[k]; col[k] = n->edge_color[k]; }
+        for (k = 0; k < 4; k++) {
+            int from = forward ? side[k] : k, to = forward ? k : side[k];
+            n->edge_w[to] = w[from]; n->edge_style[to] = st[from]; n->edge_color[to] = col[from];
+        }
+        n->edge_color_set = permute_bits(n->edge_color_set, side, edge_bit, forward);
+    }
+    /* radii: corners rotate and the two radii of a corner swap axes */
+    {
+        uint8_t rx[4], ry[4];
+        for (k = 0; k < 4; k++) { rx[k] = n->rad_x[k]; ry[k] = n->rad_y[k]; }
+        for (k = 0; k < 4; k++) {
+            if (forward) { n->rad_x[k] = ry[corner[k]]; n->rad_y[k] = rx[corner[k]]; }
+            else { n->rad_y[corner[k]] = rx[k]; n->rad_x[corner[k]] = ry[k]; }
+        }
+        x_bits = permute_bits(n->rad_pct, corner, rad_x_bit, forward) & 15;
+        y_bits = permute_bits(n->rad_pct, corner, rad_y_bit, forward) & 240;
+        n->rad_pct = (uint8_t)((x_bits << 4) | (y_bits >> 4));
+    }
+    for (k = 0; k < n->shadow_count && k < WE_SHADOWS_MAX; k++) {
+        int8_t x = n->shadow[k].x, y = n->shadow[k].y;
+        if (forward) { n->shadow[k].x = y; n->shadow[k].y = (int8_t)(rl ? -x : x); }
+        else { n->shadow[k].y = x; n->shadow[k].x = (int8_t)(rl ? -y : y); }
+    }
+    for (k = 0; k < n->tshadow_count && k < WE_SHADOWS_MAX; k++) {
+        int8_t x = n->tshadow[k].x, y = n->tshadow[k].y;
+        if (forward) { n->tshadow[k].x = y; n->tshadow[k].y = (int8_t)(rl ? -x : x); }
+        else { n->tshadow[k].y = x; n->tshadow[k].x = (int8_t)(rl ? -y : y); }
+    }
+    if (n->grad_dir && n->grad_dir <= WE_GRAD_RADIAL) {
+        if (forward) n->grad_dir = grad_map[rl][n->grad_dir];
+        else for (k = 1; k <= WE_GRAD_RADIAL; k++) if (grad_map[rl][k] == n->grad_dir) { n->grad_dir = (uint8_t)k; break; }
+    }
+    if (n->grad_dir == WE_GRAD_RADIAL) {
+        swap16(&n->grad_at[0], &n->grad_at[1]);
+        swap16(&n->grad_size[0], &n->grad_size[1]);
+        n->grad_at_pct = (uint8_t)((n->grad_at_pct & ~15) | ((n->grad_at_pct & 1) << 1) | ((n->grad_at_pct & 2) >> 1) |
+                                   ((n->grad_at_pct & 4) << 1) | ((n->grad_at_pct & 8) >> 1));
+    }
+    swap16(&n->border_spacing, &n->border_spacing_y);
+    swap16(&n->aspect_num, &n->aspect_den);
+    if (simple_size(n)) {
+        swap16(&n->width, &n->height);
+        swap16(&n->min_width, &n->min_height);
+        swap16(&n->max_width, &n->max_height);
+    } else if (forward) diag(d, "vertical flow size kept physical", i);
+    if (forward && (n->bgi_len || n->bgi_layers)) { n->bgi_len = 0; n->bgi_layers = 0; diag(d, "background image refused", i); }
+}
+
+/* forward 1 before the layout, 0 after it. */
+static void vertical_styles(we_doc_t *d, int forward) {
+    int i;
+    for (i = 0; i < (int)d->nnodes; i++) {
+        int root = d->nodes[i].parent;
+        while (root >= 0 && !vertical_root(d, root)) root = d->nodes[root].parent;
+        if (root < 0 || d->nodes[i].is_text) continue;
+        if (forward && d->nodes[i].wmode != d->nodes[root].wmode) {
+            d->nodes[i].wmode = d->nodes[root].wmode;
+            diag(d, "nested writing mode inherited", i);
+        }
+        vertical_style(d, i, d->nodes[root].wmode == WE_WM_VERTICAL_RL, forward);
+    }
+}
+
+static int layout_vertical(we_doc_t *d, int idx, int ox, int oy, int width, int *extent, int depth) {
+    we_node_t *n = &d->nodes[idx];
+    int size = resolved_height[idx] >= 0 ? resolved_height[idx] : definite_height(d, idx, 0), first = (int)d->nitems, e;
+    (void)n;
+    if (size < 0) size = vertical_inline[idx];      /* auto: max-content along the inline axis */
+    if (size < WE_CHAR_W) size = WE_CHAR_W;
+    if (size > WE_LAYOUT_MAX) size = WE_LAYOUT_MAX;
+    {
+        int saved_now = vertical_now, saved_block = vertical_block, saved_resolved = resolved_height[idx];
+        vertical_now = idx; vertical_block = width;     /* the logical height: the physical width or indefinite */
+        resolved_height[idx] = (int16_t)width;
+        e = layout_content(d, idx, ox, oy, size, depth);
+        vertical_now = saved_now; vertical_block = saved_block; resolved_height[idx] = (int16_t)saved_resolved;
+    }
+    *extent = width >= 0 ? width : e;
+    vertical_remap(d, idx, first, ox, oy, *extent);
+    return size;
+}
+
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     we_node_t* n = &d->nodes[idx];
     int bx, by, bw, bh, content_x, content_w, content_h, slot, border_slot = -1;
@@ -6130,7 +7369,8 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         diag(d, "percent height indefinite", idx);
     if (bw < 0) bw = 0;
     if (bw > WE_LAYOUT_MAX) bw = WE_LAYOUT_MAX;
-    if (forced_width[idx] < 0) bx += horizontal_auto(n, cw, bw);
+    if (forced_width[idx] < 0) bx += horizontal_auto(n, cw, bw, n->parent >= 0 && d->nodes[n->parent].dir_rtl &&
+                                                   d->nodes[n->parent].display != WE_DISP_FLEX && d->nodes[n->parent].display != WE_DISP_GRID);
     bx = limit_coord(bx);
     by = limit_coord(by);
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw;
@@ -6173,12 +7413,12 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
             if (alt) w_cpy(alt->text, OS_FB_WEB_TEXT_LEN, d->pool + n->text_off, n->text_len);
             content_h = WE_LINE_H;
         }
-    } else if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID)
-        content_h = layout_flex(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
-    else if (n->display == WE_DISP_TABLE)
-        content_h = layout_table(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
-    else
-        content_h = layout_children(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
+    } else if (vertical_root(d, idx)) {
+        int extent, automatic = forced_width[idx] < 0 && width_auto(n);
+        content_h = layout_vertical(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], automatic ? -1 : content_w, &extent, depth);
+        if (automatic) bw = limit_coord(extent + box_edge(n, 1) + box_edge(n, 3) + n->padding[1] + n->padding[3]);
+    } else
+        content_h = layout_content(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
     if (resolved_height[idx] >= 0) content_h = resolved_height[idx];
     else if (n->aspect_num && !w_eq(n->tag, "img")) {
         int ratio = ratio_height(n, bw - node_border_extra(n));
@@ -6204,10 +7444,25 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         } else { it->x = (int16_t)box[0]; it->y = (int16_t)box[1]; it->w = (uint16_t)box[2]; it->h = (uint16_t)box[3]; }
     }
     gradient_fill(d, idx, grad_slot, grad_slots, bx, by, bw, bh);
-    shadow_slot[1] += bgi_fill(d, idx, bgi_at, bx, by, bw, bh);
+    shadow_slot[1] += bgi_paint(d, idx, bgi_at, bx, by, bw, bh);
     shadow_fill(d, idx, 0, shadow_slot[0], shadow_slots[0], bx, by, bw, bh, &radii);
     shadow_fill(d, idx, 1, shadow_slot[1], shadow_slots[1], bx, by, bw, bh, &radii);
-    if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 5 || n->border_style == 6)) {
+    if (n->own_edges) {
+        /* lot 64: per-side borders: the top and bottom across the box,
+         * the left and right between them, each with its style and colour */
+        int w[4], style[4], side;
+        uint32_t color[4];
+        for (side = 0; side < 4; side++) {
+            edge_of(n, side, &w[side], &style[side], &color[side]);
+            if (style[side] == WE_BS_HIDDEN) w[side] = 0;
+        }
+        if (radii_any(&radii)) diag(d, "edges radius painted square", idx);
+        if (w[0]) edge_paint(d, idx, style[0], color[0], 0, by, bx, w[0], bw);
+        if (w[2]) edge_paint(d, idx, style[2], color[2], 0, by + bh - w[2], bx, w[2], bw);
+        if (w[3]) edge_paint(d, idx, style[3], color[3], 1, bx, by + w[0], w[3], bh - w[0] - w[2]);
+        if (w[1]) edge_paint(d, idx, style[1], color[1], 1, bx + bw - w[1], by + w[0], w[1], bh - w[0] - w[2]);
+        border_slot = 1;
+    } else if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 5 || n->border_style == 6)) {
         radius_dashed(d, idx, &radii, bx, by, bw, bh, n->border > 8 ? 8 : n->border, n->border_style, n->border_color);
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell && radii_any(&radii) &&
@@ -6232,15 +7487,23 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     (void)border_slot;
     if (w_eq(n->tag, "img") || (n->overflow_hidden && layout_first[idx] != WE_NO_BASELINE))
         layout_first[idx] = layout_last[idx] = (int16_t)limit_coord(by + bh);
-    if (w_eq(n->tag, "li") && n->list_style != WE_LIST_NONE) {
+    if (w_eq(n->tag, "li") && n->lsi_len && marker_image(d, idx, bx, by, bw)) {
+        /* lot 64: list-style-image painted, the type marker not */
+    } else if (w_eq(n->tag, "li") && n->list_style != WE_LIST_NONE) {
         char marker[24];
         int number = 1, sibling, len;
         os_fb_web_item_t *it;
         (void)sibling;
         number = list_ordinal(d, idx);
         len = counter_text(n->list_style, number, marker);
-        if (n->list_style != WE_LIST_DISC && n->list_style != WE_LIST_SQUARE && n->list_style != WE_LIST_CIRCLE) { marker[len++] = '.'; marker[len] = 0; }
-        it = emit(d, idx, OS_FB_WEB_TEXT, bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
+        if (n->list_style != WE_LIST_DISC && n->list_style != WE_LIST_SQUARE && n->list_style != WE_LIST_CIRCLE) {
+            /* lot 64: in rtl the marker is right of the box and its full
+             * stop, a neutral after the number, reads first: ".1" */
+            if (n->dir_rtl) { int k; for (k = len; k > 0; k--) marker[k] = marker[k - 1]; marker[0] = '.'; }
+            else marker[len] = '.';
+            marker[++len] = 0;
+        }
+        it = emit(d, idx, OS_FB_WEB_TEXT, n->dir_rtl ? bx + bw + WE_CHAR_W : bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
         if (it) w_cpy(it->text, OS_FB_WEB_TEXT_LEN, marker, len);
     }
     place_absolutes(d, idx, bx + box_edge(n, 3), by + box_edge(n, 0), bw - box_edge(n, 1) - box_edge(n, 3),
@@ -7075,7 +8338,7 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
             child_height = height_constraint(d, items->node[k], height - vertical_extra(child) - child->margin[0] - child->margin[2], fixed_height) + vertical_extra(child) + child->margin[0] + child->margin[2];
         if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) && vertical == WE_PACK_STRETCH && child->height < 0 && !child->height_percent) assigned_h = child_height;
         x = work->column_x[c] + ((child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ?
-            horizontal_auto(child, width, child_width - child->margin[1] - child->margin[3]) :
+            horizontal_auto(child, width, child_width - child->margin[1] - child->margin[3], 0) :
             pack_distance(horizontal, width - child_width, 0, 1));
         if (child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) {
             int free = height > child_height ? height - child_height : 0;
@@ -8129,7 +9392,7 @@ static void edge_of(const we_node_t *n, int side, int *w, int *style, uint32_t *
     *style = n->edge_style[side] ? n->edge_style[side] : n->border_style;
     *color = (n->edge_color_set >> side) & 1 ? n->edge_color[side] : n->border_color;
     if (*w < 0) *w = 0;
-    if (*style == WE_BS_NONE) *w = 0;
+    if (*style == WE_BS_NONE || !*style) *w = 0;      /* lot 64: no style is none */
 }
 
 static int edges_set(const we_node_t *n) {
@@ -9169,7 +10432,7 @@ static void collapse_widths(we_doc_t *d) {
         else if (n->display == WE_DISP_CELL || n->display == WE_DISP_ROW || table_group(n) || table_column_tag(n))
             table = collapse_table_of(d, (int)i);
         if (table < 0) {
-            if (edges_set(n)) diag(d, "border edge refused", (int)i);
+            n->own_edges = (uint8_t)edges_set(n);     /* lot 64: painted per side */
             continue;
         }
         if (n->display == WE_DISP_CELL) n->collapse_cell = 1;
@@ -9721,6 +10984,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     resolve_grid_requests(d);
     resolve_grid_areas(d);
     subgrid_bind_all(d);
+    vertical_styles(d, 1);
     intrinsic_sizes(d);
     { we_node_t *root = &d->nodes[0]; int bit;
       for (bit = 0; bit < 8; bit++) if (root->spacing_pct & (1u << bit)) {
@@ -9728,6 +10992,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
           if (bit < 4) root->margin[bit] = (int16_t)v; else root->padding[bit - 4] = (int16_t)v;
       } }
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
+    vertical_styles(d, 0);
     drop_reserved(d);
     ellipsis_items(d);
     paint_outlines(d);

@@ -1,3 +1,4 @@
+# Lot 64: vertical writing modes, direction rtl and dir, translucent radial rings, arc dashes, background layers/space/round/edge offsets, list-style-image, multicol with span/breaks, per-side and logical borders; US-031 partial; statuses unchanged.
 # Lot 63: ::before/::after content, counters, quotes, char refs, overflow axes, tabs/tab-size/break-spaces, radial at/sizes, rotate/skew bands, rounded dashes, rounded clip under transform, collapse bands per line, soft hyphens, matrix(), background-image url; US-031 partial; statuses unchanged.
 # Lot 62: alpha compositing, 3D borders, transforms, outline/shadows, text paint, gradients, radius, paint order, rounded clip, spacing/justify, radial; US-031 partial; statuses unchanged.
 # Lot 61: baselines, subgrid gaps/baselines, viewport, glyph clip, collapsed edges, border styles, z-index/opacity; US-031 partial; statuses unchanged.

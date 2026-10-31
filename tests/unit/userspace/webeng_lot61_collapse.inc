@@ -152,7 +152,7 @@ static void test_l61_resolve_invalid_edges_are_refused_atomically(void) {
 }
 
 static void test_l61_resolve_edges_outside_collapse_are_diagnosed(void) {
-    lot52_render("<body style='margin:0'><div id=x style='border:2px solid #ff0000;border-top:4px solid #0000ff;width:10px;height:10px'></div></body>", 320);
+    lot52_render("<body style='margin:0'><div id=x style='border:2px solid #ff0000;border-top:4px solid solid;width:10px;height:10px'></div></body>", 320);
     TEST_ASSERT_EQUAL(1, l61_diag_count("border edge refused"));
     l61_box("x", 0, 0, 14, 14);                              /* uniform separate border */
     TEST_ASSERT_EQUAL(1, l61_count(OS_FB_WEB_BORDER));
