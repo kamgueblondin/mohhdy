@@ -733,3 +733,10 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_net_ifcfg: $(UNIT_DIR)/userspace/test_ne
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/net_ifcfg.c ../kernel/net_dhcp.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
+
+# Lot 67: Ring 3 web stack (crypto, X.509, TLS 1.2 client, HTTP/1.1).
+WF_CRYPTO_SRCS = ../userspace/wf_bn.c ../userspace/wf_sha512.c ../userspace/wf_ec.c ../userspace/wf_rsa.c ../kernel/sha256.c
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_crypto: $(UNIT_DIR)/userspace/test_wf_crypto.c $(UNIT_DIR)/userspace/wf_vectors.h $(WF_CRYPTO_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_CRYPTO_SRCS) $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
