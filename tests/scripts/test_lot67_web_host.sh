@@ -10,7 +10,7 @@ cd "$W" || exit 1
 python3 "$ROOT/scripts/lot67_gen_pki.py" "$W/pki" >/dev/null || { echo "FAIL: pki"; exit 1; }
 gcc -O1 -m32 -Wall -Werror -I"$ROOT/userspace" -I"$ROOT/kernel" -I"$ROOT/include" -o wf_fetch_host \
     "$ROOT/tests/host/wf_fetch_host.c" \
-    "$ROOT"/userspace/wf_http.c "$ROOT"/userspace/wf_dns.c "$ROOT"/userspace/wf_tls.c "$ROOT"/userspace/wf_fetch.c \
+    "$ROOT"/userspace/wf_http.c "$ROOT"/userspace/wf_dns.c "$ROOT"/userspace/wf_tls.c "$ROOT"/userspace/wf_fetch.c "$ROOT"/userspace/wf_inflate.c \
     "$ROOT"/userspace/wf_x509.c "$ROOT"/userspace/wf_bn.c "$ROOT"/userspace/wf_sha512.c "$ROOT"/userspace/wf_ec.c \
     "$ROOT"/userspace/wf_rsa.c "$ROOT"/kernel/sha256.c "$ROOT"/kernel/aes_gcm.c "$ROOT"/kernel/x25519.c || { echo "FAIL: build"; exit 1; }
 HP=$((20000 + $$ % 20000)); SP=$((HP + 1))

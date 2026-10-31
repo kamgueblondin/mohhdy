@@ -31,6 +31,8 @@ typedef struct {
     char content_type[128];
     int body_len;
     int truncated;
+    int encoding;             /* Lot 69: Content-Encoding decoded (WF_ENC_*) */
+    int wire_len;             /* body bytes on the wire (compressed) */
     int redirects;
     int https;
     uint8_t ip[4];

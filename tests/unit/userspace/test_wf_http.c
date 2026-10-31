@@ -7,6 +7,8 @@
 #include "wf_dns.h"
 #include "wf_tls.h"
 #include "wf_ec.h"
+#include "wf_inflate.h"
+#include "wf_inflate_vectors.h"
 #include "wf_fetch.h"
 #include "wf_html.h"
 
@@ -97,7 +99,13 @@ static void test_resp_content_length(void) {
     wf_http_resp_init(&r, g_body, sizeof(g_body));
     TEST_ASSERT_EQUAL(-1, feed_all(&r, "SSH-2.0-OpenSSH\r\n\r\n", 0));
     wf_http_resp_init(&r, g_body, sizeof(g_body));
-    TEST_ASSERT_EQUAL(-1, feed_all(&r, "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\n\r\n", 0));
+    /* Lot 69: gzip/deflate are decoded by wf_fetch; other codings stay refused */
+    TEST_ASSERT_EQUAL(-1, feed_all(&r, "HTTP/1.1 200 OK\r\nContent-Encoding: br\r\n\r\n", 0));
+    wf_http_resp_init(&r, g_body, sizeof(g_body));
+    TEST_ASSERT_EQUAL(-1, feed_all(&r, "HTTP/1.1 200 OK\r\nContent-Encoding: gzip, br\r\n\r\n", 0));
+    wf_http_resp_init(&r, g_body, sizeof(g_body));
+    TEST_ASSERT_EQUAL(1, feed_all(&r, "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: 0\r\n\r\n", 0));
+    TEST_ASSERT_EQUAL(1, r.content_encoding);
 }
 
 static void test_resp_chunked(void) {
@@ -240,6 +248,52 @@ static void test_ecdh_p256_rfc5903(void) {
         memcpy(bad, r_pub, 65); bad[64] ^= 1;
         TEST_ASSERT_TRUE(wf_ecdh_p256(i_priv, bad, 65, 0, z) != 0);
     }
+}
+
+
+/* Lot 69: Content-Encoding gzip / deflate, decoded in place. */
+static uint32_t crc32_ref(const uint8_t* d, int n) {
+    uint32_t c = 0xffffffffU; int i, k;
+    for (i = 0; i < n; i++) { c ^= d[i]; for (k = 0; k < 8; k++) c = (c >> 1) ^ (0xedb88320U & (0U - (c & 1U))); }
+    return ~c;
+}
+static void test_inflate_vectors(void) {
+    static uint8_t buf[32768];
+    int tr = -1, n, used;
+    memcpy(buf, wf_inf_gzip, sizeof(wf_inf_gzip));
+    n = wf_decode_body_inplace(WF_ENC_GZIP, buf, (int)sizeof(wf_inf_gzip), (int)sizeof(buf), &tr);
+    TEST_ASSERT_EQUAL(WF_INF_PLAIN_LEN, n);
+    TEST_ASSERT_EQUAL(0, tr);
+    TEST_ASSERT_EQUAL(0, memcmp(buf, wf_inf_plain_line0, strlen(wf_inf_plain_line0)));
+    TEST_ASSERT_TRUE(crc32_ref(buf, n) == wf_inf_plain_crc);
+    memcpy(buf, wf_inf_zlib, sizeof(wf_inf_zlib));
+    n = wf_decode_body_inplace(WF_ENC_DEFLATE, buf, (int)sizeof(wf_inf_zlib), (int)sizeof(buf), &tr);
+    TEST_ASSERT_EQUAL(WF_INF_PLAIN_LEN, n);
+    TEST_ASSERT_TRUE(crc32_ref(buf, n) == wf_inf_plain_crc);
+    memcpy(buf, wf_inf_raw, sizeof(wf_inf_raw));      /* raw deflate under "deflate" */
+    n = wf_decode_body_inplace(WF_ENC_DEFLATE, buf, (int)sizeof(wf_inf_raw), (int)sizeof(buf), &tr);
+    TEST_ASSERT_EQUAL(WF_INF_PLAIN_LEN, n);
+    TEST_ASSERT_TRUE(crc32_ref(buf, n) == wf_inf_plain_crc);
+    n = wf_inflate(wf_inf_fixed, (int)sizeof(wf_inf_fixed), &used, buf, (int)sizeof(buf), &tr);
+    TEST_ASSERT_EQUAL(WF_INF_PLAIN_LEN, n);
+    TEST_ASSERT_EQUAL((int)sizeof(wf_inf_fixed), used);
+    n = wf_inflate(wf_inf_stored, (int)sizeof(wf_inf_stored), &used, buf, (int)sizeof(buf), &tr);
+    TEST_ASSERT_EQUAL(WF_INF_STORED_LEN, n);
+    TEST_ASSERT_EQUAL(0, memcmp(buf, wf_inf_plain_line0, strlen(wf_inf_plain_line0)));
+    /* bounded: a small buffer cuts the output and says so */
+    memcpy(buf, wf_inf_gzip, sizeof(wf_inf_gzip));
+    n = wf_decode_body_inplace(WF_ENC_GZIP, buf, (int)sizeof(wf_inf_gzip), 4096, &tr);
+    TEST_ASSERT_TRUE(n > 0 && n < 4096);
+    TEST_ASSERT_EQUAL(1, tr);
+    TEST_ASSERT_EQUAL(0, memcmp(buf, wf_inf_plain_line0, strlen(wf_inf_plain_line0)));
+    /* input cut short: partial output, truncated */
+    memcpy(buf, wf_inf_gzip, sizeof(wf_inf_gzip) / 2);
+    n = wf_decode_body_inplace(WF_ENC_GZIP, buf, (int)sizeof(wf_inf_gzip) / 2, (int)sizeof(buf), &tr);
+    TEST_ASSERT_TRUE(n > 0 && n < WF_INF_PLAIN_LEN);
+    TEST_ASSERT_EQUAL(1, tr);
+    /* garbage is refused */
+    memset(buf, 0xff, 64);
+    TEST_ASSERT_EQUAL(-1, wf_decode_body_inplace(WF_ENC_GZIP, buf, 64, (int)sizeof(buf), &tr));
 }
 
 /* ---- in-memory transport: each connect replays the next canned reply ---- */
@@ -399,6 +453,7 @@ int main(void) {
     RUN_TEST(test_tls_prf_known_answer);
     RUN_TEST(test_tls13_rfc8448_key_schedule);
     RUN_TEST(test_ecdh_p256_rfc5903);
+    RUN_TEST(test_inflate_vectors);
     RUN_TEST(test_fetch_redirects);
     RUN_TEST(test_html_reduce);
     RUN_TEST(test_html_reduce_budget);

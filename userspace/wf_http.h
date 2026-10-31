@@ -42,6 +42,7 @@ typedef struct {
     char content_type[128];
     long content_length;     /* -1 unknown */
     int chunked;
+    int content_encoding;    /* Lot 69: WF_ENC_* (0 identity, 1 gzip, 2 deflate) */
     int body_len;
     int truncated;           /* body larger than body_cap: rest discarded */
     int done;                /* full message received */
