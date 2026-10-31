@@ -572,6 +572,41 @@ jobs:
           path: |
             test_logs/
 
+  lot68-text-scale:
+    name: QEMU desktop text scale and Ctrl zoom (Lot 68)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      # ui-scale 2, Ctrl+'+'/'-'/'0' on chat and web, pixel probes. About 1 min.
+      - name: QEMU ui-scale / text-size / Ctrl zoom with pixel probes
+        run: make qemu-gui-text-scale
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot68-text-scale-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   p2p:
     name: QEMU P2P three guests
     runs-on: ubuntu-latest

@@ -41,7 +41,7 @@ def bar_height(w, h, rgb):
     return y
 
 
-def ink_runs(w, h, rgb, y0, y1):
+def ink_runs(w, h, rgb, y0, y1, dark=False):
     """Median height of vertical runs of light text pixels in a band:
     an 8x8 glyph gives runs up to 8 px at 1x, 16 px at 2x."""
     runs = []
@@ -49,7 +49,7 @@ def ink_runs(w, h, rgb, y0, y1):
         run = 0
         for y in range(y0, y1):
             r, gg, b = px(rgb, w, x, y)
-            if r + gg + b > 600:
+            if (r + gg + b < 150) if dark else (r + gg + b > 600):
                 run += 1
             elif run:
                 runs.append(run)
@@ -150,7 +150,7 @@ def main():
             time.sleep(2.0)
             w, h, rgb = g.screendump_rgb(monitor, "qemu-gui-scale-web.ppm")
             save_png("web-2x.png", w, h, rgb)
-            wrun1, _ = ink_runs(w, h, rgb, bar_height(w, h, rgb), h - 40)
+            wrun1, _ = ink_runs(w, h, rgb, 90, h - 40, dark=True)
             start = len(g.log_text())
             g.send_key(monitor, "ctrl-equal")
             g.wait_for(proc, "osui zoom web zoom 1.25x", g.CMD_TIMEOUT, start)
@@ -158,7 +158,7 @@ def main():
             time.sleep(2.0)
             w, h, rgb = g.screendump_rgb(monitor, "qemu-gui-scale-web-zoom.ppm")
             save_png("web-2x-ctrl-plus.png", w, h, rgb)
-            wrun2, _ = ink_runs(w, h, rgb, bar_height(w, h, rgb), h - 40)
+            wrun2, _ = ink_runs(w, h, rgb, 90, h - 40, dark=True)
             g.say("web glyph-run p98 %d -> %d after Ctrl+'+'" % (wrun1, wrun2))
             if wrun2 <= wrun1:
                 raise RuntimeError("web zoom did not enlarge the page text: %d -> %d" % (wrun1, wrun2))

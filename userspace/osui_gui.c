@@ -344,6 +344,18 @@ int osui_gui_web_resolve(const char *base, const char *href, char *dst, int max)
 }
 
 static void gui_cat_u(char *d, int max, unsigned v);
+/* Lot 68: lay the open page out again for the current zoom */
+static void web_reflow(char *out, int out_max) {
+    char m[48];
+    if (!g_web_active || !g_web_file[0]) return;
+    if (web_viewport_w() == g_web_vw) return;
+    g_web_vw = web_viewport_w();
+    if (we_layout_viewport(&g_web, g_web_vw, OSUI_WEB_VIEWPORT_H) != 0) return;
+    if (g_web_scroll > g_web.perf.page_h) g_web_scroll = 0;
+    scpy(m, (int)sizeof(m), " viewport ");
+    gui_cat_u(m, (int)sizeof(m), (unsigned)g_web_vw);
+    app_out(out, out_max, "osui web reflow", m);
+}
 static void web_event(const char *p, char *out, int out_max) {
     if (sncmp(p, "view", 4) == 0) {
         /* Lot 68: kernel view size and scale; a new zoom relays the page */
@@ -351,15 +363,7 @@ static void web_event(const char *p, char *out, int out_max) {
         p += 4;
         pw = evt_int(&p); ph = evt_int(&p); q = evt_int(&p); fw = evt_int(&p); fh = evt_int(&p);
         osui_scale_web_view(osui_gui_scale(), pw, ph, q, fw, fh);
-        if (g_web_active && web_viewport_w() != before && g_web_file[0]) {
-            g_web_vw = web_viewport_w();
-            if (we_layout_viewport(&g_web, g_web_vw, OSUI_WEB_VIEWPORT_H) == 0) {
-                char m[48];
-                scpy(m, (int)sizeof(m), " viewport ");
-                gui_cat_u(m, (int)sizeof(m), (unsigned)g_web_vw);
-                app_out(out, out_max, "osui web reflow", m);
-            }
-        }
+        if (web_viewport_w() != before) web_reflow(out, out_max);
         return;
     }
     if (!g_web_active) return;
@@ -1428,6 +1432,10 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         scat(m, (int)sizeof(m), qb);
         if (us->changes != us->saved_at) (void)scale_save();
         app_out(out, out_max, "osui zoom ", m);
+        if (slot == OS_UI_Z_WEB && out) {
+            int l = slen(out);
+            web_reflow(out + l, out_max - l);
+        }
         return 0;
     }
     if (g_focus >= 0 && g_focus < OS_FB_APPS && g_slot[g_focus] && !g_ide.active && !g_web_active) {

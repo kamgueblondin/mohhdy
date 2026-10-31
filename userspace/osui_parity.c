@@ -278,6 +278,7 @@ static const osui_par_entry_t k_p2pmesh[] = {
     { "Rafale lissee", "p2p-burst", A | M, "PAIR N [TEXTE]" },
     { "Sonde de debit (estimateur)", "p2p-probe", A | M, "PAIR [N]" },
     { "Estimateur de debit", "p2p-bwe", 0, 0 },
+    { "Cadence d'envoi (estimateur)", "p2p-pace", A, "status|on|off|auto|cap BPS|burst N" },
     { "Inondation (test d'analyse)", "p2p-flood", A | M, "PAIR N" },
     { "Bloquer un pair", "p2p-block", A | M, "PAIR" },
     { "Taille du texte (globale)", "ui-scale", A, "auto|1|1.5|2|3|+|-" },
