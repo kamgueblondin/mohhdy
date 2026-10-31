@@ -262,6 +262,7 @@ typedef struct {
     uint32_t tx_bytes, rx_bytes, relayed, bad_hello, foreign, dup;
     uint32_t relayed_multi; /* forwarded to a further relay, not to the destination */
     uint32_t rejoins;       /* US-069: a known name came back under a new id after going down */
+    uint32_t heal_syncs;    /* Lot 66 (US-069): anti-entropy started by a peer coming back up */
     uint8_t last_src_ip[4]; /* source IPv4 of the datagram being handled (STUN server side) */
     /* Learned per-type receive baseline (US-075): EWMA of frames per
      * second, x16 fixed point, after P2P_ANALYZE_WARMUP windows. */

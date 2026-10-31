@@ -1826,10 +1826,36 @@ static void test_lot66_cache_lru_no_duplicate_raft_kept(void) {
     TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_cn, "r", 0x80000100U));
 }
 
+/* Lot 66 (US-069): a healed partition converges without p2p_sync. */
+static void test_lot66_heal_starts_anti_entropy(void) {
+    setup(3, 0);
+    run(3, 300);
+    g_cut[0][2] = g_cut[1][2] = g_cut[2][0] = g_cut[2][1] = 1;
+    run(3, 1300);
+    TEST_ASSERT_EQUAL(0, (int)p2p_find(&g_n[0], "gamma")->up);
+    TEST_ASSERT_EQUAL(0, (int)p2p_find(&g_n[2], "alpha")->up);
+    TEST_ASSERT_TRUE(p2p_put(&g_n[0], &g_h[0], "mode", "eco") >= 0);
+    TEST_ASSERT_TRUE(p2p_put(&g_n[2], &g_h[2], "side", "gamma") >= 0);
+    run(3, 50);
+    TEST_ASSERT_NULL(p2p_get_local(&g_n[2], "mode"));
+    TEST_ASSERT_NULL(p2p_get_local(&g_n[0], "side"));
+    TEST_ASSERT_EQUAL(0U, g_n[2].heal_syncs);
+    g_cut[0][2] = g_cut[1][2] = g_cut[2][0] = g_cut[2][1] = 0;
+    run(3, 800);
+    TEST_ASSERT_EQUAL(1, (int)p2p_find(&g_n[0], "gamma")->up);
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[2], "mode"));
+    TEST_ASSERT_EQUAL_STRING("eco", p2p_get_local(&g_n[2], "mode")->value);
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[0], "side"));
+    TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[1], "side"));
+    TEST_ASSERT_TRUE(g_n[2].heal_syncs >= 1U);
+    TEST_ASSERT_TRUE(g_n[0].heal_syncs >= 1U);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
     RUN_TEST(test_lot66_cache_lru_no_duplicate_raft_kept);
+    RUN_TEST(test_lot66_heal_starts_anti_entropy);
     RUN_TEST(test_multi_relay_chain);
     RUN_TEST(test_crash_reroute_and_rejoin);
     RUN_TEST(test_qos_adaptive_controller);

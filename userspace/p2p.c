@@ -1363,6 +1363,15 @@ static void on_hello(p2p_node_t* n, const p2p_host_t* h, const uint8_t* b, int l
          * times since it may not have our HELLO yet; INV is idempotent. */
         p->fence_push = 4U;
         p->fence_at = now(h) - P2P_HZ;
+        /* Lot 66 (US-069): a peer that was down (cut link, partition)
+         * missed the writes of both sides meanwhile. Start the two-way
+         * digest anti-entropy at once, re-sent until the answer arrives,
+         * instead of waiting for a manual p2p-sync. */
+        if (p->down_events) {
+            p->sync_retries = 4U;
+            p->sync_at = now(h) - P2P_SYNC_RESEND_TICKS;
+            n->heal_syncs++;
+        }
         line[0] = 0;
         s_cat(line, "p2p peer ", 96); s_cat(line, p->name, 96); s_cat(line, " up id ", 96); cat_hex32(line, p->id, 96);
         s_cat(line, p->keyed ? " keyed" : " unkeyed", 96);
@@ -2354,6 +2363,7 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " foreign ", cap); cat_u(out, n->foreign, cap);
         s_cat(out, " relayed_multi ", cap); cat_u(out, n->relayed_multi, cap);
         s_cat(out, " rejoins ", cap); cat_u(out, n->rejoins, cap);
+        s_cat(out, " heal_syncs ", cap); cat_u(out, n->heal_syncs, cap);
         s_cat(out, "\n", cap);
     }
     if (s_eq(what, "qos")) {

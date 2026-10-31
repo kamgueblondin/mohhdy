@@ -73,6 +73,15 @@ def main():
             ]
             for cmd, arg, frag, mut in keys:
                 gp.run_entry(monitor, proc, "/keys", "Cles collab", cmd, arg, frag, mut)
+            # Lot 66 (US-070): nine lines in the 8-slot cache from /cmd; the
+            # least recently used one is evicted, read back from /mesh.
+            gp.cmd_steps(monitor, proc, [("p2p-cache put c%d v%d 6000" % (i, i), "p2p-cache put ok c%d" % i)
+                                         for i in range(9)])
+            for cmd, arg, frag, mut in [
+                    ("p2p-cache get", "c0", "p2p-cache miss c0", False),
+                    ("p2p-cache get", "c8", "p2p-cache ok c8=v8", False),
+                    ("p2p-cache", "", " evictions 1 expired 0 ", False)]:
+                gp.run_entry(monitor, proc, "/mesh", "Maillage P2P", cmd, arg, frag, mut)
             for cmd, arg, frag, mut in rows[8:]:
                 gp.run_entry(monitor, proc, "/mesh", "Maillage P2P", cmd, arg, frag, mut)
             g.screendump_rgb(monitor, "qemu-gui-mesh-end.ppm")
