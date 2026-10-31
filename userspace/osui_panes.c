@@ -153,7 +153,7 @@ static int fill_browser(const osui_pane_src_t *src, char lines[][OSUI_PANES_LINE
     static os_dirent_t ents[32];
     int n = 0, i, k = src->listdir ? src->listdir("/web", ents, 32) : -1;
     buf_t b = line(lines, n++);
-    put_s(&b, "Pages locales /web : tapez web-render /web/<page>");
+    put_s(&b, "Barre d'adresse en haut : URL ou mots. Pages /web :");
     if (k < 0) { if (n < max) { b = line(lines, n++); put_s(&b, "  /web indisponible"); } return n; }
     for (i = 0; i < k && n < max; i++) {
         if (ents[i].flags == OS_DIRENT_DIR) continue;

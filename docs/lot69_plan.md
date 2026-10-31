@@ -148,6 +148,46 @@ Branch `cursor/lot69`, PR #226, base `origin/main` 9bf1eca (Lot 68 merge).
   image was built locally with Arm GNU Toolchain 13.3.
 - Still not ported: drivers, filesystem, shell, OS-UI, AI engine.
 
+## 8. Owner test on the box (address bar, first boot scale, windows)
+
+The owner ran the box build and reported that the changes were not
+visible. Root causes and fixes:
+
+- Browser-OS address bar: the Browser-OS pane now draws a white address
+  field ("Adresse (https://...) ou mots a chercher, puis Entree") with
+  "<", ">" and "Aller" buttons. Enter on a non-slash line in that pane
+  opens a URL (web ...) or runs a search (search ...) for plain words.
+  Tests: test_gfx_desktop test_lot69_browser_address_bar, test_osui_gui
+  test_lot69_browser_pane_address_line.
+- First boot scale: the auto rule now gives 1.5x when the shorter screen
+  side is >= 760 px (1024x768 included), with the native HD font. A host
+  can pin it with the fw_cfg file opt/mohhdy/ui-scale (read by the
+  kernel, used only without /persist/ui.cfg). The pixel QEMU tests pin
+  1x this way; test_qemu_gui_text_scale checks the unpinned 1.5x boot.
+- "//center": a desktop click used to type "/center" into the input
+  line, after a half-typed "/". Desktop clicks are now an event
+  ("cmd LINE") run apart from the typed line, which is kept. Only the
+  shell terminal still receives typed text. Test:
+  test_lot69_desktop_cmd_event_keeps_typed_line.
+- make: the kernel and userspace objects now use compiler generated
+  header deps (-MMD -MP); the hand rules missed gfx_font_hd.h and
+  os_ui_scale.h, so a header edit could leave a stale image.
+- Windows: one chrome path (kernel/gfx_wm.c) for every window type.
+  The buttons were working but tiny (14 px at any scale) and the full
+  screen web / editor windows used other "traffic" dots with only a
+  close. Now: button size follows the chrome scale (1.5x: 21 px, capped
+  by the title bar), the chat, pane and app windows resize from the
+  corner grip and the right / bottom edges (minimum 200x120, clamped to
+  the work area), and the full screen web / editor windows have the
+  same three buttons: close closes, minimize shows the desktop and the
+  Browser-OS (web) or Editeur (editor) dock icon restores it, maximize is a no-op (they are
+  already full screen). Tests: test_gfx_wm
+  test_lot69_scale_and_resize, test_gfx_desktop
+  test_lot69_every_window_shared_chrome, QEMU
+  tests/scripts/test_qemu_gui_lot69_windows.py (make
+  qemu-gui-lot69-windows: tablet clicks on the pane, chat and web
+  windows). App windows and the editor are clicked only in host tests.
+
 ## Other US
 - US-078 and US-097 stay "simule".
 - Phases 6-8 are unchanged apart from the items above.

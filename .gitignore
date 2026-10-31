@@ -82,3 +82,6 @@ userspace/usbdriver
 
 # Stale object files at the repository root (the build writes to build/).
 /*.o
+
+# Lot 69: compiler dependency files
+userspace/*.d

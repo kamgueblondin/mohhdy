@@ -28,7 +28,7 @@ int wf_url_format(const wf_url_t* u, char* out, int cap);
 /* Builds the GET request. Returns length or -1. */
 int wf_http_build_get(const wf_url_t* u, char* out, int cap);
 
-#define WF_HTTP_HDR_MAX 8192
+#define WF_HTTP_HDR_MAX (32 * 1024)   /* Lot 69: youtube.com sends ~10 KiB of headers */
 #define WF_HTTP_LOC_MAX 1024
 
 typedef struct {
@@ -42,6 +42,7 @@ typedef struct {
     char content_type[128];
     long content_length;     /* -1 unknown */
     int chunked;
+    int content_encoding;    /* Lot 69: WF_ENC_* (0 identity, 1 gzip, 2 deflate) */
     int body_len;
     int truncated;           /* body larger than body_cap: rest discarded */
     int done;                /* full message received */

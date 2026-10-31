@@ -54,6 +54,7 @@ static void summary(char* o, int max, const wf_fetch_result_t* r) {
     scat(o, max, "status "); scat_int(o, max, r->status);
     scat(o, max, " bytes "); scat_int(o, max, r->body_len);
     if (r->truncated) scat(o, max, " truncated 1");
+    if (r->encoding) { scat(o, max, r->encoding == 1 ? " gzip " : " deflate "); scat_int(o, max, r->wire_len); }
     scat(o, max, " redirects "); scat_int(o, max, r->redirects);
     scat(o, max, " url "); scat(o, max, r->url);
     if (r->https) {

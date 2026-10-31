@@ -18,7 +18,7 @@ static void test_plan_from_pixels(void) {
     plat_form_plan_t p;
     TEST_ASSERT_EQUAL(0, plat_form_plan(1024, 768, 0, 0, &p));
     TEST_ASSERT_EQUAL(PF_DESKTOP, p.form);
-    TEST_ASSERT_EQUAL(4, p.ui_q);
+    TEST_ASSERT_EQUAL(6, p.ui_q);                  /* Lot 69: 1024x768 auto is 1.5x (readable first boot) */
     TEST_ASSERT_EQUAL(0, p.ppi);
     TEST_ASSERT_EQUAL(640, p.web_css_w);
     TEST_ASSERT_EQUAL(0, plat_form_plan(3840, 2160, 0, 0, &p));

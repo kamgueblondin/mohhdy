@@ -26,6 +26,7 @@
 #define GUI_TERM_MAX 16
 #define GUI_TERM_LEN 64
 
+static void serial_puts(const char *s);   /* below: guest serial or test stub */
 static char g_input[96];
 static int g_ilen;
 static int g_leave;
@@ -245,6 +246,35 @@ int osui_gui_web_is_url(const char *s) {
 
 static int web_is_search(const char *f) { return f && sncmp(f, "search:", 7) == 0 && f[7]; }
 
+static int g_web_errpage;
+
+/* Lot 69: a small HTML page explaining a failed network load. */
+static int web_error_page(const char *url, const char *why, char *o, int cap) {
+    static const char *head = "<html><head><title>Page impossible a ouvrir</title></head><body>"
+                              "<h1>Page impossible a ouvrir</h1><p>Adresse :</p><pre>";
+    const char *mid = "</pre><p>Raison :</p><pre>";
+    const char *hint = "</pre><p>Etapes : DNS, connexion TCP, TLS (certificat), HTTP. "
+                       "Le message ci-dessus dit laquelle a echoue. Verifier le reseau avec net-if, "
+                       "ou essayer fetch -v URL dans le terminal.</p></body></html>";
+    const char *parts[5];
+    int k = 0, i, j;
+    const char *w = why;
+    if (cap < 64) return -1;
+    if (w && w[0] == 'o' && w[1] == 's') {           /* skip the "osui web fetch error=" prefix */
+        for (i = 0; w[i]; i++) if (w[i] == '=') { w = w + i + 1; break; }
+    }
+    parts[0] = head; parts[1] = url; parts[2] = mid; parts[3] = w ? w : "?"; parts[4] = hint;
+    for (j = 0; j < 5; j++) {
+        for (i = 0; parts[j][i] && k < cap - 8; i++) {
+            char c = parts[j][i];
+            if ((j == 1 || j == 3) && (c == '<' || c == '>' || c == '&')) c = c == '&' ? '+' : (c == '<' ? '(' : ')');
+            o[k++] = c;
+        }
+    }
+    o[k] = 0;
+    return k;
+}
+
 int osui_gui_web_load(const char *file, char *status, int max) {
     int n = -1, rc;
     static char sq[WSEARCH_QUERY + 8];
@@ -258,7 +288,15 @@ int osui_gui_web_load(const char *file, char *status, int max) {
             return -1;
         }
         n = g_web_fetch(file, g_web_src, OSUI_WEB_SRC_MAX, g_web_final, (int)sizeof(g_web_final), fst, (int)sizeof(fst));
-        if (n < 0) { if (status) scpy(status, max, fst); return -1; }
+        if (n < 0) {
+            /* Lot 69: the window shows why the page did not open (DNS, TCP,
+             * TLS, HTTP) instead of staying closed; the status keeps the
+             * error and the call still fails for the console callers. */
+            if (status) scpy(status, max, fst);
+            n = web_error_page(file, fst, g_web_src, OSUI_WEB_SRC_MAX);
+            g_web_errpage = (n > 0 && osui_web_pipeline(g_web_src, n) == 0);
+            return -1;
+        }
         g_web_src[n < OSUI_WEB_SRC_MAX ? n : OSUI_WEB_SRC_MAX - 1] = 0;
         rc = osui_web_pipeline(g_web_src, n);
         if (status) {
@@ -313,8 +351,18 @@ static int g_web_hn, g_web_hi = -1;
 static int web_go(const char *file, int push, char *out, int out_max) {
     char status[320];
     int k;
+    g_web_errpage = 0;
     if (osui_gui_web_load(file, status, (int)sizeof(status)) != 0) {
         if (out) { scat(out, out_max, status); scat(out, out_max, "\n"); }
+        if (g_web_errpage) {
+            /* the error page is shown in the browser window */
+            g_web_errpage = 0;
+            scpy(g_web_file, (int)sizeof(g_web_file), file);
+            g_web_active = 1;
+            g_web_mobile = 0;
+            g_web_scroll = 0;
+            if (out) scat(out, out_max, "osui web error-page shown\n");
+        }
         return -1;
     }
     scpy(g_web_file, (int)sizeof(g_web_file), g_web_final[0] ? g_web_final : file);
@@ -580,13 +628,18 @@ static int scale_save(void) {
     sc->saved_at = sc->changes;
     return 0;
 }
+/* Lot 69: first boot (no /persist/ui.cfg): the auto rule, unless the
+ * QEMU harness pinned a scale through fw_cfg (kernel display info). */
+static int g_scale_hint_q;
+void osui_gui_set_scale_hint(int q) { g_scale_hint_q = (q >= OS_UI_Q_MIN && q <= OS_UI_Q_MAX) ? q : 0; }
 static void scale_load_once(void) {
     char buf[160];
     int n;
     if (g_scale_loaded || !g_fs_io) return;
     g_scale_loaded = 1;
     n = web_image_read(0, OSUI_SCALE_CFG, (unsigned char *)buf, (int)sizeof(buf) - 1);
-    if (n > 0 && n < (int)sizeof(buf)) { buf[n] = 0; (void)osui_scale_load(osui_gui_scale(), buf, n); }
+    if (n > 0 && n < (int)sizeof(buf)) { buf[n] = 0; if (osui_scale_load(osui_gui_scale(), buf, n) == 0) return; }
+    if (g_scale_hint_q) osui_gui_scale()->ui_q = (uint8_t)g_scale_hint_q;
 }
 int osui_gui_scale_command(const char *line, char *out, int cap) {
     osui_scale_t *sc;
@@ -826,6 +879,34 @@ void osui_gui_event(const char *line, char *out, int out_max) {
         return;
     }
     if (sncmp(p, "web ", 4) == 0) { web_event(p + 4, out, out_max); return; }
+    if (sncmp(p, "cmd ", 4) == 0) {
+        /* Lot 69: a desktop click (dock, menu, pane close) runs its command
+         * as its own line; a half-typed chat line is kept, not prefixed */
+        static char keep[sizeof(g_input)];
+        int keep_n = g_ilen, i;
+        scpy(keep, (int)sizeof(keep), g_input);
+        g_ilen = 0;
+        g_input[0] = 0;
+        /* the close button of the full screen web / editor window: the
+         * typed "/center" would be eaten by those windows (keys go to the
+         * page or the editor), so close them the way their keys do */
+        if (scmp(p + 4, "/center") == 0 && (g_ide.active || g_web_active)) {
+            g_ilen = keep_n;
+            scpy(g_input, (int)sizeof(g_input), keep);
+            if (g_ide.active) ide_action(OSUI_IDE_QUIT, out, out_max);
+            else (void)osui_gui_feed_key(OS_VGA_KEY_ESC, out, out_max);
+            return;
+        }
+        /* same serial proof as a typed desktop line */
+        serial_puts("osui gui line=");
+        serial_puts(p + 4);
+        serial_puts("\n");
+        for (i = 4; p[i]; i++) (void)osui_gui_feed_key((unsigned char)p[i], out, out_max);
+        (void)osui_gui_feed_key('\n', out, out_max);
+        scpy(g_input, (int)sizeof(g_input), keep);
+        g_ilen = keep_n;
+        return;
+    }
     if (sncmp(p, "app ", 4) != 0) return;
     p += 4;
     {
@@ -1640,7 +1721,21 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             }
             if (program) return request_terminal(eval_line, out, out_max);
             if (osui_dispatch_line(g_input, out, out_max) != 0 && out
-                && sncmp(out, "osui error=commande inconnue", 28) == 0) {
+                && sncmp(out, "osui error=commande inconnue", 28) == 0
+                && scmp(osui_get_pane(), "browser") == 0 && g_input[0] != '/') {
+                /* Lot 69: Browser-OS address bar: an URL opens, words search
+                 * (web_open_line falls back to search: for non URLs) */
+                static char wl[sizeof(g_input) + 8];
+                int words = wsearch_is_query(g_input);
+                scpy(wl, (int)sizeof(wl), words ? "search " : "web ");
+                scat(wl, (int)sizeof(wl), g_input);
+                out[0] = 0;
+                if (!words || !search_line(wl, out, out_max)) web_open_line(wl, out, out_max);
+                g_ilen = 0;
+                g_input[0] = 0;
+                return 0;
+            }
+            if (out && sncmp(out, "osui error=commande inconnue", 28) == 0) {
                 /* The error used to reach the serial line only: say it
                  * in the chat window too. */
                 static char note[OS_FB_MSG_LEN]; /* off the GUI stack */

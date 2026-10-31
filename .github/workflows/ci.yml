@@ -673,6 +673,9 @@ jobs:
       - name: QEMU GUI window manager (panes, chat, dock, terminal minimize, about 1 min)
         run: make qemu-gui-windows
 
+      - name: QEMU Lot 69 shared window chrome (pane resize, chat, full screen web, about 2 min)
+        run: make qemu-gui-lot69-windows
+
       - name: QEMU terminal grid follows maximize and screen resize (reflow, about 1 min)
         run: make qemu-gui-term-resize
 

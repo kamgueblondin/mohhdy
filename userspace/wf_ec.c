@@ -286,3 +286,65 @@ int wf_ecdsa_verify_der(int curve, const uint8_t* pub, int pub_len,
     if (der_int(sig, sig_len, &pos, &r, &rl) || der_int(sig, sig_len, &pos, &s, &sl) || pos != sig_len) return -3;
     return wf_ecdsa_verify(curve, pub, pub_len, digest, digest_len, r, rl, s, sl);
 }
+
+/* ---------------------------------------------------------------- ECDH */
+
+/* k * P with a fixed-length double-and-always-add over the scalar size.
+ * Lot 69: used for ECDHE on P-256 with TLS 1.2 servers that do not offer
+ * X25519. Not hardened against cache timing (honest: see lot69_web_compat). */
+static void scalar_mul(const field_t* F, jpoint_t* R, const jpoint_t* P, const uint8_t* k, int size) {
+    static jpoint_t A, T, D;
+    int i;
+    A.inf = 1;
+    for (i = 0; i < size * 8; i++) {
+        int bit = (k[i >> 3] >> (7 - (i & 7))) & 1;
+        jdouble(F, &T, &A);
+        A = T;
+        jadd(F, &D, &A, P);
+        if (bit) A = D;
+    }
+    *R = A;
+}
+
+static int to_affine(const field_t* F, const jpoint_t* R, int size, uint8_t* out) {
+    wf_bn_t zz, zinv, x, y, z3;
+    if (R->inf) return -1;
+    wf_mont_from(&F->f, &zz, &R->z);
+    wf_mont_inv_prime(&F->f, &zinv, &zz);
+    wf_mont_to(&F->f, &zinv, &zinv);
+    FMUL(&zz, &zinv, &zinv);
+    FMUL(&z3, &zz, &zinv);
+    FMUL(&x, &R->x, &zz);
+    FMUL(&y, &R->y, &z3);
+    wf_mont_from(&F->f, &x, &x);
+    wf_mont_from(&F->f, &y, &y);
+    out[0] = 4U;
+    if (wf_bn_to_bytes(&x, out + 1, size) != 0 || wf_bn_to_bytes(&y, out + 1 + size, size) != 0) return -1;
+    return 0;
+}
+
+int wf_ecdh_p256(const uint8_t priv[32], const uint8_t* peer, int peer_len, uint8_t pub_out[65], uint8_t shared_x[32]) {
+    const curve_def_t* c = curve_of(WF_CURVE_P256);
+    field_t* F = &g_field;
+    static jpoint_t G, Q, R;
+    uint8_t g[65], tmp[65];
+    wf_bn_t k, nn;
+    int i;
+    if (!c || field_init(F, c) != 0) return -1;
+    if (wf_bn_from_bytes(&k, priv, 32) || wf_bn_from_bytes(&nn, c->n, 32)) return -1;
+    if (wf_bn_is_zero(&k) || wf_bn_cmp(&k, &nn) >= 0) return -1;
+    if (pub_out) {
+        g[0] = 4U;
+        for (i = 0; i < 32; i++) { g[1 + i] = c->gx[i]; g[33 + i] = c->gy[i]; }
+        if (load_point(F, 32, g, 65, &G) != 0) return -1;
+        scalar_mul(F, &R, &G, priv, 32);
+        if (to_affine(F, &R, 32, pub_out) != 0) return -1;
+    }
+    if (peer) {
+        if (load_point(F, 32, peer, peer_len, &Q) != 0) return -2;
+        scalar_mul(F, &R, &Q, priv, 32);
+        if (to_affine(F, &R, 32, tmp) != 0) return -3;
+        for (i = 0; i < 32; i++) shared_x[i] = tmp[1 + i];
+    }
+    return 0;
+}

@@ -156,7 +156,7 @@ def start_guest(kernel="mohhdy.bin"):
     peer = ControlledEthernetPeer(full_tls=True)
     peer.start()
     command = [
-        "qemu-system-i386", "-kernel", os.path.join(ROOT, "build", kernel),
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-kernel", os.path.join(ROOT, "build", kernel),
         "-initrd", os.path.join(ROOT, "my_initrd_test.tar"), "-cpu", "max", "-m", "1024M",
         "-display", "none", "-vga", "none", "-serial", "file:" + LOG,
         "-monitor", "unix:%s,server,nowait" % MON, "-machine", "type=pc,accel=tcg",

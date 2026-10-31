@@ -88,11 +88,54 @@ static void test_draw_buttons_colors(void) {
     TEST_ASSERT_EQUAL(GFX_WM_RGB_MAX, fb[(by + 1) * 200 + bx + 6]);
 }
 
+/* Lot 69: buttons follow the chrome scale; corner / edge resize */
+static void test_lot69_scale_and_resize(void) {
+    gfx_wm_win_t s;
+    gfx_wm_rect_t base = R(100, 50, 400, 300), area = R(0, 30, 1024, 680), placed;
+    int bx, by, n6 = gfx_wm_btn(36, 6);
+    TEST_ASSERT_EQUAL(GFX_WM_BTN, gfx_wm_btn(36, 1));
+    TEST_ASSERT_EQUAL(GFX_WM_BTN, gfx_wm_btn(36, 4));
+    TEST_ASSERT_EQUAL(21, n6);                       /* 1.5x */
+    TEST_ASSERT_EQUAL(30, gfx_wm_btn(36, 12));       /* capped by the title bar */
+    gfx_wm_button_pos(base, 36, 6, GFX_WM_HIT_CLOSE, &bx, &by);
+    TEST_ASSERT(bx + n6 <= base.x + base.w);
+    TEST_ASSERT_EQUAL(GFX_WM_HIT_CLOSE, gfx_wm_hit(base, 36, 6, bx + n6 - 2, by + n6 - 2));
+    /* grip and edges */
+    TEST_ASSERT_EQUAL(GFX_WM_HIT_RESIZE, gfx_wm_hit(base, 36, 6, 498, 348));
+    TEST_ASSERT_EQUAL(GFX_WM_HIT_RESIZE, gfx_wm_hit(base, 36, 6, 498, 200));
+    TEST_ASSERT_EQUAL(GFX_WM_HIT_RESIZE, gfx_wm_hit(base, 36, 6, 300, 348));
+    TEST_ASSERT_EQUAL(GFX_WM_HIT_BODY, gfx_wm_hit(base, 36, 6, 300, 200));
+    memset(&s, 0, sizeof(s));
+    gfx_wm_place(&s, base, area, &placed);
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_DRAG, gfx_wm_mouse(&s, placed, base, 36, 6, 498, 348, 1, 0));
+    TEST_ASSERT_EQUAL(1, s.resize);
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_RESIZED, gfx_wm_mouse(&s, placed, base, 36, 6, 598, 398, 0, 1));
+    gfx_wm_place(&s, base, area, &placed);
+    TEST_ASSERT_EQUAL(100, placed.x); TEST_ASSERT_EQUAL(500, placed.w); TEST_ASSERT_EQUAL(350, placed.h);
+    /* shrink is bounded by the minimum size */
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_DRAG, gfx_wm_mouse(&s, placed, base, 36, 6, 598, 398, 1, 0));
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_RESIZED, gfx_wm_mouse(&s, placed, base, 36, 6, 0, 0, 0, 1));
+    gfx_wm_place(&s, base, area, &placed);
+    TEST_ASSERT_EQUAL(GFX_WM_MIN_W, placed.w); TEST_ASSERT_EQUAL(GFX_WM_MIN_H, placed.h);
+    /* growth is clamped to the work area */
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_DRAG, gfx_wm_mouse(&s, placed, base, 36, 6, placed.x + placed.w - 2, placed.y + placed.h - 2, 1, 0));
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_RESIZED, gfx_wm_mouse(&s, placed, base, 36, 6, 5000, 5000, 0, 1));
+    gfx_wm_place(&s, base, area, &placed);
+    TEST_ASSERT(placed.x + placed.w <= area.x + area.w);
+    TEST_ASSERT(placed.y + placed.h <= area.y + area.h);
+    /* maximized: no resize */
+    s.maximized = 1;
+    gfx_wm_place(&s, base, area, &placed);
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_BODY, gfx_wm_mouse(&s, placed, base, 36, 6, placed.x + placed.w - 2, placed.y + placed.h - 2, 1, 0));
+    TEST_ASSERT_EQUAL(0, s.resize);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_buttons_and_hit);
     RUN_TEST(test_close_minimize_maximize_drag);
     RUN_TEST(test_draw_buttons_colors);
+    RUN_TEST(test_lot69_scale_and_resize);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

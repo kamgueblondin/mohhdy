@@ -4,7 +4,22 @@
 static char lc(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
 static int is_sp(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
 
-typedef struct { char* o; int cap; int n; int full; } ob_t;
+typedef struct { char* o; int cap; int n; int full; int nodes; } ob_t;
+
+/* Lot 69: the layout engine holds WE_MAX_NODES (160) nodes; a real page
+ * (fr.wikipedia.org) produced far more and was refused whole ("too many
+ * nodes", render error). The reader view now stops at a node budget and
+ * says the page was cut, and empty paragraphs from nested divs are not
+ * emitted at all. */
+#define WF_HTML_NODE_BUDGET 140
+
+static int ends_with(const ob_t* b, const char* s) {
+    int l = 0, i;
+    while (s[l]) l++;
+    if (b->n < l) return 0;
+    for (i = 0; i < l; i++) if (b->o[b->n - l + i] != s[i]) return 0;
+    return 1;
+}
 
 static void ob_c(ob_t* b, char c) {
     if (b->n < b->cap - 1) b->o[b->n++] = c;
@@ -27,6 +42,8 @@ static int tag_name(const char* in, int n, int i, char* name, int cap) {
 }
 
 static int seq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
+static int get_attr(const char* in, int s, int e, const char* attr, char* out, int cap);
+static int seq_pre(const char* s, const char* p) { while (*p && *s == *p) { s++; p++; } return *p == 0; }
 
 static int in_list(const char* name, const char* const* list) {
     int i;
@@ -35,11 +52,45 @@ static int in_list(const char* name, const char* const* list) {
 }
 
 static const char* const DROP_BLOCK[] = {"script", "style", "noscript", "svg", "template", "iframe", "object",
-                                         "canvas", "form", "select", "textarea", "button", "head", "nav", "footer", 0};
+                                         "canvas", "form", "select", "textarea", "button", "head", "nav", "footer",
+                                         "aside", "dialog", "menu", 0};
 static const char* const KEEP[] = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "li", "a", "br", "pre",
                                    "b", "strong", "i", "em", "code", "blockquote", "hr", 0};
 static const char* const AS_P[] = {"div", "section", "article", "main", "header", "tr", "dt", "dd", "td", "th",
-                                   "figcaption", "caption", "summary", "details", "table", "aside", 0};
+                                   "figcaption", "caption", "summary", "details", "table", 0};
+
+/* Lot 69: navigation chrome of real pages (role=navigation, hidden
+ * blocks) is skipped so the reader view keeps the content within the
+ * node budget. */
+static int chrome_block(const char* in, int s, int e) {
+    static char v[24];
+    if (get_attr(in, s, e, "role", v, (int)sizeof(v)) > 0) {
+        if (seq(v, "navigation") || seq(v, "banner") || seq(v, "contentinfo") || seq(v, "search") ||
+            seq(v, "menu") || seq(v, "menubar") || seq(v, "dialog") || seq(v, "complementary")) return 1;
+    }
+    if (get_attr(in, s, e, "aria-hidden", v, (int)sizeof(v)) > 0 && seq(v, "true")) return 1;
+    {
+        /* boolean "hidden" (with or without a value) */
+        int i;
+        for (i = s; i + 6 <= e; i++)
+            if (is_sp(in[i - 1]) && lc(in[i]) == 'h' && lc(in[i + 1]) == 'i' && lc(in[i + 2]) == 'd' && lc(in[i + 3]) == 'd' &&
+                lc(in[i + 4]) == 'e' && lc(in[i + 5]) == 'n' &&
+                (i + 6 == e || is_sp(in[i + 6]) || in[i + 6] == '=' || in[i + 6] == '/' || in[i + 6] == '>'))
+                return 1;
+    }
+    /* language pickers (Wikipedia lists 300+ languages before the content) */
+    if (get_attr(in, s, e, "hreflang", v, (int)sizeof(v)) > 0) return 1;
+    {
+        static char cl[160];
+        int k;
+        if (get_attr(in, s, e, "class", cl, (int)sizeof(cl)) > 0)
+            for (k = 0; cl[k]; k++)
+                if (seq_pre(cl + k, "interlanguage") || seq_pre(cl + k, "language-list") || seq_pre(cl + k, "skip-link") ||
+                    seq_pre(cl + k, "visually-hidden") || seq_pre(cl + k, "sr-only") || seq_pre(cl + k, "vector-menu"))
+                    return 1;
+    }
+    return 0;
+}
 
 /* Finds the end of the element named `name` starting after its open tag. */
 static int skip_block(const char* in, int n, int i, const char* name) {
@@ -91,10 +142,47 @@ static int get_attr(const char* in, int s, int e, const char* attr, char* out, i
 }
 
 /* copies text, escaping < and > that would confuse the engine; collapses spaces */
+/* Lot 69: the bitmap fonts are ASCII; UTF-8 Latin-1 letters (U+00C0..U+00FF,
+ * French accents) are shown as their base letter instead of '?', the
+ * typographic quotes and dashes as ASCII. */
+static char latin_base(unsigned char c2) {
+    static const char map[64] = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYTsaaaaaaaceeeeiiiidnooooo/ouuuuyty";
+    if (c2 >= 0x80U && c2 <= 0xbfU) return map[c2 - 0x80U];
+    return '?';
+}
+
 static void put_text(ob_t* b, const char* in, int s, int e, int* last_sp, int pre) {
-    int i;
+    int i, any = 0;
     for (i = s; i < e; i++) {
         char c = in[i];
+        unsigned char u = (unsigned char)c;
+        if (u == 0xc3U && i + 1 < e) { *last_sp = 0; ob_c(b, latin_base((unsigned char)in[i + 1])); i++; any = 1; continue; }
+        if (u == 0xc2U && i + 1 < e) {        /* nbsp, guillemets, middle dot */
+            unsigned char v = (unsigned char)in[i + 1];
+            i++;
+            if (v == 0xa0U) { if (!*last_sp) { ob_c(b, ' '); *last_sp = 1; } continue; }
+            *last_sp = 0; any = 1;
+            ob_c(b, v == 0xabU || v == 0xbbU ? '"' : (v == 0xb7U ? '.' : (v == 0xa9U ? 'c' : '?')));
+            continue;
+        }
+        if (u == 0xe2U && i + 2 < e && (unsigned char)in[i + 1] == 0x80U) {
+            unsigned char v = (unsigned char)in[i + 2];
+            i += 2;
+            *last_sp = 0; any = 1;
+            if (v == 0x93U || v == 0x94U) ob_c(b, '-');
+            else if (v == 0x98U || v == 0x99U) ob_c(b, '\'');
+            else if (v == 0x9cU || v == 0x9dU) ob_c(b, '"');
+            else if (v == 0xa6U) ob_s(b, "...");
+            else if (v == 0xa2U) ob_c(b, '*');
+            else ob_c(b, ' ');
+            continue;
+        }
+        if (u >= 0x80U) {                     /* other multi-byte: one '?' per character */
+            if ((u & 0xc0U) == 0x80U) continue;
+            *last_sp = 0; any = 1;
+            ob_c(b, '?');
+            continue;
+        }
         if (!pre && is_sp(c)) {
             if (!*last_sp) { ob_c(b, ' '); *last_sp = 1; }
             continue;
@@ -102,7 +190,9 @@ static void put_text(ob_t* b, const char* in, int s, int e, int* last_sp, int pr
         *last_sp = 0;
         if ((unsigned char)c < 0x20U && c != '\n' && c != '\t') continue;
         ob_c(b, c);
+        any = 1;
     }
+    if (any) b->nodes++;
 }
 
 /* Only web links are kept: relative ones and http(s); javascript:,
@@ -148,7 +238,7 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
     if (!st) st = &dummy;
     for (k = 0; k < (int)sizeof(*st); k++) ((char*)st)[k] = 0;
     st->in_bytes = n;
-    b.o = out; b.cap = cap; b.n = 0; b.full = 0;
+    b.o = out; b.cap = cap; b.n = 0; b.full = 0; b.nodes = 0;
     if (cap < 64) { if (cap > 0) out[0] = 0; return 0; }
     /* the title first, from <head> */
     {
@@ -160,6 +250,8 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
                 t++;
                 while (t < n && in[t] != '<' && tn < (int)sizeof(st->title) - 1) {
                     char c = in[t++];
+                    if ((unsigned char)c == 0xc3U && t < n) { st->title[tn++] = latin_base((unsigned char)in[t++]); continue; }
+                    if ((unsigned char)c >= 0x80U) { if (((unsigned char)c & 0xc0U) != 0x80U) st->title[tn++] = ' '; continue; }
                     if (is_sp(c)) { if (tn && st->title[tn - 1] != ' ') st->title[tn++] = ' '; }
                     else if ((unsigned char)c >= 0x20U && c != '<' && c != '>') st->title[tn++] = c;
                 }
@@ -180,6 +272,7 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
     ob_s(&b, "</title></head><body>");
     (void)in_title;
     while (i < n && !b.full) {
+        if (b.nodes >= WF_HTML_NODE_BUDGET) { b.full = 1; break; }
         if (in[i] == '<') {
             char name[16];
             int close, j, e;
@@ -212,9 +305,16 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
                 continue;
             }
             if (seq(name, "title")) { i = skip_block(in, n, e < n ? e + 1 : n, name); continue; }
+            if (!close && (in_list(name, KEEP) || in_list(name, AS_P) || seq(name, "span")) && e < n && in[e - 1] != '/' &&
+                chrome_block(in, j, e)) {
+                st->blocks_dropped++;
+                i = skip_block(in, n, e + 1, name);
+                continue;
+            }
             if (in_list(name, KEEP)) {
                 if (!ob_room(&b, 600)) { b.full = 1; break; }
                 st->tags_kept++;
+                if (!close) b.nodes++;
                 if (seq(name, "pre")) pre = !close;
                 if (!close && seq(name, "a")) {
                     int hl = get_attr(in, j, e, "href", href, (int)sizeof(href));
@@ -238,7 +338,13 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
             } else if (in_list(name, AS_P)) {
                 if (!ob_room(&b, 600)) { b.full = 1; break; }
                 st->tags_kept++;
-                ob_s(&b, close ? "</p>" : "<p>");
+                if (close) {
+                    if (ends_with(&b, "<p>")) { b.n -= 3; b.nodes--; }      /* empty paragraph: dropped */
+                    else if (!ends_with(&b, "</p>")) ob_s(&b, "</p>");
+                } else if (!ends_with(&b, "<p>")) {
+                    ob_s(&b, "<p>");
+                    b.nodes++;
+                }
                 last_sp = 1;
             } else {
                 st->tags_dropped++;

@@ -22,4 +22,7 @@ int wf_ecdsa_verify(int curve, const uint8_t* pub, int pub_len,
 int wf_ecdsa_verify_der(int curve, const uint8_t* pub, int pub_len,
                         const uint8_t* digest, int digest_len,
                         const uint8_t* sig, int sig_len);
+/* Lot 69: P-256 ECDH. pub_out (65 bytes, may be 0) gets priv*G; when peer
+ * (04||X||Y) is given, shared_x gets the x of priv*peer. 0 = ok. */
+int wf_ecdh_p256(const uint8_t priv[32], const uint8_t* peer, int peer_len, uint8_t pub_out[65], uint8_t shared_x[32]);
 #endif

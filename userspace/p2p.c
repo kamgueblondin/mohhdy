@@ -1704,8 +1704,10 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
     for (i = 0; i < P2P_PEERS; i++) {
         p2p_peer_t* p = &n->peers[i];
         if (!p->used || !p->up) continue;
-        if (queued) continue;
-        if (t - p->last_seen >= P2P_DOWN_TICKS) {
+        /* Lot 69: a receive backlog (data acks of the other peers) may
+         * hold a hello of this peer, so it gets one more down period, but
+         * a backlog that never drains must not keep a dead peer up. */
+        if (t - p->last_seen >= (queued ? 2u * P2P_DOWN_TICKS : P2P_DOWN_TICKS)) {
             char line[64];
             p->up = 0; p->down_events++;
             p2p_cache_on_peer_down(n, p->id);

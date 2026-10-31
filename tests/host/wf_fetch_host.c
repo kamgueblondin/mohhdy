@@ -53,8 +53,8 @@ static int h_rand(void* n, uint8_t* o, int len) {
 static void h_log(void* n, const char* l) { (void)n; printf("[fetch] %s\n", l); }
 
 static wf_trust_t g_trust;
-static uint8_t g_der[96 * 1024];
-static char g_pem[160 * 1024];
+static uint8_t g_der[256 * 1024];
+static char g_pem[320 * 1024];
 static uint8_t g_body[256 * 1024];
 
 int main(int argc, char** argv) {
@@ -84,6 +84,7 @@ int main(int argc, char** argv) {
     rc = wf_fetch(&e, argv[2], g_body, (int)sizeof(g_body) - 1, &r);
     if (rc != 0) { printf("FETCH FAIL: %s\n", r.err); return 1; }
     printf("FETCH OK status=%d bytes=%d truncated=%d redirects=%d url=%s\n", r.status, r.body_len, r.truncated, r.redirects, r.url);
+    if (r.encoding) printf("ENCODING %s wire=%d\n", r.encoding == 1 ? "gzip" : "deflate", r.wire_len);
     if (r.https) printf("TLS suite=%s leaf=%s anchor=%s not_after=%s time_checked=%d\n", r.suite, r.leaf_cn, r.anchor_cn, r.not_after, r.time_checked);
     g_body[r.body_len] = 0;
     printf("BODY-BEGIN\n%.*s\nBODY-END\n", r.body_len > 2000 ? 2000 : r.body_len, (char*)g_body);

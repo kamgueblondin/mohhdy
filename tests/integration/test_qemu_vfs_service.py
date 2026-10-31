@@ -650,7 +650,7 @@ def main():
         "--image", FAT32_DISK,
     ])
     command = [
-        "qemu-system-i386", "-cpu", "pentium3", "-kernel", KERNEL, "-initrd", INITRD,
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", "pentium3", "-kernel", KERNEL, "-initrd", INITRD,
         "-m", "1024M", "-display", "none", "-vga", "none",
         "-serial", "file:" + LOG,
         "-monitor", "unix:%s,server,nowait" % MON,

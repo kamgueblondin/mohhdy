@@ -9,6 +9,9 @@ LD = ld
 # -nostdlib : Ne pas lier avec la bibliothèque standard C
 # -fno-pie : Produire du code indépendant de la position
 CFLAGS = -m32 -ffreestanding -nostdlib -fno-pie -Wall -Wextra -O3 -msse2 -mfpmath=sse -mstackrealign -fomit-frame-pointer -I. -Iinclude -Ikernel -DCONFIG_UTF8_VGA=1
+# Lot 69: generated header deps (hand-written rules missed gfx_font_hd.h,
+# os_ui_scale.h...): a header edit now rebuilds every object using it
+CFLAGS += -MMD -MP
 ASFLAGS = -f elf32
 
 # Nom du fichier final de notre OS
@@ -592,6 +595,7 @@ pack-initrd: userspace-all
 	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples $(INITRD_DIR)/images $(INITRD_DIR)/bigfiles $(INITRD_DIR)/web $(INITRD_DIR)/etc"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
 	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && [ -f $(INITRD_TEST_IMAGE) ] && \
+	    [ -f build/lot67/pki/server_rsa_chain.pem ] && \
 	    [ "$$(cat build/.initrd-models 2>/dev/null)" = "$(INITRD_MODELS_KEY)" ] && \
 	    [ -z "$$(find $$paths -type f -newer build/.initrd-stamp -print -quit 2>/dev/null)" ] && \
 	    [ "$$(find $$paths -type f 2>/dev/null | sort | cksum)" = "$$(cat build/.initrd-list 2>/dev/null)" ]; then \
@@ -699,7 +703,7 @@ pack-initrd-now:
 	@cp -f $(INITRD_IMAGE) $(INITRD_TEST_IMAGE)
 	@tar -C $(INITRD_TEST_DIR) -rf $(INITRD_TEST_IMAGE) $(addprefix ./bin/,$(TEST_ONLY_PROGRAMS))
 	@# Lot 67: the throw-away test CA of the offline HTTPS test, test image only
-	@if [ ! -f build/lot67/pki/test_ca.pem ]; then python3 scripts/lot67_gen_pki.py build/lot67/pki >/dev/null; fi
+	@if [ ! -f build/lot67/pki/test_ca.pem ] || [ ! -f build/lot67/pki/server_rsa_chain.pem ]; then python3 scripts/lot67_gen_pki.py build/lot67/pki >/dev/null; fi
 	@mkdir -p $(INITRD_TEST_DIR)/etc && cp -f build/lot67/pki/test_ca.pem $(INITRD_TEST_DIR)/etc/ca-test.pem
 	@tar -C $(INITRD_TEST_DIR) -rf $(INITRD_TEST_IMAGE) ./etc/ca-test.pem
 	@echo "[mkinitrd] Test image $(INITRD_TEST_IMAGE): production + $(words $(TEST_ONLY_PROGRAMS)) proof programs"
@@ -1499,6 +1503,13 @@ gguf-kvm-benchmark:
 gguf-kvm-benchmark-check:
 	@python3 tests/scripts/test_benchmark_qemu_gguf_kvm_latency.py
 
+.PHONY: qemu-gui-lot69-windows
+qemu-gui-lot69-windows: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_lot69_windows.py
+
 .PHONY: qemu-web-layout
 qemu-web-layout: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_web_layout.py
+
+# Lot 69: compiler generated header deps (kept last: not the default goal)
+-include $(wildcard build/*.d build/*/*.d build/*/*/*.d)

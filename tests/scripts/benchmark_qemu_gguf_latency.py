@@ -106,7 +106,7 @@ def run_once(index):
     try:
         with open(err_path, "wb") as err:
             proc = subprocess.Popen([
-                "qemu-system-i386", "-cpu", "pentium3", "-kernel", KERNEL,
+                "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", "pentium3", "-kernel", KERNEL,
                 "-initrd", INITRD, "-m", "1024M", "-display", "none", "-vga", "none",
                 "-serial", "file:" + log, "-monitor", "unix:%s,server,nowait" % monitor_path,
                 "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",

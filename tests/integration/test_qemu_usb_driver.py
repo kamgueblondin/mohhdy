@@ -78,7 +78,7 @@ def main():
         except OSError:
             pass
     command = [
-        "qemu-system-i386", "-kernel", KERNEL, "-initrd", ata.INITRD,
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-kernel", KERNEL, "-initrd", ata.INITRD,
         "-m", "1024M", "-display", "none", "-vga", "std",
         "-usb", "-device", "usb-tablet",
         "-serial", "file:" + ata.LOG, "-monitor", "unix:%s,server,nowait" % ata.MON,
