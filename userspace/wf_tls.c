@@ -3,6 +3,7 @@
 #include "../kernel/sha256.h"
 #include "../kernel/aes_gcm.h"
 #include "../kernel/x25519.h"
+#include "wf_ec.h"
 
 #define CT_CCS 20
 #define CT_ALERT 21
@@ -428,15 +429,22 @@ static int parse_certificates(wf_tls_t* t, const uint8_t* b, int n) {
 }
 
 static int parse_ske(wf_tls_t* t, const uint8_t* b, int n) {
-    static uint8_t signed_data[64 + 4 + 32];
-    int p, scheme, sl, sig;
+    static uint8_t signed_data[64 + 4 + 65];
+    int p, scheme, sl, sig, group, pl;
     const wf_cert_t* leaf = &t->certs[0];
-    if (n < 4 + 32 + 4 || b[0] != 3 || get16(b + 1) != 0x001d || b[3] != 32) {
-        seterr(t, "server chose a key exchange group other than X25519", 0);
+    if (n < 4 || b[0] != 3) { seterr(t, "bad key exchange", 0); return -1; }
+    group = get16(b + 1); pl = b[3];
+    if (group == 0x001d && pl == 32 && n >= 4 + 32 + 4) {
+        t->group = 0x001d;
+        mcpy(t->ecdh_srv_pub, b + 4, 32);
+    } else if (group == 0x0017 && pl == 65 && n >= 4 + 65 + 4) {
+        t->group = 0x0017;          /* secp256r1: servers without X25519 */
+        mcpy(t->ecdh_srv_p256, b + 4, 65);
+    } else {
+        seterr(t, "server chose a key exchange group other than X25519 or P-256", 0);
         return -1;
     }
-    mcpy(t->ecdh_srv_pub, b + 4, 32);
-    p = 36;
+    p = 4 + pl;
     scheme = get16(b + p); p += 2;
     sl = get16(b + p); p += 2;
     if (p + sl != n) return -1;
@@ -446,8 +454,8 @@ static int parse_ske(wf_tls_t* t, const uint8_t* b, int n) {
     if (t->suite == 0xc02fU && leaf->key_type != WF_KEY_RSA) { seterr(t, "RSA suite with an EC certificate", 0); return -1; }
     mcpy(signed_data, t->client_random, 32);
     mcpy(signed_data + 32, t->server_random, 32);
-    mcpy(signed_data + 64, b, 36);
-    if (wf_x509_verify_data(leaf, sig, signed_data, 100, b + p, sl) != 0) {
+    mcpy(signed_data + 64, b, 4 + pl);
+    if (wf_x509_verify_data(leaf, sig, signed_data, 64 + 4 + pl, b + p, sl) != 0) {
         seterr(t, "server key exchange signature is invalid", 0);
         return -1;
     }
@@ -644,7 +652,7 @@ int wf_tls_handshake(wf_tls_t* t) {
     t->err[0] = 0; t->alert = -1; t->suite = 0; t->sig_scheme = 0; t->chain_rc = -1;
     t->established = 0; t->peer_closed = 0; t->c_seq = 0; t->s_seq = 0; t->s_encrypted = 0;
     t->rec_len = 0; t->plain_len = 0; t->plain_off = 0; t->hs_len = 0; t->cert_count = 0;
-    t->version = 0; t->got_share = 0; t->ems = 0;
+    t->version = 0; t->got_share = 0; t->ems = 0; t->group = 0;
     if (!t->send || !t->recv || !t->rand || !t->trust) { seterr(t, "tls: missing callbacks or root store", 0); return -1; }
     sha256_init(&t->hs_hash);
     if (t->rand(t->io, t->client_random, 32) != 0 || t->rand(t->io, t->ecdh_priv, 32) != 0) {
@@ -685,18 +693,25 @@ int wf_tls_handshake(wf_tls_t* t) {
     }
     if (!got_cert || !got_ske) { seterr(t, "incomplete server flight", 0); return -1; }
     /* ClientKeyExchange */
-    if (x25519_shared_secret(pms, t->ecdh_priv, t->ecdh_srv_pub, ws, X25519_WORKSPACE_LIMBS) != 0) {
-        seterr(t, "x25519 failed", 0);
-        return -1;
+    if (t->group == 0x0017) {
+        static uint8_t p256_pub[65];
+        if (wf_ecdh_p256(t->ecdh_priv, t->ecdh_srv_p256, 65, p256_pub, pms) != 0) { seterr(t, "P-256 ECDH failed", 0); return -1; }
+        buf[0] = 65;
+        mcpy(buf + 1, p256_pub, 65);
+    } else {
+        if (x25519_shared_secret(pms, t->ecdh_priv, t->ecdh_srv_pub, ws, X25519_WORKSPACE_LIMBS) != 0) {
+            seterr(t, "x25519 failed", 0);
+            return -1;
+        }
+        buf[0] = 32;
+        mcpy(buf + 1, my_pub, 32);
     }
     {
         uint8_t z = 0; int i;
         for (i = 0; i < 32; i++) z |= pms[i];
         if (!z) { seterr(t, "x25519 low-order point", 0); return -1; }
     }
-    buf[0] = 32;
-    mcpy(buf + 1, my_pub, 32);
-    if (send_hs(t, HS_CLIENT_KEY_EXCHANGE, buf, 33, 0) != 0) return -1;
+    if (send_hs(t, HS_CLIENT_KEY_EXCHANGE, buf, 1 + buf[0], 0) != 0) return -1;
     /* extended master secret over the session hash */
     if (t->ems) {
         hs_snapshot(t, hash);

@@ -59,6 +59,8 @@ typedef struct {
     sha256_ctx_t hs_hash;         /* running transcript hash */
     uint8_t ecdh_priv[32];
     uint8_t ecdh_srv_pub[32];
+    uint8_t ecdh_srv_p256[65];
+    int group;                    /* 0x001d X25519 or 0x0017 P-256 */
     int cert_count;
     wf_cert_t certs[WF_CHAIN_MAX];
     uint8_t cert_store[WF_TLS_CERT_STORE];
