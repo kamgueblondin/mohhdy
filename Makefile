@@ -1110,6 +1110,12 @@ qemu-gui-parity: $(OS_IMAGE) pack-initrd disk
 
 .PHONY: qemu-gui-parity
 
+# Lot 65 (US-G21): live P2P node driven from the /mesh panel.
+qemu-gui-mesh: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_gui_mesh.py
+
+.PHONY: qemu-gui-mesh
+
 # Lot 46 PR B (US-G16): editor Save As of 64 KiB, v4 overlay image (LBA 0-63
 # + extension 4225-4352), byte exact on disk and after a cold reboot, FAT16
 # volume untouched, 64 KiB + 1 refused.

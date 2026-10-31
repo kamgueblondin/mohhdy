@@ -520,6 +520,10 @@ jobs:
       - name: QEMU large save (64 KiB) across a reboot
         run: make qemu-gui-bigsave
 
+      # Lot 65 (US-G21/US-G24): live P2P node and collab ledger from /mesh and /keys (about 2 min)
+      - name: QEMU /mesh and /keys on a live node
+        run: make qemu-gui-mesh
+
       - name: QEMU GUI lot 49 (explorer = shell tree, maximize without lag, terminal ls; about 1 min)
         run: make qemu-gui-lot49
 

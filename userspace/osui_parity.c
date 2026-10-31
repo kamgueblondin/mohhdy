@@ -314,7 +314,7 @@ static const osui_par_entry_t k_keys[] = {
     { "Resynchroniser", "collab-sync", M, 0 },
     { "Payer", "collab-pay", A | M, "PAIR MONTANT" },
     { "Reserver une offre", "collab-reserve", A | M, "VENDEUR SEQ" },
-    { "Publier une tache", "collab-task", A | M, "PRIX EXPRESSION" },
+    { "Publier une tache", "collab-task", A | M, "PRIX sum N|primes N|fnv TEXTE" },
     { "Prendre une tache", "collab-claim", A | M, "AUTEUR SEQ" },
     { "Calculer une tache", "collab-work", A | M, "AUTEUR SEQ" },
     { "Verifier un resultat", "collab-review", A | M, "SEQ" },
