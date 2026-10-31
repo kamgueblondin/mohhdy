@@ -105,6 +105,40 @@ static void put_text(ob_t* b, const char* in, int s, int e, int* last_sp, int pr
     }
 }
 
+/* Only web links are kept: relative ones and http(s); javascript:,
+ * mailto:, data: and other schemes are dropped. */
+static int href_web(const char* h) {
+    int k;
+    for (k = 0; h[k] && h[k] != '/' && h[k] != '?' && h[k] != '#'; k++) {
+        if (h[k] == ':') {
+            return (k == 4 && (h[0] | 32) == 'h' && (h[1] | 32) == 't' && (h[2] | 32) == 't' && (h[3] | 32) == 'p') ||
+                   (k == 5 && (h[0] | 32) == 'h' && (h[1] | 32) == 't' && (h[2] | 32) == 't' && (h[3] | 32) == 'p' &&
+                    (h[4] | 32) == 's');
+        }
+    }
+    return 1;
+}
+
+/* Decodes the common entities of a title in place; < and > become spaces
+ * (the title is re-escaped when written). */
+static void title_decode(char* t) {
+    static const char* const ent[] = {"&amp;", "&", "&lt;", " ", "&gt;", " ", "&quot;", "\"", "&#39;", "'",
+                                      "&apos;", "'", "&nbsp;", " ", 0};
+    int r = 0, w = 0, j;
+    while (t[r]) {
+        int hit = 0;
+        if (t[r] == '&') {
+            for (j = 0; ent[j]; j += 2) {
+                int l = 0;
+                while (ent[j][l] && t[r + l] == ent[j][l]) l++;
+                if (!ent[j][l]) { t[w++] = ent[j + 1][0]; r += l; hit = 1; break; }
+            }
+        }
+        if (!hit) t[w++] = t[r++];
+    }
+    t[w] = 0;
+}
+
 int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int cap, wf_html_stats_t* st) {
     static wf_url_t link;
     static char href[WF_URL_PATH_MAX], abs_url[WF_URL_HOST_MAX + WF_URL_PATH_MAX + 16];
@@ -131,13 +165,18 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
                 }
                 while (tn && st->title[tn - 1] == ' ') tn--;
                 st->title[tn] = 0;
+                title_decode(st->title);
                 break;
             }
             t++;
         }
     }
     ob_s(&b, "<html><head><title>");
-    ob_s(&b, st->title[0] ? st->title : "(untitled)");
+    if (!st->title[0]) ob_s(&b, "(untitled)");
+    for (k = 0; st->title[k]; k++) {
+        if (st->title[k] == '&') ob_s(&b, "&amp;");
+        else { char one[2]; one[0] = st->title[k]; one[1] = 0; ob_s(&b, one); }
+    }
     ob_s(&b, "</title></head><body>");
     (void)in_title;
     while (i < n && !b.full) {
@@ -180,7 +219,7 @@ int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int c
                 if (!close && seq(name, "a")) {
                     int hl = get_attr(in, j, e, "href", href, (int)sizeof(href));
                     ob_s(&b, "<a");
-                    if (hl > 0 && base && wf_url_resolve(base, href, &link) == 0) {
+                    if (hl > 0 && base && href_web(href) && wf_url_resolve(base, href, &link) == 0) {
                         wf_url_format(&link, abs_url, (int)sizeof(abs_url));
                         ob_s(&b, " href=\"");
                         for (k = 0; abs_url[k]; k++) if (abs_url[k] != '"') ob_c(&b, abs_url[k]);

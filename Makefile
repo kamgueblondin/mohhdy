@@ -1121,6 +1121,13 @@ qemu-gui-mesh: $(OS_IMAGE) pack-initrd disk
 
 .PHONY: qemu-gui-mesh
 
+# Lot 67: guest fetch/http-get + /browser against a local HTTP/HTTPS server
+# through QEMU slirp (offline). LOT67_REAL=1 adds https://example.com (manual).
+qemu-lot67-web: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot67_web.py
+
+.PHONY: qemu-lot67-web
+
 # Lot 46 PR B (US-G16): editor Save As of 64 KiB, v4 overlay image (LBA 0-63
 # + extension 4225-4352), byte exact on disk and after a cold reboot, FAT16
 # volume untouched, 64 KiB + 1 refused.

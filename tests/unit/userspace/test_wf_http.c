@@ -7,6 +7,7 @@
 #include "wf_dns.h"
 #include "wf_tls.h"
 #include "wf_fetch.h"
+#include "wf_html.h"
 
 static void test_url_parse(void) {
     wf_url_t u;
@@ -289,6 +290,58 @@ static void test_fetch_redirects(void) {
     TEST_ASSERT_TRUE(strstr(r.err, "before the end of the body") != 0);
 }
 
+/* Lot 67: reader view of a real page */
+static void test_html_reduce(void) {
+    static const char page[] =
+        "<!doctype html><html><head><title>Ex &amp; Co</title><style>p{color:red}</style>"
+        "<script>var a='<p>evil</p>';</script></head><body onload=x()>"
+        "<h1 class=big>Hello</h1><!-- hidden <p>no</p> --><svg><text>no</text></svg>"
+        "<p>One <b>two</b> <a href=\"/docs?q=1\" onclick=\"y()\">docs</a> "
+        "<a href=\"javascript:alert(1)\">bad</a></p><ul><li>a<li>b</ul></body></html>";
+    static char out[2048];
+    wf_url_t base;
+    wf_html_stats_t st;
+    int n;
+    TEST_ASSERT_EQUAL(0, wf_url_parse("https://example.com/dir/page.html", &base));
+    n = wf_html_reduce(page, (int)strlen(page), &base, out, (int)sizeof(out), &st);
+    TEST_ASSERT_TRUE(n > 0 && n < (int)sizeof(out));
+    TEST_ASSERT_EQUAL_STRING("Ex & Co", st.title);
+    TEST_ASSERT_NOT_NULL(strstr(out, "<h1>Hello</h1>"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "href=\"https://example.com/docs?q=1\""));
+    TEST_ASSERT_NULL(strstr(out, "evil"));
+    TEST_ASSERT_NULL(strstr(out, "hidden"));
+    TEST_ASSERT_NULL(strstr(out, "onclick"));
+    TEST_ASSERT_NULL(strstr(out, "onload"));
+    TEST_ASSERT_NULL(strstr(out, "javascript:"));
+    TEST_ASSERT_NULL(strstr(out, "color:red"));
+    TEST_ASSERT_TRUE(st.blocks_dropped >= 1);
+    TEST_ASSERT_EQUAL(0, st.truncated);
+}
+
+static void test_html_reduce_budget(void) {
+    static char big[20000];
+    static char out[512];
+    wf_html_stats_t st;
+    int i, n, p = 0;
+    for (i = 0; i < 600; i++) { memcpy(big + p, "<p>lorem ipsum</p>", 18); p += 18; }
+    big[p] = 0;
+    n = wf_html_reduce(big, p, 0, out, (int)sizeof(out), &st);
+    TEST_ASSERT_TRUE(n < (int)sizeof(out));
+    TEST_ASSERT_EQUAL(1, st.truncated);
+    TEST_ASSERT_NOT_NULL(strstr(out, "[page tronquee]"));
+    TEST_ASSERT_EQUAL(0, (int)out[n]);
+}
+
+static void test_html_text(void) {
+    static const char page[] = "<p>a &lt;b&gt; &quot;c&quot; &#39;d&#39;</p><script>x</script><p>e&nbsp;f</p>";
+    static char out[256];
+    int n = wf_html_text(page, (int)strlen(page), out, (int)sizeof(out));
+    TEST_ASSERT_TRUE(n > 0);
+    TEST_ASSERT_NOT_NULL(strstr(out, "a <b> \"c\" 'd'"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "e f"));
+    TEST_ASSERT_NULL(strstr(out, "x"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_url_parse);
@@ -300,6 +353,9 @@ int main(void) {
     RUN_TEST(test_dns_codec);
     RUN_TEST(test_tls_prf_known_answer);
     RUN_TEST(test_fetch_redirects);
+    RUN_TEST(test_html_reduce);
+    RUN_TEST(test_html_reduce_budget);
+    RUN_TEST(test_html_text);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -219,7 +219,7 @@ run_test() {
     esac
     case "$(basename "$test_file")" in
         test_wf_x509.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c" ;;
-        test_wf_http.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
+        test_wf_http.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
     esac
     if [ "$(basename "$test_file")" = "test_tokenizer.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_tokenizer.c"
