@@ -75,7 +75,7 @@ def main():
     try:
         with open(os.devnull, "wb") as err:
             proc = subprocess.Popen([
-                "qemu-system-i386", "-cpu", "pentium3", "-kernel", g.KERNEL,
+                "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", "pentium3", "-kernel", g.KERNEL,
                 "-initrd", g.INITRD, "-m", "1024M", "-display", "none", "-vga", "std",
                 "-usb", "-device", "usb-tablet",
                 "-serial", "file:" + g.LOG, "-monitor", "unix:%s,server,nowait" % g.MON_SOCK,
@@ -138,7 +138,8 @@ def main():
             g.say("/browse renders /web/index.html")
             start = len(g.log_text())
             bar_h = max(28, min(40, 768 // 22))
-            g.click_tablet(qmp, 1024 - 16 - 2 * 34 + 10, bar_h + 20, 1024, 768)
+            # Lot 69: back / forward are on the left of the title bar now
+            g.click_tablet(qmp, 16 + 10, bar_h + 20, 1024, 768)
             g.wait_for(proc, "osui web back none", g.CMD_TIMEOUT, start)
             g.say("browser back button -> osui web back none (first page)")
         g.say("QEMU GUI tool apps (task manager, settings, P2P, PM run, viewer, chat) contract passed.")

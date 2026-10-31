@@ -127,7 +127,7 @@ def main():
         time.sleep(0.8)
         with open(ERR, "wb") as err:
             qemu = subprocess.Popen([
-                "qemu-system-i386", "-name", "MOHHDY",
+                "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-name", "MOHHDY",
                 "-cpu", "pentium3",
                 "-kernel", KERNEL, "-initrd", INITRD,
                 "-m", "1024M", "-vga", "std", "-display", "gtk",

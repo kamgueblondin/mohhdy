@@ -61,7 +61,7 @@ def main():
     peer = WireEchoPeer()
     peer.start()
     command = [
-        "qemu-system-i386", "-kernel", nw.KERNEL, "-initrd", nw.INITRD,
+        "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-kernel", nw.KERNEL, "-initrd", nw.INITRD,
         "-m", "1024M", "-display", "none", "-vga", "none",
         "-serial", "file:" + nw.LOG,
         "-monitor", "unix:%s,server,nowait" % nw.MON,

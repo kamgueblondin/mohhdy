@@ -7888,6 +7888,7 @@ void main() {
     osui_gui_set_ide_ops(shell_ide_load, shell_ide_save, shell_ide_exec);
     osui_gui_set_web_fetch(shell_fetch_page);
     osui_gui_set_search_url(shell_search_url);   /* Lot 69: search-open on the desktop */   /* Lot 67: /browser over the network */
+    { extern int shell_display_ui_hint(void); osui_gui_set_scale_hint(shell_display_ui_hint()); }   /* Lot 69: fw_cfg first-boot pin */
     osui_gui_set_fs_io(&shell_fs_io);
     umalloc_init((void *)OS_USER_HEAP_BASE, shell_heap_grow);
     osui_gui_set_heap(urealloc);

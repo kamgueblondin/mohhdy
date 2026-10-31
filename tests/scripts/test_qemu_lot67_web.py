@@ -112,7 +112,7 @@ def main():
         cpu = os.environ.get("LOT67_CPU", "max")
         with open(os.devnull, "wb") as err:
             proc = subprocess.Popen([
-                "qemu-system-i386", "-cpu", cpu, "-kernel", g.KERNEL, "-initrd", g.INITRD, "-m", "1024M",
+                "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", cpu, "-kernel", g.KERNEL, "-initrd", g.INITRD, "-m", "1024M",
                 "-display", "none", "-vga", "std", "-serial", "file:" + g.LOG,
                 "-monitor", "unix:%s,server,nowait" % g.MON_SOCK, "-machine", "type=pc,accel=tcg",
                 "-no-reboot", "-no-shutdown",
@@ -132,6 +132,17 @@ def main():
                 ("fetch https://%s:%d/loop" % (base, sp), "fetch error too many redirects", ["fetch ok"], None),
                 ("fetch -I https://%s:%d/big" % (base, sp), "fetch ok status 200 bytes 204800 ", ["fetch error"], None),
                 ("fetch http://%s:%d/nope" % (base, hp), "fetch ok status 404", ["fetch error"], None),
+                # Lot 69: TLS 1.3 (ECDSA and RSA-PSS), P-256 ECDHE, gzip, cross-scheme redirect, big page
+                ("fetch https://%s:%d/hello" % (base, sp + 1), "fetch ok status 200 bytes 17 ", ["fetch error"],
+                 "tls TLS13-AES128-GCM-SHA256"),
+                ("fetch -I https://%s:%d/page.html" % (base, sp + 2), "fetch ok status 200", ["fetch error"],
+                 "tls TLS13-AES128-GCM-SHA256"),
+                ("fetch -I https://%s:%d/hello" % (base, sp + 3), "fetch ok status 200", ["fetch error"],
+                 "tls ECDHE-RSA-AES128-GCM-SHA256"),
+                ("fetch http://%s:%d/gzip" % (base, hp), "fetch body-end", ["fetch error"], "fetched over the network by Mohhdy"),
+                ("fetch http://%s:%d/to/https/%s/%d/gzip" % (base, hp, base, sp + 1), "fetch body-end",
+                 ["fetch error"], "redirects 1 url https://%s:%d/gzip tls TLS13" % (base, sp + 1)),
+                ("fetch -I http://%s:%d/biggz" % (base, hp), "fetch ok status 200", ["fetch error"], "truncated 1"),
             ]
             only = os.environ.get("LOT67_ONLY")
             if only:
@@ -205,6 +216,18 @@ def main():
                 time.sleep(1.5)
                 w, h, rgb = g.screendump_rgb(mon, "qemu-lot69-%s.ppm" % label)
                 say("%s: %s" % (label, save_png(label + ".png", w, h, rgb)))
+            # Lot 69: a page that cannot open shows the reason in the window
+            # (here: TLS to the plain HTTP port) instead of staying closed
+            g.send_key(mon, "esc")
+            time.sleep(0.8)
+            start = len(g.log_text())
+            type_line(mon, proc, "web https://%s:%d/page.html" % (base, hp), mode="getc")
+            g.wait_for(proc, "osui web error-page shown", FETCH_TIMEOUT, start)
+            if "osui web fetch error=TLS" not in g.normalized_log(g.log_text()[start:]):
+                raise RuntimeError("error page without the TLS reason")
+            time.sleep(1.5)
+            w, h, rgb = g.screendump_rgb(mon, "qemu-lot69-web-error.ppm")
+            say("error page: %s" % save_png("web-error-page.png", w, h, rgb))
             if os.environ.get("LOT69_REAL") == "1":
                 try:
                     # manual only: the real engine from the desktop (not in CI)

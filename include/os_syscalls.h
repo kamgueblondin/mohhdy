@@ -2084,6 +2084,8 @@ typedef struct {
     uint8_t source;                 /* OS_DISPLAY_SRC_* */
     uint8_t edid_status;            /* 0 ok, 1 no device, 2 no BAR, 3 bad header, 4 bad checksum */
     char mfg[4];
+    uint8_t ui_hint_q;              /* Lot 69: fw_cfg opt/mohhdy/ui-scale, 0 none */
+    uint8_t pad_[3];
 } os_display_info_t;
 #define OS_OUTCAP_BAD (-1)
 #define OS_OUTCAP_BUSY (-2)

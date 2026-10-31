@@ -46,6 +46,9 @@ typedef struct {
         gfx_rect_t base;     /* default place, before drag / maximize */
         gfx_rect_t traffic;  /* close button (kept name: old traffic light) */
         gfx_rect_t btn[3];   /* minimize, maximize, close */
+        /* Lot 69: Browser-OS address / search bar (has_addr set) */
+        int has_addr;
+        gfx_rect_t addr, addr_back, addr_fwd, addr_go;
     } pane_win;
     struct {
         int visible, minimized, maximized;

@@ -127,7 +127,7 @@ def main():
     try:
         with open(ERR, "wb") as err:
             proc = subprocess.Popen([
-                "qemu-system-i386", "-cpu", "pentium3", "-kernel", KERNEL,
+                "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4", "-cpu", "pentium3", "-kernel", KERNEL,
                 "-initrd", INITRD, "-m", "1024M", "-display", "none", "-vga", "none",
                 "-serial", "file:" + LOG, "-monitor", "unix:%s,server,nowait" % MON,
                 "-machine", "type=pc,accel=%s" % accel, "-no-reboot", "-no-shutdown",

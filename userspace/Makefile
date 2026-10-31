@@ -4,6 +4,7 @@ LD = ld
 AS = as
 
 CFLAGS = -m32 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -I../kernel -I../include
+CFLAGS += -MMD -MP
 LDFLAGS = -nostdlib -Ttext=0x40000000
 ASFLAGS = --32
 
@@ -62,7 +63,7 @@ ai_gguf_pause.o: ai_gguf_client.c
 	$(CC) $(CFLAGS) -DGGUF_PAUSE -c -o $@ $<
 ai_client.o ai_stat.o ai_rogue.o ai_gguf_client.o ai_gguf_pause.o: ai_common.h $(USER_HEADERS)
 
-shell: shell.o shell_util.o shell_fetch.o shell_search.o wsearch.o wf_guest.o wf_fetch.o wf_http.o wf_html.o wf_dns.o wf_tls.o wf_x509.o wf_bn.o wf_sha512.o wf_ec.o wf_rsa.o fsops.o ramfs.o procsim.o osui_runtime.o webrt.o grpcwire.o osui_gui.o osui_scale.o osui_panes.o osui_files.o osui_app.o osui_tools.o osui_form.o osui_parity.o net_ifcfg.o imgdec.o umalloc.o webeng.o osui_ide.o promptmessage.o shell_p2p.o shell_grpc.o shell_collab.o collab.o p2p.o p2p_bwe.o p2p_pace.o p2p_flow.o stun.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o shell_prod.o prod.o cicd.o shell_persist.o csig.o shell_platform.o platform.o plat_form.o plat_energy.o mobile_ui.o devsync.o dosemu.o start.o
+shell: shell.o shell_util.o shell_fetch.o shell_search.o wsearch.o wf_guest.o wf_fetch.o wf_inflate.o wf_http.o wf_html.o wf_dns.o wf_tls.o wf_x509.o wf_bn.o wf_sha512.o wf_ec.o wf_rsa.o fsops.o ramfs.o procsim.o osui_runtime.o webrt.o grpcwire.o osui_gui.o osui_scale.o osui_panes.o osui_files.o osui_app.o osui_tools.o osui_form.o osui_parity.o net_ifcfg.o imgdec.o umalloc.o webeng.o osui_ide.o promptmessage.o shell_p2p.o shell_grpc.o shell_collab.o collab.o p2p.o p2p_bwe.o p2p_pace.o p2p_flow.o stun.o p2p_sha256.o p2p_aes_gcm.o p2p_x25519.o p2p_bigint.o shell_prod.o prod.o cicd.o shell_persist.o csig.o shell_platform.o platform.o plat_form.o plat_energy.o mobile_ui.o devsync.o dosemu.o start.o
 	@echo "Linking shell..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
@@ -249,6 +250,8 @@ start.o: start.s
 
 clean:
 	@echo "Cleaning userspace..."
-	rm -f *.o $(PROGRAMS)
+	rm -f *.o *.d $(PROGRAMS)
 ipc_wait_server.o ipc_wait_poke.o pci_driver.o pci_rogue.o ps2_driver.o serial_driver.o vga_driver.o usb_driver.o dev_rogue.o: ipc_wait_common.h
 ps2_driver.o ps2_decode.o: ps2_decode.h
+
+-include $(wildcard *.d)

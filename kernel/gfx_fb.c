@@ -234,12 +234,53 @@ int gfx_fb_probe_edid(void) {
     return -1;
 }
 
+/* Lot 69: QEMU fw_cfg "opt/mohhdy/ui-scale" (text, quarters, e.g. "4").
+ * Lets a test harness pin the first-boot text scale; real hardware has no
+ * fw_cfg and gets the auto rule. Read once at boot, read-only after. */
+static int g_ui_hint_q;
+static void fwcfg_select(uint16_t key) { __asm__ volatile("outw %0, %1" : : "a"(key), "Nd"((uint16_t)0x510)); }
+static uint8_t fwcfg_byte(void) { return inb(0x511); }
+int gfx_fb_probe_fwcfg(void) {
+    static const char want[] = "opt/mohhdy/ui-scale";
+    uint32_t n, i, k;
+    fwcfg_select(0);
+    if (fwcfg_byte() != 'Q' || fwcfg_byte() != 'E' || fwcfg_byte() != 'M' || fwcfg_byte() != 'U') return -1;
+    fwcfg_select(0x19);
+    n = 0;
+    for (k = 0; k < 4; k++) n = (n << 8) | fwcfg_byte();
+    if (n > 256) n = 256;
+    for (i = 0; i < n; i++) {
+        uint8_t e[64];
+        uint32_t size;
+        uint16_t sel;
+        int match = 1;
+        for (k = 0; k < 64; k++) e[k] = fwcfg_byte();
+        for (k = 0; k < sizeof(want); k++) if ((char)e[8 + k] != want[k]) { match = 0; break; }
+        if (!match) continue;
+        size = ((uint32_t)e[0] << 24) | ((uint32_t)e[1] << 16) | ((uint32_t)e[2] << 8) | e[3];
+        sel = (uint16_t)(((uint16_t)e[4] << 8) | e[5]);
+        fwcfg_select(sel);
+        {
+            int v = 0;
+            for (k = 0; k < size && k < 4; k++) {
+                uint8_t c = fwcfg_byte();
+                if (c < '0' || c > '9') break;
+                v = v * 10 + (c - '0');
+            }
+            if (v >= 4 && v <= 16) g_ui_hint_q = v;
+        }
+        return g_ui_hint_q;
+    }
+    return 0;
+}
+
 void gfx_fb_display_info(os_display_info_t *o) {
     uint8_t *p = (uint8_t *)o;
     unsigned i;
     for (i = 0; i < sizeof(*o); i++) p[i] = 0;
     if (g_on) { o->fb_w = (uint16_t)g_w; o->fb_h = (uint16_t)g_h; }
     o->edid_status = (uint8_t)g_edid_status;
+    o->ui_hint_q = (uint8_t)g_ui_hint_q;
     if (!g_edid.ok) return;
     o->native_w = (uint16_t)g_edid.native_w;
     o->native_h = (uint16_t)g_edid.native_h;

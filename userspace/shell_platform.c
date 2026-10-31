@@ -40,6 +40,8 @@ static char g_file[1100];
 
 static int sys0(int nr) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(nr) : "memory"); return r; }
 static int sys_display(os_display_info_t* d) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(SYS_DISPLAY_INFO), "c"(d) : "memory"); return r; }
+/* Lot 69: fw_cfg first-boot scale pin from the kernel (0 = none) */
+int shell_display_ui_hint(void) { os_display_info_t di; return sys_display(&di) == 0 ? di.ui_hint_q : 0; }
 static int sys1(int nr, const void* a) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(nr), "b"(a) : "memory"); return r; }
 
 static int s_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }

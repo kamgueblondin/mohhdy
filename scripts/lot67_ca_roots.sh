@@ -5,7 +5,7 @@ set -e
 out=initrd_content/etc/ca-roots.pem
 mkdir -p initrd_content/etc
 {
-  echo "# MOHHDY Lot 67 root CA store (public certificates copied from the Mozilla"
+  echo "# MOHHDY Lot 67 (Lot 69: whole Mozilla TLS set) root CA store (public certificates copied from the Mozilla"
   echo "# bundle shipped by ca-certificates). Regenerate: scripts/lot67_ca_roots.sh"
   while read -r f; do
     [ -z "$f" ] && continue

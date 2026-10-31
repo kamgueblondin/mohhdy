@@ -116,7 +116,7 @@ int wf_http_build_get(const wf_url_t* u, char* o, int cap) {
     if (p >= 0) p = put(o, cap, p, u->host);
     if (p >= 0 && u->port != (u->https ? 443 : 80)) { p = put(o, cap, p, ":"); if (p >= 0) p = put_int(o, cap, p, u->port); }
     if (p >= 0) p = put(o, cap, p, "\r\nUser-Agent: Mohhdy-fetch/1.0\r\nAccept: text/html,text/plain,*/*\r\n"
-                                   "Accept-Encoding: identity\r\nConnection: close\r\n\r\n");
+                                   "Accept-Encoding: gzip, deflate\r\nConnection: close\r\n\r\n");
     return p;
 }
 
@@ -219,10 +219,17 @@ static int parse_head(wf_http_resp_t* r) {
             } else if (nl == 16 && prefix_ci(name, "content-encoding")) {
                 char tmp[32];
                 copy_val(val, vl, tmp, (int)sizeof(tmp));
-                if (!(prefix_ci(tmp, "identity") && slen(tmp) == 8)) return fail(r, "compressed body not supported");
+                if (prefix_ci(tmp, "identity") && slen(tmp) == 8) r->content_encoding = 0;
+                else if ((prefix_ci(tmp, "gzip") && slen(tmp) == 4) || (prefix_ci(tmp, "x-gzip") && slen(tmp) == 6)) r->content_encoding = 1;
+                else if (prefix_ci(tmp, "deflate") && slen(tmp) == 7) r->content_encoding = 2;
+                else return fail(r, "unsupported Content-Encoding (only gzip and deflate)");
             }
         }
     }
+    /* Lot 69: a compressed body is inflated in place in the same buffer;
+     * keeping the wire bytes to a third leaves room for about 3x + the
+     * consumed input of decoded output (HTML compresses 5-8x). */
+    if (r->content_encoding) r->body_cap = r->body_cap / 3;
     if (r->chunked) { r->content_length = -1; r->state = ST_CHUNK_SIZE; r->line_len = 0; }
     else if (r->status == 204 || r->status == 304 || (r->status >= 100 && r->status < 200)) r->state = ST_DONE;
     else if (r->content_length >= 0) { r->remaining = r->content_length; r->state = r->remaining ? ST_BODY_LEN : ST_DONE; }
