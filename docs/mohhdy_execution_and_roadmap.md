@@ -7,6 +7,28 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 64 (31 October 2026)
+
+US-031 partial, phase3_complete=false. The same bounded guest engine adds
+writing-mode vertical-rl/vertical-lr for block containers (logical layout
+mapped to physical space, glyphs stacked upright), direction rtl and the
+dir attribute (start/end alignment, logical properties, flex, grid and
+table columns from the right, rtl list markers, list padding and
+text-indent; no bidi reordering), translucent radial-gradient stops as
+disjoint rings, dotted and dashed patterns along rounded corner arcs,
+background-image layers (comma lists), background-repeat space and round,
+the background shorthand with images, background-position edge offsets
+(3/4 values) and -x/-y longhands, list-style-image, background images on
+inline boxes, a bounded multi-column layout (column-count/width/gap/fill/
+rule, column-span all, forced column breaks) and per-side and logical
+borders on boxes (border-<side>-width/style/color, border-inline/block
+and their sides, logical corner radii). Kernel, rights and shared ABI
+unchanged. No Chromium, WebKit, network loading, JavaScript VM, new font
+engine or margin collapsing. US-059/060/063/074 unchanged; US-G19..US-G24
+remain partial. Margin collapsing remains absent. Roadmap statuses and the
+complete non-done assertion stay unchanged. Subset, remaining gaps, line
+counts and measured results: docs/lot64_plan.md.
+
 ### Lot 63 (30 October 2026)
 
 US-031 partial, phase3_complete=false. The same bounded guest engine adds
