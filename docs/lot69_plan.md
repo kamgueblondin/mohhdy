@@ -64,6 +64,16 @@ Branch `cursor/lot69`, PR #226, base `origin/main` 9bf1eca (Lot 68 merge).
     slirp (`scripts/lot67_web_server.py` `/html/?q=`, `/block/?q=`).
   - Manual: `LOT69_REAL=1` runs the real engine (not in CI). Results are
     in the "Real engine" section below.
+- Real engine result (manual run, 2026-10-31 about 20:50 Mauritius,
+  UTC+4): `search ok results 0 layout none status 202 bytes 14270
+  fallback ddg-lite blocked bot-check`. DuckDuckGo answered the QEMU
+  guest with an HTTP 202 bot-check page on both html and lite, so
+  there are no real results from inside Mohhdy right now. Mohhdy detects
+  this and reports it. The same session fetched https://example.com/ over
+  real TLS (status 200). The GUI step of that manual run could not type
+  its line after closing the page, so there is no real-engine screenshot.
+- Fixed: a bare `/search` again opens the Recherche panel (parity
+  family). Only `/search WORDS` is the Internet search.
 - Honest: the real engine can change its markup or answer with a bot
   check at any time. Mohhdy then prints `blocked bot-check` or uses the
   generic fallback; it does not run JavaScript.
@@ -116,6 +126,8 @@ Branch `cursor/lot69`, PR #226, base `origin/main` 9bf1eca (Lot 68 merge).
   - Relayed counts include the relayed DACK.
   - The replay test keeps the message datagram, since the last frame on
     the wire is now beta's ack.
+- In QEMU the guest clock reads the ack RTT as 0 ms (below one
+  tick), so the rate samples there are bounded by the 1 ms floor.
 - Still partial: no retransmission (the mesh stays best effort, losses
   are only measured) and no ECN.
 

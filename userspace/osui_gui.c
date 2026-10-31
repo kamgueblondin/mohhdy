@@ -441,7 +441,7 @@ static int search_line(const char *in, char *out, int out_max) {
     }
     if (sncmp(in, "search ", 7) == 0) q = in + 7;
     else if (sncmp(in, "/search ", 8) == 0) q = in + 8;
-    else if (scmp(in, "search") == 0 || scmp(in, "/search") == 0) {
+    else if (scmp(in, "search") == 0) {   /* bare "/search" stays the Recherche panel */
         if (out) scpy(out, out_max, "osui search error=usage search WORDS\n");
         return 1;
     }
@@ -1038,7 +1038,7 @@ int osui_gui_route_line(const char *line, const char *pane) {
     while (*line == ' ' || *line == '\t') line++;
     if (scmp(line, "console") == 0 || scmp(line, "gui-exit") == 0 || scmp(line, "/console") == 0
         || is_word(line, "web") || is_word(line, "pm-ide") || is_word(line, "search")
-        || is_word(line, "search-open") || is_word(line, "/search"))
+        || is_word(line, "search-open") || sncmp(line, "/search ", 8) == 0)
         return OSUI_GUI_ROUTE_HOST;
     if (line[0] == '!' || token_ai(line)) return OSUI_GUI_ROUTE_SHELL;
     /* Lot 67: the network GET runs in the shell (same command as the console) */

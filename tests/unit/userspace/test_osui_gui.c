@@ -254,6 +254,9 @@ static void test_gui_shell_pane_uses_console_shell(void) {
         TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_SHELL, osui_gui_route_line(lines[i], "shell"));
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("console", "shell"));
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("gui-exit", "shell"));
+    /* Lot 69: "/search WORDS" is the Internet search, bare "/search" the Recherche panel */
+    TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("/search mohhdy", "chat"));
+    TEST_ASSERT_TRUE(osui_gui_route_line("/search", "chat") != OSUI_GUI_ROUTE_HOST);
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("web /web/demo.html", "shell"));
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_HOST, osui_gui_route_line("pm-ide x.pm", "shell"));
     TEST_ASSERT_EQUAL(OSUI_GUI_ROUTE_OSUI, osui_gui_route_line("session-list", "none"));
