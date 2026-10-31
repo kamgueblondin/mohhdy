@@ -2028,11 +2028,13 @@ static int radial_shape(we_node_t *n, const char *a, int l, int *shape) {
     return any;
 }
 
-/* text-align keywords, left-to-right; other values give fallback */
-static int align_keyword(const char *v, int len, int fallback) {
-    if (value_is(v, len, "left") || value_is(v, len, "start")) return WE_ALIGN_LEFT;
+/* text-align keywords; other values give fallback. Lot 64: start and end
+ * also set *logical (1, 2) for the resolution against direction. */
+static int align_keyword(const char *v, int len, int fallback, int *logical) {
+    *logical = value_is(v, len, "start") ? 1 : value_is(v, len, "end") ? 2 : 0;
+    if (value_is(v, len, "left") || *logical == 1) return WE_ALIGN_LEFT;
     if (value_is(v, len, "center")) return WE_ALIGN_CENTER;
-    if (value_is(v, len, "right") || value_is(v, len, "end")) return WE_ALIGN_RIGHT;
+    if (value_is(v, len, "right") || *logical == 2) return WE_ALIGN_RIGHT;
     if (value_is(v, len, "justify")) return WE_ALIGN_JUSTIFY;
     return fallback;
 }
@@ -3665,13 +3667,18 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "font-weight")) {
         n->bold = (uint8_t)(w_ieq_n(v, vl, "bold") || w_ieq_n(v, vl, "700") || w_ieq_n(v, vl, "800") || w_ieq_n(v, vl, "900"));
     } else if (w_eq(prop, "text-align")) {
-        n->align = (uint8_t)align_keyword(v, vl, WE_ALIGN_LEFT);
+        int logical;
+        n->align = (uint8_t)align_keyword(v, vl, WE_ALIGN_LEFT, &logical);
+        n->align_logical = (uint8_t)((n->align_logical & 12) | logical);
     } else if (w_eq(prop, "text-align-last")) {
         /* Lot 62 round 2: alignment of the last line and of lines before a
          * forced break (left-to-right: start is left, end is right) */
-        int a = value_is(v, vl, "auto") ? -1 : align_keyword(v, vl, -2);
+        int logical = 0, a = value_is(v, vl, "auto") ? -1 : align_keyword(v, vl, -2, &logical);
         if (a == -2) diag(d, "text-align-last refused", -1);
-        else n->align_last = (uint8_t)(a + 1);
+        else {
+            n->align_last = (uint8_t)(a + 1);
+            n->align_logical = (uint8_t)((n->align_logical & 3) | logical << 2);
+        }
     } else if (w_eq(prop, "text-justify")) {
         if (value_is(v, vl, "none")) n->justify_none = 1;
         else if (value_is(v, vl, "auto") || value_is(v, vl, "inter-word")) n->justify_none = 0;
@@ -3774,6 +3781,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->color = p ? p->color : 0x000000;
         n->bold = p ? p->bold : 0;
         n->align = p ? p->align : WE_ALIGN_LEFT;
+        n->align_logical = p ? p->align_logical : 1;    /* initial text-align: start */
         n->width = -1; n->height = -1; n->width_pct = 0;
         w_zero(n->length, sizeof(n->length)); n->aspect_num = 0; n->aspect_den = 1;
         n->flex_grow = -1;
@@ -3865,6 +3873,9 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         mode_pass = 0;
         cascade_rules(d, match, n, pseudo, 0);
         cascade_rules(d, match, n, pseudo, 1);
+        /* lot 64: start is left in ltr and right in rtl, end the other way */
+        if (n->align_logical & 3) n->align = ((n->align_logical & 3) == 1) != n->dir_rtl ? WE_ALIGN_LEFT : WE_ALIGN_RIGHT;
+        if (n->align_logical >> 2) n->align_last = (uint8_t)(1 + (((n->align_logical >> 2) == 1) != n->dir_rtl ? WE_ALIGN_LEFT : WE_ALIGN_RIGHT));
         if (n->border && n->border_color == (p ? p->color : 0)) n->border_color = n->color;
         if (p && p->display == WE_DISP_NONE) n->display = WE_DISP_NONE;
     }
@@ -4255,6 +4266,7 @@ typedef struct {
     int wrapped;   /* lot 62: the line being flushed ends at a soft wrap */
     int glue;      /* lot 63: the next piece joins the line without a break */
     int align_last, justify_none;
+    int start;     /* lot 64: WE_ALIGN_RIGHT in rtl, where justify falls back */
 } we_inline_t;
 #define WE_NO_BASELINE (-32768)
 #define WE_LINE_ATOMS 8
@@ -4512,8 +4524,8 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
     x = f->x0 + f->pending_x;
     /* the last line and a line before a forced break: text-align-last,
      * auto meaning text-align with justify falling back to start */
-    if (!wrapped) align = f->align_last ? f->align_last - 1 : align == WE_ALIGN_JUSTIFY ? WE_ALIGN_LEFT : align;
-    if (f->justify_none && align == WE_ALIGN_JUSTIFY) align = WE_ALIGN_LEFT;
+    if (!wrapped) align = f->align_last ? f->align_last - 1 : align == WE_ALIGN_JUSTIFY ? f->start : align;
+    if (f->justify_none && align == WE_ALIGN_JUSTIFY) align = f->start;
     if (advance && f->pending_x == 0 && f->atom_h == 0) {
         if (align == WE_ALIGN_CENTER && total < f->width) x += (f->width - total) / 2;
         else if (align == WE_ALIGN_RIGHT && total < f->width) x += f->width - total;
@@ -4900,9 +4912,13 @@ static int ratio_height(const we_node_t *n, int width) {
     return height < 0 ? 0 : height > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : height;
 }
 
-static int horizontal_auto(const we_node_t *n, int containing, int outer) {
+/* Lot 64: rtl is the containing block's direction; a box without auto
+ * margins then takes the free space on its left (the end side). */
+static int horizontal_auto(const we_node_t *n, int containing, int outer, int rtl) {
     int free = containing - outer - n->margin[1] - n->margin[3];
-    if (free <= 0 || !(n->margin_auto & WE_AUTO_LEFT)) return 0;
+    if (free <= 0) return 0;
+    if (!(n->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT))) return rtl ? free : 0;
+    if (!(n->margin_auto & WE_AUTO_LEFT)) return 0;
     return n->margin_auto & WE_AUTO_RIGHT ? free / 2 : free;
 }
 
@@ -5287,6 +5303,7 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->align = d->nodes[idx].align;
     f->align_last = d->nodes[idx].align_last;
     f->justify_none = d->nodes[idx].justify_none;
+    f->start = d->nodes[idx].dir_rtl ? WE_ALIGN_RIGHT : WE_ALIGN_LEFT;
     f->line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
     f->indent = d->nodes[idx].text_indent;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
@@ -6164,10 +6181,47 @@ static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, in
     }
 }
 
+static int inside(const we_doc_t *d, int node, int root);
+
+/* Lot 64: direction rtl in a flex or grid container. The items are laid
+ * out left to right and then mirrored inside the content box with their
+ * subtrees, so the main start of a row (the cross start of a column, the
+ * first grid column) is the right edge. Text inside an item keeps its
+ * left-to-right order. */
+static void rtl_mirror(we_doc_t *d, int idx, int first, int x, int width) {
+    int c, i;
+    for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
+        const we_node_t *k = &d->nodes[c];
+        int delta;
+        if (k->absolute || k->display == WE_DISP_NONE) continue;
+        delta = 2 * x + width - 2 * k->x - k->w;
+        if (!delta) continue;
+        for (i = c; i < (int)d->nnodes; i++)
+            if (inside(d, i, c)) d->nodes[i].x = (int16_t)limit_coord(d->nodes[i].x + delta);
+        for (i = first; i < (int)d->nitems; i++)
+            if (inside(d, d->item_owner[i], c)) d->items[i].x = (int16_t)limit_coord(d->items[i].x + delta);
+    }
+}
+
 static int layout_content(we_doc_t *d, int idx, int x, int y, int width, int depth) {
     const we_node_t *n = &d->nodes[idx];
-    if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID) return layout_flex(d, idx, x, y, width, depth);
-    if (n->display == WE_DISP_TABLE) return layout_table(d, idx, x, y, width, depth);
+    if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID) {
+        int first = (int)d->nitems, h = layout_flex(d, idx, x, y, width, depth);
+        if (n->dir_rtl) rtl_mirror(d, idx, first, x, width);
+        return h;
+    }
+    if (n->display == WE_DISP_TABLE) {
+        int first = (int)d->nitems, h = layout_table(d, idx, x, y, width, depth), r;
+        /* rtl: the first column at the right; each row's cells are mirrored */
+        if (n->dir_rtl)
+            for (r = idx + 1; r < (int)d->nnodes && inside(d, r, idx); r++)
+                if (d->nodes[r].display == WE_DISP_ROW) {
+                    int t = d->nodes[r].parent;
+                    while (t >= 0 && d->nodes[t].display != WE_DISP_TABLE) t = d->nodes[t].parent;
+                    if (t == idx) rtl_mirror(d, r, first, x, width);      /* not a nested table's rows */
+                }
+        return h;
+    }
     return layout_children(d, idx, x, y, width, depth);
 }
 
@@ -6406,7 +6460,8 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         diag(d, "percent height indefinite", idx);
     if (bw < 0) bw = 0;
     if (bw > WE_LAYOUT_MAX) bw = WE_LAYOUT_MAX;
-    if (forced_width[idx] < 0) bx += horizontal_auto(n, cw, bw);
+    if (forced_width[idx] < 0) bx += horizontal_auto(n, cw, bw, n->parent >= 0 && d->nodes[n->parent].dir_rtl &&
+                                                   d->nodes[n->parent].display != WE_DISP_FLEX && d->nodes[n->parent].display != WE_DISP_GRID);
     bx = limit_coord(bx);
     by = limit_coord(by);
     n->x = (int16_t)bx; n->y = (int16_t)by; n->w = (int16_t)bw;
@@ -7351,7 +7406,7 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
             child_height = height_constraint(d, items->node[k], height - vertical_extra(child) - child->margin[0] - child->margin[2], fixed_height) + vertical_extra(child) + child->margin[0] + child->margin[2];
         if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) && vertical == WE_PACK_STRETCH && child->height < 0 && !child->height_percent) assigned_h = child_height;
         x = work->column_x[c] + ((child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ?
-            horizontal_auto(child, width, child_width - child->margin[1] - child->margin[3]) :
+            horizontal_auto(child, width, child_width - child->margin[1] - child->margin[3], 0) :
             pack_distance(horizontal, width - child_width, 0, 1));
         if (child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) {
             int free = height > child_height ? height - child_height : 0;

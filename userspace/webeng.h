@@ -224,6 +224,9 @@ typedef struct {
     /* Lot 64: inherited writing-mode (WE_WM_*), direction (1 rtl) and
      * text-orientation (1 upright; mixed paints upright too). */
     uint8_t wmode, dir_rtl, upright;
+    /* Lot 64: text-align / text-align-last given as start or end (bits 0-1
+     * and 2-3: 1 start, 2 end), resolved against direction after the cascade. */
+    uint8_t align_logical;
     int16_t border_spacing;    /* horizontal; separate borders; collapse forces 0 */
     int16_t border_spacing_y;  /* vertical; one value sets both */
     int16_t line_height;       /* 0 uses WE_LINE_H; glyphs stay at the top */
