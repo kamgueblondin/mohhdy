@@ -70,6 +70,11 @@ void osui_gui_fill_scene(os_fb_scene_t *scene);
 void osui_gui_ascii_row(const uint16_t *cells, int y, char *dst, int max);
 void osui_gui_write_snap(char *dst, int max);
 int osui_gui_feed_key(int key, char *out, int out_max);
+/* Lot 68: shared text scale state (console ui-scale / text-size and GUI
+ * Ctrl+'+'/'-'/'0'), and the window a zoom key applies to (OS_UI_Z_*). */
+int osui_gui_zoom_target(void);
+struct osui_scale_s *osui_gui_scale(void);
+int osui_gui_scale_command(const char *line, char *out, int cap);
 void osui_gui_set_input(const char *text);
 const char *osui_gui_input(void);
 void osui_gui_run(void);

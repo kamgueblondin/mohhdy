@@ -280,6 +280,8 @@ static const osui_par_entry_t k_p2pmesh[] = {
     { "Estimateur de debit", "p2p-bwe", 0, 0 },
     { "Inondation (test d'analyse)", "p2p-flood", A | M, "PAIR N" },
     { "Bloquer un pair", "p2p-block", A | M, "PAIR" },
+    { "Taille du texte (globale)", "ui-scale", A, "auto|1|1.5|2|3|+|-" },
+    { "Taille du texte (fenetre)", "text-size", A, "FENETRE N|+|-|0" },
     { "Debloquer un pair", "p2p-unblock", A | M, "PAIR" },
 };
 

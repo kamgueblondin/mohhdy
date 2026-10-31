@@ -3,6 +3,7 @@
  * Pas Chromium. Pas un LLM de production. Pas agent/.
  */
 
+#include "osui_scale.h"
 #include "osui_gui.h"
 #include "osui_runtime.h"
 #include "osui_ide.h"
@@ -169,6 +170,30 @@ static int web_image_read(void *ctx, const char *path, unsigned char *dst, int c
     return fsops_read(g_fs_io, path, (char *)dst, cap);
 }
 
+/* Lot 68: one text scale state for the console command and the GUI */
+static osui_scale_t g_scale;
+static int g_scale_ready, g_scale_loaded;
+static void scale_load_once(void);
+static int scale_save(void);
+osui_scale_t *osui_gui_scale(void) {
+    if (!g_scale_ready) { osui_scale_init(&g_scale); g_scale_ready = 1; }
+    if (!g_scale_loaded && g_fs_io) scale_load_once();
+    return &g_scale;
+}
+/* Page viewport: 640 CSS px at 1x as before; a zoomed page gets the view
+ * width divided by the zoom (at least 240), so it reflows instead of
+ * being cut. */
+static int g_web_vw = OSUI_WEB_VIEWPORT;
+static int web_viewport_w(void) {
+    osui_scale_t *sc = osui_gui_scale();
+    int q = osui_scale_effective(sc, OS_UI_Z_WEB), pw = sc->web_pw > 0 ? sc->web_pw : 992, v;
+    if (q <= OS_UI_Q1) return OSUI_WEB_VIEWPORT;
+    v = pw * 4 / q;
+    if (v > OSUI_WEB_VIEWPORT) v = OSUI_WEB_VIEWPORT;
+    if (v < 240) v = 240;
+    return v;
+}
+
 static int osui_web_pipeline(const char *src, int n) {
     int defined = 0, expanded = 0, kept = 0, dropped = 0, vdef = 0, unres = 0, m, rc, k;
     webrt_viewport_t vp;
@@ -186,7 +211,8 @@ static int osui_web_pipeline(const char *src, int n) {
     if (rc != 0) return rc;
     if (g_web.css_len > 0) {
         g_web.css[g_web.css_len < WE_CSS_MAX ? g_web.css_len : WE_CSS_MAX - 1] = 0;
-        vp.width = OSUI_WEB_VIEWPORT; vp.height = OSUI_WEB_VIEWPORT_H; vp.dark = 0;
+        g_web_vw = web_viewport_w();
+        vp.width = g_web_vw; vp.height = OSUI_WEB_VIEWPORT_H; vp.dark = 0;
         m = webrt_css_flatten_media(g_web.css, &vp, css1, WE_CSS_MAX, &kept, &dropped);
         if (m >= 0) {
             m = webrt_css_resolve_vars(css1, css2, WE_CSS_MAX, &vdef, &unres);
@@ -201,7 +227,8 @@ static int osui_web_pipeline(const char *src, int n) {
     rc = we_style(&g_web);
     if (rc != 0) return rc;
     we_set_image_reader(web_image_read, 0);
-    return we_layout_viewport(&g_web, OSUI_WEB_VIEWPORT, OSUI_WEB_VIEWPORT_H);
+    g_web_vw = web_viewport_w();
+    return we_layout_viewport(&g_web, g_web_vw, OSUI_WEB_VIEWPORT_H);
 }
 
 we_doc_t *osui_gui_web_doc(void) { return &g_web; }
@@ -316,7 +343,25 @@ int osui_gui_web_resolve(const char *base, const char *href, char *dst, int max)
     return slen(dst) < 40 ? 0 : -1;
 }
 
+static void gui_cat_u(char *d, int max, unsigned v);
 static void web_event(const char *p, char *out, int out_max) {
+    if (sncmp(p, "view", 4) == 0) {
+        /* Lot 68: kernel view size and scale; a new zoom relays the page */
+        int pw, ph, q, fw, fh, before = web_viewport_w();
+        p += 4;
+        pw = evt_int(&p); ph = evt_int(&p); q = evt_int(&p); fw = evt_int(&p); fh = evt_int(&p);
+        osui_scale_web_view(osui_gui_scale(), pw, ph, q, fw, fh);
+        if (g_web_active && web_viewport_w() != before && g_web_file[0]) {
+            g_web_vw = web_viewport_w();
+            if (we_layout_viewport(&g_web, g_web_vw, OSUI_WEB_VIEWPORT_H) == 0) {
+                char m[48];
+                scpy(m, (int)sizeof(m), " viewport ");
+                gui_cat_u(m, (int)sizeof(m), (unsigned)g_web_vw);
+                app_out(out, out_max, "osui web reflow", m);
+            }
+        }
+        return;
+    }
     if (!g_web_active) return;
     if (sncmp(p, "back", 4) == 0 || sncmp(p, "fwd", 3) == 0) {
         int to = g_web_hi + (p[0] == 'b' ? -1 : 1);
@@ -463,6 +508,39 @@ static void ide_action(int act, char *out, int out_max) {
 /* ---- desktop apps: file explorer and text editor --------------------- */
 
 void osui_gui_set_fs_io(const fsops_io_t *io) { g_fs_io = io; }
+
+/* Lot 68: load the saved scale once (missing file: auto), then run a
+ * ui-scale / text-size line and save on change. Same code for the console
+ * and the GUI chat, which both reach this through shell dispatch. */
+static int scale_save(void) {
+    osui_scale_t *sc = osui_gui_scale();
+    char buf[160];
+    int n;
+    if (!g_fs_io) return -1;
+    n = osui_scale_save(sc, buf, (int)sizeof(buf));
+    if (n <= 0 || fsops_write(g_fs_io, OSUI_SCALE_CFG, buf, n) != 0) return -1;
+    sc->saved_at = sc->changes;
+    return 0;
+}
+static void scale_load_once(void) {
+    char buf[160];
+    int n;
+    if (g_scale_loaded || !g_fs_io) return;
+    g_scale_loaded = 1;
+    n = web_image_read(0, OSUI_SCALE_CFG, (unsigned char *)buf, (int)sizeof(buf) - 1);
+    if (n > 0 && n < (int)sizeof(buf)) { buf[n] = 0; (void)osui_scale_load(osui_gui_scale(), buf, n); }
+}
+int osui_gui_scale_command(const char *line, char *out, int cap) {
+    osui_scale_t *sc;
+    unsigned before;
+    int rc;
+    scale_load_once();
+    sc = osui_gui_scale();
+    before = sc->changes;
+    rc = osui_scale_command(sc, line, out, cap);
+    if (rc == 0 && sc->changes != before && scale_save() == 0) scat(out, cap, " saved " OSUI_SCALE_CFG);
+    return rc;
+}
 int osui_gui_focus(void) { return g_focus; }
 
 /* Lot 46: decimal number appended to a log line */
@@ -1161,7 +1239,13 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     image_sync();   /* UX5: viewer pixels, only when they change */
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
-    scene->version = 7; /* 3: term_attr (pm-ide syntax classes), 4: web display list, 5: llm, 6: pane_live, 7: app windows */
+    scene->version = 8; /* 3: term_attr (pm-ide syntax classes), 4: web display list, 5: llm, 6: pane_live, 7: app windows, 8: text scale */
+    {
+        osui_scale_t *us = osui_gui_scale();
+        int z;
+        scene->ui_scale_q = us->ui_q;
+        for (z = 0; z < OS_UI_Z_COUNT; z++) scene->zoom_q[z] = us->zoom[z];
+    }
     scene->chat_mode = (mode && mode[0] == 'f') ? OS_FB_CHAT_FLOAT : OS_FB_CHAT_CENTER;
     scene->pane = OS_FB_PANE_NONE;
     if (pane) {
@@ -1301,6 +1385,17 @@ void osui_gui_render(uint16_t *cells) {
     }
 }
 
+/* Lot 68: window that Ctrl+'+'/'-'/'0' zooms: the page, the editor, the
+ * focused app, else the open pane (shell or panel), else the chat. */
+int osui_gui_zoom_target(void) {
+    const char *pane = osui_get_pane();
+    if (g_web_active) return OS_UI_Z_WEB;
+    if (g_ide.active) return OS_UI_Z_IDE;
+    if (g_focus >= 0 && g_focus < OS_FB_APPS && g_slot[g_focus]) return OS_UI_Z_APP0 + g_focus;
+    if (pane && pane[0] && scmp(pane, "none") != 0) return scmp(pane, "shell") == 0 ? OS_UI_Z_SHELL : OS_UI_Z_PANE;
+    return OS_UI_Z_CHAT;
+}
+
 int osui_gui_feed_key(int key, char *out, int out_max) {
     if (out && out_max > 0) out[0] = 0;
     if (key == 0) {
@@ -1314,6 +1409,21 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             g_evt_on = 0;
             osui_gui_event(g_evt, out, out_max);
         } else if (g_evt_len < (int)sizeof(g_evt) - 1) g_evt[g_evt_len++] = (char)key;
+        return 0;
+    }
+    if (key == OS_KEY_ZOOM_IN || key == OS_KEY_ZOOM_OUT || key == OS_KEY_ZOOM_RESET) {
+        /* Lot 68: Ctrl+'+' / Ctrl+'-' / Ctrl+'0' zoom the focused window */
+        osui_scale_t *us = osui_gui_scale();
+        int slot = osui_gui_zoom_target(), z;
+        char m[64];
+        z = osui_scale_zoom(us, slot, key == OS_KEY_ZOOM_IN ? 1 : key == OS_KEY_ZOOM_OUT ? -1 : 0);
+        scpy(m, (int)sizeof(m), osui_scale_slot_name(slot));
+        scat(m, (int)sizeof(m), " zoom ");
+        gui_cat_u(m, (int)sizeof(m), (unsigned)z);
+        scat(m, (int)sizeof(m), " q ");
+        gui_cat_u(m, (int)sizeof(m), (unsigned)osui_scale_effective(us, slot));
+        if (us->changes != us->saved_at) (void)scale_save();
+        app_out(out, out_max, "osui zoom ", m);
         return 0;
     }
     if (g_focus >= 0 && g_focus < OS_FB_APPS && g_slot[g_focus] && !g_ide.active && !g_web_active) {

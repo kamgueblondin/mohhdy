@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 451
+#define MOHHDY_SHELL_COMMAND_COUNT 453
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -417,8 +417,10 @@ static const char * const mohhdy_shell_commands[] = {
     "task-suspend",
     "term-dump",
     "test",
+    "text-size",
     "top",
     "touch",
+    "ui-scale",
     "unalias",
     "uptime",
     "vfs-backend-grant",

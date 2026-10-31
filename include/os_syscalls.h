@@ -425,6 +425,11 @@ typedef struct {
 #define OS_TERM_KEY_END 0x13
 #define OS_TERM_KEY_DEL 0x14
 #define OS_TERM_KEY_MIN 0x15 /* terminal minimize: back to the desktop, keep the typed line */
+/* Lot 68: Ctrl+'+' (or Ctrl+'='), Ctrl+'-', Ctrl+'0' (also keypad):
+ * text zoom of the focused window (userspace/osui_gui.c). */
+#define OS_KEY_ZOOM_IN 0x18
+#define OS_KEY_ZOOM_OUT 0x19
+#define OS_KEY_ZOOM_RESET 0x1A
 #define OS_VGA_KEY_LEFT 28
 #define OS_VGA_KEY_RIGHT 29
 #define OS_VGA_KEY_UP 30
@@ -609,6 +614,12 @@ typedef struct {
     uint8_t app_focus;          /* slot with keyboard focus, 0xFF none */
     uint8_t app_pad[3];
     os_fb_app_t app[OS_FB_APPS];
+    /* version >= 8 (Lot 68): text scale in quarters (4 = 1x, 6 = 1.5x,
+     * 8 = 2x, 12 = 3x; 0 = auto from the screen, include/os_ui_scale.h)
+     * and a zoom per window (OS_UI_Z_*, 0 or 4 = none). */
+    uint8_t ui_scale_q;
+    uint8_t zoom_q[12];
+    uint8_t scale_pad[3];
 } os_fb_scene_t;
 
 typedef struct {

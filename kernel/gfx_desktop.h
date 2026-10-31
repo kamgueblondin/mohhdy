@@ -33,6 +33,7 @@ typedef struct {
     int bar_h;
     gfx_rect_t menu_items[GFX_DESKTOP_MENUS];
     int menu_count;
+    int chrome_q;            /* Lot 68: menu bar text scale (quarters) */
     gfx_rect_t stage_badge;
     struct {
         gfx_rect_t box;
@@ -86,6 +87,15 @@ int gfx_desktop_set_image(const os_fb_image_t *img);
 /* Rectangle the image of slot occupies in box (0 size when none). */
 void gfx_desktop_image_rect(const gfx_rect_t *box, gfx_rect_t *out);
 void gfx_desktop_app_grid_fit(const gfx_rect_t *box, int *rows, int *cols);
+/* Lot 68: text scale (quarters, include/os_ui_scale.h) */
+void gfx_desktop_app_grid_fit_q(const gfx_rect_t *box, int q, int *rows, int *cols);
+int gfx_desktop_app_row_h(int q);
+int gfx_desktop_app_grid_y(int q);
+int gfx_desktop_surface_q(const os_fb_scene_t *sc, int zslot, int w, int h);
+int gfx_desktop_chrome_q(const os_fb_scene_t *sc, int w, int h);
+int gfx_glyph_pixel(char ch, int q, int dx, int dy);
+int gfx_desktop_text_q(void);
+void gfx_desktop_set_text_q(int q);
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *layout);
 void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h);
 void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w, int h);
