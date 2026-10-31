@@ -2857,10 +2857,7 @@ static int position_edges(const char *v, int len, int16_t out[2], uint8_t *bits)
     while (k < c) {
         if (g == 2 || origin_value(v + a[k], l[k], &axis[g], &value, &pct) || axis[g] == -2) return -1;
         start[g] = k++;
-        if (k < c && !origin_value(v + a[k], l[k], &dummy, &value, &pct) && dummy == -2) {
-            if (axis[g] < 0) return -1;
-            k++;
-        }
+        if (k < c && !origin_value(v + a[k], l[k], &dummy, &value, &pct) && dummy == -2) k++;   /* centre + offset: refused below */
         end[g++] = k;
     }
     if (g != 2 || (axis[0] >= 0 && axis[0] == axis[1])) return -1;
@@ -2908,7 +2905,7 @@ static void bgi_reset(we_node_t *n) {
     n->bgi_space = 0; n->bgi_layers = 0;
     for (k = 0; k < WE_BG_LAYERS - 1; k++) {
         we_bg_layer_t *l = &n->bgi_more[k];
-        l->off = l->len = 0; l->repeat = 3; l->size_kind = WE_BGS_AUTO; l->pos_pct = 3; l->space = 0;
+        l->repeat = 3;            /* off/len are read only below bgi_layers */ l->size_kind = WE_BGS_AUTO; l->pos_pct = 3; l->space = 0;
         l->pos[0] = l->pos[1] = 0; l->size[0] = l->size[1] = -1;
     }
 }
@@ -2990,12 +2987,8 @@ static int background_shorthand(we_doc_t *d, we_node_t *n, const char *v, int le
             if (kind == 1 || kind == 2 || kind == 6) {
                 if (span[kind - 1][0] >= 0 && kind != 6) return -1;   /* one image per layer */
                 if (kind == 6 && (span[5][0] >= 0 || k != c - 1)) return -1;
-            } else if (span[kind - 1][0] >= 0) {
-                /* the tokens of a group must follow each other */
-                int g;
-                for (g = span[kind - 1][1]; g < at && (w_space(s[g]) || s[g] == '/'); g++) {}
-                if (g != at) return -1;
             }
+            /* a group split by other tokens spans them and fails its parser */
             if (span[kind - 1][0] < 0) span[kind - 1][0] = at;
             span[kind - 1][1] = t;
             at = t;
@@ -10427,7 +10420,7 @@ static int collapse_table_of(const we_doc_t *d, int i) {
 static void collapse_widths(we_doc_t *d) {
     uint32_t i;
     for (i = 0; i < d->nnodes; i++) {
-        d->nodes[i].collapse_w = 0; d->nodes[i].collapse_cell = 0; d->nodes[i].own_edges = 0;
+        d->nodes[i].collapse_w = 0; d->nodes[i].collapse_cell = 0;
         w_zero(d->nodes[i].cin, sizeof(d->nodes[i].cin));
     }
     for (i = 0; i < d->nnodes; i++) {

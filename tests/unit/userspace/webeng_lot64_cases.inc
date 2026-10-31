@@ -41,6 +41,13 @@ static void test_l64_layer_and_shorthand_cases(void) {
     l63_bgi("<body style='margin:0'><div style='width:8px;height:2px;background:url(/images/mire-ga16.png) 1px no-repeat 2px'></div></body>");
     TEST_ASSERT_EQUAL(1, l61_diag_count("background refused"));   /* a split position */
     TEST_ASSERT_EQUAL(0, (int)g_doc.nitems);
+    /* an inline fragment has no padding box: content-box origin is its corner */
+    l63_bgi("<body style='margin:0'><p style='margin:0'><span style='border:2px solid #000;padding:3px;background:url(/images/mire-ga16.png) "
+            "no-repeat;background-size:6px 4px;background-origin:content-box'>abc</span></p></body>");
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_rect_at(0, 0, 1, 4, 0x000000);
+    l61_rect_at(5, 0, 1, 4, 0xC8C8C8);
+    l61_text_at("abc", 0, 1);
 }
 
 static void test_l64_column_cases(void) {
@@ -83,7 +90,17 @@ static void test_l64_edge_cases(void) {
     l61_text_at("x", 0, 2);
 }
 
+static void test_l64_arc_square_clipped(void) {
+    /* a dash square near the end of a narrow arc is cut at the corner box */
+    lot52_render(L64_BODY "<div style='width:40px;height:70px;border:6px dashed #ff0000;border-radius:8px / 30px'></div></body>", 320);
+    l61_rect_at(3, 6, 5, 6, 0xFF0000);
+    l61_rect_at(3, 70, 5, 6, 0xFF0000);
+    l61_rect_at(8, 0, 12, 6, 0xFF0000);
+    TEST_ASSERT_EQUAL(14, (int)g_doc.nitems);
+}
+
 static void lot64_cases_run(void) {
+    RUN_TEST(test_l64_arc_square_clipped);
     RUN_TEST(test_l64_vertical_logical_cases);
     RUN_TEST(test_l64_layer_and_shorthand_cases);
     RUN_TEST(test_l64_column_cases);
