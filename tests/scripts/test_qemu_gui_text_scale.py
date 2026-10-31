@@ -144,7 +144,8 @@ def main():
             g.say("first boot default: ui-scale auto 1.5x (no pin)")
             # US-080: form-factor plan, applied through the same ui-scale
             g.send_command_until(monitor, "form-factor 3840x2160", "ui-scale 3x glyph_px 24", proc)
-            g.send_command_until(monitor, "form-factor apply desktop 1024x768", "form-factor applied ui-scale ok global 1x", proc)
+            # Lot 69: the 1024x768 desktop plan is 1.5x now (readable auto rule)
+            g.send_command_until(monitor, "form-factor apply desktop 1024x768", "form-factor applied ui-scale ok global 1.5", proc)
             # US-081: profile applied to real settings, battery simule
             g.send_command_until(monitor, "power-apply saver", "pace_cap_bps 64000", proc)
             g.send_command_until(monitor, "power-sim start 50000 50", "battery simule pct 50", proc)

@@ -1244,6 +1244,12 @@ static void test_lot69_every_window_shared_chrome(void) {
     redraw(&l);
     TEST_ASSERT(l.app_win[0].visible);
     TEST_ASSERT(same_buttons(&l.app_win[0].box, l.app_win[0].btn, GFX_DESKTOP_APP_TITLE_H, q));
+    {
+        int ex = l.app_win[0].box.x + l.app_win[0].box.w - 2, ey = l.app_win[0].box.y + 150;
+        drag(ex, ey, ex - 80, ey);
+        redraw(&m);
+        TEST_ASSERT_EQUAL(l.app_win[0].box.w - 80, m.app_win[0].box.w);
+    }
     /* full screen web and editor */
     for (k = 0; k < 2; k++) {
         gfx_rect_t fb_box, btn[3];
@@ -1271,7 +1277,7 @@ static void test_lot69_every_window_shared_chrome(void) {
         TEST_ASSERT(GFX_WM_RGB_CLOSE != g_fb[(btn[2].y + 2) * W + btn[2].x + n / 2]);
         read_kbd(got, (int)sizeof(got));
         TEST_ASSERT_EQUAL_STRING("", got);
-        click_at(rect_center_x(&m.dock.icons[1]), rect_center_y(&m.dock.icons[1]));
+        click_at(rect_center_x(&m.dock.icons[k ? 7 : 1]), rect_center_y(&m.dock.icons[k ? 7 : 1]));
         redraw(&m);
         TEST_ASSERT_EQUAL(GFX_WM_RGB_CLOSE, g_fb[(btn[2].y + 2) * W + btn[2].x + n / 2]);
         read_kbd(got, (int)sizeof(got));

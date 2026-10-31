@@ -10,9 +10,11 @@ pixel layout is fixed):
     title buttons replace the old traffic dots: minimize shows the desktop
     and the Browser-OS dock icon restores it, maximize is a no-op (already
     full screen), close closes the page ("osui web close").
-App windows and the editor use the same gfx_wm code path; their buttons
-are checked by the host test test_gfx_desktop
-(test_lot69_every_window_shared_chrome).
+  * explorer app window (/files): maximize on-off, minimize / Fichiers
+    dock restore, right edge resize (the close button follows), close;
+  * full screen editor (pm-ide): minimize / Editeur dock restore, close.
+The host test test_gfx_desktop (test_lot69_every_window_shared_chrome)
+checks the button geometry of every window type.
 """
 from __future__ import print_function
 
@@ -33,6 +35,22 @@ import test_qemu_gui_term_window as tw  # noqa: E402
 from test_qemu_gui_windows import btn, click, count, PANE, CHAT_CENTER, W, H, BAR_H  # noqa: E402
 
 RED = (0xE0, 0x52, 0x4B)
+
+
+def red_button(rgb, y0, y1):
+    """centre of the rightmost red close button between rows y0..y1"""
+    best = None
+    for y in range(y0, y1):
+        for x in range(W - 1, 0, -1):
+            i = (y * W + x) * 3
+            p = rgb[i:i + 3]
+            if abs(p[0] - RED[0]) <= 4 and abs(p[1] - RED[1]) <= 4 and abs(p[2] - RED[2]) <= 4:
+                if best is None or x > best[0]:
+                    best = (x, y)
+                break
+    if best is None:
+        raise RuntimeError("no red close button in rows %d..%d" % (y0, y1))
+    return best[0] - 7, best[1] + 4
 
 
 def main():
@@ -110,6 +128,53 @@ def main():
             click(qmp, proc, *btn(full, "max", 30), marker="gfx wm full already maximized", label="web maximize")
             click(qmp, proc, *btn(full, "close", 30), marker="gfx wm full close", label="web close")
             g.wait_for(proc, "osui web close", g.CMD_TIMEOUT, start)
+            # 4. explorer app window: locate its red close button on screen
+            # (the chat is closed first: its close button is in the same rows)
+            time.sleep(1.0)
+            click(qmp, proc, *btn(CHAT_CENTER, "close", 34), marker="gfx wm chat close", label="chat close again")
+            g.send_command_until(monitor, "/files", "osui files open dir=/", proc, mode="getc", wait_prompt=False)
+            time.sleep(1.5)
+            _, _, rgb = g.screendump_rgb(monitor, "qemu-gui-lot69-app.ppm")
+            cx, cy = red_button(rgb, BAR_H + 8, BAR_H + 60)
+            app = (0, cy - 9, cx + 9 + 2, 0)   # right edge = close right + pad
+            click(qmp, proc, cx - 18, cy, "gfx wm app maximize on", "app maximize")
+            _, _, rgb = g.screendump_rgb(monitor, "qemu-gui-lot69-app-max.ppm")
+            mx, my = red_button(rgb, BAR_H, BAR_H + 40)
+            click(qmp, proc, mx - 18, my, "gfx wm app maximize off", "app maximize off")
+            click(qmp, proc, cx - 36, cy, "gfx wm app minimize", "app minimize")
+            click(qmp, proc, docks[6][0], docks[6][1], "gfx wm app restore", "dock Fichiers restore")
+            _, _, rgb = g.screendump_rgb(monitor, "qemu-gui-lot69-app-restored.ppm")
+            cx, cy = red_button(rgb, BAR_H + 8, BAR_H + 60)
+            right = cx + 7 + 4 + 2          # close right edge + gap + pad
+            start = len(g.log_text())
+            tw.move(qmp, right - 3, cy + 60)
+            time.sleep(0.3)
+            tw.button(qmp, True)
+            time.sleep(0.3)
+            tw.move(qmp, right - 83, cy + 60)
+            time.sleep(0.3)
+            tw.button(qmp, False)
+            g.wait_for(proc, "gfx wm app resized", g.CMD_TIMEOUT, start)
+            time.sleep(1.0)
+            _, _, rgb = g.screendump_rgb(monitor, "qemu-gui-lot69-app-resized.ppm")
+            rx, ry = red_button(rgb, BAR_H + 8, BAR_H + 60)
+            if abs((cx - rx) - 80) > 3:
+                raise RuntimeError("app resize: close button moved by %d, not 80" % (cx - rx))
+            g.say("app window resized by its right edge (close button followed)")
+            click(qmp, proc, rx, ry, "gfx wm app close", "app close")
+            time.sleep(1.0)
+            # 5. full screen editor
+            g.send_command_until(monitor, "pm-ide w69.pm", "osui pm-ide open fullscreen", proc,
+                                 mode="getc", wait_prompt=False)
+            time.sleep(1.5)
+            _, _, rgb = g.screendump_rgb(monitor, "qemu-gui-lot69-ide.ppm")
+            if count(rgb, W - 70, BAR_H + 8, W - 8, BAR_H + 40, RED, 4) < 60:
+                raise RuntimeError("editor window has no shared red close button")
+            click(qmp, proc, *btn(full, "min", 30), marker="gfx wm full minimize", label="editor minimize")
+            click(qmp, proc, docks[7][0], docks[7][1], "gfx wm full restore", "dock Editeur restore")
+            start = len(g.log_text())
+            click(qmp, proc, *btn(full, "close", 30), marker="gfx wm full close", label="editor close")
+            g.wait_for(proc, "osui pm-ide quit", g.CMD_TIMEOUT, start)
         g.say("QEMU GUI lot69 windows contract passed.")
         return 0
     finally:

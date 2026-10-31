@@ -180,7 +180,7 @@ visible. Root causes and fixes:
   corner grip and the right / bottom edges (minimum 200x120, clamped to
   the work area), and the full screen web / editor windows have the
   same three buttons: close closes, minimize shows the desktop and the
-  Browser-OS dock icon restores it, maximize is a no-op (they are
+  Browser-OS (web) or Editeur (editor) dock icon restores it, maximize is a no-op (they are
   already full screen). Tests: test_gfx_wm
   test_lot69_scale_and_resize, test_gfx_desktop
   test_lot69_every_window_shared_chrome, QEMU

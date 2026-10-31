@@ -257,7 +257,7 @@ static void open_target(int i) {
         gfx_fb_redraw_desktop();
         return;
     }
-    if (g_full_min && i == 1) {
+    if (g_full_min && i == (g_full_pane == OS_FB_PANE_IDE ? 7 : 1)) {
         g_full_min = 0;
         wm_log("gfx wm full restore\n");
         gfx_fb_redraw_desktop();
