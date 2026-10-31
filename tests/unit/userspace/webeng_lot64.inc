@@ -4,6 +4,7 @@
 #include "webeng_lot64_radial.inc"
 #include "webeng_lot64_arc.inc"
 #include "webeng_lot64_bglayers.inc"
+#include "webeng_lot64_marker.inc"
 
 static void lot64_run(void) {
     lot64_vertical_run();
@@ -11,4 +12,5 @@ static void lot64_run(void) {
     lot64_radial_run();
     lot64_arc_run();
     lot64_bglayers_run();
+    lot64_marker_run();
 }

@@ -184,6 +184,7 @@ typedef struct {
     uint8_t grid_cols;         /* 1..8 when display:grid, else 0 */
     uint8_t flex_wrap, float_side, grid_rows, relative;
     uint8_t list_style;
+    uint16_t lsi_off, lsi_len;  /* lot 64: inherited list-style-image url (pool), 0 length: none */
     uint8_t justify_content, align_items, align_self, align_content;
     uint8_t justify_items, justify_self;
     uint8_t width_kind, basis_content, border_box;

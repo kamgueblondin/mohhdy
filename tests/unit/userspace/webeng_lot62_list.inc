@@ -35,7 +35,7 @@ static void test_l62_list_marker_styles(void) {
 static void test_l62_list_refusals(void) {
     lot52_render("<body style='margin:0 0 0 40px'><ol start=1x><li>a</li></ol><ol start=10000><li>b</li></ol>"
                  "<ol type=q><li value=-><li>c</li></ol>"
-                 "<ul style='list-style:inside square;list-style:square circle;list-style:url(x)'><li>d</li></ul></body>", 320);
+                 "<ul style='list-style:inside square;list-style:square circle;list-style:url()'><li>d</li></ul></body>", 320);
     TEST_ASSERT_EQUAL(3, l61_diag_count("list number refused"));
     TEST_ASSERT_EQUAL(1, l61_diag_count("list type refused"));
     TEST_ASSERT_EQUAL(3, l61_diag_count("list marker refused"));

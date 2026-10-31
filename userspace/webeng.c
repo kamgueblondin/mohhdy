@@ -2662,16 +2662,22 @@ static int position_pair(const char *v, int len, int16_t out[2], uint8_t *pct_bi
 /* The url stays in the pool where the declaration already lives; the
  * path rules are those of <img src> and are checked when the box paints.
  * An <img> keeps its own source and refuses a background image. */
-static int background_url(we_doc_t *d, we_node_t *n, const char *v, int len) {
+/* lot 64: the url() span in the pool, shared by list-style-image */
+static int url_span(const we_doc_t *d, const char *v, int len, uint16_t *off, uint16_t *ulen) {
     int a = 4, b = len - 1;
-    if (w_eq(n->tag, "img") || len < 6 || !w_ieq_n(v, 4, "url(") || v[len - 1] != ')') return -1;
+    if (len < 6 || !w_ieq_n(v, 4, "url(") || v[len - 1] != ')') return -1;
     while (a < b && w_space(v[a])) a++;
     while (b > a && w_space(v[b - 1])) b--;
     if (b - a >= 2 && (v[a] == '"' || v[a] == '\'') && v[b - 1] == v[a]) { a++; b--; }
     if (b <= a || v < d->pool || v + len > d->pool + d->pool_used) return -1;
-    n->bgi_off = (uint16_t)(v + a - d->pool);
-    n->bgi_len = (uint16_t)(b - a);
+    *off = (uint16_t)(v + a - d->pool);
+    *ulen = (uint16_t)(b - a);
     return 0;
+}
+
+static int background_url(we_doc_t *d, we_node_t *n, const char *v, int len) {
+    if (w_eq(n->tag, "img")) return -1;
+    return url_span(d, v, len, &n->bgi_off, &n->bgi_len);
 }
 
 /* repeat, no-repeat, repeat-x, repeat-y, or one repeat/no-repeat per axis.
@@ -3682,16 +3688,29 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "square")) n->list_style = WE_LIST_SQUARE;
         else if (list_keyword(v, vl) >= 0) n->list_style = (uint8_t)list_keyword(v, vl);
         else diag(d, "list marker refused", -1);
+    } else if (w_eq(prop, "list-style-image")) {
+        /* lot 64: an image marker; the type stays the fallback */
+        if (value_is(v, vl, "none")) n->lsi_len = 0;
+        else if (url_span(d, v, vl, &n->lsi_off, &n->lsi_len)) diag(d, "list marker refused", -1);
     } else if (w_eq(prop, "list-style")) {
-        int a[4], l[4], c = tokens(v, vl, a, l), k, style = -1, ok = c >= 1;
+        int a[4], l[4], c = tokens(v, vl, a, l), k, style = -1, ok = c >= 1, image = -1;
+        uint16_t off = 0, len = 0;
         for (k = 0; k < c && ok; k++) {
             int kw = list_keyword(v + a[k], l[k]);
             if (value_is(v + a[k], l[k], "outside")) continue;
+            if (l[k] > 4 && w_ieq_n(v + a[k], 4, "url(")) {      /* lot 64: list-style-image */
+                if (image >= 0 || url_span(d, v + a[k], l[k], &off, &len)) ok = 0;
+                image = k;
+                continue;
+            }
             if (kw < 0 || style >= 0) ok = 0;
             else style = kw;
         }
         if (!ok) diag(d, "list marker refused", -1);
-        else n->list_style = (uint8_t)(style < 0 ? WE_LIST_DISC : style);
+        else {
+            n->list_style = (uint8_t)(style < 0 ? WE_LIST_DISC : style);
+            n->lsi_off = off; n->lsi_len = len;
+        }
     } else if (w_eq(prop, "min-width") || w_eq(prop, "max-width")) {
         int is_min = w_eq(prop, "min-width");
         int rc = parse_len(v, vl, &px, &pct);
@@ -4035,6 +4054,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
             n->col_floor[track] = n->row_floor[track] = n->col_cap[track] = n->row_cap[track] = -1;
         } }
         n->list_style = p ? p->list_style : WE_LIST_NONE;
+        n->lsi_off = p ? p->lsi_off : 0; n->lsi_len = p ? p->lsi_len : 0;
         n->border_color = n->color;
         n->quotes_kind = p ? p->quotes_kind : WE_QUOTES_AUTO;
         n->quotes_off = p ? p->quotes_off : 0; n->quotes_len = p ? p->quotes_len : 0;
@@ -4452,6 +4472,7 @@ typedef struct {
 #define WE_NO_BASELINE (-32768)
 #define WE_LINE_ATOMS 8
 
+static void inline_image(we_doc_t *d, int idx, int x, int y, int w, int h);
 static int limit_coord(int n) {
     if (n < -WE_LAYOUT_MAX) return -WE_LAYOUT_MAX;
     if (n > WE_LAYOUT_MAX) return WE_LAYOUT_MAX;
@@ -4743,6 +4764,8 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         n = &d->nodes[d->nodes[node].parent >= 0 ? d->nodes[node].parent : node];
         run_w = len * glyph_adv(d, node);
         if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, run_w, box_h, n->bg);
+        if ((n->bgi_len || n->bgi_layers) && n->display == WE_DISP_INLINE && run_w > 0)
+            inline_image(d, d->nodes[node].parent >= 0 ? d->nodes[node].parent : node, xs, f->y, run_w, box_h);
         before = (int)d->nitems;
         paint_run(d, node, xs, f->y + 1, buf, len);
         if ((int)d->nitems > before) paint_decorations(d, node, xs, f->y + 1, run_w);
@@ -6488,6 +6511,57 @@ static int bgi_fill(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh
     return nr;
 }
 
+/* Lot 64: an inline box's background images, painted per text run (each
+ * run is a fragment box with its own copy of the tiles, as
+ * box-decoration-break: clone), over the colour and under the text. */
+static int bgi_paint(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh);
+static void inline_image(we_doc_t *d, int idx, int x, int y, int w, int h) {
+    we_node_t *n = &d->nodes[idx];
+    uint8_t origin = n->bg_origin, clip = n->bg_clip;
+    n->bg_origin = n->bg_clip = WE_BOX_BORDER;          /* the fragment has no padding of its own */
+    (void)bgi_paint(d, idx, (int)d->nitems, x, y, w, h);
+    n->bg_origin = origin; n->bg_clip = clip;
+}
+
+/* Lot 64: list-style-image. The marker image is painted at its natural
+ * size (scaled down to the 8 px glyph height when taller, keeping its
+ * ratio: "list marker image scaled") outside the li, its right edge one
+ * glyph before the border box and its top 1 px below the box's top, as the
+ * text marker, through the background image painter (the
+ * li's first layer is borrowed for the call). It is refused like any
+ * image (path, reader, format, vertical flow, budget); the list-style-type
+ * marker is then painted instead, as CSS asks for an image that fails. */
+static int marker_image(we_doc_t *d, int idx, int bx, int by) {
+    we_node_t *n = &d->nodes[idx];
+    static we_node_t saved;
+    int painted = 0, mw, mh;
+    uint8_t failed = image_work.failed[idx];
+    saved = *n;
+    n->bgi_off = n->lsi_off; n->bgi_len = n->lsi_len;
+    n->bgi_repeat = 0; n->bgi_size_kind = WE_BGS_AUTO; n->bgi_pos_pct = 0; n->bgi_space = 0;
+    n->bgi_pos[0] = n->bgi_pos[1] = 0; n->bg_origin = n->bg_clip = WE_BOX_BORDER;
+    image_work.ready_idx = -1;
+    image_work.failed[idx] = 0;
+    if (!n->visibility && image_open(d, idx) == 0) {
+        mw = image_work.decoded.w; mh = image_work.decoded.h;
+        if (mh > 8) {
+            mw = mw * 8 / mh; mh = 8;
+            if (mw < 1) mw = 1;
+            n->bgi_size_kind = WE_BGS_EXPLICIT; n->bgi_size[0] = (int16_t)mw; n->bgi_size[1] = (int16_t)mh;
+            diag(d, "list marker image scaled", idx);
+        }
+        painted = bgi_fill(d, idx, (int)d->nitems, bx - mw - WE_CHAR_W, by + 1, mw, mh) > 0;
+    }
+    image_work.ready_idx = -1;
+    image_work.failed[idx] = failed;
+    n->bgi_off = saved.bgi_off; n->bgi_len = saved.bgi_len; n->bgi_repeat = saved.bgi_repeat;
+    n->bgi_size_kind = saved.bgi_size_kind; n->bgi_pos_pct = saved.bgi_pos_pct; n->bgi_space = saved.bgi_space;
+    n->bgi_pos[0] = saved.bgi_pos[0]; n->bgi_pos[1] = saved.bgi_pos[1];
+    n->bgi_size[0] = saved.bgi_size[0]; n->bgi_size[1] = saved.bgi_size[1];
+    n->bg_origin = saved.bg_origin; n->bg_clip = saved.bg_clip;
+    return painted;
+}
+
 /* Lot 64: the layers from the lowest up, each inserted over the previous */
 static int bgi_paint(we_doc_t *d, int idx, int at, int bx, int by, int bw, int bh) {
     we_node_t *n = &d->nodes[idx];
@@ -6930,7 +7004,9 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     (void)border_slot;
     if (w_eq(n->tag, "img") || (n->overflow_hidden && layout_first[idx] != WE_NO_BASELINE))
         layout_first[idx] = layout_last[idx] = (int16_t)limit_coord(by + bh);
-    if (w_eq(n->tag, "li") && n->list_style != WE_LIST_NONE) {
+    if (w_eq(n->tag, "li") && n->lsi_len && marker_image(d, idx, bx, by)) {
+        /* lot 64: list-style-image painted, the type marker not */
+    } else if (w_eq(n->tag, "li") && n->list_style != WE_LIST_NONE) {
         char marker[24];
         int number = 1, sibling, len;
         os_fb_web_item_t *it;
