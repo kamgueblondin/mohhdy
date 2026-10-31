@@ -1771,9 +1771,65 @@ static void test_lot42_p2p_bft_mesh_and_zk_bulletproofs_batch(void) {
     TEST_ASSERT_EQUAL(0, bullet_agg.total_valid_bulletproofs);
 }
 
+
+/* Lot 66 (US-070): cache slot choice and lifetime. */
+static p2p_node_t g_cn;
+static void test_lot66_cache_lru_no_duplicate_raft_kept(void) {
+    char k[8];
+    int i, same = 0;
+    const p2p_item_t* it;
+    memset(&g_cn, 0, sizeof(g_cn));
+    /* A key in a later slot is replaced, not cached twice in a free slot. */
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_cn, "a", "1", 100, 10));
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_cn, "b", "2", 100, 10));
+    g_cn.cache.entries[0].used = 0;
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_cn, "b", "3", 100, 11));
+    for (i = 0; i < P2P_CACHE_MAX; i++)
+        if (g_cn.cache.entries[i].used && strcmp(g_cn.cache.entries[i].key, "b") == 0) same++;
+    TEST_ASSERT_EQUAL(1, same);
+    it = p2p_cache_get(&g_cn, "b", 12);
+    TEST_ASSERT_NOT_NULL(it);
+    TEST_ASSERT_EQUAL_STRING("3", ((const p2p_cache_entry_t*)it)->value);
+    /* LRU: fill, touch the oldest, the next fill evicts the least used. */
+    memset(&g_cn, 0, sizeof(g_cn));
+    for (i = 0; i < P2P_CACHE_MAX; i++) {
+        k[0] = 'k'; k[1] = (char)('0' + i); k[2] = 0;
+        TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_cn, k, "v", 1000, 100U + (uint32_t)i));
+    }
+    TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_cn, "k0", 200));
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_cn, "new", "v", 1000, 201));
+    TEST_ASSERT_EQUAL(1U, g_cn.cache.evictions);
+    TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_cn, "k0", 202));
+    TEST_ASSERT_NULL(p2p_cache_get(&g_cn, "k1", 202));
+    TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_cn, "new", 202));
+    /* An expired line is reused before any live line is evicted. */
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_cn, "short", "v", 5, 300));
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_cn, "later", "v", 1000, 400));
+    TEST_ASSERT_EQUAL(2U, g_cn.cache.evictions);
+    TEST_ASSERT_EQUAL(1U, g_cn.cache.expired);
+    /* Expiry is wrap safe: a line filled just before the tick wraps lives. */
+    memset(&g_cn, 0, sizeof(g_cn));
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_cn, "w", "v", 100, 0xFFFFFFF0U));
+    TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_cn, "w", 0x20U));
+    TEST_ASSERT_NULL(p2p_cache_get(&g_cn, "w", 0x60U));
+    /* A Raft line never expires, survives a peer down and is evicted last. */
+    memset(&g_cn, 0, sizeof(g_cn));
+    TEST_ASSERT_EQUAL(0, p2p_cache_put_v(&g_cn, "r", "v", 3, P2P_CACHE_RAFT_TTL, 5));
+    TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_cn, "x", "v", 100, 6));
+    p2p_cache_on_peer_down(&g_cn, 0x1234U);
+    TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_cn, "r", 0x80000000U));
+    TEST_ASSERT_NULL(p2p_cache_get(&g_cn, "x", 7));
+    for (i = 0; i < P2P_CACHE_MAX; i++) {
+        k[0] = 'z'; k[1] = (char)('0' + i); k[2] = 0;
+        TEST_ASSERT_EQUAL(0, p2p_cache_put(&g_cn, k, "v", 0x1000, 0x80000000U + (uint32_t)i));
+    }
+    TEST_ASSERT_NOT_NULL(p2p_cache_get(&g_cn, "r", 0x80000100U));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_discovery_and_keys);
+    RUN_TEST(test_lot66_cache_lru_no_duplicate_raft_kept);
     RUN_TEST(test_multi_relay_chain);
     RUN_TEST(test_crash_reroute_and_rejoin);
     RUN_TEST(test_qos_adaptive_controller);
