@@ -24,6 +24,11 @@ static void test_l64_vertical_logical_cases(void) {
     TEST_ASSERT_EQUAL(96, (int)g_doc.nitems);
     TEST_ASSERT_TRUE(g_doc.perf.items_dropped > 0);
     TEST_ASSERT_EQUAL(1, l61_diag_count("display budget exceeded"));
+    /* the 96 glyphs fill the list: only the box after them is dropped */
+    lot52_render(L64_BODY "<div style='writing-mode:vertical-rl;height:64px'>abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh abcdefgh<div style='height:2px;background:#ff0000'></div></div></body>", 320);
+    TEST_ASSERT_EQUAL(96, (int)g_doc.nitems);
+    TEST_ASSERT_EQUAL(1, (int)g_doc.perf.items_dropped);
+    TEST_ASSERT_EQUAL(1, l61_diag_count("display budget exceeded"));
 }
 
 static void test_l64_layer_and_shorthand_cases(void) {
@@ -56,6 +61,9 @@ static void test_l64_column_cases(void) {
     lot52_render(L64_BODY "<div style='column-count:2;width:40px;column-rule:solid #ff0000'><div>a</div><div>b</div></div>"
                  "<div id=x style='column-width:50%;column-width:30px'>x</div></body>", 320);
     l61_rect_at(19, 0, 3, 10, 0xFF0000);                      /* medium: 3 px */
+    TEST_ASSERT_EQUAL(1, l61_diag_count("columns refused"));
+    TEST_ASSERT_EQUAL(30, lot52_node("x")->col_width);
+    lot52_render(L64_BODY "<div id=x style='column-width:30px;column-width:0px'>x</div></body>", 320);
     TEST_ASSERT_EQUAL(1, l61_diag_count("columns refused"));
     TEST_ASSERT_EQUAL(30, lot52_node("x")->col_width);
 }

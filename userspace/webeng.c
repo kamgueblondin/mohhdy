@@ -3090,9 +3090,10 @@ static int column_count_value(const char *v, int len, int *out) {
 }
 
 static int column_width_value(const char *v, int len, int *out) {
-    int px, pct;
+    int px;
     if (value_is(v, len, "auto")) { *out = -1; return 0; }
-    if (len < 1 || v[0] < '0' || v[0] > '9' || parse_len(v, len, &px, &pct) != 0 || pct || px < 1) return -1;
+    /* no percentage pointer: parse_len refuses a percentage */
+    if (len < 1 || v[0] < '0' || v[0] > '9' || parse_len(v, len, &px, 0) != 0 || px < 1) return -1;
     *out = px;
     return 0;
 }
