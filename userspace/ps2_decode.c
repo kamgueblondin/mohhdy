@@ -66,13 +66,15 @@ static int emit(os_input_event_t* out, uint32_t* n, uint32_t cap, uint8_t type, 
 
 static int emit_mods(const ps2_decoder_t* d, os_input_event_t* out, uint32_t* n, uint32_t cap) {
     return emit(out, n, cap, OS_INPUT_EV_MODS,
-                (uint8_t)((d->shift ? OS_INPUT_MOD_SHIFT : 0U) | (d->caps ? OS_INPUT_MOD_CAPS : 0U)), 0, 0);
+                (uint8_t)((d->shift ? OS_INPUT_MOD_SHIFT : 0U) | (d->caps ? OS_INPUT_MOD_CAPS : 0U) |
+                          (d->ctrl ? OS_INPUT_MOD_CTRL : 0U)), 0, 0);
 }
 
 void ps2_decoder_seed(ps2_decoder_t* d, uint32_t mods) {
     if (!d) return;
     d->shift = (mods & OS_INPUT_MOD_SHIFT) ? 1U : 0U;
     d->caps = (mods & OS_INPUT_MOD_CAPS) ? 1U : 0U;
+    d->ctrl = (mods & OS_INPUT_MOD_CTRL) ? 1U : 0U;
 }
 
 int ps2_decode_byte(ps2_decoder_t* d, uint8_t b, int aux, os_input_event_t* out, uint32_t* n, uint32_t cap) {
@@ -96,8 +98,8 @@ int ps2_decode_byte(ps2_decoder_t* d, uint8_t b, int aux, os_input_event_t* out,
     if (b == 0xE0U) { d->e0 = 1; return 0; }
     if (d->e0) {
         d->e0 = 0;
-        if (b == 0x1DU) { d->ctrl = 1; return 0; }                      /* right Ctrl */
-        if (b == 0x9DU) { d->ctrl = 0; return 0; }
+        if (b == 0x1DU) { if (d->ctrl) return 0; d->ctrl = 1; return emit_mods(d, out, n, cap); } /* right Ctrl */
+        if (b == 0x9DU) { if (!d->ctrl) return 0; d->ctrl = 0; return emit_mods(d, out, n, cap); }
         if (b & 0x80U) return 0;                                        /* E0 break */
         return emit(out, n, cap, OS_INPUT_EV_EXT, b, 0, 0);
     }
@@ -106,8 +108,8 @@ int ps2_decode_byte(ps2_decoder_t* d, uint8_t b, int aux, os_input_event_t* out,
     if (b == 0x2AU || b == 0x36U) { if (d->shift) return 0; d->shift = 1; return emit_mods(d, out, n, cap); }
     if (b == 0xAAU || b == 0xB6U) { if (!d->shift) return 0; d->shift = 0; return emit_mods(d, out, n, cap); }
     if (b == 0x3AU) { d->caps = (uint8_t)!d->caps; return emit_mods(d, out, n, cap); }
-    if (b == 0x1DU) { d->ctrl = 1; return 0; }                          /* Lot 68: left Ctrl */
-    if (b == 0x9DU) { d->ctrl = 0; return 0; }
+    if (b == 0x1DU) { if (d->ctrl) return 0; d->ctrl = 1; return emit_mods(d, out, n, cap); } /* Lot 68: left Ctrl */
+    if (b == 0x9DU) { if (!d->ctrl) return 0; d->ctrl = 0; return emit_mods(d, out, n, cap); }
     if (b & 0x80U) return 0;                                            /* other breaks */
     if (b == 0x01U) return emit(out, n, cap, OS_INPUT_EV_ESC, 0, 0, 0);
     if (d->ctrl && ps2_zoom_key(b)) return emit(out, n, cap, OS_INPUT_EV_CHAR, ps2_zoom_key(b), 0, 0);

@@ -1282,6 +1282,26 @@ static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh,
     }
 }
 
+/* Lot 68: word-wrapped text, at most max_lines lines of maxc columns;
+ * returns the lines used. */
+static int draw_text_wrap(uint32_t *fb, int w, int h, int x, int y, const char *t, int maxc, int max_lines, int line_h, uint32_t c) {
+    int used = 0, pos = 0, len = 0;
+    while (t[len]) len++;
+    if (maxc < 4) maxc = 4;
+    while (pos < len && used < max_lines) {
+        int take = len - pos, k;
+        if (take > maxc) {
+            take = maxc;
+            for (k = maxc; k > maxc / 2; k--) if (t[pos + k] == ' ') { take = k; break; }
+        }
+        draw_text_n(fb, w, h, x, y + used * line_h, t + pos, take, c);
+        pos += take;
+        while (pos < len && t[pos] == ' ') pos++;
+        used++;
+    }
+    return used;
+}
+
 static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, const os_fb_scene_t *sc) {
     int log_y, i, n;
     const char *msg;
@@ -1301,8 +1321,15 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
             draw_text(fb, w, h, x + rw - CW * ln - 66, y + 14, lab, RGB(243, 230, 176));
     }
     fill_rect_a(fb, w, h, x + 14, y + 46, rw - 28, TS(24) + 20, RGB(42, 36, 16), 230);
-    draw_text_n(fb, w, h, x + 20, y + 50, "Posez une question ou tapez /help.", (rw - 40) / CW, RGB(243, 230, 176));
-    llm_text(lab, (int)sizeof(lab), "Assistant local : ", sc, "");
+    if (g_tq <= OS_UI_Q1) {
+        draw_text_n(fb, w, h, x + 20, y + 50, "Posez une question ou tapez /help.", (rw - 40) / CW, RGB(243, 230, 176));
+        llm_text(lab, (int)sizeof(lab), "Assistant local : ", sc, "");
+    } else {
+        /* scaled: the same two lines, shorter words first, wrapped */
+        int used = draw_text_wrap(fb, w, h, x + 20, y + 50, "Question ou /help.", (rw - 40) / CW, 1, TS(12), RGB(243, 230, 176));
+        (void)used;
+        llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
+    }
     draw_text_n(fb, w, h, x + 20, y + 50 + TS(12), lab, (rw - 40) / CW, RGB(243, 230, 176));
     log_y = y + 74 + TS(24);
     fill_rect(fb, w, h, x + 14, log_y, rw - 28, y + rh - 82 - log_y, RGB(11, 16, 20));
@@ -1311,8 +1338,13 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     if (n <= 0) {
         llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
         draw_text_n(fb, w, h, x + 20, log_y + 8, lab, (rw - 40) / CW, RGB(154, 168, 181));
-        draw_text_n(fb, w, h, x + 20, log_y + 8 + TS(14), "Mohhdy OS - bureau pilote par prompts.", (rw - 40) / CW, RGB(201, 232, 223));
-        draw_text_n(fb, w, h, x + 20, log_y + 8 + TS(26), "Fichiers et Editeur : icones du dock.", (rw - 40) / CW, RGB(201, 232, 223));
+        {
+            int room = (y + rh - 92 - (log_y + 8 + TS(14))) / TS(12) + 1, u;
+            if (room < 1) room = 1;
+            u = draw_text_wrap(fb, w, h, x + 20, log_y + 8 + TS(14), "Mohhdy OS - bureau pilote par prompts.", (rw - 40) / CW, room, TS(12), RGB(201, 232, 223));
+            if (room - u > 0)
+                (void)draw_text_wrap(fb, w, h, x + 20, log_y + 8 + TS(14) + u * TS(12), "Fichiers et Editeur : icones du dock.", (rw - 40) / CW, room - u, TS(12), RGB(201, 232, 223));
+        }
     } else {
         /* messages wrap on word boundaries; the newest stay visible */
         int maxc = (rw - 48) / CW, lines = 0, avail = (y + rh - 92 - log_y) / TS(11), first = 0, yy, need;
@@ -1347,7 +1379,7 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     }
     fill_rect(fb, w, h, x + 14, y + rh - 42 - (TS(10) + 18), rw - 28, TS(10) + 18, RGB(16, 25, 32));
     if (sc && sc->input[0]) draw_text_n(fb, w, h, x + 20, y + rh - 51 - TS(10), input_tail(sc->input, (rw - 48) / CW), (rw - 48) / CW, RGB(232, 238, 244));
-    else draw_text_n(fb, w, h, x + 20, y + rh - 51 - TS(10), "Prompt ou /help, /browser, /shell ...", (rw - 40) / CW, RGB(154, 168, 181));
+    else draw_text_n(fb, w, h, x + 20, y + rh - 51 - TS(10), g_tq <= OS_UI_Q1 ? "Prompt ou /help, /browser, /shell ..." : "Prompt ou /help", (rw - 40) / CW, RGB(154, 168, 181));
     {
         /* Lot 68: the send button and the labels follow the text scale;
          * the bottom strip is 34 px, so they stop at 2x (chrome). */
@@ -1414,6 +1446,29 @@ int gfx_desktop_chrome_q(const os_fb_scene_t *sc, int w, int h) {
     return q > OS_UI_Q_CHROME_MAX ? OS_UI_Q_CHROME_MAX : q;
 }
 
+/* Lot 68: the menu bar at a chrome scale. At 1x: logo, menus from x=122
+ * and the AI label as before. Larger: the first of (logo + scaled label),
+ * (logo + 1x label), (no logo + 1x label), (no logo, no label) where every
+ * menu fits, so the menus never disappear first. */
+typedef struct { int mx, flag_w, flag_q, logo; } menu_plan_t;
+static const char *const g_menu_names[GFX_DESKTOP_MENUS] = { "Chat", "Browser-OS", "Shell", "Admin", "Support", "Statut", "Fichiers", "Editeur" };
+static void menu_bar_plan(int w, int cq, menu_plan_t *p) {
+    int cw = os_ui_char_w(cq), gap = w < 720 ? 8 : 14, total = 0, i, k;
+    int fl1 = (w >= 920) ? (8 * 36 + 12) : ((w >= 720) ? (8 * 16 + 12) : 8);
+    p->logo = 1;
+    if (cq <= OS_UI_Q1) { p->mx = 122; p->flag_w = fl1; p->flag_q = fl1 > 8 ? OS_UI_Q1 : 0; return; }
+    for (i = 0; i < GFX_DESKTOP_MENUS; i++) { int n = 0; while (g_menu_names[i][n]) n++; total += n * cw + gap; }
+    total -= gap;
+    for (k = 0; k < 4; k++) {
+        p->logo = k < 2;
+        p->mx = p->logo ? 30 + 9 * cw + 20 : 30;
+        if (k == 0) { p->flag_w = (w >= 920) ? (cw * 36 + 12) : ((w >= 720) ? (cw * 16 + 12) : 8); p->flag_q = p->flag_w > 8 ? cq : 0; }
+        else if (k == 3) { p->flag_w = 8; p->flag_q = 0; }
+        else { p->flag_w = fl1; p->flag_q = fl1 > 8 ? OS_UI_Q1 : 0; }
+        if (p->mx + total <= w - p->flag_w - 8) return;
+    }
+}
+
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *out) {
     static os_fb_scene_t def; /* Lot 6: the scene carries the web display list, keep it off the 16 KB kernel stack */
     const os_fb_scene_t *sc = scene;
@@ -1445,11 +1500,13 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     {
         /* Lot 68: menu bar text at the chrome scale (<= 2x) */
         int cq = gfx_desktop_chrome_q(sc, w, h), cw = os_ui_char_w(cq);
+        menu_plan_t mp;
         out->chrome_q = cq;
-        mx = cq <= OS_UI_Q1 ? 122 : 30 + 9 * cw + 20;
+        menu_bar_plan(w, cq, &mp);
+        mx = mp.mx;
         ty = (bar_h - os_ui_px(8, cq)) / 2;
         gap = w < 720 ? 8 : 14;  /* 8 menus still fit at 640 px */
-        flag_w = (w >= 920) ? (cw * 36 + 12) : ((w >= 720) ? (cw * 16 + 12) : 8);
+        flag_w = mp.flag_w;
         for (i = 0; i < GFX_DESKTOP_MENUS; i++) {
             int len = 0;
             while (menus[i][len]) len++;
@@ -1540,6 +1597,16 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
     }
 
     chat_w = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(w / 3, 220, 360) : clampi(w / 2, 240, 640);
+    {
+        /* Lot 68: a larger chat text gets a wider window (up to 4/5 of
+         * the screen) so lines keep about the same number of words. */
+        int cq = gfx_desktop_surface_q(sc, OS_UI_Z_CHAT, w, h);
+        if (cq > OS_UI_Q1) {
+            int want = chat_w * cq / OS_UI_Q1, cap = (w * 4) / 5;
+            if (want > cap) want = cap;
+            if (want > chat_w) chat_w = want;
+        }
+    }
     if (chat_w > w - 24) chat_w = w - 24;
     chat_h = sc->chat_mode == OS_FB_CHAT_FLOAT ? clampi(h / 2, 180, 400) : clampi((h * 5) / 12, 160, 360);
     if (chat_h > h - bar_h - 56) chat_h = h - bar_h - 56;
@@ -1896,14 +1963,16 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     fill_rect_a(fb, w, h, 0, 0, w, bar_h, RGB(12, 28, 40), 235);
     fill_rect(fb, w, h, 12, (bar_h - 12) / 2, 12, 12, RGB(61, 154, 138));
     g_tq = lay.chrome_q;
-    draw_text(fb, w, h, 30, (bar_h - TS(8)) / 2, "Mohhdy OS", RGB(232, 238, 244));
     {
-        int mx = g_tq <= OS_UI_Q1 ? 122 : 30 + 9 * CW + 20;
-        int ty = (bar_h - TS(8)) / 2;
+        menu_plan_t mp;
+        int mx, ty = (bar_h - TS(8)) / 2;
         int i;
         const int gap = w < 720 ? 8 : 14;
         int lens[GFX_DESKTOP_MENUS];
-        int flag_w = (w >= 920) ? (CW * 36 + 12) : ((w >= 720) ? (CW * 16 + 12) : 8);
+        int flag_w;
+        menu_bar_plan(w, g_tq, &mp);
+        mx = mp.mx; flag_w = mp.flag_w;
+        if (mp.logo) draw_text(fb, w, h, 30, ty, "Mohhdy OS", RGB(232, 238, 244));
         for (i = 0; i < GFX_DESKTOP_MENUS; i++) {
             int n = 0;
             while (menus[i][n]) n++;
@@ -1919,12 +1988,18 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
                 draw_text(fb, w, h, mx, ty, menus[i], RGB(232, 238, 244));
             mx += lens[i] * CW + gap;
         }
-        if (w >= 920) {
-            char lab[64];
-            llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
-            draw_text_n(fb, w, h, w - CW * 36 - 12, ty, lab, 36, RGB(243, 230, 176));
-        } else if (w >= 720)
-            draw_text(fb, w, h, w - CW * 16 - 8, ty, "Mohhdy OS", RGB(243, 230, 176));
+        if (mp.flag_q) {
+            int keep = g_tq;
+            g_tq = mp.flag_q;
+            ty = (bar_h - TS(8)) / 2;
+            if (w >= 920) {
+                char lab[64];
+                llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
+                draw_text_n(fb, w, h, w - CW * 36 - 12, ty, lab, 36, RGB(243, 230, 176));
+            } else if (w >= 720)
+                draw_text(fb, w, h, w - CW * 16 - 8, ty, "Mohhdy OS", RGB(243, 230, 176));
+            g_tq = keep;
+        }
     }
     g_tq = OS_UI_Q1;
 

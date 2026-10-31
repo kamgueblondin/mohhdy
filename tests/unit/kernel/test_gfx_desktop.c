@@ -2,6 +2,8 @@
 /* test_gfx_desktop.c - Pixels du bureau VBE (glassmorphic, pas ASCII 80x25). */
 
 #include "../../framework/unity.h"
+#include "../../../include/os_ui_scale.h"
+#include <string.h>
 #include "../../../kernel/gfx_desktop.h"
 #include "../../../kernel/gfx_fb.h"
 #include "../../../kernel/gfx_wm.h"
@@ -955,6 +957,71 @@ static void test_llm_friendly_names(void) {
     TEST_ASSERT_EQUAL_STRING("other", gfx_desktop_llm_name("other"));
 }
 
+
+/* Lot 68: scaled glyphs keep the 1x shape (EPX smoothing only touches
+ * edge pixels), metrics follow the scale, and the scene carries it. */
+static int font_bit(char ch, int x, int y) { return gfx_glyph_pixel(ch, 4, x, y); }
+static void test_lot68_scaled_glyphs(void) {
+    static const int qs[] = {8, 12, 16};
+    int c, k, x, y, on1, onq;
+    for (k = 0; k < 3; k++) {
+        int q = qs[k], f = q / 4;
+        TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('A', q, -1, 0));
+        TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('A', q, 8 * f, 0));
+        for (c = 33; c < 127; c++) {
+            on1 = 0; onq = 0;
+            for (y = 0; y < 8; y++) for (x = 0; x < 8; x++) {
+                int all = 1, none = 1, dx, dy, sx, sy;
+                on1 += font_bit((char)c, x, y);
+                for (dy = -1; dy <= 1; dy++) for (dx = -1; dx <= 1; dx++) {
+                    int b = font_bit((char)c, x + dx, y + dy);
+                    if (x + dx < 0 || x + dx > 7 || y + dy < 0 || y + dy > 7) continue;
+                    if (b) none = 0; else all = 0;
+                }
+                for (sy = 0; sy < f; sy++) for (sx = 0; sx < f; sx++) {
+                    int p = gfx_glyph_pixel((char)c, q, x * f + sx, y * f + sy);
+                    onq += p;
+                    if (all) TEST_ASSERT_EQUAL(1, p);
+                    if (none) TEST_ASSERT_EQUAL(0, p);
+                }
+            }
+            /* ink grows with the area, within EPX corner changes */
+            TEST_ASSERT_TRUE(onq * 2 >= on1 * f * f);
+            TEST_ASSERT_TRUE(onq <= on1 * f * f * 2);
+        }
+    }
+    /* 1.5x: nearest neighbour, 12 px cell */
+    TEST_ASSERT_EQUAL(font_bit('H', 0, 0), gfx_glyph_pixel('H', 6, 0, 0));
+    TEST_ASSERT_EQUAL(0, gfx_glyph_pixel('H', 6, 12, 0));
+}
+
+static void test_lot68_scene_scale_and_grid(void) {
+    static os_fb_scene_t sc;
+    gfx_rect_t box;
+    int r1, c1, r2, c2;
+    memset(&sc, 0, sizeof(sc));
+    sc.magic = OS_FB_MAGIC; sc.version = 7;
+    TEST_ASSERT_EQUAL(4, gfx_desktop_surface_q(&sc, OS_UI_Z_CHAT, 3840, 2160)); /* old scene: 1x */
+    sc.version = 8;
+    TEST_ASSERT_EQUAL(4, gfx_desktop_surface_q(&sc, OS_UI_Z_CHAT, 1024, 768));
+    TEST_ASSERT_EQUAL(12, gfx_desktop_surface_q(&sc, OS_UI_Z_CHAT, 3840, 2160)); /* auto */
+    sc.ui_scale_q = 8;
+    sc.zoom_q[OS_UI_Z_WEB] = 6;
+    TEST_ASSERT_EQUAL(8, gfx_desktop_surface_q(&sc, OS_UI_Z_CHAT, 1024, 768));
+    TEST_ASSERT_EQUAL(12, gfx_desktop_surface_q(&sc, OS_UI_Z_WEB, 1024, 768));
+    sc.ui_scale_q = 12;
+    TEST_ASSERT_EQUAL(8, gfx_desktop_chrome_q(&sc, 1024, 768)); /* chrome capped at 2x */
+    gfx_desktop_set_text_q(8);
+    TEST_ASSERT_EQUAL(8, gfx_desktop_text_q());
+    gfx_desktop_set_text_q(4);
+    box.x = 0; box.y = 0; box.w = 600; box.h = 400;
+    gfx_desktop_app_grid_fit_q(&box, 4, &r1, &c1);
+    gfx_desktop_app_grid_fit_q(&box, 8, &r2, &c2);
+    TEST_ASSERT_TRUE(r1 > 0 && c1 > 0);
+    TEST_ASSERT_TRUE(r2 * 2 <= r1 + 2);
+    TEST_ASSERT_TRUE(c2 * 2 <= c1 + 2);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
@@ -982,6 +1049,8 @@ int main(void) {
     RUN_TEST(test_app_grid_fits_window);
     RUN_TEST(test_viewer_image_pixels);
     RUN_TEST(test_llm_friendly_names);
+    RUN_TEST(test_lot68_scaled_glyphs);
+    RUN_TEST(test_lot68_scene_scale_and_grid);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

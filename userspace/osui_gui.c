@@ -517,6 +517,7 @@ static int scale_save(void) {
     char buf[160];
     int n;
     if (!g_fs_io) return -1;
+    if (g_fs_io->mkdir) (void)g_fs_io->mkdir("/persist");
     n = osui_scale_save(sc, buf, (int)sizeof(buf));
     if (n <= 0 || fsops_write(g_fs_io, OSUI_SCALE_CFG, buf, n) != 0) return -1;
     sc->saved_at = sc->changes;
@@ -1415,13 +1416,16 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         /* Lot 68: Ctrl+'+' / Ctrl+'-' / Ctrl+'0' zoom the focused window */
         osui_scale_t *us = osui_gui_scale();
         int slot = osui_gui_zoom_target(), z;
-        char m[64];
+        char m[80];
         z = osui_scale_zoom(us, slot, key == OS_KEY_ZOOM_IN ? 1 : key == OS_KEY_ZOOM_OUT ? -1 : 0);
+        char qb[16];
         scpy(m, (int)sizeof(m), osui_scale_slot_name(slot));
         scat(m, (int)sizeof(m), " zoom ");
-        gui_cat_u(m, (int)sizeof(m), (unsigned)z);
-        scat(m, (int)sizeof(m), " q ");
-        gui_cat_u(m, (int)sizeof(m), (unsigned)osui_scale_effective(us, slot));
+        os_ui_q_format(z, qb);
+        scat(m, (int)sizeof(m), qb);
+        scat(m, (int)sizeof(m), " effective ");
+        os_ui_q_format(osui_scale_effective(us, slot), qb);
+        scat(m, (int)sizeof(m), qb);
         if (us->changes != us->saved_at) (void)scale_save();
         app_out(out, out_max, "osui zoom ", m);
         return 0;

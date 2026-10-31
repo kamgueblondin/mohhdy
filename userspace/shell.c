@@ -7380,6 +7380,7 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         }
         line[n] = 0;
         out[0] = 0;
+        osui_gui_set_fs_io(&shell_fs_io);
         (void)osui_gui_scale_command(line, out, (int)sizeof(out));
         print_string(out);
         print_string("\n");

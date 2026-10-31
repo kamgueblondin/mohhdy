@@ -373,6 +373,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ramfs: $(UNIT_DIR)/userspace/test_ramfs.
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/ramfs.c ../userspace/procsim.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ui_scale: $(UNIT_DIR)/userspace/test_ui_scale.c ../userspace/osui_scale.c ../userspace/osui_scale.h ../include/os_ui_scale.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_scale.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ps2_decode: $(UNIT_DIR)/userspace/test_ps2_decode.c ../userspace/ps2_decode.c ../userspace/ps2_decode.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/ps2_decode.c $(FRAMEWORK_SOURCES)

@@ -152,6 +152,55 @@ static void test_reseed_after_ring0_drain(void) {
     TEST_ASSERT_EQUAL('c', c[1]);
 }
 
+
+/* Lot 68: Ctrl+'+' / Ctrl+'-' / Ctrl+'0' (left or right Ctrl, main or
+ * keypad keys) give zoom key codes; without Ctrl they stay characters. */
+static void test_ctrl_zoom_keys(void) {
+    char c[16];
+    uint32_t k;
+    ps2_decoder_init(&d); n = 0;
+    (void)ps2_decode_byte(&d, 0x0D, 0, ev, &n, 8);                 /* '=' */
+    TEST_ASSERT_EQUAL(1U, chars(c, 16));
+    TEST_ASSERT_EQUAL('=', c[0]);
+    ps2_decoder_init(&d); n = 0;
+    {
+        const uint8_t seq[] = {0x1D, 0x0D, 0x8D, 0x0C, 0x8C, 0x0B, 0x8B, 0x9D, 0x0B};
+        feed(seq, sizeof(seq), 0);
+    }
+    k = chars(c, 16);
+    TEST_ASSERT_EQUAL(4U, k);
+    TEST_ASSERT_EQUAL(OS_KEY_ZOOM_IN, (uint8_t)c[0]);
+    TEST_ASSERT_EQUAL(OS_KEY_ZOOM_OUT, (uint8_t)c[1]);
+    TEST_ASSERT_EQUAL(OS_KEY_ZOOM_RESET, (uint8_t)c[2]);
+    TEST_ASSERT_EQUAL('0', c[3]);                                    /* Ctrl released */
+    ps2_decoder_init(&d); n = 0;
+    {
+        const uint8_t seq[] = {0xE0, 0x1D, 0x4E, 0x4A, 0x52, 0xE0, 0x9D};
+        feed(seq, sizeof(seq), 0);
+    }
+    k = chars(c, 16);
+    TEST_ASSERT_EQUAL(3U, k);
+    TEST_ASSERT_EQUAL(OS_KEY_ZOOM_IN, (uint8_t)c[0]);
+    TEST_ASSERT_EQUAL(OS_KEY_ZOOM_OUT, (uint8_t)c[1]);
+    TEST_ASSERT_EQUAL(OS_KEY_ZOOM_RESET, (uint8_t)c[2]);
+    TEST_ASSERT_EQUAL(0, ps2_zoom_key(0x1E));
+    /* Ctrl is a reported modifier: a Ring 0 hand-over keeps it */
+    ps2_decoder_init(&d); n = 0;
+    (void)ps2_decode_byte(&d, 0x1D, 0, ev, &n, 8);
+    TEST_ASSERT_EQUAL(1U, n);
+    TEST_ASSERT_EQUAL(OS_INPUT_EV_MODS, ev[0].type);
+    TEST_ASSERT_EQUAL(OS_INPUT_MOD_CTRL, ev[0].code);
+    (void)ps2_decode_byte(&d, 0x1D, 0, ev, &n, 8);              /* typematic repeat: no new event */
+    TEST_ASSERT_EQUAL(1U, n);
+    ps2_decoder_init(&d); n = 0;
+    ps2_decoder_seed(&d, OS_INPUT_MOD_CTRL);
+    (void)ps2_decode_byte(&d, 0x0C, 0, ev, &n, 8);
+    TEST_ASSERT_EQUAL(OS_KEY_ZOOM_OUT, ev[0].code);
+    ps2_decoder_seed(&d, 0U);
+    (void)ps2_decode_byte(&d, 0x0C, 0, ev, &n, 8);
+    TEST_ASSERT_EQUAL('-', ev[1].code);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_letters_digits_and_breaks);
@@ -161,6 +210,7 @@ int main(void) {
     RUN_TEST(test_mouse_packets_and_resync);
     RUN_TEST(test_capacity_is_respected);
     RUN_TEST(test_reseed_after_ring0_drain);
+    RUN_TEST(test_ctrl_zoom_keys);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

@@ -179,7 +179,7 @@ int osui_scale_command(osui_scale_t *s, const char *line, char *out, int cap) {
     char cmd[16], a[16], b[16];
     const char *p;
     int q, slot;
-    if (!s || !line || !out || cap < 64) return -1;
+    if (!s || !line || !out || cap < 1) return -1;
     p = word(line, cmd, (int)sizeof(cmd));
     if (!s_eq(cmd, "ui-scale") && !s_eq(cmd, "text-size")) return -1;
     p = word(p, a, (int)sizeof(a));

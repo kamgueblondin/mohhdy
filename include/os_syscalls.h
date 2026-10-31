@@ -2090,6 +2090,7 @@ typedef struct {
 #define OS_INPUT_EV_MODS 5U   /* Lot 6: code = bit0 shift, bit1 caps (after a change) */
 #define OS_INPUT_MOD_SHIFT 1U
 #define OS_INPUT_MOD_CAPS 2U
+#define OS_INPUT_MOD_CTRL 4U /* Lot 68: zoom shortcuts survive a driver/Ring 0 hand-over */
 typedef struct {
     uint8_t type;
     uint8_t code;
