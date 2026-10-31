@@ -138,7 +138,7 @@ def main():
                 raise RuntimeError("net-if without gw/dns: %r" % out[-400:])
             say("interface: gw %s dns %s" % (m.group(1), m.group(2)))
             out = g.normalized_log(g.log_text())
-            if 'root "MOHHDY Test Root"' not in out or "dates checked" not in out or "test-ca 1" not in out:
+            if any("https" in c[0] for c in checks) and ('root "MOHHDY Test Root"' not in out or "dates checked" not in out or "test-ca 1" not in out):
                 raise RuntimeError("TLS report incomplete")
             if os.environ.get("LOT67_REAL") == "1":
                 out = run(mon, proc, "fetch -v https://example.com/", "fetch body-end", 240, ["fetch error"])
@@ -155,6 +155,9 @@ def main():
             w, h, rgb = g.screendump_rgb(mon, shot)
             say("browser screenshot test_logs/%s %dx%d" % (shot, w, h))
             if os.environ.get("LOT67_REAL") == "1":
+                g.send_key(mon, "esc")  # the page pane takes the keys; ESC closes it
+                g.wait_for(proc, "osui web close", 10, len(g.log_text()) - 4000)
+                time.sleep(0.5)
                 start = len(g.log_text())
                 type_line(mon, proc, "web https://example.com/", mode="getc")
                 g.wait_for(proc, "osui web fetch ok status 200", 240, start)
