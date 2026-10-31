@@ -152,6 +152,9 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_devsync.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/devsync.c"
     fi
+    if [ "$(basename "$test_file")" = "test_plat_form_energy.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/plat_form.c $BASE_DIR/userspace/plat_energy.c $BASE_DIR/userspace/platform.c"
+    fi
     if [ "$(basename "$test_file")" = "test_platform.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/platform.c"
     fi

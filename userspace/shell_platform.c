@@ -8,6 +8,9 @@
 #include "devsync.h"
 #include "p2p.h"
 #include "osui_gui.h"
+#include "osui_scale.h"
+#include "plat_form.h"
+#include "plat_energy.h"
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
@@ -75,7 +78,7 @@ static void join(char* d, const char* dir, const char* name, int cap) {
     s_cat(d, name, cap);
 }
 
-static const char* k_cmds[] = {
+static const char* k_cmds[] = { "form-factor", "power-apply", "power-sim",
     "hal-info", "hal-port", "screen-adapt", "screen-resize", "gesture", "gesture-multi", "power-profile", "power-status", "dev-list",
     "dev-rules", "dev-hotplug", "admin-nodes", "admin-node-add",
     "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
@@ -689,6 +692,127 @@ static int cmd_devsync(const char* cmd, const char* rest) {
     return 0;
 }
 
+/* Lot 68 (US-080): form-factor plan applied to the real desktop scale */
+p2p_node_t* shell_p2p_node(void);
+static int cmd_form_factor(const char* rest) {
+    char a[24], b[24], c[24];
+    plat_form_plan_t pl;
+    osui_scale_t* sc = osui_gui_scale();
+    int w = sc->fb_w > 0 ? sc->fb_w : 1024, h = sc->fb_h > 0 ? sc->fb_h : 768, diag = 0, form = 0, apply = 0, ok = 1;
+    rest = word(rest, a, (int)sizeof(a));
+    if (s_eq(a, "apply")) { apply = 1; rest = word(rest, a, (int)sizeof(a)); }
+    if (a[0]) {
+        form = plat_form_kind_parse(a);
+        if (form < 0) { print_string("form-factor error usage: form-factor [apply] [auto|phone|tablet|desktop|tv] [WxH] [DIAG_INCH_TENTHS]\n"); return 1; }
+    }
+    rest = word(rest, b, (int)sizeof(b));
+    if (b[0]) {
+        char num[8];
+        int i = 0, j = 0;
+        while (b[i] && b[i] != 'x' && j < 7) num[j++] = b[i++];
+        num[j] = 0;
+        w = to_int(num, &ok);
+        if (b[i] == 'x') h = to_int(b + i + 1, &ok); else ok = 0;
+    }
+    rest = word(rest, c, (int)sizeof(c));
+    if (c[0]) diag = to_int(c, &ok);
+    if (!ok || plat_form_plan(w, h, diag, form, &pl) != 0) {
+        print_string("form-factor error size WxH 160x120..8192x8192, diagonal 0..1500 tenths of an inch\n");
+        return 1;
+    }
+    plat_form_report(&pl, g_out, (int)sizeof(g_out));
+    print_string(g_out);
+    if (apply) {
+        char line[32], qb[16];
+        os_ui_q_format(pl.ui_q, qb);
+        line[0] = 0;
+        s_cat(line, "ui-scale ", (int)sizeof(line));
+        s_cat(line, qb, (int)sizeof(line));
+        line[s_len(line) - 1] = 0;   /* "2x" -> "2" */
+        g_out[0] = 0;
+        (void)osui_gui_scale_command(line, g_out, (int)sizeof(g_out));
+        print_string("form-factor applied ");
+        print_string(g_out);
+    }
+    return 0;
+}
+
+/* Lot 68 (US-081): profile applied to real settings; battery simule */
+static plat_energy_t g_energy;
+static int g_energy_ready;
+static void energy_ensure(void) {
+    if (g_energy_ready) return;
+    plat_energy_init(&g_energy);
+    g_energy_ready = 1;
+}
+static void energy_push_pace(void) {
+    char out[256], num[12], t[12];
+    const char* av[2];
+    int k = 0, j;
+    uint32_t v = g_energy.pace_cap_bps;
+    do { t[k++] = (char)('0' + v % 10U); v /= 10U; } while (v && k < 11);
+    for (j = 0; j < k; j++) num[j] = t[k - 1 - j];
+    num[k] = 0;
+    av[0] = "cap"; av[1] = num;
+    (void)p2p_pace_cmd(shell_p2p_node(), 2, av, out, (int)sizeof(out));
+}
+static int cmd_power_apply(const char* rest) {
+    char a[24];
+    int p;
+    energy_ensure();
+    word(rest, a, (int)sizeof(a));
+    if (!a[0] || s_eq(a, "status")) { plat_energy_report(&g_energy, g_out, (int)sizeof(g_out)); print_string(g_out); return 0; }
+    if (s_eq(a, "auto")) {
+        g_energy.auto_mode = 1;
+        p = plat_power_auto(busy_sample(), g_energy.sim_on && !g_energy.charging);
+    } else {
+        p = plat_power_parse(a);
+        if (!p) { print_string("power-apply error use performance|balanced|saver|auto|status\n"); return 1; }
+        g_energy.auto_mode = 0;
+    }
+    (void)plat_energy_apply(&g_energy, p);
+    g_profile = p; g_auto = g_energy.auto_mode;
+    energy_push_pace();
+    plat_energy_report(&g_energy, g_out, (int)sizeof(g_out));
+    print_string(g_out);
+    return 0;
+}
+static int cmd_power_sim(const char* rest) {
+    char a[24], b[24], c[24];
+    int ok = 1;
+    energy_ensure();
+    rest = word(rest, a, (int)sizeof(a));
+    rest = word(rest, b, (int)sizeof(b));
+    rest = word(rest, c, (int)sizeof(c));
+    if (s_eq(a, "start")) {
+        int cap = b[0] ? to_int(b, &ok) : 50000, pct = c[0] ? to_int(c, &ok) : 100;
+        if (!ok || plat_energy_sim_start(&g_energy, (uint32_t)cap, (uint32_t)pct) != 0) {
+            print_string("power-sim error usage: power-sim start [CAP_MWH 1000..200000] [PCT 0..100]\n");
+            return 1;
+        }
+    } else if (s_eq(a, "tick")) {
+        int ms = to_int(b, &ok), busy = c[0] ? to_int(c, &ok) : (int)busy_sample();
+        if (!ok || !g_energy.sim_on || ms < 0) { print_string("power-sim error usage: power-sim tick MS [BUSY] (after start)\n"); return 1; }
+        if (plat_energy_sim_tick(&g_energy, (uint32_t)ms, (uint32_t)busy)) {
+            g_profile = g_energy.profile;
+            energy_push_pace();
+            print_string("power-sim auto switch ");
+            print_string(plat_power_name(g_energy.profile));
+            print_string("\n");
+        }
+    } else if (s_eq(a, "charge")) {
+        g_energy.charging = s_eq(b, "on");
+    } else if (s_eq(a, "stop")) {
+        plat_energy_sim_stop(&g_energy);
+    } else if (a[0] && !s_eq(a, "status")) {
+        print_string("power-sim error usage: power-sim start|tick|charge on|off|stop|status\n");
+        return 1;
+    }
+    plat_energy_report(&g_energy, g_out, (int)sizeof(g_out));
+    print_string(g_out);
+    return 0;
+}
+
 int shell_platform_line(const char* line) {
     char cmd[24], a[64];
     const char* rest = word(line, cmd, (int)sizeof(cmd));
@@ -871,6 +995,9 @@ int shell_platform_line(const char* line) {
         return 0;
     }
     if (s_eq(cmd, "legacy-emul")) return cmd_legacy_emul(rest);
+    if (s_eq(cmd, "form-factor")) return cmd_form_factor(rest);
+    if (s_eq(cmd, "power-apply")) return cmd_power_apply(rest);
+    if (s_eq(cmd, "power-sim")) return cmd_power_sim(rest);
     if (s_eq(cmd, "power-profile")) {
         int p;
         word(rest, a, 64);

@@ -436,6 +436,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_devsync: $(UNIT_DIR)/userspace/test_devs
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/devsync.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_plat_form_energy: $(UNIT_DIR)/userspace/test_plat_form_energy.c ../userspace/plat_form.c ../userspace/plat_energy.c ../userspace/platform.c ../userspace/plat_form.h ../userspace/plat_energy.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/plat_form.c ../userspace/plat_energy.c ../userspace/platform.c $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_platform: $(UNIT_DIR)/userspace/test_platform.c ../userspace/platform.c ../userspace/platform.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/platform.c $(FRAMEWORK_SOURCES)
