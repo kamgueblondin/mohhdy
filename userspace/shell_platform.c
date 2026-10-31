@@ -701,11 +701,20 @@ static int cmd_form_factor(const char* rest) {
     int w = sc->fb_w > 0 ? sc->fb_w : 1024, h = sc->fb_h > 0 ? sc->fb_h : 768, diag = 0, form = 0, apply = 0, ok = 1;
     rest = word(rest, a, (int)sizeof(a));
     if (s_eq(a, "apply")) { apply = 1; rest = word(rest, a, (int)sizeof(a)); }
+    if (a[0] >= '0' && a[0] <= '9') {
+        /* size first: form-factor WxH [DIAG] */
+        int i = 0;
+        while (a[i]) { b[i] = a[i]; i++; }
+        b[i] = 0;
+        a[0] = 0;
+        goto have_size;
+    }
     if (a[0]) {
         form = plat_form_kind_parse(a);
         if (form < 0) { print_string("form-factor error usage: form-factor [apply] [auto|phone|tablet|desktop|tv] [WxH] [DIAG_INCH_TENTHS]\n"); return 1; }
     }
     rest = word(rest, b, (int)sizeof(b));
+have_size:
     if (b[0]) {
         char num[8];
         int i = 0, j = 0;

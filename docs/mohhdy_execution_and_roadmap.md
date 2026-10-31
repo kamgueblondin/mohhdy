@@ -544,3 +544,8 @@ Lot 47 (PR #204, `docs/lot47_plan.md`) :
 - Client HTTP/1.1 et TLS 1.2 en Ring 3 avec verification X.509 reelle (`fetch`, `http-get`, `web URL` dans le GUI), racines publiques dans `/etc/ca-roots.pem`. Preuve hors ligne : `make qemu-lot67-web`. Verification manuelle : https://example.com/ ouvert dans Mohhdy.
 - Corrections TCP (fenetre reelle, pas de perte d'octets, fin de flux apres FIN, passerelle).
 - US-068/US-073 partiels : estimateur de debit et pacer (`p2p-probe`, `p2p-bwe`), pas encore applique au chemin de donnees. US-076, US-080, US-081 inchanges (partiels). Voir docs/lot67_plan.md.
+
+### Lot 68 : textes agrandissables, cadence pilotee par l'estimateur, formats d'ecran, energie (US-068 / US-073 / US-080 / US-081)
+
+- Echelle globale `ui-scale` (1x a 4x, auto selon l'ecran), zoom par fenetre `text-size`, Ctrl+'+'/'-'/'0', persistance `/persist/ui.cfg`, glyphes lisses Scale2x/Scale3x, zoom web avec reflow. Preuve `make qemu-gui-text-scale`.
+- US-068/US-073 partiels : le pacer de donnees suit le debit de l'estimateur (`p2p-pace`). US-080 partiel : `form-factor`. US-081 partiel : `power-apply`, batterie simulee (`power-sim`). US-076 inchange. Voir docs/lot68_plan.md.
