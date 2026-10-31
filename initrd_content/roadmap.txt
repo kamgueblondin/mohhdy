@@ -1,3 +1,4 @@
+# Lot 67: real HTTP/HTTPS (fetch, /browser) with X.509 checks; US-068/US-073 bandwidth estimator (partial); statuses unchanged.
 # Lot 66: US-G23 done (/release apply, verify, refused apply, rollback, restore in QEMU); phase 9 24/24; US-069 heal anti-entropy, US-070 LRU cache (both partial).
 # Lot 65: GUI panels cover whole command families; US-G19 G20 G21 G22 G24 done, US-G23 partial.
 # Lot 64: vertical writing modes, direction rtl and dir, translucent radial rings, arc dashes, background layers/space/round/edge offsets, list-style-image, multicol with span/breaks, per-side and logical borders; US-031 partial; statuses unchanged.
