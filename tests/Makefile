@@ -787,7 +787,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_p2p_bwe: $(UNIT_DIR)/userspace/test_p2p_
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/p2p_bwe.c ../userspace/p2p_pace.c $(FRAMEWORK_SOURCES)
 
 # Lot 67: URL / HTTP / DNS / TLS PRF / fetch
-WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../kernel/aes_gcm.c ../kernel/x25519.c $(WF_X509_SRCS)
+WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_inflate.c ../kernel/aes_gcm.c ../kernel/x25519.c $(WF_X509_SRCS)
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_http: $(UNIT_DIR)/userspace/test_wf_http.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)

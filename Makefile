@@ -595,6 +595,7 @@ pack-initrd: userspace-all
 	@paths="userspace promptmessage/examples webpages dosapps $(INITRD_DIR)/roadmap.txt $(INITRD_DIR)/samples $(INITRD_DIR)/images $(INITRD_DIR)/bigfiles $(INITRD_DIR)/web $(INITRD_DIR)/etc"; \
 	if [ -d "$(MODEL_DIR)" ]; then paths="$$paths $(MODEL_DIR)"; fi; \
 	if [ -f build/.initrd-stamp ] && [ -f $(INITRD_IMAGE) ] && [ -f $(INITRD_TEST_IMAGE) ] && \
+	    [ -f build/lot67/pki/server_rsa_chain.pem ] && \
 	    [ "$$(cat build/.initrd-models 2>/dev/null)" = "$(INITRD_MODELS_KEY)" ] && \
 	    [ -z "$$(find $$paths -type f -newer build/.initrd-stamp -print -quit 2>/dev/null)" ] && \
 	    [ "$$(find $$paths -type f 2>/dev/null | sort | cksum)" = "$$(cat build/.initrd-list 2>/dev/null)" ]; then \
@@ -702,7 +703,7 @@ pack-initrd-now:
 	@cp -f $(INITRD_IMAGE) $(INITRD_TEST_IMAGE)
 	@tar -C $(INITRD_TEST_DIR) -rf $(INITRD_TEST_IMAGE) $(addprefix ./bin/,$(TEST_ONLY_PROGRAMS))
 	@# Lot 67: the throw-away test CA of the offline HTTPS test, test image only
-	@if [ ! -f build/lot67/pki/test_ca.pem ]; then python3 scripts/lot67_gen_pki.py build/lot67/pki >/dev/null; fi
+	@if [ ! -f build/lot67/pki/test_ca.pem ] || [ ! -f build/lot67/pki/server_rsa_chain.pem ]; then python3 scripts/lot67_gen_pki.py build/lot67/pki >/dev/null; fi
 	@mkdir -p $(INITRD_TEST_DIR)/etc && cp -f build/lot67/pki/test_ca.pem $(INITRD_TEST_DIR)/etc/ca-test.pem
 	@tar -C $(INITRD_TEST_DIR) -rf $(INITRD_TEST_IMAGE) ./etc/ca-test.pem
 	@echo "[mkinitrd] Test image $(INITRD_TEST_IMAGE): production + $(words $(TEST_ONLY_PROGRAMS)) proof programs"

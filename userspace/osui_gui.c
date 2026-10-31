@@ -246,6 +246,35 @@ int osui_gui_web_is_url(const char *s) {
 
 static int web_is_search(const char *f) { return f && sncmp(f, "search:", 7) == 0 && f[7]; }
 
+static int g_web_errpage;
+
+/* Lot 69: a small HTML page explaining a failed network load. */
+static int web_error_page(const char *url, const char *why, char *o, int cap) {
+    static const char *head = "<html><head><title>Page impossible a ouvrir</title></head><body>"
+                              "<h1>Page impossible a ouvrir</h1><p>Adresse :</p><pre>";
+    const char *mid = "</pre><p>Raison :</p><pre>";
+    const char *hint = "</pre><p>Etapes : DNS, connexion TCP, TLS (certificat), HTTP. "
+                       "Le message ci-dessus dit laquelle a echoue. Verifier le reseau avec net-if, "
+                       "ou essayer fetch -v URL dans le terminal.</p></body></html>";
+    const char *parts[5];
+    int k = 0, i, j;
+    const char *w = why;
+    if (cap < 64) return -1;
+    if (w && w[0] == 'o' && w[1] == 's') {           /* skip the "osui web fetch error=" prefix */
+        for (i = 0; w[i]; i++) if (w[i] == '=') { w = w + i + 1; break; }
+    }
+    parts[0] = head; parts[1] = url; parts[2] = mid; parts[3] = w ? w : "?"; parts[4] = hint;
+    for (j = 0; j < 5; j++) {
+        for (i = 0; parts[j][i] && k < cap - 8; i++) {
+            char c = parts[j][i];
+            if ((j == 1 || j == 3) && (c == '<' || c == '>' || c == '&')) c = c == '&' ? '+' : (c == '<' ? '(' : ')');
+            o[k++] = c;
+        }
+    }
+    o[k] = 0;
+    return k;
+}
+
 int osui_gui_web_load(const char *file, char *status, int max) {
     int n = -1, rc;
     static char sq[WSEARCH_QUERY + 8];
@@ -259,7 +288,15 @@ int osui_gui_web_load(const char *file, char *status, int max) {
             return -1;
         }
         n = g_web_fetch(file, g_web_src, OSUI_WEB_SRC_MAX, g_web_final, (int)sizeof(g_web_final), fst, (int)sizeof(fst));
-        if (n < 0) { if (status) scpy(status, max, fst); return -1; }
+        if (n < 0) {
+            /* Lot 69: the window shows why the page did not open (DNS, TCP,
+             * TLS, HTTP) instead of staying closed; the status keeps the
+             * error and the call still fails for the console callers. */
+            if (status) scpy(status, max, fst);
+            n = web_error_page(file, fst, g_web_src, OSUI_WEB_SRC_MAX);
+            g_web_errpage = (n > 0 && osui_web_pipeline(g_web_src, n) == 0);
+            return -1;
+        }
         g_web_src[n < OSUI_WEB_SRC_MAX ? n : OSUI_WEB_SRC_MAX - 1] = 0;
         rc = osui_web_pipeline(g_web_src, n);
         if (status) {
@@ -314,8 +351,18 @@ static int g_web_hn, g_web_hi = -1;
 static int web_go(const char *file, int push, char *out, int out_max) {
     char status[320];
     int k;
+    g_web_errpage = 0;
     if (osui_gui_web_load(file, status, (int)sizeof(status)) != 0) {
         if (out) { scat(out, out_max, status); scat(out, out_max, "\n"); }
+        if (g_web_errpage) {
+            /* the error page is shown in the browser window */
+            g_web_errpage = 0;
+            scpy(g_web_file, (int)sizeof(g_web_file), file);
+            g_web_active = 1;
+            g_web_mobile = 0;
+            g_web_scroll = 0;
+            if (out) scat(out, out_max, "osui web error-page shown\n");
+        }
         return -1;
     }
     scpy(g_web_file, (int)sizeof(g_web_file), g_web_final[0] ? g_web_final : file);

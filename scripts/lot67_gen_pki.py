@@ -54,6 +54,9 @@ leaf_pss = cert("pss.mohhdy.test", "MOHHDY Test Inter", leaf_k, inter_k, False, 
 expired = cert("old.mohhdy.test", "MOHHDY Test Inter", leaf_k, inter_k, False, sans=("old.mohhdy.test",), days=(-400, -30))
 future = cert("new.mohhdy.test", "MOHHDY Test Inter", leaf_k, inter_k, False, sans=("new.mohhdy.test",), days=(3000, 3600))
 crit = cert("crit.mohhdy.test", "MOHHDY Test Inter", leaf_k, inter_k, False, sans=("crit.mohhdy.test",), extra_critical=True)
+# Lot 69: RSA leaf for TLS 1.3 RSA-PSS CertificateVerify and TLS 1.2 ECDHE-RSA over P-256
+leaf_rsa_k = rsa.generate_private_key(65537, 2048)
+leaf_rsa = cert("mohhdy.test", "MOHHDY Test Inter", leaf_rsa_k, inter_k, False, sans=SANS, ips=("10.0.2.2",))
 # a CA:false "intermediate" that signs a leaf
 noca_k = ec.generate_private_key(ec.SECP256R1())
 noca = cert("MOHHDY Not A CA", "MOHHDY Test Root", noca_k, root_k, False, h=hashes.SHA384())
@@ -77,6 +80,9 @@ def pem(c): return c.public_bytes(serialization.Encoding.PEM)
 open(f"{OUT}/test_ca.pem", "wb").write(pem(root))
 open(f"{OUT}/server_chain.pem", "wb").write(pem(leaf) + pem(inter))
 open(f"{OUT}/server_key.pem", "wb").write(leaf_k.private_bytes(serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+open(f"{OUT}/server_rsa_chain.pem", "wb").write(pem(leaf_rsa) + pem(inter))
+open(f"{OUT}/server_rsa_key.pem", "wb").write(leaf_rsa_k.private_bytes(serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
 
 def arr(n, b):

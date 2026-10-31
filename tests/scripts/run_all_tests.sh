@@ -228,7 +228,7 @@ run_test() {
         test_p2p_pace.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
         test_p2p_flow.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
         test_p2p_bwe.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
-        test_wf_http.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
+        test_wf_http.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
     esac
     if [ "$(basename "$test_file")" = "test_tokenizer.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_tokenizer.c"

@@ -13,7 +13,7 @@
 #endif
 #define NOW "20260601120000"
 static wf_trust_t g_trust;
-static uint8_t g_der[64 * 1024];
+static uint8_t g_der[256 * 1024];
 
 static void trust_test_root(void) {
     memset(&g_trust, 0, sizeof(g_trust));
@@ -133,7 +133,7 @@ static void test_chain_failures(void) {
 
 static char* slurp(const char* path, int* len) {
     FILE* f = fopen(path, "rb");
-    static char b[128 * 1024];
+    static char b[320 * 1024];
     size_t n;
     if (!f) return 0;
     n = fread(b, 1, sizeof(b) - 1, f);
@@ -153,11 +153,21 @@ static void test_real_chain_with_production_roots(void) {
     memset(&g_trust, 0, sizeof(g_trust));
     n = wf_trust_add_pem(&g_trust, pem, len, g_der, (int)sizeof(g_der), &used);
     printf("    roots: %d parsed, %d skipped, %d bytes DER\n", n, g_trust.skipped, used);
-    TEST_ASSERT_TRUE(n >= 30);
+    TEST_ASSERT_TRUE(n >= 140);   /* Lot 69: the whole Mozilla TLS set */
     TEST_ASSERT_EQUAL(0, g_trust.skipped);
     for (i = 0; i < RC_COUNT; i++) TEST_ASSERT_EQUAL(0, wf_x509_parse(d[i], l[i], &ch[i]));
     TEST_ASSERT_EQUAL(WF_CHAIN_OK, wf_chain_verify(ch, RC_COUNT, &g_trust, "example.com", "20261101000000", &info));
     printf("    example.com -> %s (depth %d)\n", info.anchor_cn, info.depth);
+    /* Lot 69: the guest decodes the PEM in place (one buffer): same result */
+    {
+        static wf_trust_t t2;
+        int used2 = 0;
+        memset(&t2, 0, sizeof(t2));
+        TEST_ASSERT_EQUAL(n, wf_trust_add_pem(&t2, pem, len, (uint8_t*)pem, len, &used2));
+        TEST_ASSERT_EQUAL(0, t2.skipped);
+        TEST_ASSERT_EQUAL(used, used2);
+        TEST_ASSERT_EQUAL(WF_CHAIN_OK, wf_chain_verify(ch, RC_COUNT, &t2, "example.com", "20261101000000", &info));
+    }
     TEST_ASSERT_EQUAL(WF_CHAIN_E_HOST, wf_chain_verify(ch, RC_COUNT, &g_trust, "example.org.evil", "20261101000000", 0));
     TEST_ASSERT_EQUAL(WF_CHAIN_E_EXPIRED, wf_chain_verify(ch, RC_COUNT, &g_trust, "example.com", "20270601000000", 0));
 }
@@ -171,8 +181,30 @@ static void test_base64(void) {
     TEST_ASSERT_EQUAL(-1, wf_base64_decode("TWFuTWFuTWFu", 12, out, 8));
 }
 
+
+/* Lot 69: www.google.com style certificates carry > 100 dNSNames; the host
+ * check must scan all of them, not only the first WF_X509_MAX_SAN. */
+static void test_host_match_beyond_san_cap(void) {
+    static uint8_t seq[4096];
+    static wf_cert_t c;
+    int p = 0, i;
+    memset(&c, 0, sizeof(c));
+    for (i = 0; i < 120; i++) {
+        char nm[32];
+        int n = snprintf(nm, sizeof(nm), "h%d.example.test", i);
+        seq[p++] = 0x82; seq[p++] = (uint8_t)n; memcpy(seq + p, nm, (size_t)n); p += n;
+        if (i < WF_X509_MAX_SAN) { c.san[c.san_count] = seq + p - n; c.san_len[c.san_count] = n; c.san_count++; }
+    }
+    seq[p++] = 0x82; seq[p++] = 10; memcpy(seq + p, "google.com", 10); p += 10;
+    c.san_seq = seq; c.san_seq_len = p;
+    TEST_ASSERT_EQUAL(0, wf_x509_host_match(&c, "google.com"));
+    TEST_ASSERT_EQUAL(0, wf_x509_host_match(&c, "h119.example.test"));
+    TEST_ASSERT_TRUE(wf_x509_host_match(&c, "evil.com") != 0);
+}
+
 int main(void) {
     unity_init();
+    RUN_TEST(test_host_match_beyond_san_cap);
     RUN_TEST(test_parse_fields);
     RUN_TEST(test_parse_rejects_garbage);
     RUN_TEST(test_host_match);

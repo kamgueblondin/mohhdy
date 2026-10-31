@@ -1,6 +1,7 @@
 /* wf_fetch.c - Lot 67: HTTP(S) GET with bounded redirects (see wf_fetch.h). */
 #include "wf_fetch.h"
 #include "wf_dns.h"
+#include "wf_inflate.h"
 
 static wf_tls_t g_tls;
 static wf_http_resp_t g_resp;
@@ -121,6 +122,9 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, uint8_t* body, int 
             break;
         }
         if (n == 1) break;
+        /* Lot 69: the buffer is full; the rest would be discarded anyway,
+         * so stop reading (a 900 KiB page no longer costs its full download) */
+        if (g_resp.truncated && g_resp.status >= 200 && g_resp.status < 300) break;
     }
     if (u->https) wf_tls_close(&g_tls);
     env->close(env->net, h);
@@ -128,6 +132,14 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, uint8_t* body, int 
     res->status = g_resp.status;
     res->body_len = g_resp.body_len;
     res->truncated = g_resp.truncated;
+    res->encoding = g_resp.content_encoding;
+    res->wire_len = g_resp.body_len;
+    if (g_resp.content_encoding != 0 && g_resp.body_len > 0) {
+        int tr = 0, n = wf_decode_body_inplace(g_resp.content_encoding, body, g_resp.body_len, cap, &tr);
+        if (n < 0) { scopy(res->err, (int)sizeof(res->err), "HTTP: corrupt gzip/deflate body"); return -1; }
+        res->body_len = n;
+        if (tr) res->truncated = 1;
+    }
     scopy(res->content_type, (int)sizeof(res->content_type), g_resp.content_type);
     return 0;
 }
