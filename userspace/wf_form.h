@@ -109,7 +109,9 @@ const char *wf_form_option_label(const wf_form_page_t *p, int field, int k);
 int wf_form_activate(wf_form_page_t *p, int field);
 /* 1 for checkbox, radio and select (a click acts, no text to edit) */
 int wf_form_is_toggle(const wf_form_page_t *p, int field);
-/* Editing the focused field (display bytes). 0 when changed, -1 if not. */
+/* Editing the focused field (display bytes). 0 when changed, -1 if not.
+ * Lot 71: checkbox, radio and select take the focus too (Tab); Space
+ * activates them, LEFT/RIGHT/HOME/END and a letter move a select. */
 int wf_form_focus(wf_form_page_t *p, int field);
 int wf_form_focus_next(wf_form_page_t *p, int dir);
 int wf_form_insert(wf_form_page_t *p, char c);

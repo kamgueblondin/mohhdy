@@ -194,11 +194,34 @@ static int editable(const wf_field_t *f) {
     return f->type == WF_FIELD_TEXT || f->type == WF_FIELD_PASSWORD || f->type == WF_FIELD_TEXTAREA;
 }
 
+/* Lot 71: the keyboard reaches checkboxes, radios and selects too */
+static int focusable(const wf_field_t *f) {
+    return editable(f) || f->type == WF_FIELD_CHECKBOX || f->type == WF_FIELD_RADIO || f->type == WF_FIELD_SELECT;
+}
+
 int wf_form_focus(wf_form_page_t *p, int field) {
-    if (field < 0 || field >= p->nfields || !editable(&p->field[field])) { p->focus = -1; return -1; }
+    if (field < 0 || field >= p->nfields || !focusable(&p->field[field])) { p->focus = -1; return -1; }
     p->focus = field;
-    p->field[field].cursor = (int16_t)f_len(p->field[field].value);
+    p->field[field].cursor = (int16_t)(editable(&p->field[field]) ? f_len(p->field[field].value) : 0);
     return 0;
+}
+
+/* a typed letter on a focused select: next option whose label starts
+ * with it (ASCII and Latin-1 case folded), from the selected one */
+static unsigned char fold1(unsigned char c) {
+    if (c >= 'A' && c <= 'Z') return (unsigned char)(c + 32);
+    if (c >= 0xC0u && c <= 0xDEu && c != 0xD7u) return (unsigned char)(c + 32);
+    return c;
+}
+static int select_letter(wf_form_page_t *p, int field, char c) {
+    wf_field_t *f = &p->field[field];
+    int k;
+    for (k = 1; k <= f->nopt; k++) {
+        int o = (f->sel + k) % f->nopt;
+        const char *l = wf_form_option_label(p, field, o);
+        if (l && l[0] && fold1((unsigned char)l[0]) == fold1((unsigned char)c)) { select_to(p, field, o); return 0; }
+    }
+    return -1;
 }
 
 int wf_form_focus_next(wf_form_page_t *p, int dir) {
@@ -206,7 +229,7 @@ int wf_form_focus_next(wf_form_page_t *p, int dir) {
     if (p->nfields == 0) return -1;
     for (k = 1; k <= p->nfields; k++) {
         i = p->focus < 0 ? (dir > 0 ? k - 1 : p->nfields - k) : ((p->focus + dir * k) % p->nfields + p->nfields) % p->nfields;
-        if (editable(&p->field[i])) return wf_form_focus(p, i);
+        if (focusable(&p->field[i])) return wf_form_focus(p, i);
     }
     return -1;
 }
@@ -216,6 +239,12 @@ int wf_form_insert(wf_form_page_t *p, char c) {
     int n, i;
     if (p->focus < 0) return -1;
     f = &p->field[p->focus];
+    if (!editable(f)) {
+        /* Space acts on a checkbox, radio or select; a letter picks an option */
+        if (c == ' ') return wf_form_activate(p, p->focus);
+        if (f->type == WF_FIELD_SELECT && (unsigned char)c > 0x20u) return select_letter(p, p->focus, c);
+        return -1;
+    }
     n = f_len(f->value);
     if ((unsigned char)c < 0x20u && c != '\n') return -1;
     if (c == '\n' && f->type != WF_FIELD_TEXTAREA) return -1;
@@ -233,6 +262,7 @@ int wf_form_backspace(wf_form_page_t *p) {
     int n, i;
     if (p->focus < 0) return -1;
     f = &p->field[p->focus];
+    if (!editable(f)) return -1;
     n = f_len(f->value);
     if (f->cursor > n) f->cursor = (int16_t)n;
     if (f->cursor <= 0) return -1;
@@ -246,6 +276,7 @@ int wf_form_delete(wf_form_page_t *p) {
     int n, i;
     if (p->focus < 0) return -1;
     f = &p->field[p->focus];
+    if (!editable(f)) return -1;
     n = f_len(f->value);
     if (f->cursor >= n) return -1;
     for (i = f->cursor; i < n; i++) f->value[i] = f->value[i + 1];
@@ -257,6 +288,14 @@ int wf_form_move(wf_form_page_t *p, int delta) {
     int n, c;
     if (p->focus < 0) return -1;
     f = &p->field[p->focus];
+    if (f->type == WF_FIELD_SELECT && f->nopt) {
+        /* LEFT / RIGHT: previous / next option; HOME / END: first / last */
+        int k = delta <= -1000 ? 0 : delta >= 1000 ? f->nopt - 1 : f->sel + (delta < 0 ? -1 : 1);
+        if (k < 0 || k >= f->nopt || k == f->sel) return -1;
+        select_to(p, p->focus, k);
+        return 0;
+    }
+    if (!editable(f)) return -1;
     n = f_len(f->value);
     c = f->cursor + delta;
     if (c < 0) c = 0;
@@ -304,6 +343,7 @@ int wf_form_display(const wf_form_page_t *p, int field, char *out, int cap) {
     if (f->type == WF_FIELD_CHECKBOX || f->type == WF_FIELD_RADIO) {
         const char *l = f->label[0] ? f->label : f->value;
         int radio = f->type == WF_FIELD_RADIO;
+        if (p->focus == field) { out[o++] = '>'; out[o++] = ' '; }
         out[o++] = radio ? '(' : '[';
         out[o++] = f->checked ? (radio ? '*' : 'x') : ' ';
         out[o++] = radio ? ')' : ']';
@@ -315,6 +355,7 @@ int wf_form_display(const wf_form_page_t *p, int field, char *out, int cap) {
     if (f->type == WF_FIELD_SELECT) {
         const char *l = wf_form_option_label(p, field, f->sel);
         if (!l || !l[0]) l = f->value;
+        if (p->focus == field) { out[o++] = '>'; out[o++] = ' '; }
         out[o++] = '[';
         out[o++] = ' ';
         for (i = 0; l && l[i] && o < cap - 5 && i < width; i++) out[o++] = (l[i] == '<' || l[i] == '>') ? ' ' : l[i];

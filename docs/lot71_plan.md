@@ -18,6 +18,8 @@ Branch `cursor/lot71`, base `origin/main` after PR #227 (Lot 70).
 - Checkboxes, radios and selects are real controls: `[x] label`,
   `(*) label`, `[ option v ]`. A click toggles the checkbox, checks the
   radio (its group is unchecked), moves the select to the next option.
+  Keyboard: Tab reaches them too, Space toggles, LEFT/RIGHT/HOME/END
+  and a typed letter move a select (`> ` marks the focused control).
   Console: `web-input N on|off`, `web-input N LABEL|VALUE|#K`; `web-forms`
   lists the options. Unchecked boxes are not sent (HTML rule). Bounded:
   24 options per select, a 4 KB option pool per page.

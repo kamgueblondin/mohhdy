@@ -341,6 +341,19 @@ def main():
         wait_log(b, "p2p kv replicated mode=eco v1 from alpha", 60)
         if "mode=eco" in log(c, start_c):
             raise RuntimeError("gamma received mode=eco during the hub cut")
+        # Lot 71: alpha resends the lost put (p2p_rtx) at most 3 times while
+        # the cut lasts, then gives it up; anti-entropy must deliver it.
+        for _round in range(30):
+            cmd(a, "p2p-poll 5", "p2p-poll ok", timeout=30)
+            start_fl = cmd(a, "p2p-flow gamma", "p2p flow peer gamma ")
+            m = re.search(r"rtx kept \d+ acked \d+ resent (\d+) gave_up (\d+)", log(a, start_fl))
+            if m and int(m.group(2)) >= 1:
+                break
+        else:
+            raise RuntimeError("alpha did not give up the put during the cut: %s" % log(a, start_fl)[-400:])
+        if int(m.group(1)) < 3:
+            raise RuntimeError("alpha gave up before 3 resends: %s" % m.group(0))
+        say("scenario 2: put to gamma resent %s times during the cut, then given up" % m.group(1))
         hub.heal_pair(a["mac"], c["mac"])
         hub.heal_pair(b["mac"], c["mac"])
         cmd(c, "p2p-poll 5", "p2p-poll ok", timeout=30)

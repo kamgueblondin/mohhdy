@@ -263,7 +263,11 @@ int shell_page_form_link(const char* href) {
     if (t <= 0 || n < 0 || n >= g_forms.nfields) return -1;
     if (g_forms.field[n].type == WF_FIELD_SUBMIT) { g_forms.focus = n; return 1; }
     /* Lot 71: a checkbox, radio or select acts on the click */
-    if (wf_form_is_toggle(&g_forms, n)) { g_forms.focus = -1; return wf_form_activate(&g_forms, n) == 0 ? 2 : -1; }
+    if (wf_form_is_toggle(&g_forms, n)) {
+        if (wf_form_activate(&g_forms, n) != 0) return -1;
+        (void)wf_form_focus(&g_forms, n);   /* Tab, Space and arrows go on from here */
+        return 2;
+    }
     (void)wf_form_focus(&g_forms, n);
     return 0;
 }

@@ -315,6 +315,56 @@ static void test_toggle_controls(void) {
 }
 
 /* the option pool and the per-select cap are bounded */
+/* Lot 71: the keyboard reaches the controls */
+static void test_keyboard_controls(void) {
+    wf_url_t base;
+    char d[80];
+    int q, cb, sel;
+    wf_form_reset(&g_fp);
+    TEST_ASSERT_EQUAL(0, wf_url_parse("http://h/", &base));
+    TEST_ASSERT_EQUAL(0, wf_form_begin(&g_fp, &base, "/s", "get", 0));
+    q = wf_form_add(&g_fp, &base, "text", "q", "", 0, 0, 0);
+    cb = wf_form_add(&g_fp, &base, "checkbox", "safe", "", "Filtre", 0, 0);
+    (void)wf_form_add(&g_fp, &base, "submit", "go", "Go", 0, 0, 0);
+    sel = wf_form_add(&g_fp, &base, "select", "lr", "", 0, 0, 0);
+    wf_form_add_option(&g_fp, sel, "fr", "Fran\xe7" "ais", 1);
+    wf_form_add_option(&g_fp, sel, "en", "anglais", 0);
+    wf_form_add_option(&g_fp, sel, "de", "allemand", 0);
+    wf_form_end(&g_fp);
+    TEST_ASSERT_EQUAL(0, wf_form_focus(&g_fp, q));
+    TEST_ASSERT_EQUAL(0, wf_form_focus_next(&g_fp, 1));            /* Tab: the checkbox */
+    TEST_ASSERT_EQUAL(cb, g_fp.focus);
+    wf_form_display(&g_fp, cb, d, (int)sizeof(d));
+    TEST_ASSERT_EQUAL_STRING("> [ ] Filtre", d);
+    TEST_ASSERT_EQUAL(0, wf_form_insert(&g_fp, ' '));               /* Space toggles */
+    TEST_ASSERT_EQUAL(1, g_fp.field[cb].checked);
+    TEST_ASSERT_EQUAL(-1, wf_form_insert(&g_fp, 'x'));              /* no text in a checkbox */
+    TEST_ASSERT_EQUAL(-1, wf_form_backspace(&g_fp));
+    TEST_ASSERT_EQUAL(-1, wf_form_move(&g_fp, 1));
+    TEST_ASSERT_EQUAL(0, wf_form_focus_next(&g_fp, 1));            /* the submit button is skipped */
+    TEST_ASSERT_EQUAL(sel, g_fp.focus);
+    TEST_ASSERT_EQUAL(0, wf_form_move(&g_fp, 1));                   /* RIGHT */
+    TEST_ASSERT_EQUAL_STRING("en", g_fp.field[sel].value);
+    TEST_ASSERT_EQUAL(0, wf_form_move(&g_fp, 1000));                /* END */
+    TEST_ASSERT_EQUAL_STRING("de", g_fp.field[sel].value);
+    TEST_ASSERT_EQUAL(-1, wf_form_move(&g_fp, 1));                  /* already last */
+    TEST_ASSERT_EQUAL(0, wf_form_insert(&g_fp, 'F'));               /* a letter */
+    TEST_ASSERT_EQUAL_STRING("fr", g_fp.field[sel].value);
+    TEST_ASSERT_EQUAL(0, wf_form_insert(&g_fp, 'a'));               /* anglais, then allemand */
+    TEST_ASSERT_EQUAL_STRING("en", g_fp.field[sel].value);
+    TEST_ASSERT_EQUAL(0, wf_form_insert(&g_fp, 'a'));
+    TEST_ASSERT_EQUAL_STRING("de", g_fp.field[sel].value);
+    TEST_ASSERT_EQUAL(-1, wf_form_insert(&g_fp, 'z'));
+    wf_form_display(&g_fp, sel, d, (int)sizeof(d));
+    TEST_ASSERT_EQUAL_STRING("> [ allemand v ]", d);
+    TEST_ASSERT_EQUAL(0, wf_form_move(&g_fp, -1000));               /* HOME */
+    TEST_ASSERT_EQUAL_STRING("fr", g_fp.field[sel].value);
+    TEST_ASSERT_EQUAL(0, wf_form_focus_next(&g_fp, 1));            /* wraps to the text field */
+    TEST_ASSERT_EQUAL(q, g_fp.focus);
+    TEST_ASSERT_EQUAL(0, wf_form_submit(&g_fp, 0, -1, &g_sub));
+    TEST_ASSERT_EQUAL_STRING("http://h/s?q=&safe=on&lr=fr", g_sub.url);
+}
+
 static void test_option_bounds(void) {
     wf_url_t base;
     char v[8];
@@ -336,6 +386,7 @@ int main(void) {
     unity_init();
     RUN_TEST(test_toggle_controls);
     RUN_TEST(test_option_bounds);
+    RUN_TEST(test_keyboard_controls);
     RUN_TEST(test_edit_and_display);
     RUN_TEST(test_submit_get);
     RUN_TEST(test_submit_post_and_query_replaced);
