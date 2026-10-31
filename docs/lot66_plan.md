@@ -72,9 +72,13 @@ debts (TCP ports, coverage). Checked against the repository first:
   counter `heal_syncs` in `p2p-stats`.
 - Proof: `test_p2p` test_lot66_heal_starts_anti_entropy (both sides write
   during the cut, both converge with no p2p_sync; fails on the old code),
-  `make qemu-p2p` scenario 2b: `p2p-put hk heal` on alpha during the long
-  hub wire cut of gamma reaches gamma after the heal
-  (`p2p kv synced hk=heal v1 from alpha`) with no p2p-sync typed.
+  `test_lot66_heal_with_raft_snapshot` (the 2b shape: Raft, compaction,
+  InstallSnapshot during the heal), `make qemu-p2p` scenario 2c: `p2p-put
+  hz side` on beta while the old leader alpha is cut by the hub reaches
+  alpha after the heal as `p2p kv synced hz=side v1 from ...` (not a Raft
+  entry), no p2p-sync typed on any guest, `heal_syncs` at least 1.
+  Note found on the way: in 2b the InstallSnapshot also carries the whole
+  key/value store, so 2b alone could not tell the two paths apart.
 
 ## Not done
 

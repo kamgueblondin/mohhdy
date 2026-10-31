@@ -322,9 +322,6 @@ def main():
         hub.cut_pair(a["mac"], c["mac"])
         hub.cut_pair(b["mac"], c["mac"])
         gamma_at_cut = len(base.log_text(c["log"]))
-        # Lot 66 (US-069): a plain kv write during the long cut; after the
-        # heal it must reach gamma by the automatic anti-entropy (no p2p-sync).
-        cmd(a, "p2p-put hk heal", "p2p-put ok hk")
         cmd(a, "p2p-raft-put late yes", "p2p-raft-put ok index 2")
         cmd(a, "p2p-poll 1", "p2p-poll ok")
         cmd(b, "p2p-poll 1", "p2p-poll ok")
@@ -368,25 +365,6 @@ def main():
             if _round >= 1 and "p2p raft snapshot installed index 2" in log(c, healed_at):
                 break
         wait_log(c, "p2p raft snapshot installed index 2", 40)
-        if "p2p-sync " in log(c, healed_at) or "p2p-sync " in log(a, healed_at):
-            raise RuntimeError("a manual p2p-sync ran during the heal")
-        for _round in range(6):
-            if "hk=heal" in log(c, healed_at):
-                break
-            cmd(a, "p2p-poll 2", "p2p-poll ok")
-            cmd(c, "p2p-poll 2", "p2p-poll ok")
-        if "hk=heal" not in log(c, healed_at):
-            st = cmd(c, "p2p-kv", "p2p kv ok ")
-            raise RuntimeError("gamma lacks hk=heal after the heal: %s" % log(c, st)[-1200:])
-        wait_log(c, "p2p kv synced hk=heal v1 from ", 40, healed_at)
-        heals = []
-        for node in (a, c):
-            st = cmd(node, "p2p-stats", " heal_syncs ")
-            heals.append(int(re.search(r" heal_syncs (\d+)", log(node, st)).group(1)))
-        if max(heals) < 1:
-            raise RuntimeError("no heal anti-entropy counted: %r" % heals)
-        cmd(c, "p2p-get hk", "p2p-get ok local hk=heal v1")
-        say("scenario 2b: heal anti-entropy delivered hk=heal to gamma without p2p-sync (heal_syncs %r)" % heals)
         wait_log(b, "p2p raft commit index 3 next=ok", 30)
         wait_log(c, "p2p raft commit index 3 next=ok", 30)
         st_a = cmd(a, "p2p-raft", "p2p raft role ")
@@ -447,6 +425,10 @@ def main():
             cmd(elected, "p2p-poll 1", "p2p-poll ok")
             cmd(other, "p2p-poll 1", "p2p-poll ok")
         wait_log(other, "split=beta", 30)
+        # Lot 66 (US-069): a plain kv write on the majority side while alpha
+        # is cut; it is not a Raft entry, so only the anti-entropy started
+        # by the heal (no p2p-sync typed) can bring it to alpha.
+        cmd(b, "p2p-put hz side", "p2p-put ok hz")
         cmd(a, "p2p-poll 1", "p2p-poll ok")
         if "split=beta" in log(a, alpha_at_cut) or "commit index" in log(a, alpha_at_cut):
             raise RuntimeError("isolated alpha committed during the partition: %s" % log(a, alpha_at_cut)[-600:])
@@ -457,6 +439,25 @@ def main():
             cmd(a, "p2p-poll 2", "p2p-poll ok")
             cmd(c, "p2p-poll 2", "p2p-poll ok")
         wait_log(a, "split=beta", 40)
+        for _round in range(6):
+            if "hz=side" in log(a, alpha_at_cut):
+                break
+            cmd(b, "p2p-poll 2", "p2p-poll ok")
+            cmd(a, "p2p-poll 2", "p2p-poll ok")
+        if "hz=side" not in log(a, alpha_at_cut):
+            st = cmd(a, "p2p-kv", "p2p kv ok ")
+            raise RuntimeError("alpha lacks hz=side after the heal: %s" % log(a, st)[-1200:])
+        wait_log(a, "p2p kv synced hz=side v1 from ", 20, alpha_at_cut)
+        for node in (a, b, c):
+            if "p2p-sync " in log(node, at_cut[node["label"]]):
+                raise RuntimeError("a manual p2p-sync ran during 2c")
+        heals = []
+        for node in (a, b):
+            st = cmd(node, "p2p-stats", " heal_syncs ")
+            heals.append(int(re.search(r" heal_syncs (\d+)", log(node, st)).group(1)))
+        if max(heals) < 1:
+            raise RuntimeError("no heal anti-entropy counted: %r" % heals)
+        say("scenario 2c: heal anti-entropy brought hz=side to alpha without p2p-sync (heal_syncs %r)" % heals)
         start_a = cmd(a, "p2p-raft", "p2p raft role ")
         m = re.search(r"p2p raft role (\w+) term (\d+)", log(a, start_a))
         if not m or m.group(1) != "follower" or int(m.group(2)) != term_b:

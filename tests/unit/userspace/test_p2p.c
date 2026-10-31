@@ -1874,7 +1874,6 @@ static void test_lot66_heal_with_raft_snapshot(void) {
     TEST_ASSERT_NULL(p2p_get_local(&g_n[2], "hk"));
     g_cut[0][2] = g_cut[1][2] = g_cut[2][0] = g_cut[2][1] = 0;
     run(3, 1000);
-    printf("gamma out: %s\n", g_out[2]);
     TEST_ASSERT_NOT_NULL(p2p_get_local(&g_n[2], "hk"));
 }
 
