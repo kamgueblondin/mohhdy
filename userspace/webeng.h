@@ -77,6 +77,7 @@ enum { WE_WS_NORMAL = 0, WE_WS_PRE = 1, WE_WS_PRE_WRAP = 2, WE_WS_PRE_LINE = 3, 
 enum { WE_HYPHENS_MANUAL = 0, WE_HYPHENS_NONE = 1 };
 /* Lot 64: one background-image layer after the first (see we_node_t). */
 #define WE_BG_LAYERS 4
+#define WE_COLUMNS_MAX 8    /* lot 64: multi-column count cap */
 typedef struct {
     uint16_t off, len;
     uint8_t repeat, size_kind, pos_pct, space;
@@ -184,7 +185,14 @@ typedef struct {
     uint8_t grid_cols;         /* 1..8 when display:grid, else 0 */
     uint8_t flex_wrap, float_side, grid_rows, relative;
     uint8_t list_style;
-    uint16_t lsi_off, lsi_len;  /* lot 64: inherited list-style-image url (pool), 0 length: none */
+    uint16_t lsi_off, lsi_len;
+    /* Lot 64: multi-column layout: column-count (0 auto), column-width (-1
+     * auto), column-fill auto (1) or balance, column-rule width (0: none),
+     * style (WE_BS_*) and colour (set: 1; else currentColor). The gap is
+     * col_gap (normal: 8 px, one glyph). */
+    uint8_t col_count, col_fill_auto, rule_w, rule_style, rule_color_set;
+    int16_t col_width;
+    uint32_t rule_color;  /* lot 64: inherited list-style-image url (pool), 0 length: none */
     uint8_t justify_content, align_items, align_self, align_content;
     uint8_t justify_items, justify_self;
     uint8_t width_kind, basis_content, border_box;

@@ -2918,6 +2918,63 @@ static int outline_style_value(const char *v, int len) {
     return code == WE_BS_HIDDEN ? 0 : code;
 }
 
+/* ---------- Lot 64: multi-column properties ---------- */
+static int column_count_value(const char *v, int len, int *out) {
+    int k, value = 0;
+    if (value_is(v, len, "auto")) { *out = 0; return 0; }
+    if (len < 1 || len > 3) return -1;
+    for (k = 0; k < len; k++) {
+        if (v[k] < '0' || v[k] > '9') return -1;
+        value = value * 10 + v[k] - '0';
+    }
+    if (value < 1 || value > WE_COLUMNS_MAX) return -1;
+    *out = value;
+    return 0;
+}
+
+static int column_width_value(const char *v, int len, int *out) {
+    int px, pct;
+    if (value_is(v, len, "auto")) { *out = -1; return 0; }
+    if (len < 1 || v[0] < '0' || v[0] > '9' || parse_len(v, len, &px, &pct) != 0 || pct || px < 1) return -1;
+    *out = px;
+    return 0;
+}
+
+/* columns: one or two of <count> and <width> (auto for either) */
+static int parse_columns(we_node_t *n, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), k, count = -1, width = -2, value, autos = 0;
+    if (c < 1 || c > 2 || tokens_more(v, len, a, l, c)) return -1;
+    for (k = 0; k < c; k++) {
+        if (value_is(v + a[k], l[k], "auto")) { autos++; continue; }
+        if (column_count_value(v + a[k], l[k], &value) == 0) { if (count >= 0) return -1; count = value; }
+        else if (column_width_value(v + a[k], l[k], &value) == 0) { if (width != -2) return -1; width = value; }
+        else return -1;
+    }
+    if (autos == 2 && c == 2) { count = 0; width = -1; }
+    n->col_count = (uint8_t)(count < 0 ? 0 : count);
+    n->col_width = (int16_t)(width == -2 ? -1 : width);
+    return 0;
+}
+
+/* column-rule: width, style and colour in any order, each once */
+static int parse_column_rule(we_node_t *n, const char *v, int len) {
+    int a[4], l[4], c = tokens(v, len, a, l), k, style = 0, width = -1, has_color = 0;
+    uint32_t color = 0;
+    if (c < 1 || c > 3 || tokens_more(v, len, a, l, c)) return -1;
+    for (k = 0; k < c; k++) {
+        int code = border_style_code(v + a[k], l[k]), w;
+        if (code) { if (style) return -1; style = code; }
+        else if (outline_width_value(v + a[k], l[k], &w) == 0) { if (width >= 0) return -1; width = w; }
+        else if (parse_color(v + a[k], l[k], &color) == 0) { if (has_color) return -1; has_color = 1; }
+        else return -1;
+    }
+    n->rule_style = (uint8_t)style;
+    n->rule_w = (uint8_t)(width < 0 ? 3 : width);
+    n->rule_color_set = (uint8_t)has_color;
+    n->rule_color = color;
+    return 0;
+}
+
 static int parse_outline(we_node_t *n, const char *v, int len) {
     int a[4], l[4], c = tokens(v, len, a, l), k, style = 0, width = -1, has_color = 0;
     uint32_t color = 0;
@@ -3688,6 +3745,36 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "square")) n->list_style = WE_LIST_SQUARE;
         else if (list_keyword(v, vl) >= 0) n->list_style = (uint8_t)list_keyword(v, vl);
         else diag(d, "list marker refused", -1);
+    } else if (w_eq(prop, "column-count")) {
+        int value;
+        if (column_count_value(v, vl, &value)) diag(d, "columns refused", -1);
+        else n->col_count = (uint8_t)value;
+    } else if (w_eq(prop, "column-width")) {
+        int value;
+        if (column_width_value(v, vl, &value)) diag(d, "columns refused", -1);
+        else n->col_width = (int16_t)value;
+    } else if (w_eq(prop, "columns")) {
+        if (parse_columns(n, v, vl)) diag(d, "columns refused", -1);
+    } else if (w_eq(prop, "column-fill")) {
+        if (value_is(v, vl, "auto")) n->col_fill_auto = 1;
+        else if (value_is(v, vl, "balance")) n->col_fill_auto = 0;
+        else diag(d, "columns refused", -1);
+    } else if (w_eq(prop, "column-span")) {
+        if (!value_is(v, vl, "none")) diag(d, "column span refused", -1);
+    } else if (w_eq(prop, "column-rule")) {
+        if (parse_column_rule(n, v, vl)) diag(d, "column rule refused", -1);
+    } else if (w_eq(prop, "column-rule-style")) {
+        int code = border_style_code(v, vl);
+        if (!code) diag(d, "column rule refused", -1);
+        else n->rule_style = (uint8_t)code;
+    } else if (w_eq(prop, "column-rule-width")) {
+        int w;
+        if (outline_width_value(v, vl, &w)) diag(d, "column rule refused", -1);
+        else n->rule_w = (uint8_t)w;
+    } else if (w_eq(prop, "column-rule-color")) {
+        uint32_t color;
+        if (parse_color(v, vl, &color)) diag(d, "column rule refused", -1);
+        else { n->rule_color = color; n->rule_color_set = 1; }
     } else if (w_eq(prop, "list-style-image")) {
         /* lot 64: an image marker; the type stays the fallback */
         if (value_is(v, vl, "none")) n->lsi_len = 0;
@@ -4055,6 +4142,8 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         } }
         n->list_style = p ? p->list_style : WE_LIST_NONE;
         n->lsi_off = p ? p->lsi_off : 0; n->lsi_len = p ? p->lsi_len : 0;
+        n->col_count = 0; n->col_width = -1; n->col_fill_auto = 0;
+        n->rule_w = 3; n->rule_style = 0; n->rule_color_set = 0; n->rule_color = 0;
         n->border_color = n->color;
         n->quotes_kind = p ? p->quotes_kind : WE_QUOTES_AUTO;
         n->quotes_off = p ? p->quotes_off : 0; n->quotes_len = p ? p->quotes_len : 0;
@@ -6644,8 +6733,152 @@ static void rtl_mirror(we_doc_t *d, int idx, int first, int x, int width) {
     }
 }
 
+/* ---------- Lot 64: multi-column layout (subset) ----------
+ * A block with column-count or column-width lays its content out at the
+ * column width (count from column-width as CSS: as many as fit, capped by
+ * column-count and WE_COLUMNS_MAX; the gap is column-gap, normal 8 px),
+ * then cuts it into units: each in-flow child box whole (no fragmentation
+ * inside a box: break-inside avoid), and each line of the inline content.
+ * The units are packed in order into columns of height h: the smallest h
+ * that needs no more than the count (balance), or the definite height with
+ * column-fill auto (and as a cap when balancing). Units that do not fit go
+ * to further columns on the right (overflow columns). Each unit moves with
+ * its subtree and items to its column. column-rule paints in the middle of
+ * each gap between two used columns, over the column height, after the
+ * content. column-span: all and vertical writing modes are refused. */
+typedef struct { int node, top, bottom, line; } we_col_unit_t;
+static we_col_unit_t col_unit[OS_FB_WEB_ITEMS + WE_MAX_NODES];
+static int16_t col_of[OS_FB_WEB_ITEMS + WE_MAX_NODES];
+static uint8_t col_moved[OS_FB_WEB_ITEMS];
+
+static int multicol(const we_node_t *n) {
+    return (n->col_count || n->col_width > 0) && n->display != WE_DISP_FLEX && n->display != WE_DISP_GRID &&
+           n->display != WE_DISP_TABLE && n->wmode == WE_WM_HORIZONTAL;
+}
+
+static int column_plan(const we_node_t *n, int width, int *gap, int *cw) {
+    int count, g = n->col_gap >= 0 ? n->col_gap : WE_CHAR_W;
+    if (n->col_width > 0) {
+        count = (width + g) / (n->col_width + g);
+        if (count < 1) count = 1;
+        if (n->col_count && n->col_count < count) count = n->col_count;
+    } else count = n->col_count;
+    if (count > WE_COLUMNS_MAX) count = WE_COLUMNS_MAX;
+    while (count > 1 && (width - (count - 1) * g) / count < WE_CHAR_W) count--;
+    if (count < 1) count = 1;
+    *gap = g;
+    *cw = (width - (count - 1) * g) / count;
+    if (*cw < WE_CHAR_W) *cw = WE_CHAR_W;
+    return count;
+}
+
+/* the units in order; returns their count */
+static int column_units(we_doc_t *d, int idx, int first) {
+    int c, count = 0, line_h = d->nodes[idx].line_height > 0 ? d->nodes[idx].line_height : WE_LINE_H;
+    uint32_t i;
+    for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
+        const we_node_t *k = &d->nodes[c];
+        if (k->display == WE_DISP_NONE || k->absolute) continue;
+        if (k->is_text || k->display == WE_DISP_INLINE || k->display == WE_DISP_INLINE_BLOCK) {
+            int open = -1;
+            for (i = (uint32_t)first; i < d->nitems; i++) {
+                const os_fb_web_item_t *it = &d->items[i];
+                int top, bottom;
+                if (!it->kind || !inside(d, d->item_owner[i], c)) continue;
+                top = it->kind == OS_FB_WEB_TEXT ? it->y - 1 : it->y;
+                bottom = it->kind == OS_FB_WEB_TEXT ? top + line_h : it->y + it->h;
+                if (open >= 0 && top < col_unit[open].bottom) {
+                    if (top < col_unit[open].top) col_unit[open].top = top;
+                    if (bottom > col_unit[open].bottom) col_unit[open].bottom = bottom;
+                    continue;
+                }
+                open = count++;
+                col_unit[open].node = c; col_unit[open].line = 1;
+                col_unit[open].top = top; col_unit[open].bottom = bottom;
+            }
+        } else {
+            col_unit[count].node = c; col_unit[count].line = 0;
+            col_unit[count].top = k->y - k->margin[0];
+            col_unit[count].bottom = k->y + k->h + k->margin[2];
+            count++;
+        }
+    }
+    return count;
+}
+
+/* columns used by packing the units at height h (col_of filled) */
+static int column_pack(int units, int h) {
+    int u, column = 0, start = 0;
+    for (u = 0; u < units; u++) {
+        if (u == 0) start = col_unit[0].top;
+        else if (col_unit[u].bottom - start > h) { column++; start = col_unit[u].top; }
+        col_of[u] = (int16_t)column;
+    }
+    return units ? column + 1 : 0;
+}
+
+static void column_shift(we_doc_t *d, int first, const we_col_unit_t *u, int dx, int dy) {
+    uint32_t i;
+    int k;
+    for (i = (uint32_t)first; i < d->nitems; i++) {
+        os_fb_web_item_t *it = &d->items[i];
+        int top;
+        if (!it->kind || col_moved[i] || !inside(d, d->item_owner[i], u->node)) continue;
+        top = it->kind == OS_FB_WEB_TEXT ? it->y - 1 : it->y;
+        if (u->line && (top < u->top || top >= u->bottom)) continue;
+        col_moved[i] = 1;
+        it->x = (int16_t)limit_coord(it->x + dx);
+        it->y = (int16_t)limit_coord(it->y + dy);
+    }
+    if (u->line) return;
+    for (k = u->node; k < (int)d->nnodes; k++)
+        if (inside(d, k, u->node)) {
+            d->nodes[k].x = (int16_t)limit_coord(d->nodes[k].x + dx);
+            d->nodes[k].y = (int16_t)limit_coord(d->nodes[k].y + dy);
+        }
+}
+
+static int layout_columns(we_doc_t *d, int idx, int x, int y, int width, int depth) {
+    const we_node_t *n = &d->nodes[idx];
+    int gap, cw, count = column_plan(n, width, &gap, &cw), first = (int)d->nitems, units, u, h, lo, hi, used, k;
+    int fixed = definite_height(d, idx, 0), start[WE_COLUMNS_MAX * 4];
+    (void)layout_children(d, idx, x, y, cw, depth);
+    units = column_units(d, idx, first);
+    if (!units) return fixed > 0 ? fixed : 0;
+    lo = 1; hi = col_unit[units - 1].bottom - col_unit[0].top;
+    for (u = 0; u < units; u++) if (col_unit[u].bottom - col_unit[u].top > lo) lo = col_unit[u].bottom - col_unit[u].top;
+    if (hi < lo) hi = lo;
+    if (n->col_fill_auto && fixed > 0) h = fixed;
+    else {
+        while (lo < hi) {                      /* the smallest height using at most count columns */
+            int mid = (lo + hi) / 2;
+            if (column_pack(units, mid) <= count) hi = mid;
+            else lo = mid + 1;
+        }
+        h = lo;
+        if (fixed > 0 && h > fixed) h = fixed;
+    }
+    used = column_pack(units, h);
+    if (used > WE_COLUMNS_MAX * 4) { diag(d, "columns overflow dropped", idx); used = WE_COLUMNS_MAX * 4; }
+    if (used > count) diag(d, "columns overflow", idx);
+    for (k = 0; k < used; k++) start[k] = -1;
+    for (u = 0; u < units; u++) if (col_of[u] < used && start[col_of[u]] < 0) start[col_of[u]] = col_unit[u].top;
+    w_zero(col_moved, sizeof(col_moved));
+    for (u = 0; u < units; u++) {
+        int column = col_of[u] < used ? col_of[u] : used - 1;
+        column_shift(d, first, &col_unit[u], column * (cw + gap), column ? y - start[column] : 0);
+    }
+    if (n->rule_style > WE_BS_HIDDEN && n->rule_w > 0)
+        for (k = 1; k < used && k < count; k++) {
+            int rx = x + k * (cw + gap) - gap / 2 - n->rule_w / 2;
+            edge_paint(d, idx, n->rule_style, n->rule_color_set ? n->rule_color : n->color, 1, rx, y, n->rule_w, h);
+        }
+    return h;
+}
+
 static int layout_content(we_doc_t *d, int idx, int x, int y, int width, int depth) {
     const we_node_t *n = &d->nodes[idx];
+    if (multicol(n)) return layout_columns(d, idx, x, y, width, depth);
     if (n->display == WE_DISP_FLEX || n->display == WE_DISP_GRID) {
         int first = (int)d->nitems, h = layout_flex(d, idx, x, y, width, depth);
         if (n->dir_rtl) rtl_mirror(d, idx, first, x, width);
