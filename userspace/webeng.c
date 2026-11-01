@@ -153,7 +153,15 @@ static int char_ref(const char *s, int n, char out[4]) {
         else {
             /* Lot 71: Latin-1 and CP1252 code points have a glyph in the
              * display charset (include/os_charset.h). */
-            unsigned char b = code > 0 ? os_cp1252_from_cp((uint32_t)code) : 0;
+            unsigned char b = 0;
+            int pg = code > 0 ? os_cp_page((uint32_t)code, &b) : -1;
+            if (pg > 0 && b < 0xFFu) {
+                /* Lot 72: Greek, Cyrillic, Latin Extended-A, symbols: the
+                 * page selector, then the byte */
+                out[0] = (char)os_page_sel[pg]; out[1] = (char)b; out[2] = (char)os_page_sel[0]; out[3] = 0;
+                return i + 1;
+            }
+            b = code > 0 ? os_cp1252_from_cp((uint32_t)code) : 0;
             out[0] = b >= 0x20u && b != 0x7Fu && b < 0xFFu ? (char)b : '?';
         }
         return i + 1;
@@ -168,37 +176,11 @@ static int char_ref(const char *s, int n, char out[4]) {
     return 0;
 }
 
-/* Decode entities. Spaces stay in the buffer when the chunk has a glyph or
- * a pre ancestor needs its newlines. A whitespace-only chunk between
- * ordinary elements still collapses to one html space, as before. */
-static int add_text(we_doc_t* d, int parent, const char* s, int n) {
-    char buf[WE_TEXT_SOURCE_MAX];
-    if (n > 0) d->nodes[parent].has_text = 1;
-    int i = 0, o = 0, graphic = 0, newline = 0, idx;
-    while (i < n && o < (int)sizeof(buf) - 1) {
-        char c = s[i];
-        if (c == '\r') { i++; continue; }
-        if (c == '&') {
-            char rep[4];
-            int used = char_ref(s + i, n - i, rep), k;
-            if (!used) { rep[0] = '&'; rep[1] = 0; used = 1; }
-            for (k = 0; rep[k] && o < (int)sizeof(buf) - 1; k++) { if (rep[k] != ' ' && rep[k] != WE_SHY) graphic = 1; buf[o++] = rep[k]; }
-            i += used;
-            continue;
-        }
-        if (w_space(c)) {
-            buf[o++] = c == '\n' ? '\n' : c == '\t' ? '\t' : ' ';   /* lot 63: tabs kept for tab-size */
-            if (c == '\n') newline = 1;
-            i++;
-            continue;
-        }
-        graphic = 1;
-        /* Lot 71: the source is in display bytes (CP1252); the font has
-         * glyphs for 0x80..0xFE. */
-        buf[o++] = (c >= 32 && c < 127) || ((unsigned char)c >= 0x80u && (unsigned char)c < 0xFFu) ? c : '?';
-        i++;
-    }
-    if (i < n) diag(d, "text source exceeds limit", parent);
+/* Lot 72: one text node of add_text: the glyph page its bytes 0x80..0xFF
+ * belong to (include/os_charset.h) is kept on the node; every TEXT item
+ * painted from it carries the page in pad bits 8..10. */
+static int add_text_node(we_doc_t* d, int parent, const char* buf, int o, int graphic, int newline, int page) {
+    int idx;
     if (!graphic && !(ancestor_pre(d, parent) && newline)) {
         if (o > 0) d->nodes[parent].pending_html_space = 1;
         return 0;
@@ -206,10 +188,61 @@ static int add_text(we_doc_t* d, int parent, const char* s, int n) {
     idx = new_node(d, parent);
     if (idx < 0) return -1;
     d->nodes[idx].is_text = 1;
+    d->nodes[idx].glyph_page = (uint8_t)(page > 0 ? page : 0);
     if (pool_put(d, buf, o, &d->nodes[idx].text_off) != 0) return -1;
     d->nodes[idx].text_len = (uint16_t)o;
     d->perf.text_nodes++;
     return 0;
+}
+
+/* Decode entities. Spaces stay in the buffer when the chunk has a glyph or
+ * a pre ancestor needs its newlines. A whitespace-only chunk between
+ * ordinary elements still collapses to one html space, as before.
+ * Lot 72: page selectors of the source take no cell: they are removed and
+ * the bytes after them keep their page on the node; where the page of the
+ * high bytes changes inside a chunk, the chunk is split into two text
+ * nodes (one page per node, so a byte is still one cell). */
+static int add_text(we_doc_t* d, int parent, const char* s, int n) {
+    char buf[WE_TEXT_SOURCE_MAX];
+    if (n > 0) d->nodes[parent].has_text = 1;
+    int i = 0, o = 0, graphic = 0, newline = 0, page = 0, node_page = -1;
+    while (i < n && o < (int)sizeof(buf) - 1) {
+        char c = s[i], rep[4];
+        int k, used = 1, sp;
+        if (c == '\r') { i++; continue; }
+        if (c == '&') {
+            used = char_ref(s + i, n - i, rep);
+            if (!used) { rep[0] = '&'; rep[1] = 0; used = 1; }
+        } else {
+            rep[0] = c;
+            rep[1] = 0;
+        }
+        i += used;
+        for (k = 0; rep[k] && o < (int)sizeof(buf) - 1; k++) {
+            unsigned char u = (unsigned char)rep[k];
+            sp = os_page_of_sel(u);
+            if (sp >= 0) { page = sp; continue; }
+            if (w_space((char)u) && c != '&') {
+                buf[o++] = u == '\n' ? '\n' : u == '\t' ? '\t' : ' ';   /* lot 63: tabs kept for tab-size */
+                if (u == '\n') newline = 1;
+                continue;
+            }
+            if (u >= 0x80u && u < 0xFFu) {
+                if (node_page >= 0 && node_page != page) {
+                    /* the page changes: what came before is one node */
+                    if (add_text_node(d, parent, buf, o, graphic, newline, node_page) != 0) return -1;
+                    o = 0; graphic = 0; newline = 0;
+                }
+                node_page = page;
+            }
+            if (rep[k] != ' ' && rep[k] != WE_SHY) graphic = 1;
+            /* Lot 71: the source is in display bytes (CP1252); the font has
+             * glyphs for 0x80..0xFE. */
+            buf[o++] = c == '&' ? rep[k] : ((u >= 32 && u < 127) || (u >= 0x80u && u < 0xFFu) ? (char)u : '?');
+        }
+    }
+    if (i < n) diag(d, "text source exceeds limit", parent);
+    return add_text_node(d, parent, buf, o, graphic, newline, node_page);
 }
 
 static int find_ci(const char* s, int n, int from, const char* word) {
@@ -11219,6 +11252,9 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
           if (d->items[i].kind == OS_FB_WEB_TEXT && o >= 0 && o < (int)d->nnodes) {
               int q = node_q(d, o);
               if (q != OS_UI_Q1) d->items[i].pad = (uint16_t)q;
+              /* Lot 72: the glyph page of the text node in bits 8..10 */
+              if (d->nodes[o].is_text && d->nodes[o].glyph_page)
+                  d->items[i].pad = (uint16_t)(d->items[i].pad | ((d->nodes[o].glyph_page & 7u) << 8));
           }
           /* Lot 72: an atlas image carries its slot in pad */
           if (d->items[i].kind == OS_FB_WEB_IMAGE && o >= 0 && o < (int)d->nnodes && image_work.atlas[o])

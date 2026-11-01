@@ -278,6 +278,30 @@ static int web_error_page(const char *url, const char *why, char *o, int cap) {
     return k;
 }
 
+/* Lot 72: a local page is UTF-8; the web engine reads display bytes (one
+ * byte per cell, include/os_charset.h). Each run between '<' and '>' is
+ * converted on its own, so every text chunk the engine sees starts in
+ * glyph page 0 and carries its own page selector. Returns the new length
+ * (never longer). */
+int osui_gui_web_src_to_display(char *s, int n) {
+    int r = 0, w = 0;
+    while (r < n) {
+        int e = r, m, k;
+        char keep;
+        if (s[r] == '<' || s[r] == '>') { s[w++] = s[r++]; continue; }
+        while (e < n && s[e] != '<' && s[e] != '>') e++;
+        keep = e < n ? s[e] : 0;
+        s[e] = 0;
+        m = os_text_to_display_inplace(s + r, e - r + 1);
+        for (k = 0; k < m; k++) s[w + k] = s[r + k];
+        w += m;
+        if (e < n) s[e] = keep;
+        r = e;
+    }
+    if (w < n) s[w] = 0;
+    return w;
+}
+
 int osui_gui_web_load(const char *file, char *status, int max) {
     int n = -1, rc;
     static char sq[WSEARCH_QUERY + 8];
@@ -321,6 +345,7 @@ int osui_gui_web_load(const char *file, char *status, int max) {
     }
     if (n < 0) { if (status) { scpy(status, max, "osui web error=not_found file="); scpy(status + slen(status), max - slen(status), file); } return -1; }
     g_web_src[n] = 0;
+    n = osui_gui_web_src_to_display(g_web_src, n);
     rc = osui_web_pipeline(g_web_src, n);
     if (status) {
         scpy(status, max, rc == 0 ? "osui web render file=" : "osui web error=render file=");
@@ -1703,7 +1728,11 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         for (i = 0; i < (int)scene->nterm && i < OS_FB_TERM_MAX; i++) os_text_to_display_inplace(scene->term[i], OS_FB_TERM_LEN);
     os_text_to_display_inplace(scene->web_title, OS_FB_TERM_LEN);
     os_text_to_display_inplace(scene->input, OS_FB_INPUT_LEN);
-    for (i = 0; i < (int)scene->nweb && i < OS_FB_WEB_ITEMS; i++) os_text_to_display_inplace(scene->web[i].text, OS_FB_WEB_TEXT_LEN);
+    /* Lot 72: a TEXT item of another glyph page (pad bits 8..10) holds
+     * that page's bytes, which may look like UTF-8: it is left as is */
+    for (i = 0; i < (int)scene->nweb && i < OS_FB_WEB_ITEMS; i++)
+        if (scene->web[i].kind != OS_FB_WEB_TEXT || !((scene->web[i].pad >> 8) & 7u))
+            os_text_to_display_inplace(scene->web[i].text, OS_FB_WEB_TEXT_LEN);
 }
 
 void osui_gui_render(uint16_t *cells) {

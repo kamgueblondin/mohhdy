@@ -159,26 +159,31 @@ static int get_attr(const char* in, int s, int e, const char* attr, char* out, i
  * display bytes (include/os_charset.h): French accents, the oe ligature,
  * typographic quotes and the euro sign are kept for the desktop fonts;
  * Latin Extended-A letters become their base letter, others '?'. */
+/* Lot 72: a character no CP1252 byte has (Greek, Cyrillic, Latin
+ * Extended-A, symbols) is written with its glyph page selector; every
+ * run of text starts and ends in page 0. */
 static void put_text(ob_t* b, const char* in, int s, int e, int* last_sp, int pre) {
-    int i = s, any = 0;
+    int i = s, any = 0, page = 0;
     while (i < e) {
         uint32_t cp = wf_text_next(in, e, &i, g_cs, 1);
-        unsigned char c;
+        char d[2];
+        int m, k;
         if (cp == 0) break;
         if (cp == 0xA0u || (!pre && (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == '\f'))) {
             if (!*last_sp) { ob_c(b, ' '); *last_sp = 1; }
             continue;
         }
-        c = os_cp1252_from_cp(cp);
-        if (!c) continue;
+        m = os_display_put(cp, &page, d, 2);
+        if (m <= 0) continue;
         if (pre && cp == '\r') continue;
         *last_sp = 0;
         any = 1;
-        if (c == '<') ob_s(b, "&lt;");
-        else if (c == '>') ob_s(b, "&gt;");
-        else if (c == '&') ob_s(b, "&amp;");
-        else ob_c(b, (char)c);
+        if (d[m - 1] == '<') ob_s(b, "&lt;");
+        else if (d[m - 1] == '>') ob_s(b, "&gt;");
+        else if (d[m - 1] == '&') ob_s(b, "&amp;");
+        else for (k = 0; k < m; k++) ob_c(b, d[k]);
     }
+    if (page) ob_c(b, (char)os_page_sel[0]);
     if (any) b->nodes++;
 }
 
@@ -641,7 +646,7 @@ int wf_html_text(const char* in, int n, char* out, int cap) { return html_text(i
 int wf_html_text_display(const char* in, int n, char* out, int cap) { return html_text(in, n, out, cap, 1); }
 static int html_text(const char* in, int n, char* out, int cap, int display) {
     ob_t b;
-    int i = 0, last_sp = 1, nl = 1, cs = g_cs_set;
+    int i = 0, last_sp = 1, nl = 1, cs = g_cs_set, dpage = 0;
     if (!display && cs == WF_CS_NONE) {
         int sn = wf_charset_sniff(in, n);
         cs = sn >= 0 ? sn : WF_CS_UTF8;
@@ -655,6 +660,7 @@ static int html_text(const char* in, int n, char* out, int cap, int display) {
             j = tag_name(in, n, i + 1 + close, name, (int)sizeof(name));
             e = j;
             while (e < n && in[e] != '>') e++;
+            dpage = 0;
             if (!close && (in_list(name, DROP_BLOCK) || seq(name, "title"))) { i = skip_block(in, n, e < n ? e + 1 : n, name); continue; }
             if (seq(name, "p") || seq(name, "br") || seq(name, "li") || seq(name, "div") || seq(name, "tr") ||
                 (name[0] == 'h' && name[1] >= '1' && name[1] <= '6' && !name[2])) {
@@ -665,8 +671,12 @@ static int html_text(const char* in, int n, char* out, int cap, int display) {
             continue;
         }
         if (display && (unsigned char)in[i] >= 0x80U) {
+            /* Lot 72: a glyph page selector prints nothing and sets the
+             * page of the next bytes (reset at every tag) */
             char u[4];
-            int k, m = os_display_to_utf8((unsigned char)in[i], u, (int)sizeof(u));
+            int k, m, sp = os_page_of_sel((unsigned char)in[i]);
+            if (sp >= 0) { dpage = sp; i++; continue; }
+            m = os_display_to_utf8_page((unsigned)dpage, (unsigned char)in[i], u, (int)sizeof(u));
             for (k = 0; k < m; k++) ob_c(&b, u[k]);
             i++; nl = 0; last_sp = 0;
             continue;

@@ -336,14 +336,16 @@ int wsearch_format(const wsearch_page_t *pg, char *o, int cap) {
 /* text escaped for HTML */
 /* Lot 71: the results are UTF-8 (console); the page for the web engine
  * gets display bytes (include/os_charset.h) so accents are drawn. */
+/* Lot 72: Greek, Cyrillic... with their glyph page selector; the text
+ * ends in page 0 */
 static int cat_esc(char *o, int cap, int n, const char *s) {
-    int sl = w_len(s);
+    int sl = w_len(s), page = 0;
     for (; s && *s && n < cap - 7; s++) {
         if ((unsigned char)*s >= 0x80u && os_utf8_seq_ok(s, sl, 0)) {
-            int k = 0;
+            int k = 0, m;
             uint32_t cp = os_utf8_next(s, sl, &k);
-            unsigned char b = os_cp1252_from_cp(cp);
-            if (b) { o[n++] = (char)b; o[n] = 0; }
+            m = os_display_put(cp, &page, o + n, 2);
+            if (m > 0) { n += m; o[n] = 0; }
             s += k - 1;
             sl -= k;
             continue;
@@ -353,8 +355,12 @@ static int cat_esc(char *o, int cap, int n, const char *s) {
         else if (*s == '>') n = w_cat(o, cap, n, "&gt;");
         else if (*s == '&') n = w_cat(o, cap, n, "&amp;");
         else if (*s == '"') n = w_cat(o, cap, n, "&quot;");
-        else { o[n++] = *s; o[n] = 0; }
+        else {
+            if ((unsigned char)*s >= 0x80u && page) { o[n++] = (char)os_page_sel[0]; page = 0; }
+            o[n++] = *s; o[n] = 0;
+        }
     }
+    if (page && n < cap - 1) { o[n++] = (char)os_page_sel[0]; o[n] = 0; }
     return n;
 }
 

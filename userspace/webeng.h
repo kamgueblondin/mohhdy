@@ -180,6 +180,7 @@ typedef struct { int8_t x, y, spread; uint8_t blur, inset, has_color; uint32_t c
 
 typedef struct {
     uint8_t is_text, attr_flags, has_text;
+    uint8_t glyph_page;         /* Lot 72: page of a text node's bytes 0x80..0xFF */
     we_length_t length[WE_LENGTH_PROPS];
     int16_t aspect_num, aspect_den;
     uint8_t lead_space, trail_space, html_space, pending_html_space;

@@ -144,34 +144,40 @@ uint32_t wf_text_next(const char *s, int n, int *i, int cs, int ent) {
     return os_utf8_next(s, n, i);
 }
 
+/* Lot 72: characters outside CP1252 get their glyph page selector; the
+ * text ends in page 0 (one byte is kept for the closing selector). */
 int wf_text_display(const char *s, int n, int cs, int collapse, char *out, int cap) {
-    int i = 0, o = 0, sp = 1;
+    int i = 0, o = 0, sp = 1, page = 0;
     if (cap <= 0) return 0;
-    while (i < n && o < cap - 1) {
+    while (i < n && o < cap - 2) {
         uint32_t cp = wf_text_next(s, n, &i, cs, 1);
-        unsigned char b;
+        int m;
         if (cp == 0) break;
         if (collapse && (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == '\f' || cp == 0xA0u)) {
             if (!sp) { out[o++] = ' '; sp = 1; }
             continue;
         }
         if (cp == '\r') continue;
-        b = os_cp1252_from_cp(cp);
-        if (!b) continue;
-        out[o++] = (char)b;
+        m = os_display_put(cp, &page, out + o, cap - 2 - o);
+        if (m < 0) break;
+        if (m == 0) continue;
+        o += m;
         sp = 0;
     }
     if (collapse) while (o > 0 && out[o - 1] == ' ') o--;
+    if (page) out[o++] = (char)os_page_sel[0];
     out[o] = 0;
     return o;
 }
 
 int wf_display_to_utf8(const char *s, int n, char *out, int cap) {
-    int i, o = 0;
+    int i, o = 0, page = 0;
     if (cap <= 0) return 0;
     for (i = 0; i < n && s[i]; i++) {
         char t[4];
-        int k = os_display_to_utf8((unsigned char)s[i], t, 4), j;
+        int k, j, q = os_page_of_sel((unsigned char)s[i]);
+        if (q >= 0) { page = q; continue; }   /* Lot 72: glyph page selector */
+        k = os_display_to_utf8_page((unsigned)page, (unsigned char)s[i], t, 4);
         if (o + k > cap - 1) break;
         for (j = 0; j < k; j++) out[o++] = t[j];
     }

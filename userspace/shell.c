@@ -41,6 +41,7 @@ int shell_collab_line(const char* line);
 #include "collab.h"
 #include "../kernel/sha256.h"
 #include "webeng.h"
+#include "os_charset.h"
 #include "webrt.h"
 #include "shell_util.h"
 int shell_collab_sign(const uint8_t* m, int len, uint8_t sig[40], uint8_t pk[128]);
@@ -3054,7 +3055,15 @@ static void cmd_web(shell_context_t* ctx, const char* command, char args[][128],
     }
     if (strcmp(command, "web-render") == 0) {
         print_string(status); print_string("\n");
-        if (d->title[0]) { print_string("web title "); print_string(d->title); print_string("\n"); }
+        if (d->title[0]) {
+            static char tu[sizeof(d->title) * 3 + 1];
+            print_string("web title "); print_string(d->title); print_string("\n");
+            /* Lot 72: a title with glyph page selectors, also as UTF-8 */
+            if (os_display_cells(d->title, (int)sizeof(d->title)) != (int)strlen(d->title)) {
+                os_display_str_to_utf8(d->title, (int)sizeof(d->title), tu, (int)sizeof(tu));
+                print_string("web title utf8 "); print_string(tu); print_string("\n");
+            }
+        }
         for (i = 0; i < d->nitems; i++) {
             const os_fb_web_item_t* it = &d->items[i];
             print_string(it->kind == OS_FB_WEB_RECT ? "web item rect " : it->kind == OS_FB_WEB_BORDER ? "web item border " : "web item text ");
@@ -3062,6 +3071,19 @@ static void cmd_web(shell_context_t* ctx, const char* command, char args[][128],
             print_int(it->w); print_string("x"); print_int(it->h);
             print_string(" #"); pm_print_hex(it->color & 0xFFFFFFU);
             if (it->kind == OS_FB_WEB_TEXT) { print_string(it->bold ? " bold \"" : " \""); print_string(it->text); print_string("\""); }
+            if (it->kind == OS_FB_WEB_TEXT && ((it->pad >> 8) & 7u)) {
+                /* Lot 72: glyph page of the item, and its text as UTF-8 */
+                static char u8[OS_FB_WEB_TEXT_LEN * 3 + 1];
+                int k, o = 0, pg = (int)((it->pad >> 8) & 7u);
+                for (k = 0; k < OS_FB_WEB_TEXT_LEN && it->text[k]; k++) {
+                    int m = os_display_to_utf8_page((unsigned)pg, (unsigned char)it->text[k], u8 + o, (int)sizeof(u8) - 1 - o);
+                    if (m <= 0) break;
+                    o += m;
+                }
+                u8[o] = 0;
+                print_string(" page "); print_int(pg);
+                print_string(" utf8 \""); print_string(u8); print_string("\"");
+            }
             print_string("\n");
         }
         print_string("web-render ok\n");

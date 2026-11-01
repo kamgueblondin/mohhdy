@@ -250,6 +250,23 @@ static void test_results_note(void) {
     TEST_ASSERT_NULL(strstr(o, "exige"));
 }
 
+
+/* Lot 72: Greek and Cyrillic results reach the page with their glyph
+ * page selectors; each escaped text ends in page 0 */
+static void test_results_glyph_pages(void) {
+    static char o[4096];
+    memset(&g_pg, 0, sizeof(g_pg));
+    g_pg.n = 1;
+    strcpy(g_pg.r[0].url, "https://el.wikipedia.org/");
+    strcpy(g_pg.r[0].title, "\xce\x95\xce\xbb\xce\xbb\xce\xac\xce\xb4\xce\xb1");
+    strcpy(g_pg.r[0].snippet, "\xd0\x9c\xd0\xbe\xd1\x81\xd0\xba\xd0\xb2\xd0\xb0 \xce\xb1\xe9!");
+    TEST_ASSERT_TRUE(wsearch_results_html(&g_pg, "\xce\xb1", "https://e/x", o, (int)sizeof(o)) > 0);
+    TEST_ASSERT_NOT_NULL(strstr(o, "<title>Recherche : \x8f\xe1\x81</title>"));
+    TEST_ASSERT_NOT_NULL(strstr(o, "\">\x8f\xc5\xeb\xeb\xdc\xe4\xe1\x81</a>"));
+    /* Cyrillic, Greek, then a raw CP1252 byte (not UTF-8): page 0 first */
+    TEST_ASSERT_NOT_NULL(strstr(o, "<div class=s>\x90\xbc\xde\xe1\xda\xd2\xd0 \x8f\xe1\x81\xe9!</div>"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cfg);
@@ -263,6 +280,7 @@ int main(void) {
     RUN_TEST(test_google_update_browser);
     RUN_TEST(test_google_form_target);
     RUN_TEST(test_results_note);
+    RUN_TEST(test_results_glyph_pages);
     RUN_TEST(test_json_bounds);
     RUN_TEST(test_html_text);
     RUN_TEST(test_wiki);

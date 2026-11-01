@@ -40,6 +40,8 @@ void osui_gui_ide_output(const char *text);
 /* Lot 61: explicit viewport height for fixed boxes and the scroll bound. */
 #define OSUI_WEB_VIEWPORT_H 480
 int osui_gui_web_load(const char *file, char *status, int max);
+/* Lot 72: local UTF-8 page source to display bytes, page reset at every tag */
+int osui_gui_web_src_to_display(char *s, int n);
 int osui_gui_persist_read(const char *path, char *buf, int cap);
 int osui_gui_persist_write(const char *path, const char *buf, int n);
 /* Lot 67: "web https://..." (or http://) loads the page over the network
