@@ -813,6 +813,10 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wsearch_api: $(UNIT_DIR)/userspace/test_
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/wsearch_api.c ../userspace/wsearch.c ../userspace/wf_entity.c $(FRAMEWORK_SOURCES)
 
 # Lot 72: browser images (wf_html <img>, wf_webimg atlas, engine atlas item)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_aead: $(UNIT_DIR)/userspace/test_wf_aead.c ../userspace/wf_aead.c ../userspace/wf_aead.h $(UNIT_DIR)/userspace/wf_aead_vectors.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/wf_aead.c $(FRAMEWORK_SOURCES)
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_webimg: $(UNIT_DIR)/userspace/test_wf_webimg.c $(WF_NET_SRCS) ../userspace/wf_webimg.c ../userspace/webeng.c ../userspace/imgdec.c ../userspace/imgdec_gif.inc ../userspace/imgdec_ico.inc ../userspace/imgdec_jpeg.inc $(wildcard ../userspace/wf_*.h) ../userspace/webeng.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) ../userspace/wf_webimg.c ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
