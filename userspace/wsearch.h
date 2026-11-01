@@ -53,6 +53,9 @@ int wsearch_format(const wsearch_page_t *page, char *out, int cap);
 /* small HTML page listing the results with links, for /browser */
 int wsearch_results_html(const wsearch_page_t *page, const char *query, const char *engine_url,
                          char *out, int cap);
+/* Lot 72: same with a note line under the header (0: none) */
+int wsearch_results_html_note(const wsearch_page_t *page, const char *query, const char *engine_url, const char *note,
+                              char *out, int cap);
 /* text that is not a URL or a local path: the address bar searches it */
 int wsearch_is_query(const char *text);
 #endif

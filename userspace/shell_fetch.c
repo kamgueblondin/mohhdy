@@ -10,6 +10,8 @@
 #include "wf_section.h"
 #include "shell_search.h"
 #include "wf_webimg.h"
+#include "wsearch.h"
+#include "wsearch_api.h"
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
@@ -413,6 +415,15 @@ int shell_page_submit(int n, char* src, int src_max, char* final_url, int url_ma
     }
     for (i = 0; sub.url[i] && i < (int)sizeof(url) - 1; i++) url[i] = sub.url[i];
     url[i] = 0;
+    {
+        /* Lot 72: Google search form: the page without JavaScript, then
+         * the fallback engines (shell_search_google_form) */
+        static char gq[WSEARCH_QUERY + 1];
+        if (sub.method != WF_METHOD_POST && wsearch_google_form(url, gq, (int)sizeof(gq))) {
+            g_page_ok = 0;
+            return shell_search_google_form(gq, src, src_max, final_url, url_max, status, st_max);
+        }
+    }
     if (sub.method == WF_METHOD_POST) {
         rq.method = "POST"; rq.body = sub.body; rq.body_len = sub.body_len; rq.ctype = sub.content_type; rq.extra = 0;
         return page_fetch(url, &rq, src, src_max, final_url, url_max, status, st_max);

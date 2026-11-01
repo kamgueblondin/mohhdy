@@ -25,6 +25,8 @@ static char g_used[WSEARCH_URL + 64];
 static uint8_t g_sbody[192 * 1024];
 static wf_fetch_result_t g_sres;
 static char g_fmt[8192];
+/* Lot 72: what the Google basic page answered on the last search */
+static int g_google_state;   /* 0 not tried, 1 results, 2 js required, 3 bot check, 4 no result */
 
 static int s_pre(const char* s, const char* p) { while (*p && *s == *p) { s++; p++; } return *p == 0; }
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
@@ -107,6 +109,8 @@ static int try_kind(int kind, const char* engine, const char* q, char* err, int 
         return 0;
     }
     (void)wsearch_api_parse(kind, (const char*)g_sbody, g_sres.body_len, &g_page);
+    if (kind == WSEARCH_KIND_GOOGLE)
+        g_google_state = g_page.n ? 1 : g_page.blocked == 2 ? 2 : g_page.blocked ? 3 : 4;
     return 0;
 }
 
@@ -122,6 +126,7 @@ static int run_search(const char* q, char* st, int st_max) {
     cfg_load();
     g_page.n = 0;
     g_tried[0] = 0;
+    g_google_state = 0;
     err[0] = 0;
     s_cpy(g_query, (int)sizeof(g_query), q);
     kind = wsearch_kind(g_engine);
@@ -299,6 +304,44 @@ int shell_search_line(const char* line) {
     print_string("search end\n");
     return 0;
 }
+
+/* Lot 72: a search form of a Google page submitted in the browser. The
+ * query goes to the Google page without JavaScript (gbv=1); when Google
+ * refuses it (since 2025 it answers "update your browser" to clients
+ * without JavaScript, measured again 2026-11-01) the usual fallback
+ * engines answer and the page says so. */
+int shell_search_google_form(const char* q, char* src, int src_max, char* final_url, int url_max, char* status, int st_max) {
+    static char st[700], note[200], saved[WSEARCH_ENGINE_URL];
+    int n, rc;
+    cfg_load();
+    s_cpy(saved, (int)sizeof(saved), g_engine);
+    s_cpy(g_engine, (int)sizeof(g_engine), "google");
+    rc = run_search(q, st, (int)sizeof(st));
+    s_cpy(g_engine, (int)sizeof(g_engine), saved);
+    note[0] = 0;
+    if (g_google_state == 2)
+        s_cpy(note, (int)sizeof(note), "Google (sans JavaScript, gbv=1) a repondu \"mettez a jour votre navigateur\" : "
+                                       "il exige JavaScript, que Mohhdy n'execute pas. Resultats d'un autre moteur.");
+    else if (g_google_state == 3)
+        s_cpy(note, (int)sizeof(note), "Google a renvoye une verification anti-robot. Resultats d'un autre moteur.");
+    else if (g_google_state == 4)
+        s_cpy(note, (int)sizeof(note), "Google n'a renvoye aucun resultat lisible. Resultats d'un autre moteur.");
+    else if (g_google_state == 1)
+        s_cpy(note, (int)sizeof(note), "Resultats de la page Google sans JavaScript (gbv=1).");
+    if (status && st_max > 0) {
+        status[0] = 0;
+        s_cat(status, st_max, "osui web google-form state ");
+        s_cat(status, st_max, g_google_state == 1 ? "results" : g_google_state == 2 ? "js-required" : g_google_state == 3 ? "bot-check" : "none");
+        s_cat(status, st_max, " ");
+        s_cat(status, st_max, st);
+    }
+    if (rc != 0) return -1;
+    n = wsearch_results_html_note(&g_page, q, g_used, note, src, src_max);
+    if (n < 0) return -1;
+    if (final_url && url_max > 0) { final_url[0] = 0; s_cat(final_url, url_max, "search:"); s_cat(final_url, url_max, q); }
+    return n;
+}
+int shell_search_google_state(void) { return g_google_state; }
 
 int shell_search_page(const char* q, char* src, int src_max, char* final_url, int url_max, char* status, int st_max) {
     static char st[700];

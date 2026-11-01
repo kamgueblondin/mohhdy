@@ -210,6 +210,46 @@ static void test_wiki(void) {
     TEST_ASSERT_EQUAL_STRING("noyau i386 & Ring 3", g_pg.r[1].snippet);
 }
 
+
+/* Lot 72: the page Google gives gbv=1 clients today (measured 2026-11-01) */
+static void test_google_update_browser(void) {
+    int n = load("google_update_browser.html");
+    TEST_ASSERT_EQUAL(0, wsearch_api_parse(WSEARCH_KIND_GOOGLE, g_buf, n, &g_pg));
+    TEST_ASSERT_EQUAL(2, g_pg.blocked);
+    /* the real result page is still parsed when Google sends one */
+    n = load("google_basic.html");
+    TEST_ASSERT_EQUAL(2, wsearch_api_parse(WSEARCH_KIND_GOOGLE, g_buf, n, &g_pg));
+    TEST_ASSERT_EQUAL(0, g_pg.blocked);
+}
+
+static void test_google_form_target(void) {
+    char q[64];
+    TEST_ASSERT_EQUAL(1, wsearch_google_form("https://www.google.com/search?ie=ISO-8859-1&hl=fr&source=hp&q=mohhdy+os&btnG=Recherche", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL_STRING("mohhdy os", q);
+    TEST_ASSERT_EQUAL(1, wsearch_google_form("https://google.fr/search?q=caf%C3%A9", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL_STRING("caf\xc3\xa9", q);
+    TEST_ASSERT_EQUAL(1, wsearch_google_form("http://www.google.co.uk/webhp?hl=en&q=x#frag", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL_STRING("x", q);
+    TEST_ASSERT_EQUAL(0, wsearch_google_form("https://www.google.com/search?hl=fr", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL(0, wsearch_google_form("https://www.google.com/search?q=", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL(0, wsearch_google_form("https://evilgoogle.com/search?q=x", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL(0, wsearch_google_form("https://www.google.com.evil.org/search?q=x", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL(0, wsearch_google_form("https://www.google.com/maps?q=x", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL(0, wsearch_google_form("https://duckduckgo.com/search?q=x", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL(0, wsearch_google_form("ftp://www.google.com/search?q=x", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL(1, wsearch_google_form("https://www.google.com:443/search?q=a&qq=b", q, (int)sizeof(q)));
+    TEST_ASSERT_EQUAL_STRING("a", q);
+}
+
+static void test_results_note(void) {
+    static char o[4096];
+    memset(&g_pg, 0, sizeof(g_pg));
+    TEST_ASSERT_TRUE(wsearch_results_html_note(&g_pg, "q", "https://e/x", "Google <exige> JavaScript", o, (int)sizeof(o)) > 0);
+    TEST_ASSERT_NOT_NULL(strstr(o, "<p class=m>Google &lt;exige&gt; JavaScript</p>"));
+    TEST_ASSERT_TRUE(wsearch_results_html(&g_pg, "q", "https://e/x", o, (int)sizeof(o)) > 0);
+    TEST_ASSERT_NULL(strstr(o, "exige"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cfg);
@@ -220,6 +260,9 @@ int main(void) {
     RUN_TEST(test_brave_json);
     RUN_TEST(test_google_cse_json);
     RUN_TEST(test_google_html);
+    RUN_TEST(test_google_update_browser);
+    RUN_TEST(test_google_form_target);
+    RUN_TEST(test_results_note);
     RUN_TEST(test_json_bounds);
     RUN_TEST(test_html_text);
     RUN_TEST(test_wiki);

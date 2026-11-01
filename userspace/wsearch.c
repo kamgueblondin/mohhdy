@@ -359,6 +359,11 @@ static int cat_esc(char *o, int cap, int n, const char *s) {
 }
 
 int wsearch_results_html(const wsearch_page_t *pg, const char *q, const char *engine_url, char *o, int cap) {
+    return wsearch_results_html_note(pg, q, engine_url, 0, o, cap);
+}
+
+int wsearch_results_html_note(const wsearch_page_t *pg, const char *q, const char *engine_url, const char *note,
+                              char *o, int cap) {
     int i, n = 0;
     if (!o || cap < 256) return -1;
     o[0] = 0;
@@ -372,7 +377,13 @@ int wsearch_results_html(const wsearch_page_t *pg, const char *q, const char *en
     n = cat_int(o, cap, n, pg ? pg->n : 0);
     n = w_cat(o, cap, n, " resultats via ");
     n = cat_esc(o, cap, n, engine_url);
-    n = w_cat(o, cap, n, "</p><ol>");
+    n = w_cat(o, cap, n, "</p>");
+    if (note && note[0]) {   /* Lot 72: why another engine answered */
+        n = w_cat(o, cap, n, "<p class=m>");
+        n = cat_esc(o, cap, n, note);
+        n = w_cat(o, cap, n, "</p>");
+    }
+    n = w_cat(o, cap, n, "<ol>");
     for (i = 0; pg && i < pg->n && n < cap - 900; i++) {
         n = w_cat(o, cap, n, "<li><a href=\"");
         n = cat_esc(o, cap, n, pg->r[i].url);

@@ -502,6 +502,12 @@ int wsearch_parse_google_html(const char *h, int n, wsearch_page_t *pg) {
      * "update your browser" page: no result to parse, try another engine */
     if (a_find_ci(h, n, 0, "/httpservice/retry/enablejs") >= 0 || a_find_ci(h, n, 0, "browser isn't supported") >= 0)
         pg->blocked = 2;
+    /* Lot 72 (measured 2026-11-01 with gbv=1 and text browser agents):
+     * "Mettez a jour votre navigateur" / "no longer supported", with a
+     * link to the help article on browsers without JavaScript */
+    if (a_find_ci(h, n, 0, "websearch/answer/16515119") >= 0 || a_find_ci(h, n, 0, "n'est plus pris en charge") >= 0 ||
+        a_find_ci(h, n, 0, "is no longer supported") >= 0)
+        pg->blocked = 2;
     while (pg->n < WSEARCH_MAX) {
         int a = a_find_ci(h, n, i, "<a "), e, ce, q, m;
         if (a < 0) break;
@@ -606,4 +612,54 @@ int wsearch_api_parse(int kind, const char *body, int len, wsearch_page_t *pg) {
         if (wsearch_parse_google_html(body, len, pg) > 0 || pg->blocked) return pg->n;
     }
     return wsearch_parse(body, len, pg);
+}
+
+/* Lot 72: a form of a Google page submitted from the browser. The
+ * target is https://www.google.TLD/search (or /webhp) with q=...; the
+ * query is decoded (+ and %XX, UTF-8 kept). 1 and the query, else 0. */
+int wsearch_google_form(const char *url, char *q, int cap) {
+    int i = 0, h0, h1, k;
+    if (!url || !q || cap < 2) return 0;
+    q[0] = 0;
+    if (a_pre_ci(url, a_len(url), "https://")) i = 8;
+    else if (a_pre_ci(url, a_len(url), "http://")) i = 7;
+    else return 0;
+    h0 = i;
+    while (url[i] && url[i] != '/' && url[i] != '?' && url[i] != ':') i++;
+    h1 = i;
+    {
+        /* host [www.]google.TLD with TLD "com", two letters, "co.XX" or
+         * "com.XX" (google.fr, google.co.uk, google.com.au); nothing else */
+        int s = h0, ok = 0, r, len;
+        if (h1 - s > 4 && a_pre_ci(url + s, h1 - s, "www.")) s += 4;
+        if (h1 - s > 7 && a_pre_ci(url + s, h1 - s, "google.")) {
+            r = s + 7;
+            len = h1 - r;
+            for (k = r; k < h1; k++)
+                if (!((url[k] >= 'a' && url[k] <= 'z') || (url[k] >= 'A' && url[k] <= 'Z') || url[k] == '.')) len = -1;
+            if (len == 3 && a_pre_ci(url + r, 3, "com")) ok = 1;
+            else if (len == 2 && url[r + 1] != '.' && url[r] != '.') ok = 1;
+            else if (len == 5 && a_pre_ci(url + r, 3, "co.") && url[r + 3] != '.' && url[r + 4] != '.') ok = 1;
+            else if (len == 6 && a_pre_ci(url + r, 4, "com.") && url[r + 4] != '.' && url[r + 5] != '.') ok = 1;
+        }
+        if (!ok) return 0;
+    }
+    while (url[i] == ':' || (url[i] >= '0' && url[i] <= '9')) i++;
+    if (!(a_pre_ci(url + i, a_len(url + i), "/search?") || a_pre_ci(url + i, a_len(url + i), "/webhp?"))) return 0;
+    while (url[i] && url[i] != '?') i++;
+    while (url[i]) {
+        int s, e;
+        i++;
+        s = i;
+        while (url[i] && url[i] != '&' && url[i] != '#') i++;
+        e = i;
+        if (e - s >= 2 && url[s] == 'q' && url[s + 1] == '=') {
+            int n = wsearch_urldecode(url + s + 2, e - s - 2, q, cap);
+            if (n > 0) return 1;
+            q[0] = 0;
+            return 0;
+        }
+        if (url[i] == '#') break;
+    }
+    return 0;
 }
