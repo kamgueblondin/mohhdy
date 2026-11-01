@@ -292,7 +292,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/wsearch.c"
     fi
     if [ "$(basename "$test_file")" = "test_arm_portable.c" ]; then
-        extra_src="$extra_src $BASE_DIR/arch/arm/arm_portable.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/edid.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_rtx.c"
+        extra_src="$extra_src $BASE_DIR/arch/arm/arm_portable.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/edid.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/wf_aead.c"
         cflags="$cflags -I$BASE_DIR/kernel -I$BASE_DIR/userspace -I$BASE_DIR/include"
     fi
     if [ "$(basename "$test_file")" = "test_edid.c" ]; then

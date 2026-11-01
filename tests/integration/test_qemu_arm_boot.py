@@ -25,6 +25,8 @@ NEEDLES = (
     "arm p2p flow self-test ok rate 62500 backoff 54687 (userspace/p2p_flow.c)",
     "arm p2p rtx self-test ok resent 1 dedup ok (userspace/p2p_rtx.c)",
     "arm charset self-test ok utf8 to cp1252 (include/os_charset.h)",
+    "arm aead self-test ok aes-256-gcm chacha20-poly1305 (userspace/wf_aead.c)",
+    "arm glyph pages self-test ok greek cyrillic symbols (include/os_charset_pages.h)",
     "arm gic + generic timer armed at 100 Hz",
     "arm tasks spawned 5 (USR mode)",
     "arm user reporter pid 0x00000001 running in USR mode via svc",

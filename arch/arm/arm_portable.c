@@ -5,6 +5,7 @@
 #include "p2p_flow.h"
 #include "p2p_rtx.h"
 #include "os_charset.h"
+#include "wf_aead.h"
 
 static int same(const uint8_t* a, const uint8_t* b, int n) {
     int i;
@@ -101,6 +102,49 @@ int arm_port_charset(void) {
     return n == 12 && (unsigned char)t[3] == 0xE9U && (unsigned char)t[5] == 0x80U && (unsigned char)t[7] == 0x9CU && t[8] == 'u';
 }
 
+/* Lot 72: the TLS AEAD ciphers of userspace/wf_aead.c (AES-256-GCM and
+ * ChaCha20-Poly1305): key 00..1f, nonce a0..ab, aad "hdr", text
+ * "mohhdy lot 72"; the expected bytes match OpenSSL. A flipped tag bit
+ * is refused and leaves the output untouched. */
+int arm_port_aead(void) {
+    static const uint8_t want[2][29] = {
+        { 0x8b,0x77,0x14,0x45,0x21,0xb2,0x22,0xd3,0x0d,0x11,0xa7,0xe4,0x35,
+          0xbd,0x98,0x94,0x9f,0x5e,0x1f,0x76,0x61,0x4f,0xb7,0x24,0x7c,0x98,0x00,0xc0,0xed },
+        { 0x61,0xc4,0x10,0x37,0x29,0x9f,0xe2,0xc1,0xcf,0x7b,0xd3,0x23,0xce,
+          0x8f,0xf4,0x06,0x31,0xf6,0x94,0x65,0x89,0x9f,0xb5,0x44,0x78,0x31,0x6e,0x71,0x15 } };
+    static const uint8_t pt[13] = { 'm','o','h','h','d','y',' ','l','o','t',' ','7','2' };
+    static wf_aead_t c;
+    uint8_t key[32], nonce[12], ct[13], tag[16], back[13];
+    int i, a;
+    for (i = 0; i < 32; i++) key[i] = (uint8_t)i;
+    for (i = 0; i < 12; i++) nonce[i] = (uint8_t)(0xA0 + i);
+    for (a = 0; a < 2; a++) {
+        if (wf_aead_init(&c, a == 0 ? WF_AEAD_AES256_GCM : WF_AEAD_CHACHA20_POLY1305, key) != 0) return 0;
+        if (wf_aead_seal(&c, nonce, (const uint8_t*)"hdr", 3, pt, 13, ct, tag) != 0) return 0;
+        if (!same(ct, want[a], 13) || !same(tag, want[a] + 13, 16)) return 0;
+        if (wf_aead_open(&c, nonce, (const uint8_t*)"hdr", 3, ct, 13, tag, back) != 0 || !same(back, pt, 13)) return 0;
+        tag[15] ^= 1U;
+        back[0] = 0;
+        if (wf_aead_open(&c, nonce, (const uint8_t*)"hdr", 3, ct, 13, tag, back) != -1 || back[0] != 0) return 0;
+        wf_aead_wipe(&c);
+    }
+    return 1;
+}
+
+/* Lot 72: glyph pages of include/os_charset.h: UTF-8 Greek, Cyrillic and
+ * an arrow become selector + byte runs (one cell per letter), and go back
+ * to the same UTF-8 */
+int arm_port_pages(void) {
+    static const char in[] = { (char)0xCE,(char)0xA9,' ',(char)0xD0,(char)0x96,(char)0xE2,(char)0x86,(char)0x92,'!',0 };
+    static const uint8_t want[] = { 0x8F,0xD9,' ',0x90,0xB6,0x9D,0x83,'!' };
+    char out[24], back[24];
+    int n = os_text_to_display(in, (int)sizeof(in) - 1, out, (int)sizeof(out));
+    if (n != 8 || !same((const uint8_t*)out, want, 8)) return 0;
+    if (os_display_cells(out, n) != 5) return 0;
+    os_display_str_to_utf8(out, n, back, (int)sizeof(back));
+    return same((const uint8_t*)back, (const uint8_t*)in, (int)sizeof(in));
+}
+
 uint32_t arm_port_selftest(void) {
     uint32_t m = 0;
     if (arm_port_aes_gcm()) m |= ARM_PORT_AES_GCM;
@@ -108,5 +152,7 @@ uint32_t arm_port_selftest(void) {
     if (arm_port_flow()) m |= ARM_PORT_FLOW;
     if (arm_port_rtx()) m |= ARM_PORT_RTX;
     if (arm_port_charset()) m |= ARM_PORT_CHARSET;
+    if (arm_port_aead()) m |= ARM_PORT_AEAD;
+    if (arm_port_pages()) m |= ARM_PORT_PAGES;
     return m;
 }

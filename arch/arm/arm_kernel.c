@@ -322,6 +322,8 @@ void arm_main(void) {
         kputs((m & ARM_PORT_FLOW) ? "arm p2p flow self-test ok rate 62500 backoff 54687 (userspace/p2p_flow.c)\n" : "arm p2p flow self-test FAILED\n");
         kputs((m & ARM_PORT_RTX) ? "arm p2p rtx self-test ok resent 1 dedup ok (userspace/p2p_rtx.c)\n" : "arm p2p rtx self-test FAILED\n");
         kputs((m & ARM_PORT_CHARSET) ? "arm charset self-test ok utf8 to cp1252 (include/os_charset.h)\n" : "arm charset self-test FAILED\n");
+        kputs((m & ARM_PORT_AEAD) ? "arm aead self-test ok aes-256-gcm chacha20-poly1305 (userspace/wf_aead.c)\n" : "arm aead self-test FAILED\n");
+        kputs((m & ARM_PORT_PAGES) ? "arm glyph pages self-test ok greek cyrillic symbols (include/os_charset_pages.h)\n" : "arm glyph pages self-test FAILED\n");
     }
     gic_init();
     timer_arm();
