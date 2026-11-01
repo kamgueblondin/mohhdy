@@ -4,6 +4,7 @@
 /* Lot 61: the kernel 8x8 font, shared read-only for partial glyph clipping. */
 #include "../kernel/gfx_font8.h"
 #include "../include/os_charset.h"
+#include "wf_entity_table.inc"
 #include "../include/os_ui_scale.h"
 
 /* ---------- small helpers (no libc) ---------- */
@@ -126,6 +127,33 @@ static int css_hex(char c) {
  * dashes to their ASCII forms, no-break and other spaces to a space, the
  * soft hyphen to WE_SHY); other code points become '?'. Unknown names
  * keep the '&'. Returns the bytes used, 0 for a plain '&'. */
+/* Lot 71/72: the display bytes of code point `code` (include/os_charset.h):
+ * CP1252 / Latin-1 as one byte; Greek, Cyrillic, Latin Extended-A and
+ * symbols as the page selector, the byte, then back to page 0; '?'
+ * when there is no glyph. */
+static void char_ref_cp(int code, char out[4]) {
+    unsigned char b = 0;
+    int pg = code > 0 ? os_cp_page((uint32_t)code, &b) : -1;
+    out[1] = 0;
+    if (pg > 0 && b < 0xFFu) {
+        out[0] = (char)os_page_sel[pg]; out[1] = (char)b; out[2] = (char)os_page_sel[0]; out[3] = 0;
+        return;
+    }
+    b = code > 0 ? os_cp1252_from_cp((uint32_t)code) : 0;
+    out[0] = b >= 0x20u && b != 0x7Fu && b < 0xFFu ? (char)b : '?';
+}
+
+/* Lot 72: wf_entity_table order (unsigned bytes, shorter first) */
+static int ent_cmp(const char *a, const char *b, int bl) {
+    int i;
+    for (i = 0; i < bl; i++) {
+        unsigned char x = (unsigned char)a[i], y = (unsigned char)b[i];
+        if (!x) return -1;
+        if (x != y) return x < y ? -1 : 1;
+    }
+    return a[bl] ? 1 : 0;
+}
+
 static int char_ref(const char *s, int n, char out[4]) {
     static const char *const names[] = { "amp", "lt", "gt", "quot", "apos", "nbsp", "shy", "mdash", "ndash", "hellip",
         "lsquo", "rsquo", "ldquo", "rdquo", "laquo", "raquo", "copy", "reg", "trade", "times", "middot", "bull",
@@ -150,20 +178,7 @@ static int char_ref(const char *s, int n, char out[4]) {
         else if (code == 8220 || code == 8221) out[0] = '"';
         else if (code == 8230) { out[0] = out[1] = out[2] = '.'; out[3] = 0; }
         else if (code == 173) out[0] = WE_SHY;
-        else {
-            /* Lot 71: Latin-1 and CP1252 code points have a glyph in the
-             * display charset (include/os_charset.h). */
-            unsigned char b = 0;
-            int pg = code > 0 ? os_cp_page((uint32_t)code, &b) : -1;
-            if (pg > 0 && b < 0xFFu) {
-                /* Lot 72: Greek, Cyrillic, Latin Extended-A, symbols: the
-                 * page selector, then the byte */
-                out[0] = (char)os_page_sel[pg]; out[1] = (char)b; out[2] = (char)os_page_sel[0]; out[3] = 0;
-                return i + 1;
-            }
-            b = code > 0 ? os_cp1252_from_cp((uint32_t)code) : 0;
-            out[0] = b >= 0x20u && b != 0x7Fu && b < 0xFFu ? (char)b : '?';
-        }
+        else char_ref_cp(code, out);
         return i + 1;
     }
     for (k = 0; k < (int)(sizeof(names) / sizeof(names[0])); k++) {
@@ -171,6 +186,18 @@ static int char_ref(const char *s, int n, char out[4]) {
         if (n > l + 1 && w_ieq_n(s + 1, l, names[k]) && s[l + 1] == ';') {
             w_cpy(out, 4, text[k], w_len(text[k]));
             return l + 2;
+        }
+    }
+    /* Lot 72: the other HTML 4 names that have a glyph (&eacute;, &alpha;,
+     * &rarr;, &le;), from the shared sorted table, case-sensitive */
+    for (k = 1; k < n && k <= 10 && ((s[k] >= 'a' && s[k] <= 'z') || (s[k] >= 'A' && s[k] <= 'Z') || (s[k] >= '0' && s[k] <= '9')); k++) {}
+    if (k > 1 && k < n && s[k] == ';') {
+        int lo = 0, hi = WF_ENTITY_COUNT - 1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2, c = ent_cmp(wf_entity_table[mid].name, s + 1, k - 1);
+            if (c == 0) { char_ref_cp(wf_entity_table[mid].cp, out); return k + 1; }
+            if (c < 0) lo = mid + 1;
+            else hi = mid - 1;
         }
     }
     return 0;

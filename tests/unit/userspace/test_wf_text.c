@@ -279,6 +279,22 @@ static void test_html_text_display(void) {
 /* Lot 72: Greek and Cyrillic pages through the reader view: the reduced
  * page carries page selectors (every text run ends in page 0), the title
  * too, and the console text is the original UTF-8 again */
+/* Lot 72: the HTML 4 names whose code point is in a glyph page (Greek,
+ * arrows, math) are decoded like their numeric reference; a name with no
+ * glyph (&spades;) is still not decoded */
+static void test_named_refs_pages(void) {
+    char o[64];
+    TEST_ASSERT_EQUAL(0x3B1, (int)wf_entity_lookup("alpha", 5));
+    TEST_ASSERT_EQUAL(0x391, (int)wf_entity_lookup("Alpha", 5));
+    TEST_ASSERT_EQUAL(0x2192, (int)wf_entity_lookup("rarr", 4));
+    TEST_ASSERT_EQUAL(0x221A, (int)wf_entity_lookup("radic", 5));
+    TEST_ASSERT_EQUAL(0x3C9, (int)wf_entity_lookup("omega", 5));
+    TEST_ASSERT_EQUAL(0x2019, (int)wf_entity_lookup("rsquo", 5));
+    TEST_ASSERT_EQUAL(0, (int)wf_entity_lookup("spades", 6));
+    wf_text_display("&alpha;&le;x", 12, WF_CS_UTF8, 1, o, (int)sizeof(o));
+    TEST_ASSERT_EQUAL_STRING("\x8f\xe1\x9d\xa2x\x81", o);
+}
+
 static void test_reduce_greek_cyrillic(void) {
     static const char page[] =
         "<html><head><title>\xce\x95\xce\xbb\xce\xbb\xce\xb7\xce\xbd\xce\xb9\xce\xba\xce\xac</title></head><body>"
@@ -347,6 +363,7 @@ int main(void) {
     RUN_TEST(test_reduce_budget_ex);
     RUN_TEST(test_html_text_display);
     RUN_TEST(test_reduce_greek_cyrillic);
+    RUN_TEST(test_named_refs_pages);
     RUN_TEST(test_header_charset_wins);
     unity_print_results();
     unity_cleanup();

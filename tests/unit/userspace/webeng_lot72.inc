@@ -94,11 +94,33 @@ static void test_l72_whitespace_chunk_unchanged(void) {
     TEST_ASSERT_NOT_NULL(find_text("b"));
 }
 
+static void test_l72_named_references(void) {
+    /* names from the shared HTML 4 table: Greek (case-sensitive), arrows,
+     * math, Latin-1; an unknown name stays as written */
+    static const char* p = L72("<p>&alpha;&Omega;</p><p>&rarr;&le;</p><p>&eacute;t&eacute;</p><p>&Alpha;</p><p>&bogus;x</p>");
+    const os_fb_web_item_t *g, *s, *e, *A;
+    TEST_ASSERT_EQUAL(0, we_render(&g_doc, p, (int)strlen(p), 400));
+    g = find_text("\xe1\xd9");
+    s = find_text("\x83\xa2");
+    e = find_text("\xe9t\xe9");
+    A = find_text("\xc1");
+    TEST_ASSERT_NOT_NULL(g);
+    TEST_ASSERT_NOT_NULL(s);
+    TEST_ASSERT_NOT_NULL(e);
+    TEST_ASSERT_NOT_NULL(A);
+    TEST_ASSERT_EQUAL(2, (g->pad >> 8) & 7);
+    TEST_ASSERT_EQUAL(4, (s->pad >> 8) & 7);
+    TEST_ASSERT_EQUAL(0, (e->pad >> 8) & 7);
+    TEST_ASSERT_EQUAL(2, (A->pad >> 8) & 7);
+    TEST_ASSERT_NOT_NULL(find_text("&bogus;x"));
+}
+
 static void lot72_run(void) {
     RUN_TEST(test_l72_greek_item_page);
     RUN_TEST(test_l72_cyrillic_heading_keeps_scale);
     RUN_TEST(test_l72_page_change_splits_node);
     RUN_TEST(test_l72_ascii_does_not_split);
     RUN_TEST(test_l72_numeric_references);
+    RUN_TEST(test_l72_named_references);
     RUN_TEST(test_l72_whitespace_chunk_unchanged);
 }
