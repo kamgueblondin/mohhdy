@@ -17,10 +17,18 @@ GUI part: the same page in the web window; the decoded
 pixels (saturated colours of the test pattern) are counted on the screen
 and the favicon is drawn before the title. Screenshots (PNG, when Pillow
 is there) go to LOT72_SHOTS (default test_logs/lot72-shots).
+Glyph pages: web-render of the local UTF-8 page /web/lot72.html prints
+the glyph page of the Greek, Cyrillic and symbol items with their text
+back in UTF-8, and the title in UTF-8; in the GUI, the 8x8 glyphs of
+the page (kernel/gfx_font8.h, found by their U+XXXX comment) are matched
+pixel for pixel on the screen: dark glyph pixels on the white page, and
+light glyph pixels in the dark title bar. A glyph drawn from the wrong
+page (the CP1252 byte) does not match.
 """
 from __future__ import print_function
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -83,6 +91,71 @@ def saturated(rgb, x0, y0, x1, y1):
     return n
 
 
+def log_utf8(start=0):
+    """serial log from byte offset `start`, decoded as UTF-8 (display
+    bytes of other pages are not UTF-8 and become U+FFFD)"""
+    with open(g.LOG, "rb") as handle:
+        data = handle.read()
+    return g.normalized_log(data[start:].decode("utf-8", "replace"))
+
+
+def log_size():
+    try:
+        return os.path.getsize(g.LOG)
+    except OSError:
+        return 0
+
+
+def font8(cp):
+    """rows of the 8x8 glyph of code point cp (bit x of row y = pixel x)"""
+    text = open(os.path.join(ROOT, "kernel", "gfx_font8.h")).read()
+    m = re.search(r"\{([^}]*)\}, /\* U\+%04X \*/" % cp, text)
+    if not m:
+        raise RuntimeError("no 8x8 glyph for U+%04X" % cp)
+    return [int(v, 16) for v in m.group(1).split(",")]
+
+
+def lum(rgb, x, y):
+    i = (y * W + x) * 3
+    return (rgb[i] * 3 + rgb[i + 1] * 6 + rgb[i + 2]) // 10
+
+
+def glyph_masks(rgb, light):
+    """per pixel: glyph-coloured (on) and background-coloured (off)"""
+    on, off = [], []
+    for y in range(H):
+        ron, roff = [False] * W, [False] * W
+        for x in range(W):
+            v = lum(rgb, x, y)
+            ron[x] = v > 170 if light else v < 100
+            roff[x] = v < 120 if light else v > 160
+        on.append(ron)
+        off.append(roff)
+    return on, off
+
+
+def find_glyph(masks, rows, x0, y0, x1, y1):
+    """positions where the 8x8 cell matches the glyph exactly: glyph
+    pixels on, the other pixels of the cell off"""
+    on, off = masks
+    found = []
+    for y in range(max(0, y0), min(H, y1) - 8):
+        for x in range(max(0, x0), min(W, x1) - 8):
+            ok = True
+            for gy in range(8):
+                bits = rows[gy]
+                ron, roff = on[y + gy], off[y + gy]
+                for gx in range(8):
+                    if not (ron[x + gx] if bits & (1 << gx) else roff[x + gx]):
+                        ok = False
+                        break
+                if not ok:
+                    break
+            if ok:
+                found.append((x, y))
+    return found
+
+
 def main():
     if not os.path.isfile(os.path.join(lw.PKI, "test_ca.pem")):
         subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "lot67_gen_pki.py"), lw.PKI], check=True)
@@ -117,6 +190,26 @@ def main():
             g.wait_for(proc, "net-driver stack ring3 ready", g.CMD_TIMEOUT)
             time.sleep(0.5)
             u = "http://10.0.2.2:%d" % hp
+            # ---- glyph pages: local UTF-8 page, console
+            b0 = log_size()
+            lw.run(mon, proc, "web-render /web/lot72.html", "web-render ok", 60, fail=["error"])
+            out = log_utf8(b0)
+            want = "web title utf8 \u0391\u03b8\u03ae\u03bd\u03b1 \u041c\u043e\u0441\u043a\u0432\u0430"
+            if want not in out:
+                raise RuntimeError("web-render lot72: want %r in:\n%s" % (want, out[-3000:]))
+            paged = {}
+            for m in re.finditer(r'web item text .* page (\d) utf8 "([^"]*)"', out):
+                paged[int(m.group(1))] = paged.get(int(m.group(1)), "") + m.group(2) + " "
+            say("paged items: %r" % paged)
+            for page, word in ((2, "\u0395\u03bb\u03bb\u03b7\u03bd\u03b9\u03ba\u03ac"), (2, "\u03a9\u03bb"),
+                               (2, "\u0396\u03b5\u03cd\u03c2"), (3, "\u0416\u0438\u0437\u043d\u044c"),
+                               (3, "\u0416\u0443\u0440\u043d\u0430\u043b"), (3, "\u2116"), (3, "\u0490\u0491"),
+                               (3, "\u049a\u0430\u0437\u0430\u049b"), (1, "\u0141"), (1, "\u0107\u0119\u0144"),
+                               (4, "\u2192"), (4, "\u221a"), (4, "\u2264"), (4, "\u2713"), (4, "\u20bd"), (4, "\u0218\u021b"),
+                               (2, "\u03b1")):
+                if word not in paged.get(page, ""):
+                    raise RuntimeError("web-render lot72: no page %d item with %r; items %r" % (page, word, paged))
+            say("console: Greek, Cyrillic, Latin Ext-A and symbol items keep their glyph page, title in UTF-8")
             # ---- console
             lw.run(mon, proc, "web-images on", "web-images on", 30)
             out = lw.run(mon, proc, "web-open %s/lot72/images.html" % u, "osui web page sections", fail=["error"])
@@ -184,6 +277,25 @@ def main():
             say("saturated favicon pixels in the title bar: %d" % title)
             if title < 12:   # 16x16 gradient icon, about 30 strong pixels
                 raise RuntimeError("favicon not drawn: %d pixels" % title)
+            g.send_key(mon, "esc")
+            time.sleep(1.0)
+            # ---- glyph pages in the GUI: the local page and its title
+            start = len(g.log_text())
+            lw.type_line(mon, proc, "web /web/lot72.html", mode="getc")
+            g.wait_for(proc, "osui web render file=/web/lot72.html", g.CMD_TIMEOUT, start)
+            time.sleep(3.0)
+            rgb = shot(mon, "glyph-pages")
+            dark, light = glyph_masks(rgb, False), glyph_masks(rgb, True)
+            for cp in (0x0416, 0x03A9, 0x03BB, 0x2116, 0x0490, 0x2192):
+                hits = find_glyph(dark, font8(cp), 8, BAR_H + 60, W - 8, H - 40)
+                say("page glyph U+%04X found at %r" % (cp, hits[:3]))
+                if not hits:
+                    raise RuntimeError("glyph U+%04X not drawn in the page" % cp)
+            for cp in (0x03B8, 0x041C):
+                hits = find_glyph(light, font8(cp), 8, BAR_H + 4, W - 8, BAR_H + 56)
+                say("title glyph U+%04X found at %r" % (cp, hits[:3]))
+                if not hits:
+                    raise RuntimeError("glyph U+%04X not drawn in the title" % cp)
             g.send_key(mon, "esc")
             time.sleep(1.0)
         say("QEMU Lot 72 contract passed in %.0f s." % (time.monotonic() - t0))
