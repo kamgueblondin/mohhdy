@@ -8,6 +8,28 @@ static wf_http_resp_t g_resp;
 
 typedef struct { const wf_fetch_env_t* env; int h; } bridge_t;
 
+/* Lot 72: one kept-alive connection (bounded: a single socket + the TLS
+ * state already in g_tls) */
+static struct {
+    int open, h, https, port;
+    char host[WF_URL_HOST_MAX];
+    bridge_t br;
+} g_conn;
+static int g_opened, g_reused;
+
+void wf_fetch_conn_stats(int* opened, int* reused) { if (opened) *opened = g_opened; if (reused) *reused = g_reused; }
+
+static int seq(const char* a, const char* b) { int i; for (i = 0; a[i] && a[i] == b[i]; i++) {} return a[i] == b[i]; }
+
+static void conn_close(const wf_fetch_env_t* env) {
+    if (!g_conn.open) return;
+    if (g_conn.https) wf_tls_close(&g_tls);
+    env->close(env->net, g_conn.h);
+    g_conn.open = 0;
+}
+
+void wf_fetch_drop(const wf_fetch_env_t* env) { conn_close(env); }
+
 static int b_send(void* io, const uint8_t* d, int n) { bridge_t* b = (bridge_t*)io; return b->env->send(b->env->net, b->h, d, n); }
 static int b_recv(void* io, uint8_t* d, int n) { bridge_t* b = (bridge_t*)io; return b->env->recv(b->env->net, b->h, d, n); }
 static int b_rand(void* io, uint8_t* d, int n) { bridge_t* b = (bridge_t*)io; return b->env->rand(b->env->net, d, n); }
@@ -45,14 +67,25 @@ static void ip_str(const uint8_t ip[4], char* o) {
     o[p] = 0;
 }
 
-/* One request on a fresh connection. 0 = response parsed. */
-static int one(const wf_fetch_env_t* env, const wf_url_t* u, const wf_fetch_req_t* rq, uint8_t* body, int cap, wf_fetch_result_t* res) {
+/* One request, on the kept-alive connection when it matches (Lot 72),
+ * else on a fresh one. 0 = response parsed. *stale = 1 when a reused
+ * connection turned out closed before any answer byte (caller retries). */
+static int one(const wf_fetch_env_t* env, const wf_url_t* u, const wf_fetch_req_t* rq, uint8_t* body, int cap, wf_fetch_result_t* res, int* stale) {
     static char req[WF_URL_PATH_MAX + WF_URL_HOST_MAX + 256];
     static uint8_t buf[4096];
     static char ipb[20];
-    bridge_t br;
-    int h, n, rl, rc = 0, got;
+    bridge_t* br = &g_conn.br;
+    int h, n, rl, rc = 0, got, reuse, total = 0, keep;
     uint8_t ip[4];
+    *stale = 0;
+    reuse = env->keepalive && g_conn.open && g_conn.https == u->https && g_conn.port == u->port && seq(g_conn.host, u->host) &&
+            (!u->https || g_tls.established);
+    if (!reuse) conn_close(env);
+    if (reuse) {
+        h = g_conn.h;
+        logf2(env, "reuse connection to ", u->host);
+        goto connected;
+    }
     if (wf_ipv4_parse(u->host, ip) != 0) {
         if (env->resolve(env->net, u->host, ip) != 0) {
             scopy(res->err, (int)sizeof(res->err), "DNS: cannot resolve ");
@@ -65,7 +98,10 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, const wf_fetch_req_
     logf2(env, "connect ", ipb);
     h = env->connect(env->net, ip, u->port);
     if (h < 0) { scopy(res->err, (int)sizeof(res->err), "TCP connect failed"); return -1; }
-    br.env = env; br.h = h;
+    g_opened++;
+    res->connections++;
+connected:
+    br->env = env; br->h = h;
     {
         /* Lot 71: the jar's Cookie line goes after the caller's extra lines */
         static char ex[WF_COOKIE_HDR + 1024];
@@ -75,19 +111,20 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, const wf_fetch_req_
             uint32_t before = env->jar->sent;
             ex[0] = 0;
             if (extra) { while (extra[el] && el < (int)sizeof(ex) - 1) { ex[el] = extra[el]; el++; } ex[el] = 0; }
-            if (extra && extra[el]) { env->close(env->net, h); scopy(res->err, (int)sizeof(res->err), "request too long"); return -1; }
+            if (extra && extra[el]) { env->close(env->net, h); g_conn.open = 0; scopy(res->err, (int)sizeof(res->err), "request too long"); return -1; }
             ck = wf_cookie_header(env->jar, u->host, u->path, u->https, ex + el, (int)sizeof(ex) - el);
             if (ck > 0) { extra = ex; res->cookies_sent = (int)(env->jar->sent - before); }
             else res->cookies_sent = 0;
         }
-        rl = wf_http_build_request(u, rq && rq->method ? rq->method : "GET", rq ? rq->ctype : 0,
-                                   rq && rq->body ? rq->body_len : -1, extra, req, (int)sizeof(req));
+        rl = wf_http_build_request_ka(u, rq && rq->method ? rq->method : "GET", rq ? rq->ctype : 0,
+                                      rq && rq->body ? rq->body_len : -1, extra, env->keepalive, req, (int)sizeof(req));
     }
-    if (rl < 0) { env->close(env->net, h); scopy(res->err, (int)sizeof(res->err), "request too long"); return -1; }
+    if (rl < 0) { env->close(env->net, h); g_conn.open = 0; scopy(res->err, (int)sizeof(res->err), "request too long"); return -1; }
     res->https = u->https;
-    if (u->https) {
-        g_tls.io = &br; g_tls.send = b_send; g_tls.recv = b_recv; g_tls.rand = b_rand;
+    if (u->https && !reuse) {
+        g_tls.io = br; g_tls.send = b_send; g_tls.recv = b_recv; g_tls.rand = b_rand;
         g_tls.trust = env->trust; g_tls.host = u->host; g_tls.now = env->now;
+        g_tls.only_suite = env->tls_suite;
         if (wf_tls_handshake(&g_tls) != 0) {
             scopy(res->err, (int)sizeof(res->err), "TLS: ");
             sapp(res->err, (int)sizeof(res->err), g_tls.err);
@@ -100,17 +137,32 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, const wf_fetch_req_
         scopy(res->not_after, (int)sizeof(res->not_after), g_tls.chain.not_after);
         res->time_checked = g_tls.chain.time_checked;
         logf2(env, "tls ok: ", res->suite);
+    }
+    if (reuse) {
+        g_reused++;
+        res->reused++;
+        if (u->https) {
+            scopy(res->suite, (int)sizeof(res->suite), wf_tls_suite_name(g_tls.suite));
+            scopy(res->leaf_cn, (int)sizeof(res->leaf_cn), g_tls.chain.leaf_cn);
+            scopy(res->anchor_cn, (int)sizeof(res->anchor_cn), g_tls.chain.anchor_cn);
+            scopy(res->not_after, (int)sizeof(res->not_after), g_tls.chain.not_after);
+            res->time_checked = g_tls.chain.time_checked;
+        }
+    }
+    g_conn.open = 0;                          /* re-armed below when the answer allows it */
+    if (u->https) {
         if (wf_tls_write(&g_tls, (const uint8_t*)req, rl) != rl ||
             (rq && rq->body && rq->body_len > 0 && wf_tls_write(&g_tls, (const uint8_t*)rq->body, rq->body_len) != rq->body_len)) {
             scopy(res->err, (int)sizeof(res->err), "TLS write failed");
             env->close(env->net, h);
+            if (reuse) *stale = 1;
             return -1;
         }
     } else {
         int off = 0;
         while (off < rl) {
             n = env->send(env->net, h, (const uint8_t*)req + off, rl - off);
-            if (n <= 0) { scopy(res->err, (int)sizeof(res->err), "send failed"); env->close(env->net, h); return -1; }
+            if (n <= 0) { scopy(res->err, (int)sizeof(res->err), "send failed"); env->close(env->net, h); if (reuse) *stale = 1; return -1; }
             off += n;
         }
         off = 0;
@@ -123,6 +175,15 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, const wf_fetch_req_
     wf_http_resp_init(&g_resp, body, cap);
     for (;;) {
         got = u->https ? wf_tls_read(&g_tls, buf, (int)sizeof(buf)) : env->recv(env->net, h, buf, (int)sizeof(buf));
+        if (got <= 0 && reuse && total == 0) {
+            /* the server closed the idle connection: retry on a new one */
+            if (u->https) g_tls.established = 0;
+            env->close(env->net, h);
+            *stale = 1;
+            scopy(res->err, (int)sizeof(res->err), "kept-alive connection closed by the server");
+            return -1;
+        }
+        if (got > 0) total += got;
         if (got < 0) {
             scopy(res->err, (int)sizeof(res->err), u->https ? "TLS read: " : "receive failed");
             if (u->https) sapp(res->err, (int)sizeof(res->err), g_tls.err);
@@ -149,8 +210,14 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, const wf_fetch_req_
          * so stop reading (a 900 KiB page no longer costs its full download) */
         if (g_resp.truncated && g_resp.status >= 200 && g_resp.status < 300) break;
     }
-    if (u->https) wf_tls_close(&g_tls);
-    env->close(env->net, h);
+    keep = env->keepalive && rc == 0 && g_resp.done && !g_resp.conn_close && !g_resp.truncated && (!u->https || !g_tls.peer_closed);
+    if (keep) {
+        g_conn.open = 1; g_conn.h = h; g_conn.https = u->https; g_conn.port = u->port;
+        scopy(g_conn.host, (int)sizeof(g_conn.host), u->host);
+    } else {
+        if (u->https) wf_tls_close(&g_tls);
+        env->close(env->net, h);
+    }
     if (rc != 0) return rc;
     res->status = g_resp.status;
     res->body_len = g_resp.body_len;
@@ -191,7 +258,17 @@ int wf_fetch_ex(const wf_fetch_env_t* env, const char* url, const wf_fetch_req_t
         wf_url_format(&u, res->url, (int)sizeof(res->url));
         logf2(env, req && req->method ? "POST " : "GET ", res->url);
         res->suite[0] = 0; res->leaf_cn[0] = 0; res->anchor_cn[0] = 0; res->time_checked = 0;
-        if (one(env, &u, req, body, cap, res) != 0) return -1;
+        {
+            int stale = 0;
+            if (one(env, &u, req, body, cap, res, &stale) != 0) {
+                /* Lot 72: a stale kept-alive connection is retried once on a
+                 * fresh one, for a GET only (never replay a POST body) */
+                if (!stale || (req && req->method && !seq(req->method, "GET"))) return -1;
+                logf2(env, "retry on a new connection: ", res->err);
+                res->err[0] = 0;
+                if (one(env, &u, req, body, cap, res, &stale) != 0) return -1;
+            }
+        }
         if (!(res->status == 301 || res->status == 302 || res->status == 303 || res->status == 307 || res->status == 308))
             return 0;
         if (!g_resp.location[0]) return 0;

@@ -5,6 +5,11 @@
  * (c02f); key exchange X25519; extended master secret (RFC 7627) preferred, RFC 5246 master secret otherwise;
  * SNI; server certificate chain checked against a wf_trust_t root store
  * with host name and (when the clock is trusted) validity dates.
+ * Lot 72: TLS 1.3 TLS_AES_256_GCM_SHA384 (1302) and
+ * TLS_CHACHA20_POLY1305_SHA256 (1303); TLS 1.2 ECDHE-{ECDSA,RSA}-AES256-
+ * GCM-SHA384 (c02c/c030) and ECDHE-{ECDSA,RSA}-CHACHA20-POLY1305 (cca9/
+ * cca8), with SHA-384 transcript / PRF / HKDF for the SHA-384 suites
+ * (wf_aead.c ciphers). P-256 ECDHE runs on the constant-time wf_p256.c.
  * Renegotiation, session resumption and client certificates are refused.
  * The transport is two callbacks, so the same code runs over Mohhdy
  * sockets and over host sockets in the tests. Bounded: one wf_tls_t
@@ -14,6 +19,8 @@
 #include <stdint.h>
 #include "wf_x509.h"
 #include "../kernel/sha256.h"
+#include "wf_sha512.h"
+#include "wf_aead.h"
 
 /* send: returns bytes accepted (> 0) or < 0. recv: > 0 bytes, 0 = peer
  * closed, < 0 = error/timeout. */
@@ -35,6 +42,7 @@ typedef struct {
     const wf_trust_t* trust;
     const char* host;      /* SNI and certificate host name */
     const char* now;       /* YYYYMMDDHHMMSS UTC, or 0 if the clock is not trusted */
+    uint16_t only_suite;   /* Lot 72: 0 = offer every suite, else offer only this one (tests, tls-suite) */
     /* results */
     char err[128];
     int alert;             /* last alert received, -1 none */
@@ -48,15 +56,18 @@ typedef struct {
     /* state */
     uint8_t client_random[32], server_random[32];
     uint8_t master[48];
-    uint8_t c_key[16], s_key[16], c_iv[4], s_iv[4];
+    wf_aead_t c_aead, s_aead;     /* Lot 72: record ciphers (AES-128/256-GCM, ChaCha20-Poly1305) */
+    uint8_t c_iv[12], s_iv[12];   /* TLS 1.2 GCM: 4 implicit bytes; ChaCha20 and TLS 1.3: 12 */
     uint64_t c_seq, s_seq;
-    /* TLS 1.3 (RFC 8446): TLS_AES_128_GCM_SHA256 with X25519 */
+    int aead;                     /* WF_AEAD_* of the suite */
+    int hlen;                     /* 32 (SHA-256 suites) or 48 (SHA-384 suites) */
+    /* TLS 1.3 (RFC 8446) with X25519 */
     int got_share;
     int version;                  /* 0x0303 or 0x0304 once the ServerHello is read */
-    uint8_t c_iv13[12], s_iv13[12];
-    uint8_t c_secret[32], s_secret[32];   /* current traffic secrets */
+    uint8_t c_secret[48], s_secret[48];   /* current traffic secrets */
     int s_encrypted;
-    sha256_ctx_t hs_hash;         /* running transcript hash */
+    sha256_ctx_t hs_hash;         /* running transcript hashes: both until the suite is known */
+    wf_sha512_ctx_t hs_hash384;
     uint8_t ecdh_priv[32];
     uint8_t ecdh_srv_pub[32];
     uint8_t ecdh_srv_p256[65];
@@ -87,6 +98,17 @@ void wf_tls_close(wf_tls_t* t);
 void wf_tls_prf(const uint8_t* secret, int slen, const char* label, const uint8_t* seed, int seedlen,
                 uint8_t* out, int outlen);
 const char* wf_tls_suite_name(uint16_t suite);
+/* Lot 72: suite id from a name ("TLS13-CHACHA20-POLY1305-SHA256", "c030",
+ * "0xc030"); 0 if unknown. Number of suites offered; their ids. */
+uint16_t wf_tls_suite_by_name(const char* name);
+int wf_tls_suite_count(void);
+uint16_t wf_tls_suite_at(int i);
+/* TLS 1.2 PRF with SHA-256 (hlen 32) or SHA-384 (hlen 48). */
+void wf_tls_prf_h(int hlen, const uint8_t* secret, int slen, const char* label, const uint8_t* seed, int seedlen,
+                  uint8_t* out, int outlen);
+void wf_hkdf_extract_h(int hlen, const uint8_t* salt, int sl, const uint8_t* ikm, int il, uint8_t* out);
+void wf_hkdf_expand_label_h(int hlen, const uint8_t* secret, const char* label, const uint8_t* ctx, int cl,
+                            uint8_t* out, int outlen);
 /* TLS 1.3 HKDF helpers (exported for the RFC 8448 known-answer test). */
 void wf_hkdf_extract(const uint8_t* salt, int sl, const uint8_t* ikm, int il, uint8_t out[32]);
 void wf_hkdf_expand_label(const uint8_t secret[32], const char* label, const uint8_t* ctx, int cl,

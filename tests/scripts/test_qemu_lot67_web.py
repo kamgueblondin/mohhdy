@@ -134,9 +134,9 @@ def main():
                 ("fetch http://%s:%d/nope" % (base, hp), "fetch ok status 404", ["fetch error"], None),
                 # Lot 69: TLS 1.3 (ECDSA and RSA-PSS), P-256 ECDHE, gzip, cross-scheme redirect, big page
                 ("fetch https://%s:%d/hello" % (base, sp + 1), "fetch ok status 200 bytes 17 ", ["fetch error"],
-                 "tls TLS13-AES128-GCM-SHA256"),
+                 "tls TLS13-AES256-GCM-SHA384"),
                 ("fetch -I https://%s:%d/page.html" % (base, sp + 2), "fetch ok status 200", ["fetch error"],
-                 "tls TLS13-AES128-GCM-SHA256"),
+                 "tls TLS13-AES256-GCM-SHA384"),
                 ("fetch -I https://%s:%d/hello" % (base, sp + 3), "fetch ok status 200", ["fetch error"],
                  "tls ECDHE-RSA-AES128-GCM-SHA256"),
                 ("fetch http://%s:%d/gzip" % (base, hp), "fetch body-end", ["fetch error"], "fetched over the network by Mohhdy"),

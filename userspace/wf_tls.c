@@ -1,7 +1,8 @@
 /* wf_tls.c - Lot 67: TLS 1.2 client (see wf_tls.h). */
 #include "wf_tls.h"
 #include "../kernel/sha256.h"
-#include "../kernel/aes_gcm.h"
+#include "wf_aead.h"
+#include "wf_sha512.h"
 #include "../kernel/x25519.h"
 #include "wf_ec.h"
 
@@ -39,46 +40,126 @@ static void seterr(wf_tls_t* t, const char* a, const char* b) {
     t->err[n] = 0;
 }
 
+/* Lot 72: offered suites, preference order (TLS 1.3 first). kx: 0 TLS 1.3
+ * (any certificate), 1 ECDSA certificate, 2 RSA certificate. */
+typedef struct { uint16_t id; uint8_t v13, kx, aead, hlen; const char* name; } suite_t;
+static const suite_t SUITES[] = {
+    {0x1301U, 1, 0, WF_AEAD_AES128_GCM, 32, "TLS13-AES128-GCM-SHA256"},
+    {0x1302U, 1, 0, WF_AEAD_AES256_GCM, 48, "TLS13-AES256-GCM-SHA384"},
+    {0x1303U, 1, 0, WF_AEAD_CHACHA20_POLY1305, 32, "TLS13-CHACHA20-POLY1305-SHA256"},
+    {0xc02bU, 0, 1, WF_AEAD_AES128_GCM, 32, "ECDHE-ECDSA-AES128-GCM-SHA256"},
+    {0xc02fU, 0, 2, WF_AEAD_AES128_GCM, 32, "ECDHE-RSA-AES128-GCM-SHA256"},
+    {0xc02cU, 0, 1, WF_AEAD_AES256_GCM, 48, "ECDHE-ECDSA-AES256-GCM-SHA384"},
+    {0xc030U, 0, 2, WF_AEAD_AES256_GCM, 48, "ECDHE-RSA-AES256-GCM-SHA384"},
+    {0xcca9U, 0, 1, WF_AEAD_CHACHA20_POLY1305, 32, "ECDHE-ECDSA-CHACHA20-POLY1305"},
+    {0xcca8U, 0, 2, WF_AEAD_CHACHA20_POLY1305, 32, "ECDHE-RSA-CHACHA20-POLY1305"},
+};
+#define NSUITES ((int)(sizeof(SUITES) / sizeof(SUITES[0])))
+
+static const suite_t* suite_of(uint16_t id) {
+    int i;
+    for (i = 0; i < NSUITES; i++) if (SUITES[i].id == id) return &SUITES[i];
+    return 0;
+}
+
 const char* wf_tls_suite_name(uint16_t s) {
-    if (s == 0xc02bU) return "ECDHE-ECDSA-AES128-GCM-SHA256";
-    if (s == 0xc02fU) return "ECDHE-RSA-AES128-GCM-SHA256";
-    if (s == 0x1301U) return "TLS13-AES128-GCM-SHA256";
-    return "none";
+    const suite_t* su = suite_of(s);
+    return su ? su->name : "none";
+}
+
+int wf_tls_suite_count(void) { return NSUITES; }
+uint16_t wf_tls_suite_at(int i) { return i >= 0 && i < NSUITES ? SUITES[i].id : 0; }
+
+static int lower(int c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
+
+uint16_t wf_tls_suite_by_name(const char* n) {
+    int i, j;
+    unsigned v = 0;
+    if (!n || !n[0]) return 0;
+    for (i = 0; i < NSUITES; i++) {
+        for (j = 0; SUITES[i].name[j] && lower(n[j]) == lower(SUITES[i].name[j]); j++) {}
+        if (!SUITES[i].name[j] && !n[j]) return SUITES[i].id;
+    }
+    if (n[0] == '0' && (n[1] == 'x' || n[1] == 'X')) n += 2;
+    for (j = 0; n[j]; j++) {
+        int c = lower(n[j]), d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
+        if (d < 0 || j >= 4) return 0;
+        v = v * 16U + (unsigned)d;
+    }
+    return suite_of((uint16_t)v) ? (uint16_t)v : 0;
+}
+
+/* ---------------------------------------------------------------- HMAC (SHA-256 / SHA-384) */
+
+typedef struct { sha256_ctx_t s; wf_sha512_ctx_t x; int hl; } hctx_t;
+static void h_init(hctx_t* c, int hl) { c->hl = hl; if (hl == 48) wf_sha384_init(&c->x); else sha256_init(&c->s); }
+static void h_update(hctx_t* c, const uint8_t* d, int n) { if (c->hl == 48) wf_sha512_update(&c->x, d, (uint32_t)n); else sha256_update(&c->s, d, (uint32_t)n); }
+static void h_final(hctx_t* c, uint8_t* out) { if (c->hl == 48) wf_sha512_final(&c->x, out); else sha256_final(&c->s, out); }
+
+/* HMAC over m1 || m2 (RFC 2104); block 64 (SHA-256) or 128 (SHA-384). */
+static void hmac2(int hl, const uint8_t* key, int kl, const uint8_t* m1, int l1, const uint8_t* m2, int l2, uint8_t* out) {
+    static hctx_t c;
+    uint8_t k[128], pad[128], inner[48];
+    int bs = hl == 48 ? 128 : 64, i;
+    mset(k, 0, 128);
+    if (kl > bs) { h_init(&c, hl); h_update(&c, key, kl); h_final(&c, k); }
+    else mcpy(k, key, kl);
+    for (i = 0; i < bs; i++) pad[i] = (uint8_t)(k[i] ^ 0x36);
+    h_init(&c, hl); h_update(&c, pad, bs);
+    if (l1) h_update(&c, m1, l1);
+    if (l2) h_update(&c, m2, l2);
+    h_final(&c, inner);
+    for (i = 0; i < bs; i++) pad[i] = (uint8_t)(k[i] ^ 0x5c);
+    h_init(&c, hl); h_update(&c, pad, bs); h_update(&c, inner, hl); h_final(&c, out);
+    mset(k, 0, 128); mset(pad, 0, 128);
 }
 
 /* ---------------------------------------------------------------- PRF */
 
-void wf_tls_prf(const uint8_t* secret, int sl, const char* label, const uint8_t* seed, int seedlen,
-                uint8_t* out, int outlen) {
-    uint8_t ls[160], a[32 + 160], h[32];
+void wf_tls_prf_h(int hl, const uint8_t* secret, int sl, const char* label, const uint8_t* seed, int seedlen,
+                  uint8_t* out, int outlen) {
+    uint8_t ls[160], a[48], h[48];
     int ll = slen(label), lsl, done = 0, i;
-    if (ll + seedlen > 160) return;
+    if (ll + seedlen > 160 || (hl != 32 && hl != 48)) return;
     mcpy(ls, (const uint8_t*)label, ll);
     mcpy(ls + ll, seed, seedlen);
     lsl = ll + seedlen;
-    hmac_sha256(secret, (uint32_t)sl, ls, (uint32_t)lsl, a);        /* A(1) */
+    hmac2(hl, secret, sl, ls, lsl, 0, 0, a);                        /* A(1) */
     while (done < outlen) {
-        mcpy(a + 32, ls, lsl);
-        hmac_sha256(secret, (uint32_t)sl, a, (uint32_t)(32 + lsl), h);
-        for (i = 0; i < 32 && done < outlen; i++) out[done++] = h[i];
-        hmac_sha256(secret, (uint32_t)sl, a, 32, a);                 /* A(i+1) */
+        hmac2(hl, secret, sl, a, hl, ls, lsl, h);
+        for (i = 0; i < hl && done < outlen; i++) out[done++] = h[i];
+        hmac2(hl, secret, sl, a, hl, 0, 0, a);                      /* A(i+1) */
     }
+}
+
+void wf_tls_prf(const uint8_t* secret, int sl, const char* label, const uint8_t* seed, int seedlen,
+                uint8_t* out, int outlen) {
+    wf_tls_prf_h(32, secret, sl, label, seed, seedlen, out, outlen);
 }
 
 /* ---------------------------------------------------------------- HKDF (TLS 1.3) */
 
+void wf_hkdf_extract_h(int hl, const uint8_t* salt, int sl, const uint8_t* ikm, int il, uint8_t* out) {
+    static const uint8_t zero[48] = {0};
+    if (!salt || sl == 0) { salt = zero; sl = hl; }
+    hmac2(hl, salt, sl, ikm, il, 0, 0, out);
+}
+
 void wf_hkdf_extract(const uint8_t* salt, int sl, const uint8_t* ikm, int il, uint8_t out[32]) {
-    static const uint8_t zero[32] = {0};
-    if (!salt || sl == 0) { salt = zero; sl = 32; }
-    hmac_sha256(salt, (uint32_t)sl, ikm, (uint32_t)il, out);
+    wf_hkdf_extract_h(32, salt, sl, ikm, il, out);
 }
 
 void wf_hkdf_expand_label(const uint8_t secret[32], const char* label, const uint8_t* ctx, int cl,
                           uint8_t* out, int outlen) {
-    uint8_t info[2 + 1 + 6 + 64 + 1 + 64 + 1], t[32], m[32 + sizeof(info)];
+    wf_hkdf_expand_label_h(32, secret, label, ctx, cl, out, outlen);
+}
+
+void wf_hkdf_expand_label_h(int hl, const uint8_t* secret, const char* label, const uint8_t* ctx, int cl,
+                            uint8_t* out, int outlen) {
+    uint8_t info[2 + 1 + 6 + 64 + 1 + 64 + 1], t[48], m[48 + sizeof(info)];
     int ll = slen(label), il = 0, done = 0, tl = 0, i;
     uint8_t ctr = 1;
-    if (ll > 64 || cl > 64 || outlen > 255 * 32) return;
+    if (ll > 64 || cl > 64 || outlen > 255 * hl) return;
     put16(info, outlen); il = 2;
     info[il++] = (uint8_t)(6 + ll);
     mcpy(info + il, (const uint8_t*)"tls13 ", 6); il += 6;
@@ -90,19 +171,25 @@ void wf_hkdf_expand_label(const uint8_t secret[32], const char* label, const uin
         mcpy(m, t, tl);
         mcpy(m + tl, info, il);
         m[tl + il] = ctr++;
-        hmac_sha256(secret, 32, m, (uint32_t)(tl + il + 1), t);
-        tl = 32;
-        for (i = 0; i < 32 && done < outlen; i++) out[done++] = t[i];
+        hmac2(hl, secret, hl, m, tl + il + 1, 0, 0, t);
+        tl = hl;
+        for (i = 0; i < hl && done < outlen; i++) out[done++] = t[i];
     }
 }
 
-static void derive_secret(const uint8_t secret[32], const char* label, const uint8_t hash[32], uint8_t out[32]) {
-    wf_hkdf_expand_label(secret, label, hash, 32, out, 32);
+static void derive_secret(const wf_tls_t* t, const uint8_t* secret, const char* label, const uint8_t* hash, uint8_t* out) {
+    wf_hkdf_expand_label_h(t->hlen, secret, label, hash, t->hlen, out, t->hlen);
 }
 
-static void tls13_keys(const uint8_t secret[32], uint8_t key[16], uint8_t iv[12]) {
-    wf_hkdf_expand_label(secret, "key", 0, 0, key, 16);
-    wf_hkdf_expand_label(secret, "iv", 0, 0, iv, 12);
+/* traffic secret -> record cipher + 12-byte IV (RFC 8446 7.3) */
+static int tls13_keys(wf_tls_t* t, const uint8_t* secret, wf_aead_t* c, uint8_t iv[12]) {
+    uint8_t key[32];
+    int kl = wf_aead_key_len(t->aead), rc;
+    wf_hkdf_expand_label_h(t->hlen, secret, "key", 0, 0, key, kl);
+    wf_hkdf_expand_label_h(t->hlen, secret, "iv", 0, 0, iv, 12);
+    rc = wf_aead_init(c, t->aead, key);
+    mset(key, 0, 32);
+    return rc;
 }
 
 static void nonce13(const uint8_t iv[12], uint64_t seq, uint8_t n[12]) {
@@ -147,19 +234,32 @@ static int send_record(wf_tls_t* t, int type, const uint8_t* body, int n, int en
         o[0] = CT_APP;
         put16(o + 3, n + 1 + 16);
         mcpy(aad, o, 5);
-        nonce13(t->c_iv13, t->c_seq, n12);
-        if (aes128_gcm_encrypt(t->c_key, n12, n12 + 4, aad, 5, inner, (uint16_t)(n + 1), o + 5, tag) != 0) return -1;
+        nonce13(t->c_iv, t->c_seq, n12);
+        if (wf_aead_seal(&t->c_aead, n12, aad, 5, inner, n + 1, o + 5, tag) != 0) return -1;
         mcpy(o + 5 + n + 1, tag, 16);
         t->c_seq++;
         return send_all(t, o, 5 + n + 1 + 16);
+    } else if (t->aead == WF_AEAD_CHACHA20_POLY1305) {
+        /* RFC 7905: nonce = iv XOR seq, no explicit part */
+        uint8_t n12[12], aad[13], tag[16];
+        seq_bytes(t->c_seq, aad);
+        aad[8] = (uint8_t)type; aad[9] = 3; aad[10] = 3; put16(aad + 11, n);
+        put16(o + 3, n + 16);
+        nonce13(t->c_iv, t->c_seq, n12);
+        if (wf_aead_seal(&t->c_aead, n12, aad, 13, body, n, o + 5, tag) != 0) return -1;
+        mcpy(o + 5 + n, tag, 16);
+        t->c_seq++;
+        return send_all(t, o, 5 + n + 16);
     } else {
-        uint8_t nonce[8], aad[13], tag[16];
-        seq_bytes(t->c_seq, nonce);
-        mcpy(aad, nonce, 8);
+        /* RFC 5288: 4 implicit + 8 explicit nonce bytes (the sequence) */
+        uint8_t n12[12], aad[13], tag[16];
+        seq_bytes(t->c_seq, aad);
         aad[8] = (uint8_t)type; aad[9] = 3; aad[10] = 3; put16(aad + 11, n);
         put16(o + 3, 8 + n + 16);
-        mcpy(o + 5, nonce, 8);
-        if (aes128_gcm_encrypt(t->c_key, t->c_iv, nonce, aad, 13, body, (uint16_t)n, o + 13, tag) != 0) return -1;
+        mcpy(n12, t->c_iv, 4);
+        mcpy(n12 + 4, aad, 8);
+        mcpy(o + 5, aad, 8);
+        if (wf_aead_seal(&t->c_aead, n12, aad, 13, body, n, o + 13, tag) != 0) return -1;
         mcpy(o + 13 + n, tag, 16);
         t->c_seq++;
         return send_all(t, o, 5 + 8 + n + 16);
@@ -187,8 +287,8 @@ static int read_record(wf_tls_t* t) {
         uint8_t n12[12];
         int pl = len - 16;
         if (pl < 1 || pl > 16384 + 256) { seterr(t, "bad encrypted record", 0); return -1; }
-        nonce13(t->s_iv13, t->s_seq, n12);
-        if (aes128_gcm_decrypt(t->s_key, n12, n12 + 4, t->rec, 5, t->rec + 5, (uint16_t)pl, t->rec + 5 + pl, t->plain) != 0) {
+        nonce13(t->s_iv, t->s_seq, n12);
+        if (wf_aead_open(&t->s_aead, n12, t->rec, 5, t->rec + 5, pl, t->rec + 5 + pl, t->plain) != 0) {
             seterr(t, "record authentication failed (bad_record_mac)", 0);
             return -1;
         }
@@ -202,13 +302,14 @@ static int read_record(wf_tls_t* t) {
         mcpy(t->plain, t->rec + 5, len);
         t->plain_len = len;
     } else {
-        uint8_t aad[13];
-        int pl = len - 8 - 16;
+        uint8_t aad[13], n12[12];
+        int ex = t->aead == WF_AEAD_CHACHA20_POLY1305 ? 0 : 8, pl = len - ex - 16;
         if (pl < 0 || pl > 16384) { seterr(t, "bad encrypted record", 0); return -1; }
         seq_bytes(t->s_seq, aad);
         aad[8] = (uint8_t)type; aad[9] = 3; aad[10] = 3; put16(aad + 11, pl);
-        if (aes128_gcm_decrypt(t->s_key, t->s_iv, t->rec + 5, aad, 13, t->rec + 13, (uint16_t)pl, t->rec + 13 + pl,
-                               t->plain) != 0) {
+        if (ex) { mcpy(n12, t->s_iv, 4); mcpy(n12 + 4, t->rec + 5, 8); }
+        else nonce13(t->s_iv, t->s_seq, n12);
+        if (wf_aead_open(&t->s_aead, n12, aad, 13, t->rec + 5 + ex, pl, t->rec + 5 + ex + pl, t->plain) != 0) {
             seterr(t, "record authentication failed (bad_record_mac)", 0);
             return -1;
         }
@@ -243,11 +344,21 @@ static int read_record(wf_tls_t* t) {
 
 /* ---------------------------------------------------------------- handshake */
 
-static void hs_hash(wf_tls_t* t, const uint8_t* d, int n) { sha256_update(&t->hs_hash, d, (uint32_t)n); }
+static void hs_hash(wf_tls_t* t, const uint8_t* d, int n) {
+    sha256_update(&t->hs_hash, d, (uint32_t)n);
+    wf_sha512_update(&t->hs_hash384, d, (uint32_t)n);
+}
 
-static void hs_snapshot(wf_tls_t* t, uint8_t out[32]) {
-    sha256_ctx_t copy = t->hs_hash;
-    sha256_final(&copy, out);
+/* transcript hash with the suite's hash (t->hlen bytes) */
+static void hs_snapshot(wf_tls_t* t, uint8_t* out) {
+    if (t->hlen == 48) {
+        static wf_sha512_ctx_t c384;
+        c384 = t->hs_hash384;
+        wf_sha512_final(&c384, out);
+    } else {
+        sha256_ctx_t copy = t->hs_hash;
+        sha256_final(&copy, out);
+    }
 }
 
 static int send_hs(wf_tls_t* t, int type, const uint8_t* body, int n, int enc) {
@@ -292,15 +403,19 @@ static void hs_consume(wf_tls_t* t, int n) {
 
 static int build_client_hello(wf_tls_t* t, uint8_t* b, const uint8_t my_pub[32], const uint8_t sid[32]) {
     static const uint8_t sigalgs[] = {0x04,0x03, 0x05,0x03, 0x08,0x04, 0x08,0x05, 0x08,0x06, 0x04,0x01, 0x05,0x01, 0x06,0x01};
-    int p = 0, hl = slen(t->host), ext_start, i;
+    int p = 0, hl = slen(t->host), ext_start, i, cs, v13 = 0, v12 = 0;
     b[p++] = 3; b[p++] = 3;
     mcpy(b + p, t->client_random, 32); p += 32;
     b[p++] = 32;                                /* legacy_session_id (RFC 8446 D.4 middlebox compatibility) */
     mcpy(b + p, sid, 32); p += 32;
-    put16(b + p, 8); p += 2;
-    b[p++] = 0x13; b[p++] = 0x01;               /* TLS_AES_128_GCM_SHA256 (TLS 1.3) */
-    b[p++] = 0xc0; b[p++] = 0x2b; b[p++] = 0xc0; b[p++] = 0x2f;
+    cs = p; p += 2;
+    for (i = 0; i < NSUITES; i++) {             /* Lot 72: suite table, or only the forced one */
+        if (t->only_suite && SUITES[i].id != t->only_suite) continue;
+        put16(b + p, SUITES[i].id); p += 2;
+        if (SUITES[i].v13) v13 = 1; else v12 = 1;
+    }
     b[p++] = 0x00; b[p++] = 0xff;               /* renegotiation SCSV */
+    put16(b + cs, p - cs - 2);
     b[p++] = 1; b[p++] = 0;                     /* null compression */
     ext_start = p; p += 2;
     if (hl > 0 && hl < 256) {                   /* server_name */
@@ -322,11 +437,16 @@ static int build_client_hello(wf_tls_t* t, uint8_t* b, const uint8_t my_pub[32],
     /* ALPN http/1.1: the stack speaks HTTP/1.1 only */
     put16(b + p, 0x0010); put16(b + p + 2, 11); put16(b + p + 4, 9); b[p + 6] = 8; p += 7;
     mcpy(b + p, (const uint8_t*)"http/1.1", 8); p += 8;
-    /* TLS 1.3: supported_versions, psk_key_exchange_modes, key_share X25519 */
-    put16(b + p, 0x002b); put16(b + p + 2, 5); b[p + 4] = 4; put16(b + p + 5, 0x0304); put16(b + p + 7, 0x0303); p += 9;
-    put16(b + p, 0x002d); put16(b + p + 2, 2); b[p + 4] = 1; b[p + 5] = 1; p += 6;
-    put16(b + p, 0x0033); put16(b + p + 2, 38); put16(b + p + 4, 36); put16(b + p + 6, 0x001d); put16(b + p + 8, 32); p += 10;
-    mcpy(b + p, my_pub, 32); p += 32;
+    /* TLS 1.3: supported_versions, psk_key_exchange_modes, key_share X25519
+     * (left out when only a TLS 1.2 suite is offered) */
+    if (v13) {
+        put16(b + p, 0x002b);
+        if (v12) { put16(b + p + 2, 5); b[p + 4] = 4; put16(b + p + 5, 0x0304); put16(b + p + 7, 0x0303); p += 9; }
+        else { put16(b + p + 2, 3); b[p + 4] = 2; put16(b + p + 5, 0x0304); p += 7; }
+        put16(b + p, 0x002d); put16(b + p + 2, 2); b[p + 4] = 1; b[p + 5] = 1; p += 6;
+        put16(b + p, 0x0033); put16(b + p + 2, 38); put16(b + p + 4, 36); put16(b + p + 6, 0x001d); put16(b + p + 8, 32); p += 10;
+        mcpy(b + p, my_pub, 32); p += 32;
+    }
     put16(b + ext_start, p - ext_start - 2);
     return p;
 }
@@ -355,7 +475,12 @@ static int parse_server_hello(wf_tls_t* t, const uint8_t* b, int n) {
     if (sid > 32 || p + sid + 3 > n) return -1;
     p += sid;
     t->suite = (uint16_t)get16(b + p); p += 2;
-    if (t->suite != 0xc02bU && t->suite != 0xc02fU && t->suite != 0x1301U) { seterr(t, "server chose a suite we did not offer", 0); return -1; }
+    {
+        const suite_t* su = suite_of(t->suite);
+        if (!su || (t->only_suite && t->suite != t->only_suite)) { seterr(t, "server chose a suite we did not offer", 0); return -1; }
+        t->aead = su->aead;
+        t->hlen = su->hlen;
+    }
     if (b[p++] != 0) { seterr(t, "compression refused", 0); return -1; }
     if (p + 2 <= n) {
         int el = get16(b + p), e;
@@ -384,13 +509,13 @@ static int parse_server_hello(wf_tls_t* t, const uint8_t* b, int n) {
         if (ct_eq(t->server_random, hrr, 8)) { seterr(t, "server asked for a HelloRetryRequest (group other than X25519)", 0); return -1; }
     }
     if (t->version == 0x0304) {
-        if (t->suite != 0x1301U) { seterr(t, "TLS 1.3 with a TLS 1.2 suite", 0); return -1; }
+        if (!suite_of(t->suite)->v13) { seterr(t, "TLS 1.3 with a TLS 1.2 suite", 0); return -1; }
         if (!t->got_share) { seterr(t, "TLS 1.3 server sent no key share", 0); return -1; }
         return 0;
     }
     if (t->version != 0 && t->version != 0x0303) { seterr(t, "server picked an unknown version", 0); return -1; }
     t->version = 0x0303;
-    if (t->suite == 0x1301U) { seterr(t, "TLS 1.3 suite without supported_versions", 0); return -1; }
+    if (suite_of(t->suite)->v13) { seterr(t, "TLS 1.3 suite without supported_versions", 0); return -1; }
     {
         /* downgrade sentinel: a TLS 1.3 server answering 1.2 to us is an attack */
         static const uint8_t dg[7] = {0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44};
@@ -451,8 +576,8 @@ static int parse_ske(wf_tls_t* t, const uint8_t* b, int n) {
     if (p + sl != n) return -1;
     sig = scheme_to_sig(scheme);
     if (sig == WF_SIG_NONE) { seterr(t, "signature scheme not offered", 0); return -1; }
-    if (t->suite == 0xc02bU && leaf->key_type == WF_KEY_RSA) { seterr(t, "ECDSA suite with an RSA certificate", 0); return -1; }
-    if (t->suite == 0xc02fU && leaf->key_type != WF_KEY_RSA) { seterr(t, "RSA suite with an EC certificate", 0); return -1; }
+    if (suite_of(t->suite)->kx == 1 && leaf->key_type == WF_KEY_RSA) { seterr(t, "ECDSA suite with an RSA certificate", 0); return -1; }
+    if (suite_of(t->suite)->kx == 2 && leaf->key_type != WF_KEY_RSA) { seterr(t, "RSA suite with an EC certificate", 0); return -1; }
     mcpy(signed_data, t->client_random, 32);
     mcpy(signed_data + 32, t->server_random, 32);
     mcpy(signed_data + 64, b, 4 + pl);
@@ -496,8 +621,8 @@ static int parse_certificates13(wf_tls_t* t, const uint8_t* b, int n) {
     return 0;
 }
 
-static int verify_cv13(wf_tls_t* t, const uint8_t* b, int n, const uint8_t hash[32]) {
-    static uint8_t content[64 + 34 + 32];
+static int verify_cv13(wf_tls_t* t, const uint8_t* b, int n, const uint8_t* hash) {
+    static uint8_t content[64 + 34 + 48];
     static const char ctx[] = "TLS 1.3, server CertificateVerify";
     const wf_cert_t* leaf = &t->certs[0];
     int scheme, sl, sig, i;
@@ -515,8 +640,8 @@ static int verify_cv13(wf_tls_t* t, const uint8_t* b, int n, const uint8_t hash[
     for (i = 0; i < 64; i++) content[i] = 0x20;
     mcpy(content + 64, (const uint8_t*)ctx, 33);
     content[97] = 0;
-    mcpy(content + 98, hash, 32);
-    if (wf_x509_verify_data(leaf, sig, content, 130, b + 4, sl) != 0) {
+    mcpy(content + 98, hash, t->hlen);
+    if (wf_x509_verify_data(leaf, sig, content, 98 + t->hlen, b + 4, sl) != 0) {
         seterr(t, "CertificateVerify signature is invalid", 0);
         return -1;
     }
@@ -525,12 +650,9 @@ static int verify_cv13(wf_tls_t* t, const uint8_t* b, int n, const uint8_t hash[
 }
 
 static int tls13_handshake(wf_tls_t* t, uint32_t* ws) {
-    static const uint8_t empty_hash[32] = {
-        0xe3,0xb0,0xc4,0x42,0x98,0xfc,0x1c,0x14,0x9a,0xfb,0xf4,0xc8,0x99,0x6f,0xb9,0x24,
-        0x27,0xae,0x41,0xe4,0x64,0x9b,0x93,0x4c,0xa4,0x95,0x99,0x1b,0x78,0x52,0xb8,0x55};
-    static const uint8_t zero[32] = {0};
-    uint8_t shared[32], secret[32], derived[32], hs_secret[32], c_hs[32], s_hs[32], hash[32], fk[32], fin[32];
-    int type, off, len, consumed, got_cert = 0, got_cv = 0, i;
+    static const uint8_t zero[48] = {0};
+    uint8_t shared[32], secret[48], derived[48], hs_secret[48], c_hs[48], s_hs[48], hash[48], fk[48], fin[48], empty_hash[48];
+    int type, off, len, consumed, got_cert = 0, got_cv = 0, i, hl = t->hlen;
     uint8_t z = 0;
     if (x25519_shared_secret(shared, t->ecdh_priv, t->ecdh_srv_pub, ws, X25519_WORKSPACE_LIMBS) != 0) {
         seterr(t, "x25519 failed", 0);
@@ -539,15 +661,18 @@ static int tls13_handshake(wf_tls_t* t, uint32_t* ws) {
     for (i = 0; i < 32; i++) z |= shared[i];
     if (!z) { seterr(t, "x25519 low-order point", 0); return -1; }
     mset(t->ecdh_priv, 0, 32);
-    wf_hkdf_extract(0, 0, zero, 32, secret);                       /* early secret */
-    derive_secret(secret, "derived", empty_hash, derived);
-    wf_hkdf_extract(derived, 32, shared, 32, hs_secret);
+    {
+        static hctx_t hc;                                          /* Hash("") with the suite hash */
+        h_init(&hc, hl); h_final(&hc, empty_hash);
+    }
+    wf_hkdf_extract_h(hl, 0, 0, zero, hl, secret);                 /* early secret */
+    derive_secret(t, secret, "derived", empty_hash, derived);
+    wf_hkdf_extract_h(hl, derived, hl, shared, 32, hs_secret);
     mset(shared, 0, 32);
     hs_snapshot(t, hash);                                          /* CH..SH */
-    derive_secret(hs_secret, "c hs traffic", hash, c_hs);
-    derive_secret(hs_secret, "s hs traffic", hash, s_hs);
-    tls13_keys(s_hs, t->s_key, t->s_iv13);
-    tls13_keys(c_hs, t->c_key, t->c_iv13);
+    derive_secret(t, hs_secret, "c hs traffic", hash, c_hs);
+    derive_secret(t, hs_secret, "s hs traffic", hash, s_hs);
+    if (tls13_keys(t, s_hs, &t->s_aead, t->s_iv) != 0 || tls13_keys(t, c_hs, &t->c_aead, t->c_iv) != 0) { seterr(t, "cipher setup failed", 0); return -1; }
     t->s_seq = 0; t->c_seq = 0;
     t->s_encrypted = 1;
     for (;;) {
@@ -571,9 +696,9 @@ static int tls13_handshake(wf_tls_t* t, uint32_t* ws) {
             got_cv = 1;
         } else if (type == HS_FINISHED) {
             if (!got_cert || !got_cv) { seterr(t, "server Finished before its certificate", 0); return -1; }
-            wf_hkdf_expand_label(s_hs, "finished", 0, 0, fk, 32);
-            hmac_sha256(fk, 32, hash, 32, fin);
-            if (len != 32 || !ct_eq(t->hs + off, fin, 32)) { seterr(t, "server Finished does not verify", 0); return -1; }
+            wf_hkdf_expand_label_h(hl, s_hs, "finished", 0, 0, fk, hl);
+            hmac2(hl, fk, hl, hash, hl, 0, 0, fin);
+            if (len != hl || !ct_eq(t->hs + off, fin, hl)) { seterr(t, "server Finished does not verify", 0); return -1; }
             hs_consume(t, consumed);
             break;
         } else {
@@ -584,10 +709,10 @@ static int tls13_handshake(wf_tls_t* t, uint32_t* ws) {
     }
     if (t->hs_len != 0) { seterr(t, "data after the server Finished", 0); return -1; }
     hs_snapshot(t, hash);                                          /* CH..server Finished */
-    derive_secret(hs_secret, "derived", empty_hash, derived);
-    wf_hkdf_extract(derived, 32, zero, 32, secret);                /* master secret */
-    derive_secret(secret, "c ap traffic", hash, t->c_secret);
-    derive_secret(secret, "s ap traffic", hash, t->s_secret);
+    derive_secret(t, hs_secret, "derived", empty_hash, derived);
+    wf_hkdf_extract_h(hl, derived, hl, zero, hl, secret);          /* master secret */
+    derive_secret(t, secret, "c ap traffic", hash, t->c_secret);
+    derive_secret(t, secret, "s ap traffic", hash, t->s_secret);
     /* compat CCS, then the client Finished under the handshake keys */
     {
         uint8_t one = 1;
@@ -596,13 +721,12 @@ static int tls13_handshake(wf_tls_t* t, uint32_t* ws) {
         if (send_record(t, CT_CCS, &one, 1, 0) != 0) return -1;
         t->version = v;
     }
-    wf_hkdf_expand_label(c_hs, "finished", 0, 0, fk, 32);
-    hmac_sha256(fk, 32, hash, 32, fin);
-    if (send_hs(t, HS_FINISHED, fin, 32, 1) != 0) return -1;
-    tls13_keys(t->s_secret, t->s_key, t->s_iv13);
-    tls13_keys(t->c_secret, t->c_key, t->c_iv13);
+    wf_hkdf_expand_label_h(hl, c_hs, "finished", 0, 0, fk, hl);
+    hmac2(hl, fk, hl, hash, hl, 0, 0, fin);
+    if (send_hs(t, HS_FINISHED, fin, hl, 1) != 0) return -1;
+    if (tls13_keys(t, t->s_secret, &t->s_aead, t->s_iv) != 0 || tls13_keys(t, t->c_secret, &t->c_aead, t->c_iv) != 0) { seterr(t, "cipher setup failed", 0); return -1; }
     t->s_seq = 0; t->c_seq = 0;
-    mset(hs_secret, 0, 32); mset(c_hs, 0, 32); mset(s_hs, 0, 32); mset(secret, 0, 32); mset(fk, 0, 32);
+    mset(hs_secret, 0, 48); mset(c_hs, 0, 48); mset(s_hs, 0, 48); mset(secret, 0, 48); mset(fk, 0, 48);
     t->plain_len = 0; t->plain_off = 0;
     t->ems = 1;                              /* TLS 1.3 binds the transcript by design */
     t->established = 1;
@@ -622,17 +746,17 @@ static int tls13_post_hs(wf_tls_t* t) {
         if (t->hs_len - p < 4 + l) break;
         if (ty == 24 && l == 1) {
             int req = t->hs[p + 4];
-            uint8_t ns[32];
-            wf_hkdf_expand_label(t->s_secret, "traffic upd", 0, 0, ns, 32);
-            mcpy(t->s_secret, ns, 32);
-            tls13_keys(t->s_secret, t->s_key, t->s_iv13);
+            uint8_t ns[48];
+            wf_hkdf_expand_label_h(t->hlen, t->s_secret, "traffic upd", 0, 0, ns, t->hlen);
+            mcpy(t->s_secret, ns, t->hlen);
+            if (tls13_keys(t, t->s_secret, &t->s_aead, t->s_iv) != 0) return -1;
             t->s_seq = 0;
             if (req == 1) {
                 uint8_t m[5] = {24, 0, 0, 1, 0};
                 if (send_record(t, CT_HS, m, 5, 1) != 0) return -1;
-                wf_hkdf_expand_label(t->c_secret, "traffic upd", 0, 0, ns, 32);
-                mcpy(t->c_secret, ns, 32);
-                tls13_keys(t->c_secret, t->c_key, t->c_iv13);
+                wf_hkdf_expand_label_h(t->hlen, t->c_secret, "traffic upd", 0, 0, ns, t->hlen);
+                mcpy(t->c_secret, ns, t->hlen);
+                if (tls13_keys(t, t->c_secret, &t->c_aead, t->c_iv) != 0) return -1;
                 t->c_seq = 0;
             }
         } else if (ty != 4) {
@@ -648,14 +772,16 @@ static int tls13_post_hs(wf_tls_t* t) {
 int wf_tls_handshake(wf_tls_t* t) {
     static uint8_t buf[1024];
     static uint32_t ws[X25519_WORKSPACE_LIMBS];
-    uint8_t pms[32], my_pub[32], hash[32], keys[40], fin[12], sid[32];
+    uint8_t pms[32], my_pub[32], hash[48], keys[88], fin[12], sid[32];
     int type, off, len, consumed, n, got_cert = 0, got_ske = 0;
     t->err[0] = 0; t->alert = -1; t->suite = 0; t->sig_scheme = 0; t->chain_rc = -1;
     t->established = 0; t->peer_closed = 0; t->c_seq = 0; t->s_seq = 0; t->s_encrypted = 0;
     t->rec_len = 0; t->plain_len = 0; t->plain_off = 0; t->hs_len = 0; t->cert_count = 0;
-    t->version = 0; t->got_share = 0; t->ems = 0; t->group = 0;
+    t->version = 0; t->got_share = 0; t->ems = 0; t->group = 0; t->aead = 0; t->hlen = 32;
     if (!t->send || !t->recv || !t->rand || !t->trust) { seterr(t, "tls: missing callbacks or root store", 0); return -1; }
     sha256_init(&t->hs_hash);
+    wf_sha384_init(&t->hs_hash384);
+    if (t->only_suite && !suite_of(t->only_suite)) { seterr(t, "tls: unknown forced suite", 0); return -1; }
     if (t->rand(t->io, t->client_random, 32) != 0 || t->rand(t->io, t->ecdh_priv, 32) != 0) {
         seterr(t, "no entropy", 0);
         return -1;
@@ -716,24 +842,29 @@ int wf_tls_handshake(wf_tls_t* t) {
     /* extended master secret over the session hash */
     if (t->ems) {
         hs_snapshot(t, hash);
-        wf_tls_prf(pms, 32, "extended master secret", hash, 32, t->master, 48);
+        wf_tls_prf_h(t->hlen, pms, 32, "extended master secret", hash, t->hlen, t->master, 48);
     } else {
         mcpy(buf, t->client_random, 32);
         mcpy(buf + 32, t->server_random, 32);
-        wf_tls_prf(pms, 32, "master secret", buf, 64, t->master, 48);
+        wf_tls_prf_h(t->hlen, pms, 32, "master secret", buf, 64, t->master, 48);
     }
     mset(pms, 0, 32);
     mset(t->ecdh_priv, 0, 32);
     mcpy(buf, t->server_random, 32);
     mcpy(buf + 32, t->client_random, 32);
-    wf_tls_prf(t->master, 48, "key expansion", buf, 64, keys, 40);
-    mcpy(t->c_key, keys, 16); mcpy(t->s_key, keys + 16, 16);
-    mcpy(t->c_iv, keys + 32, 4); mcpy(t->s_iv, keys + 36, 4);
-    mset(keys, 0, 40);
+    {
+        /* key block: client key, server key, client IV, server IV (RFC 5246
+         * 6.3); IV 4 bytes for GCM (RFC 5288), 12 for ChaCha20 (RFC 7905) */
+        int kl = wf_aead_key_len(t->aead), ivl = t->aead == WF_AEAD_CHACHA20_POLY1305 ? 12 : 4;
+        wf_tls_prf_h(t->hlen, t->master, 48, "key expansion", buf, 64, keys, 2 * kl + 2 * ivl);
+        if (wf_aead_init(&t->c_aead, t->aead, keys) != 0 || wf_aead_init(&t->s_aead, t->aead, keys + kl) != 0) { seterr(t, "cipher setup failed", 0); return -1; }
+        mcpy(t->c_iv, keys + 2 * kl, ivl); mcpy(t->s_iv, keys + 2 * kl + ivl, ivl);
+        mset(keys, 0, (int)sizeof(keys));
+    }
     buf[0] = 1;
     if (send_record(t, CT_CCS, buf, 1, 0) != 0) return -1;
     hs_snapshot(t, hash);
-    wf_tls_prf(t->master, 48, "client finished", hash, 32, fin, 12);
+    wf_tls_prf_h(t->hlen, t->master, 48, "client finished", hash, t->hlen, fin, 12);
     if (send_hs(t, HS_FINISHED, fin, 12, 1) != 0) return -1;
     /* server ChangeCipherSpec + Finished */
     if (t->hs_len != 0) { seterr(t, "data after ServerHelloDone", 0); return -1; }
@@ -744,7 +875,7 @@ int wf_tls_handshake(wf_tls_t* t) {
     }
     t->s_encrypted = 1;
     hs_snapshot(t, hash);
-    wf_tls_prf(t->master, 48, "server finished", hash, 32, fin, 12);
+    wf_tls_prf_h(t->hlen, t->master, 48, "server finished", hash, t->hlen, fin, 12);
     type = next_hs(t, &off, &len, &consumed);
     if (type != HS_FINISHED || len != 12) { if (type >= 0) seterr(t, "expected Finished", 0); return -1; }
     if (!ct_eq(t->hs + off, fin, 12)) { seterr(t, "server Finished does not verify", 0); return -1; }

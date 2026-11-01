@@ -25,6 +25,9 @@ typedef struct {
     const char* now;          /* YYYYMMDDHHMMSS or 0 (clock not trusted) */
     int max_redirects;        /* clamped to WF_FETCH_MAX_REDIRECTS */
     wf_cookie_jar_t* jar;     /* Lot 71: 0 = no cookies; else sent and stored on every hop */
+    int keepalive;            /* Lot 72: 1 = HTTP keep-alive, the last connection (TLS session
+                               * included) is kept and reused for the same scheme/host/port */
+    uint16_t tls_suite;       /* Lot 72: 0 = offer every TLS suite, else only this one */
 } wf_fetch_env_t;
 
 typedef struct {
@@ -46,6 +49,8 @@ typedef struct {
     char anchor_cn[64];
     char not_after[15];
     int time_checked;
+    int reused;               /* Lot 72: hops sent on a kept-alive connection */
+    int connections;          /* Lot 72: new TCP (+TLS) connections opened */
     char err[160];
 } wf_fetch_result_t;
 
@@ -67,4 +72,8 @@ typedef struct {
 } wf_fetch_req_t;
 int wf_fetch_ex(const wf_fetch_env_t* env, const char* url, const wf_fetch_req_t* req, uint8_t* body, int cap,
                 wf_fetch_result_t* res);
+/* Lot 72: closes the kept-alive connection, if any (close_notify for TLS). */
+void wf_fetch_drop(const wf_fetch_env_t* env);
+/* Lot 72: connections opened / requests sent on a reused connection since start. */
+void wf_fetch_conn_stats(int* opened, int* reused);
 #endif

@@ -24,6 +24,9 @@ void strcpy(char* dest, const char* src);
 #include "shell_p2p.h"
 #include "shell_grpc.h"
 #include "shell_fetch.h"
+#include "wf_guest.h"
+#include "wf_tls.h"
+#include "wf_fetch.h"
 #include "shell_search.h"
 int shell_collab_line(const char* line);
 #include "shell_platform.h"
@@ -3656,7 +3659,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "net-if", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "fetch", "http-get", "search", "search-open", "search-engine", "search-config", "cookies", "web-open", "web-forms", "web-section", "web-input", "web-submit", "web-find", "web-images", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "fetch", "http-get", "search", "search-open", "search-engine", "search-config", "cookies", "web-open", "web-forms", "web-section", "web-input", "web-submit", "web-find", "web-images", "http-keepalive", "tls-suite", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -7367,6 +7370,40 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         return 1;
     } else if (strcmp(command, "net-if") == 0) {
         cmd_net_if(ctx, args, arg_count);
+        return 1;
+    } else if (strcmp(command, "http-keepalive") == 0) {
+        /* Lot 72: HTTP keep-alive of the guest fetches (one kept connection) */
+        int opened = 0, reused = 0;
+        (void)ctx;
+        if (arg_count >= 1 && strcmp(args[0], "off") == 0) wf_guest_set_keepalive(0);
+        else if (arg_count >= 1 && strcmp(args[0], "on") == 0) wf_guest_set_keepalive(1);
+        else if (arg_count >= 1) { print_string("usage: http-keepalive [on|off]\n"); return 1; }
+        wf_fetch_conn_stats(&opened, &reused);
+        print_string("http-keepalive ");
+        print_string(wf_guest_keepalive() ? "on" : "off");
+        print_string(" opened "); print_int(opened);
+        print_string(" reused "); print_int(reused);
+        print_string("\n");
+        return 1;
+    } else if (strcmp(command, "tls-suite") == 0) {
+        /* Lot 72: offer one TLS suite only (diagnostics), or every suite */
+        int i;
+        (void)ctx;
+        if (arg_count >= 1 && strcmp(args[0], "auto") == 0) wf_guest_set_tls_suite(0);
+        else if (arg_count >= 1) {
+            uint16_t id = wf_tls_suite_by_name(args[0]);
+            if (!id) { print_string("tls-suite error unknown suite "); print_string(args[0]); print_string("\n"); return 1; }
+            wf_guest_set_tls_suite(id);
+        }
+        print_string("tls-suite ");
+        print_string(wf_guest_tls_suite() ? wf_tls_suite_name(wf_guest_tls_suite()) : "auto");
+        print_string(" offered");
+        for (i = 0; i < wf_tls_suite_count(); i++) {
+            uint16_t id = wf_tls_suite_at(i);
+            if (wf_guest_tls_suite() && id != wf_guest_tls_suite()) continue;
+            print_string(" "); print_string(wf_tls_suite_name(id));
+        }
+        print_string("\n");
         return 1;
     } else if (strcmp(command, "web-images") == 0) {
         /* Lot 72: images of fetched pages on / off, and the counters of

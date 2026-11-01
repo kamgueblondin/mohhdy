@@ -77,7 +77,26 @@ class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def _ka_log(self):
+        # Lot 72: client port per request (keep-alive reuse shows one port)
+        print(f"KA port={self.client_address[1]} path={self.path}", flush=True)
+
     def do_GET(self):
+        if self.path.startswith("/ka/"):
+            self._ka_log()
+            self._send(200, ("keep-alive answer %s\n" % self.path[4:]).encode(), "text/plain")
+            return
+        if self.path.startswith("/kaclose/"):
+            # answers then closes: the client must open a new connection
+            self._ka_log()
+            body = b"closing\n"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            self.close_connection = True
+            return
         scheme = "https" if isinstance(self.connection, ssl.SSLSocket) else "http"
         print(f"REQ {scheme} {self.path} host={self.headers.get('Host')}", flush=True)
         p = self.path
@@ -301,17 +320,24 @@ def main():
     tls.socket = ctx.wrap_socket(tls.socket, server_side=True)
     threading.Thread(target=plain.serve_forever, daemon=True).start()
     # Lot 69: sp+1 TLS 1.3 only (ECDSA leaf), sp+2 TLS 1.3 only (RSA leaf,
-    # RSA-PSS CertificateVerify), sp+3 TLS 1.2 ECDHE-RSA with P-256 only
+    # RSA-PSS CertificateVerify), sp+3 TLS 1.2 ECDHE-RSA with P-256 only.
+    # Lot 72: sp+4 TLS 1.2 ECDSA leaf and sp+5 TLS 1.2 RSA leaf with the
+    # AES-256-GCM-SHA384 and ChaCha20-Poly1305 suites (P-256 on sp+5).
     extra = []
-    for off, ver, chain, key, curve in ((1, "1.3", "server_chain", "server_key", None),
-                                        (2, "1.3", "server_rsa_chain", "server_rsa_key", None),
-                                        (3, "1.2", "server_rsa_chain", "server_rsa_key", "prime256v1")):
+    for off, ver, chain, key, curve, ciphers in (
+            (1, "1.3", "server_chain", "server_key", None, None),
+            (2, "1.3", "server_rsa_chain", "server_rsa_key", None, None),
+            (3, "1.2", "server_rsa_chain", "server_rsa_key", "prime256v1", "ECDHE-RSA-AES128-GCM-SHA256"),
+            (4, "1.2", "server_chain", "server_key", None,
+             "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256"),
+            (5, "1.2", "server_rsa_chain", "server_rsa_key", "prime256v1",
+             "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256")):
         c = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         if ver == "1.3":
             c.minimum_version = ssl.TLSVersion.TLSv1_3
         else:
             c.minimum_version = c.maximum_version = ssl.TLSVersion.TLSv1_2
-            c.set_ciphers("ECDHE-RSA-AES128-GCM-SHA256")
+            c.set_ciphers(ciphers)
         if curve:
             c.set_ecdh_curve(curve)
         c.load_cert_chain(f"{pki}/{chain}.pem", f"{pki}/{key}.pem")
@@ -319,7 +345,7 @@ def main():
         srv.socket = c.wrap_socket(srv.socket, server_side=True)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         extra.append(sp + off)
-    print(f"READY http={hp} https={sp} tls13={extra[0]} tls13rsa={extra[1]} p256={extra[2]}", flush=True)
+    print(f"READY http={hp} https={sp} tls13={extra[0]} tls13rsa={extra[1]} p256={extra[2]} tls12ec={extra[3]} tls12rsa={extra[4]}", flush=True)
     tls.serve_forever()
 
 
