@@ -7,7 +7,13 @@ animated GIF, a 200x150 GIF, a missing image (404, alt text) and a .ico
 favicon. The image bytes are the unit test fixtures.
 Console part: web-images on, web-open of the page: the server sees the
 image requests, web-images reports found/shown/failed and the status line
-"favicon ok". GUI part: the same page in the web window; the decoded
+"favicon ok"; the image requests reuse the kept-alive connection. TLS
+part: tls-suite forces each new suite against the OpenSSL test server
+(TLS 1.3 AES-256-GCM-SHA384 / ChaCha20-Poly1305, TLS 1.2 ECDHE-ECDSA and
+ECDHE-RSA (P-256, constant-time ladder) with AES-256-GCM / ChaCha20);
+http-keepalive: the page, favicon and images over one TCP connection
+(one server port), one connection per request when switched off.
+GUI part: the same page in the web window; the decoded
 pixels (saturated colours of the test pattern) are counted on the screen
 and the favicon is drawn before the title. Screenshots (PNG, when Pillow
 is there) go to LOT72_SHOTS (default test_logs/lot72-shots).
@@ -125,6 +131,42 @@ def main():
                 if want not in line:
                     raise RuntimeError("web-images: want %r in %r" % (want, line))
             say("console: 6 images found, 5 decoded, the 404 one failed, favicon ok")
+            out = lw.run(mon, proc, "http-keepalive", "http-keepalive on opened", 30)
+            line = out[out.rfind("http-keepalive on opened"):].splitlines()[0]
+            say(line)
+            if int(line.split(" reused ")[1].split()[0]) < 3:
+                raise RuntimeError("image requests did not reuse the connection: %r" % line)
+            # ---- TLS suites (each offered alone) and keep-alive
+            sp = hp + 1
+            for suite, port, want in (("TLS13-AES256-GCM-SHA384", sp + 1, "tls TLS13-AES256-GCM-SHA384"),
+                                      ("TLS13-CHACHA20-POLY1305-SHA256", sp + 2, "tls TLS13-CHACHA20-POLY1305-SHA256"),
+                                      ("cca9", sp + 4, "tls ECDHE-ECDSA-CHACHA20-POLY1305"),
+                                      ("c02c", sp + 4, "tls ECDHE-ECDSA-AES256-GCM-SHA384"),
+                                      ("c030", sp + 5, "tls ECDHE-RSA-AES256-GCM-SHA384"),
+                                      ("cca8", sp + 5, "tls ECDHE-RSA-CHACHA20-POLY1305")):
+                lw.run(mon, proc, "tls-suite %s" % suite, "tls-suite ", 30, fail=["error"])
+                out = lw.run(mon, proc, "fetch https://10.0.2.2:%d/hello" % port, "fetch ok status 200", lw.FETCH_TIMEOUT, fail=["fetch error"])
+                if want not in out or "fetch ok status 200" not in out:
+                    raise RuntimeError("suite %s: %r" % (suite, out[-700:]))
+                say("guest TLS %s ok" % want[4:])
+            lw.run(mon, proc, "tls-suite auto", "tls-suite auto offered", 30)
+            # keep-alive seen from the server: the page, its favicon and its
+            # images came over one TCP connection; with keep-alive off, one
+            # connection per request
+            img_ports = set(l.split("port=")[1] for l in server_text().splitlines() if l.startswith("IMG "))
+            say("server: image requests from ports %s" % sorted(img_ports))
+            if len(img_ports) != 1:
+                raise RuntimeError("images not on one kept-alive connection: %r" % img_ports)
+            lw.run(mon, proc, "http-keepalive off", "http-keepalive off", 30)
+            n0 = len(server_text().splitlines())
+            lw.run(mon, proc, "web-open %s/lot72/images.html" % u, "osui web page sections", fail=["error"])
+            wait_server("IMG absente.png", 30)
+            img_ports = set(l.split("port=")[1] for l in server_text().splitlines()[n0:] if l.startswith("IMG "))
+            say("keep-alive off: image requests from %d ports" % len(img_ports))
+            if len(img_ports) < 6:
+                raise RuntimeError("keep-alive off still reused: %r" % img_ports)
+            lw.run(mon, proc, "http-keepalive on", "http-keepalive on", 30)
+            say("keep-alive: one connection for the page and its images, one per request when off")
             # ---- GUI
             g.send_command_until(mon, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)

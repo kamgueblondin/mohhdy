@@ -205,7 +205,7 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p.startswith("/lot72/img/") or p == "/favicon.ico":
             name = "fav.ico" if p == "/favicon.ico" else p[len("/lot72/img/"):]
-            print(f"IMG {name}", flush=True)
+            print(f"IMG {name} port={self.client_address[1]}", flush=True)
             ent = LOT72_FILES.get(name)
             if ent is None or ent[0] not in _IMG:
                 self._send(404, b"no image\n", "text/plain")
