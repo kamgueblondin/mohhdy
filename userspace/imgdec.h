@@ -8,13 +8,15 @@
  * (SOF2, spectral selection and successive approximation), gray or YCbCr,
  * sampling 1..2, restart markers. Arithmetic, lossless, 12-bit and CMYK
  * JPEG are refused with E_UNSUP.
+ * Lot 72: GIF87a/89a (first frame, global or local palette, transparency
+ * shown white, interlace, LZW up to 12 bits).
  * Memory: PNG and JPEG need a caller-owned scratch of imgdec_scratch_need()
  * bytes (after probe); larger images are refused with IMGDEC_E_TOOBIG.
  * Nothing is allocated. */
 #ifndef IMGDEC_H
 #define IMGDEC_H
 
-enum { IMGDEC_NONE = 0, IMGDEC_PNM = 1, IMGDEC_BMP = 2, IMGDEC_PNG = 3, IMGDEC_JPEG = 4 };
+enum { IMGDEC_NONE = 0, IMGDEC_PNM = 1, IMGDEC_BMP = 2, IMGDEC_PNG = 3, IMGDEC_JPEG = 4, IMGDEC_GIF = 5 };
 enum {
     IMGDEC_OK = 0, IMGDEC_E_FORMAT = -1, IMGDEC_E_TRUNC = -2, IMGDEC_E_UNSUP = -3,
     IMGDEC_E_TOOBIG = -4, IMGDEC_E_INFLATE = -5, IMGDEC_E_CRC = -6
@@ -38,6 +40,8 @@ typedef struct {
     int top_down;                  /* BMP */
     unsigned char pal[256][3];     /* PNG palette */
     int npal;
+    int frames;            /* Lot 72: GIF images in the file (first one decoded) */
+    int gif_pixels;        /* Lot 72: GIF frame pixels decoded (less if the stream is cut) */
 } imgdec_t;
 
 /* format and size only (no pixel decoding, no scratch) */

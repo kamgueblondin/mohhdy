@@ -2,6 +2,7 @@
 #include "../../framework/unity.h"
 #include "imgdec.h"
 #include "imgdec_samples.h"
+#include "imgdec_gif_samples.h"
 #include <string.h>
 
 static unsigned char g_scratch[64 * 1024];
@@ -208,6 +209,122 @@ static void test_jpeg_refusals_and_bounds(void) {
     (void)imgdec_open(img_mire420_jpg, sizeof(img_mire420_jpg) / 2, g_scratch, sizeof(g_scratch), &img);
 }
 
+
+/* ---- Lot 72: GIF ------------------------------------------------------ */
+static void gif_expect(const imgdec_t *img, int x, int y, int shift) {
+    unsigned char c[3];
+    int k = (x + 2 * y + shift) % 16;
+    imgdec_pixel(img, x, y, c);
+    TEST_ASSERT_EQUAL(k * 16, c[0]);
+    TEST_ASSERT_EQUAL(255 - k * 16, c[1]);
+    TEST_ASSERT_EQUAL((k * 37) & 255, c[2]);
+}
+
+static void gif_check_all(const unsigned char *buf, int n, int w, int h) {
+    imgdec_t img;
+    int x, y;
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_probe(buf, n, &img));
+    TEST_ASSERT_EQUAL(IMGDEC_GIF, img.fmt);
+    TEST_ASSERT_TRUE(imgdec_scratch_need(&img) <= sizeof(g_scratch));
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(buf, n, g_scratch, sizeof(g_scratch), &img));
+    TEST_ASSERT_EQUAL(w, img.w);
+    TEST_ASSERT_EQUAL(h, img.h);
+    TEST_ASSERT_EQUAL(w * h, img.gif_pixels);
+    for (y = 0; y < h; y++) for (x = 0; x < w; x++) gif_expect(&img, x, y, 0);
+}
+
+static void test_gif_plain(void) {
+    imgdec_t img;
+    gif_check_all(gif_plain, sizeof(gif_plain), GIFS_W, GIFS_H);
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(gif_plain, sizeof(gif_plain), g_scratch, sizeof(g_scratch), &img));
+    TEST_ASSERT_EQUAL(1, img.frames);
+    TEST_ASSERT_EQUAL(0, img.interlace);
+    TEST_ASSERT_EQUAL_STRING("gif", imgdec_fmt_name(img.fmt));
+}
+
+static void test_gif_interlaced(void) {
+    imgdec_t img;
+    gif_check_all(gif_inter, sizeof(gif_inter), GIFS_W, GIFS_H);
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_probe(gif_inter, sizeof(gif_inter), &img));
+    TEST_ASSERT_EQUAL(1, img.interlace);
+}
+
+static void test_gif_local_table(void) { gif_check_all(gif_local, sizeof(gif_local), GIFS_W, GIFS_H); }
+
+static void test_gif_big_12bit_codes(void) {
+    static unsigned char big_scratch[200 * 150 * 3 + 32768];
+    imgdec_t img;
+    int x, y;
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_probe(gif_big, sizeof(gif_big), &img));
+    TEST_ASSERT_EQUAL(IMGDEC_E_TOOBIG, imgdec_open(gif_big, sizeof(gif_big), g_scratch, sizeof(g_scratch), &img));
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(gif_big, sizeof(gif_big), big_scratch, sizeof(big_scratch), &img));
+    TEST_ASSERT_EQUAL(200 * 150, img.gif_pixels);
+    for (y = 0; y < 150; y += 7) for (x = 0; x < 200; x += 3) gif_expect(&img, x, y, 0);
+    gif_expect(&img, 199, 149, 0);
+}
+
+static void test_gif_transparent_is_white(void) {
+    imgdec_t img;
+    unsigned char c[3];
+    int x, y, seen = 0;
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(gif_transp, sizeof(gif_transp), g_scratch, sizeof(g_scratch), &img));
+    for (y = 0; y < GIFS_H; y++)
+        for (x = 0; x < GIFS_W; x++) {
+            if ((x + 2 * y) % 16 == 3) {
+                imgdec_pixel(&img, x, y, c);
+                TEST_ASSERT_EQUAL(255, c[0]); TEST_ASSERT_EQUAL(255, c[1]); TEST_ASSERT_EQUAL(255, c[2]);
+                seen++;
+            } else gif_expect(&img, x, y, 0);
+        }
+    TEST_ASSERT_TRUE(seen > 10);
+}
+
+static void test_gif_animated_first_frame(void) {
+    imgdec_t img;
+    int x, y;
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(gif_anim, sizeof(gif_anim), g_scratch, sizeof(g_scratch), &img));
+    TEST_ASSERT_EQUAL(2, img.frames);
+    for (y = 0; y < GIFS_H; y += 2) for (x = 0; x < GIFS_W; x += 3) gif_expect(&img, x, y, 0);
+}
+
+static void test_gif_truncated_and_corrupt(void) {
+    static unsigned char bad[sizeof(gif_plain)];
+    imgdec_t img;
+    unsigned char c[3];
+    int k;
+    TEST_ASSERT_EQUAL(IMGDEC_E_TRUNC, imgdec_open(gif_plain, 10, g_scratch, sizeof(g_scratch), &img));
+    TEST_ASSERT_EQUAL(IMGDEC_E_FORMAT, imgdec_probe((const unsigned char *)"GIF88a....", 10, &img));
+    /* cut in the middle of the code stream: the decoded part is kept */
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(gif_plain, (int)sizeof(gif_plain) - 60, g_scratch, sizeof(g_scratch), &img));
+    TEST_ASSERT_TRUE(img.gif_pixels > 0 && img.gif_pixels < GIFS_W * GIFS_H);
+    gif_expect(&img, 0, 0, 0);
+    imgdec_pixel(&img, GIFS_W - 1, GIFS_H - 1, c);
+    TEST_ASSERT_EQUAL(255, c[0]);
+    /* random bytes in the stream never write outside the image */
+    for (k = 0; k < 64; k++) {
+        int i;
+        memcpy(bad, gif_plain, sizeof(gif_plain));
+        for (i = 0; i < 8; i++) bad[60 + ((k * 13 + i * 7) % ((int)sizeof(gif_plain) - 62))] ^= (unsigned char)(k * 31 + i + 1);
+        (void)imgdec_open(bad, sizeof(bad), g_scratch, sizeof(g_scratch), &img);
+    }
+    /* scratch too small and huge logical screen */
+    TEST_ASSERT_EQUAL(IMGDEC_E_TOOBIG, imgdec_open(gif_plain, sizeof(gif_plain), g_scratch, 100, &img));
+    memcpy(bad, gif_plain, sizeof(gif_plain));
+    bad[6] = 0xFF; bad[7] = 0x7F;
+    TEST_ASSERT_EQUAL(IMGDEC_E_TOOBIG, imgdec_probe(bad, sizeof(bad), &img));
+}
+
+static void test_gif_render_scaled(void) {
+    imgdec_t img;
+    int w, h;
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(gif_plain, sizeof(gif_plain), g_scratch, sizeof(g_scratch), &img));
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_render(&img, g_rgb, 11, 11, 0, 0, 0, &w, &h));
+    TEST_ASSERT_EQUAL(11, w);
+    TEST_ASSERT_EQUAL(8, h);
+    TEST_ASSERT_EQUAL(0, g_rgb[0]);
+    TEST_ASSERT_EQUAL(255, g_rgb[1]);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bmp24);
@@ -224,6 +341,14 @@ int main(void) {
     RUN_TEST(test_png_scratch_bound_new_variants);
     RUN_TEST(test_jpeg_baseline);
     RUN_TEST(test_jpeg_refusals_and_bounds);
+    RUN_TEST(test_gif_plain);
+    RUN_TEST(test_gif_interlaced);
+    RUN_TEST(test_gif_local_table);
+    RUN_TEST(test_gif_big_12bit_codes);
+    RUN_TEST(test_gif_transparent_is_white);
+    RUN_TEST(test_gif_animated_first_frame);
+    RUN_TEST(test_gif_truncated_and_corrupt);
+    RUN_TEST(test_gif_render_scaled);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

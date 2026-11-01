@@ -202,6 +202,7 @@ static void zero(imgdec_t *img) {
 static int sane(int w, int h) { return w > 0 && h > 0 && w <= IMGDEC_MAX_DIM && h <= IMGDEC_MAX_DIM; }
 
 #include "imgdec_jpeg.inc"
+#include "imgdec_gif.inc"
 
 /* ---- probe ------------------------------------------------------------ */
 static int probe_png(const unsigned char *b, int n, imgdec_t *img) {
@@ -278,6 +279,8 @@ int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img) {
     zero(img);
     rc = probe_jpeg(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_JPEG) return rc;
     zero(img);
+    rc = probe_gif(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_GIF) return rc;
+    zero(img);
     rc = probe_bmp(buf, n, img); if (rc != IMGDEC_E_FORMAT) return rc;
     zero(img);
     return probe_pnm(buf, n, img);
@@ -316,6 +319,7 @@ unsigned imgdec_scratch_need(const imgdec_t *img) {
     if (!img) return 0U;
     if (img->fmt == IMGDEC_PNG) return png_raw_size(img) + (unsigned)img->w * (unsigned)img->h * (unsigned)img->channels;
     if (img->fmt == IMGDEC_JPEG) return jpeg_scratch_need(img);
+    if (img->fmt == IMGDEC_GIF) return gif_scratch_need(img);
     return 0U;
 }
 
@@ -420,6 +424,7 @@ int imgdec_open(const unsigned char *buf, int n, unsigned char *scratch, unsigne
     if (rc) return rc;
     if (img->fmt == IMGDEC_PNG) return open_png(buf, n, scratch, scratch_max, img);
     if (img->fmt == IMGDEC_JPEG) return open_jpeg(buf, n, scratch, scratch_max, img);
+    if (img->fmt == IMGDEC_GIF) return open_gif(buf, n, scratch, scratch_max, img);
     return IMGDEC_OK;
 }
 
@@ -485,7 +490,7 @@ int imgdec_render(const imgdec_t *img, unsigned char *rgb, int max_w, int max_h,
 }
 
 const char *imgdec_fmt_name(int fmt) {
-    switch (fmt) { case IMGDEC_PNM: return "pnm"; case IMGDEC_BMP: return "bmp"; case IMGDEC_PNG: return "png"; case IMGDEC_JPEG: return "jpeg"; default: return "inconnu"; }
+    switch (fmt) { case IMGDEC_PNM: return "pnm"; case IMGDEC_BMP: return "bmp"; case IMGDEC_PNG: return "png"; case IMGDEC_JPEG: return "jpeg"; case IMGDEC_GIF: return "gif"; default: return "inconnu"; }
 }
 
 const char *imgdec_strerror(int rc) {
