@@ -40,6 +40,8 @@ typedef struct {
     int stride;                    /* bytes per row of data */
     int top_down;                  /* BMP */
     unsigned char pal[256][3];     /* PNG palette */
+    unsigned char pal_a[256];      /* Lot 72: PNG tRNS alpha per palette entry (255 = opaque) */
+    int over_white;                /* Lot 72: caller sets 1 after open: imgdec_pixel composes PNG alpha over white (web pages) */
     int npal;
     int frames;            /* Lot 72: GIF images in the file (first one decoded) */
     int gif_pixels;

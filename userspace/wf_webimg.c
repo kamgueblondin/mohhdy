@@ -98,6 +98,7 @@ static int load(wf_webimg_t* w, const char* url, const wf_webimg_io_t* io, imgde
     if (imgdec_scratch_need_scaled(img, shift) > WF_WEBIMG_SCRATCH) { err(st, "image trop grande", url); return -1; }
     rc = imgdec_open_scaled(w->src, n, w->scratch, WF_WEBIMG_SCRATCH, shift, img);
     if (rc) { err(st, imgdec_strerror(rc), url); return -1; }
+    img->over_white = 1;                       /* transparent PNG over the white page */
     if (shift && st) st->scaled++;
     return 0;
 }

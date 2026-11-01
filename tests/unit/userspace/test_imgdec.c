@@ -402,12 +402,57 @@ static void test_ico_png_and_dib(void) {
     }
 }
 
+
+/* Lot 72: 2x1 palette PNG, index 0 black fully transparent (tRNS), index 1 red */
+static const unsigned char png_pal_trns[99] = {
+137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,2,0,0,0,1,8,3,0,0,0,195,252,143,184,0,0,0,6,80,76,84,69,0,0,0,255,0,0,27,255,141,34,0,0,0,1,116,82,78,83,0,64,230,216,102,0,0,0,11,73,68,65,84,120,156,99,96,96,4,0,0,4,0,2,191,122,63,74,0,0,0,0,73,69,78,68,174,66,96,130
+};
+
+/* Lot 72: PNG alpha composed over white when the caller asks (web pages) */
+static void test_png_alpha_over_white(void) {
+    imgdec_t img;
+    int x, y, seen_partial = 0;
+    unsigned char raw[3], out[3];
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_probe(img_mire_rgba_png, sizeof(img_mire_rgba_png), &img));
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(img_mire_rgba_png, sizeof(img_mire_rgba_png), g_scratch, sizeof(g_scratch), &img));
+    TEST_ASSERT_EQUAL(4, img.channels);
+    for (y = 0; y < img.h; y++)
+        for (x = 0; x < img.w; x++) {
+            unsigned a = img.data[y * img.stride + x * 4 + 3], k;
+            img.over_white = 0;
+            imgdec_pixel(&img, x, y, raw);
+            img.over_white = 1;
+            imgdec_pixel(&img, x, y, out);
+            if (a != 255) seen_partial++;
+            for (k = 0; k < 3; k++)
+                TEST_ASSERT_EQUAL((raw[k] * a + 255U * (255U - a) + 127U) / 255U, out[k]);
+        }
+    TEST_ASSERT_TRUE(seen_partial > 0);
+}
+
+/* Lot 72: palette PNG with tRNS: index 0 transparent becomes white */
+static void test_png_palette_trns(void) {
+    imgdec_t img;
+    unsigned char rgb[3];
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_probe(png_pal_trns, sizeof(png_pal_trns), &img));
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(png_pal_trns, sizeof(png_pal_trns), g_scratch, sizeof(g_scratch), &img));
+    imgdec_pixel(&img, 0, 0, rgb);
+    TEST_ASSERT_EQUAL(0, rgb[0]); TEST_ASSERT_EQUAL(0, rgb[1]); TEST_ASSERT_EQUAL(0, rgb[2]);
+    img.over_white = 1;
+    imgdec_pixel(&img, 0, 0, rgb);
+    TEST_ASSERT_EQUAL(255, rgb[0]); TEST_ASSERT_EQUAL(255, rgb[1]); TEST_ASSERT_EQUAL(255, rgb[2]);
+    imgdec_pixel(&img, 1, 0, rgb);                       /* opaque red */
+    TEST_ASSERT_EQUAL(255, rgb[0]); TEST_ASSERT_EQUAL(0, rgb[1]); TEST_ASSERT_EQUAL(0, rgb[2]);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bmp24);
     RUN_TEST(test_bmp32_top_down);
     RUN_TEST(test_png_rgb_split_idat);
     RUN_TEST(test_png_rgba);
+    RUN_TEST(test_png_alpha_over_white);
+    RUN_TEST(test_png_palette_trns);
     RUN_TEST(test_png_palette_and_gray);
     RUN_TEST(test_bounds_and_errors);
     RUN_TEST(test_inflate_fixed_and_bound);

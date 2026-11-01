@@ -370,6 +370,7 @@ static int open_png(const unsigned char *b, int n, unsigned char *scratch, unsig
     int pos = 8, got_end = 0, ch = img->channels, pal = img->color_type == 3;
     int fbpp = (ch * img->depth) / 8 < 1 ? 1 : (ch * img->depth) / 8;
     if (!scratch || need > smax) return IMGDEC_E_TOOBIG;
+    { int k; for (k = 0; k < 256; k++) img->pal_a[k] = 255; }
     r.nseg = 0; r.cur = 0; r.pos = 0; r.bitbuf = 0; r.bitcnt = 0; r.eof = 0;
     while (pos + 12 <= n) {
         unsigned len = be32(b + pos);
@@ -380,6 +381,10 @@ static int open_png(const unsigned char *b, int n, unsigned char *scratch, unsig
             unsigned k;
             img->npal = (int)(len / 3) > 256 ? 256 : (int)(len / 3);
             for (k = 0; k < (unsigned)img->npal; k++) { img->pal[k][0] = type[4 + k * 3]; img->pal[k][1] = type[5 + k * 3]; img->pal[k][2] = type[6 + k * 3]; }
+        } else if (pal && type[0] == 't' && type[1] == 'R' && type[2] == 'N' && type[3] == 'S') {
+            /* Lot 72: palette transparency, composed over white */
+            unsigned k;
+            for (k = 0; k < len && k < 256; k++) img->pal_a[k] = type[4 + k];
         } else if (type[0] == 'I' && type[1] == 'D' && type[2] == 'A' && type[3] == 'T') {
             if (r.nseg >= MAX_SEG) return IMGDEC_E_UNSUP;
             r.seg[r.nseg] = type + 4; r.len[r.nseg] = (int)len; r.nseg++;
@@ -447,6 +452,14 @@ int imgdec_open_scaled(const unsigned char *buf, int n, unsigned char *scratch, 
     return IMGDEC_OK;
 }
 
+/* Lot 72: with img->over_white, PNG alpha (RGBA, gray+alpha, palette
+ * tRNS) is composed over a white page: a transparent logo no longer shows
+ * a black box. The raw samples stay the default (image viewer, tests). */
+static void over_white(unsigned char rgb[3], unsigned a) {
+    int k;
+    for (k = 0; k < 3; k++) rgb[k] = (unsigned char)((rgb[k] * a + 255U * (255U - a) + 127U) / 255U);
+}
+
 void imgdec_pixel(const imgdec_t *img, int x, int y, unsigned char rgb[3]) {
     const unsigned char *p;
     if (x < 0) x = 0;
@@ -463,10 +476,13 @@ void imgdec_pixel(const imgdec_t *img, int x, int y, unsigned char rgb[3]) {
     if (img->fmt == IMGDEC_PNG && img->color_type == 3) {
         int k = p[0] < img->npal ? p[0] : 0;
         rgb[0] = img->pal[k][0]; rgb[1] = img->pal[k][1]; rgb[2] = img->pal[k][2];
+        if (img->over_white && img->pal_a[k] != 255) over_white(rgb, img->pal_a[k]);
     } else if (img->channels >= 3) {
         rgb[0] = p[0]; rgb[1] = p[1]; rgb[2] = p[2];
+        if (img->over_white && img->fmt == IMGDEC_PNG && img->channels == 4 && p[3] != 255) over_white(rgb, p[3]);
     } else {
         rgb[0] = rgb[1] = rgb[2] = p[0];
+        if (img->over_white && img->fmt == IMGDEC_PNG && img->channels == 2 && p[1] != 255) over_white(rgb, p[1]);
     }
 }
 
