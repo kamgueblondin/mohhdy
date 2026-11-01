@@ -607,6 +607,41 @@ jobs:
           path: |
             test_logs/
 
+  lot72-images:
+    name: QEMU browser images and favicon (Lot 72)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      # Offline: local test server on 10.0.2.2 (slirp). About 1 min under TCG.
+      - name: QEMU PNG, GIF, JPEG images and favicon in the browser
+        run: make qemu-lot72
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot72-images-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   lot68-text-scale:
     name: QEMU desktop text scale and Ctrl zoom (Lot 68)
     runs-on: ubuntu-latest

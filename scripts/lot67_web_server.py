@@ -20,8 +20,50 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /latin1.html  Lot 71: an ISO-8859-1 page with accents and entities
   /long.html    Lot 71: a long page (1500 paragraphs, about 120 KiB)
   /searx/search?q=Q[&format=json]  Lot 71: SearXNG-like results
+  /lot72/images.html  Lot 72: a page with PNG, GIF (animated), JPEG
+                (baseline, progressive), a missing image with alt text and
+                a favicon link; the image bytes are the unit test fixtures
+                (tests/unit/userspace/imgdec*_samples.h), /lot72/img/NAME
+  /favicon.ico  Lot 72: the .ico fixture (DIB entries)
 Every request is logged on stdout ("REQ <scheme> <path>")."""
-import html, http.server, socketserver, ssl, sys, threading, urllib.parse
+import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
+
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _c_arrays(path):
+    """byte arrays of a generated C header: name -> bytes"""
+    out = {}
+    try:
+        text = open(path).read()
+    except OSError:
+        return out
+    for m in re.finditer(r"static const unsigned char (\w+)\[\d+\] = \{(.*?)\};", text, re.S):
+        out[m.group(1)] = bytes(int(x, 0) for x in re.findall(r"0x[0-9a-fA-F]+|\d+", m.group(2)))
+    return out
+
+
+_IMG = {}
+for _h in ("imgdec_samples.h", "imgdec_gif_samples.h"):
+    _IMG.update(_c_arrays(os.path.join(_ROOT, "tests", "unit", "userspace", _h)))
+LOT72_FILES = {
+    "mire.png": ("img_mire_png", "image/png"),
+    "mire444.jpg": ("img_mire444_jpg", "image/jpeg"),
+    "mire-prog.jpg": ("img_mire_prog_jpg", "image/jpeg"),
+    "anim.gif": ("gif_anim", "image/gif"),
+    "big.gif": ("gif_big", "image/gif"),
+    "fav.ico": ("gif_ico_bmp", "image/x-icon"),
+}
+LOT72_PAGE = ("<!doctype html><html><head><meta charset=\"utf-8\"><title>Images Lot 72</title>"
+              "<link rel=\"icon\" href=\"/lot72/img/fav.ico\"></head><body>"
+              "<h1>Images dans le navigateur</h1>"
+              "<p>PNG <img src=\"img/mire.png\" width=\"144\" height=\"96\" alt=\"mire png\"> "
+              "GIF <img src=\"/lot72/img/anim.gif\" alt=\"gif\"></p>"
+              "<p>JPEG <img src=\"img/mire444.jpg\" width=\"96\"> progressif "
+              "<img data-src=\"img/mire-prog.jpg\" src=\"data:image/gif;base64,R0lGODlh\" width=\"96\"></p>"
+              "<p><img src=\"img/big.gif\" alt=\"grande image\"></p>"
+              "<p>absente : <img src=\"img/absente.png\" alt=\"image absente\"></p>"
+              "<p>FIN-IMAGES</p></body></html>")
 
 PAGE = (b"<!doctype html><html><head><title>Mohhdy offline test page</title></head>"
         b"<body><h1>Hello from the Lot 67 test server</h1>"
@@ -139,6 +181,18 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def _lot71(self, p, body, post=False):
         """Lot 71 routes: forms, charsets, long page, SearXNG, cookies."""
+        if p == "/lot72/images.html":
+            self._send(200, LOT72_PAGE.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p.startswith("/lot72/img/") or p == "/favicon.ico":
+            name = "fav.ico" if p == "/favicon.ico" else p[len("/lot72/img/"):]
+            print(f"IMG {name}", flush=True)
+            ent = LOT72_FILES.get(name)
+            if ent is None or ent[0] not in _IMG:
+                self._send(404, b"no image\n", "text/plain")
+            else:
+                self._send(200, _IMG[ent[0]], ent[1])
+            return True
         if p == "/controls.html":
             page = ("<html><head><meta charset=\"utf-8\"><title>Options</title></head><body>"
                     "<form action=\"/echo\" method=\"get\">"

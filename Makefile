@@ -1514,6 +1514,10 @@ qemu-gui-lot69-windows: $(OS_IMAGE) pack-initrd disk
 qemu-lot71: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot71.py
 
+.PHONY: qemu-lot72
+qemu-lot72: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot72.py
+
 .PHONY: qemu-web-layout
 qemu-web-layout: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_web_layout.py
