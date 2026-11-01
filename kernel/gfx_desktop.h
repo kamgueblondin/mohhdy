@@ -111,6 +111,8 @@ int gfx_glyph_pixel_page(int page, char ch, int q, int dx, int dy);
 /* Lot 72: bytes of display text t from pos that make one wrapped line of
  * at most maxc cells (page selectors take none) */
 int gfx_text_wrap_take(const char *t, int pos, int len, int maxc);
+/* Lot 72: first chat message shown in avail lines of maxc cells */
+int gfx_chat_first(const os_fb_scene_t *sc, int n, int maxc, int avail);
 /* Lot 69: 0 native fonts (default), 1 smoothed 8x8 upscale */
 void gfx_desktop_set_font_mode(int mode);
 int gfx_desktop_font_mode(void);

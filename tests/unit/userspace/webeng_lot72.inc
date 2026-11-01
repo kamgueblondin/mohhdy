@@ -113,6 +113,12 @@ static void test_l72_named_references(void) {
     TEST_ASSERT_EQUAL(0, (e->pad >> 8) & 7);
     TEST_ASSERT_EQUAL(2, (A->pad >> 8) & 7);
     TEST_ASSERT_NOT_NULL(find_text("&bogus;x"));
+    /* a prefix of a name is not that name */
+    {
+        static const char* q = L72("<p>&rar;&alph;</p>");
+        TEST_ASSERT_EQUAL(0, we_render(&g_doc, q, (int)strlen(q), 400));
+        TEST_ASSERT_NOT_NULL(find_text("&rar;&alph;"));
+    }
 }
 
 static void lot72_run(void) {

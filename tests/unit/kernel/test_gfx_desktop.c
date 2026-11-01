@@ -1615,6 +1615,25 @@ static void test_lot72_wrap_take_cells(void) {
     /* a selector inside the line is not counted as a cell */
     strcpy(t, "ab\x8f\xe1\xe2 cd ef");
     TEST_ASSERT_EQUAL(8, gfx_text_wrap_take(t, 0, (int)strlen(t), 8));
+    /* going back to the last space counts cells, not selector bytes */
+    strcpy(t, "abcdef \x8f\xe1\x90\xb6\x8f\xe1\x90\xb6\x8f\xe1\x90\xb6");
+    TEST_ASSERT_EQUAL(6, gfx_text_wrap_take(t, 0, (int)strlen(t), 10));
+}
+
+/* the chat keeps the messages that fit by cells: 4 messages of 30
+ * alternating Greek / Cyrillic letters (60 bytes, 30 cells) take 2 lines
+ * each at 30 cells, so 8 lines show them all */
+static void test_lot72_chat_first_by_cells(void) {
+    static os_fb_scene_t sc;
+    int i, k;
+    memset(&sc, 0, sizeof(sc));
+    for (i = 0; i < 4; i++) {
+        for (k = 0; k < 30; k++) { sc.messages[i][2 * k] = (char)(k & 1 ? 0x90 : 0x8F); sc.messages[i][2 * k + 1] = (char)0xE1; }
+        sc.messages[i][60] = 0;
+    }
+    TEST_ASSERT_EQUAL(0, gfx_chat_first(&sc, 4, 30, 8));
+    TEST_ASSERT_EQUAL(1, gfx_chat_first(&sc, 4, 30, 7));
+    TEST_ASSERT_EQUAL(3, gfx_chat_first(&sc, 4, 30, 1));   /* the newest is always shown */
 }
 
 /* the input line keeps its page when only its end fits (address field) */
@@ -1707,6 +1726,7 @@ int main(void) {
     RUN_TEST(test_lot72_web_item_page);
     RUN_TEST(test_lot72_title_selectors);
     RUN_TEST(test_lot72_wrap_take_cells);
+    RUN_TEST(test_lot72_chat_first_by_cells);
     RUN_TEST(test_lot72_chat_input_tail_page);
     RUN_TEST(test_lot72_favicon_in_address_bar);
     RUN_TEST(test_chat_and_dock_and_stage);

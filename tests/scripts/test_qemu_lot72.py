@@ -234,6 +234,7 @@ def main():
             say("charsets: windows-1251 (header) and iso-8859-7 (meta) pages decoded; the form goes back in windows-1251")
             # ---- console
             lw.run(mon, proc, "web-images on", "web-images on", 30)
+            n_img0 = len(server_text().splitlines())   # the charset pages above have their own favicon requests
             out = lw.run(mon, proc, "web-open %s/lot72/images.html" % u, "osui web page sections", fail=["error"])
             if "favicon ok" not in out:
                 raise RuntimeError("favicon not loaded: %r" % out[-600:])
@@ -268,7 +269,7 @@ def main():
             # keep-alive seen from the server: the page, its favicon and its
             # images came over one TCP connection; with keep-alive off, one
             # connection per request
-            img_ports = set(l.split("port=")[1] for l in server_text().splitlines() if l.startswith("IMG "))
+            img_ports = set(l.split("port=")[1] for l in server_text().splitlines()[n_img0:] if l.startswith("IMG "))
             say("server: image requests from ports %s" % sorted(img_ports))
             if len(img_ports) != 1:
                 raise RuntimeError("images not on one kept-alive connection: %r" % img_ports)

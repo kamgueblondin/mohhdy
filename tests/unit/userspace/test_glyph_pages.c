@@ -32,6 +32,14 @@ static void test_selectors(void) {
     TEST_ASSERT_EQUAL(0, os_cp1252_high[0x8F - 0x80]);
     TEST_ASSERT_EQUAL(0, os_cp1252_high[0x90 - 0x80]);
     TEST_ASSERT_EQUAL(0, os_cp1252_high[0x9D - 0x80]);
+    /* a selector is never a character, in any page (the Cyrillic page
+     * uses other bytes of 0x80..0x9F for letters) */
+    {
+        int p, k;
+        for (p = 0; p < OS_PAGE_COUNT; p++)
+            for (k = 0; k < OS_PAGE_COUNT; k++)
+                TEST_ASSERT_EQUAL(0, (int)os_display_cp((unsigned)p, os_page_sel[k]));
+    }
 }
 
 static void test_cp_page(void) {

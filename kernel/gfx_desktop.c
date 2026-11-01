@@ -1084,6 +1084,23 @@ static void draw_text_n(uint32_t *fb, int w, int h, int x, int y, const char *s,
 /* Lot 72: one wrapped line of t from byte pos: the bytes that fill at
  * most maxc cells, cut after the last space past half the line when the
  * text goes on. */
+/* Lot 72: first chat message shown when the newest ones fill `avail`
+ * lines of maxc cells (each message: its wrapped lines + 1 of gap). A
+ * message is measured in cells: page selectors take none. */
+int gfx_chat_first(const os_fb_scene_t *sc, int n, int maxc, int avail) {
+    int i, lines = 0;
+    if (maxc < 1) maxc = 1;
+    for (i = n - 1; i >= 0; i--) {
+        int len = 0, need;
+        while (sc->messages[i][len] && len < OS_FB_MSG_LEN) len++;
+        len = os_display_cells(sc->messages[i], len);   /* cells, not bytes */
+        need = (len + maxc - 1) / maxc + 1;  /* +1: wrap slack and gap */
+        if (lines + need > avail && i < n - 1) return i + 1;
+        lines += need;
+    }
+    return 0;
+}
+
 int gfx_text_wrap_take(const char *t, int pos, int len, int maxc) {
     int take = os_display_take(t + pos, len - pos, maxc), k, cells;
     if (pos + take >= len) return len - pos;
@@ -1692,17 +1709,10 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
         }
     } else {
         /* messages wrap on word boundaries; the newest stay visible */
-        int maxc = (rw - 48) / CW, lines = 0, avail = (y + rh - 92 - log_y) / TS(11), first = 0, yy, need;
+        int maxc = (rw - 48) / CW, avail = (y + rh - 92 - log_y) / TS(11), first, yy;
         (void)stub;
         if (maxc < 8) maxc = 8;
-        for (i = n - 1; i >= 0; i--) {
-            int len = 0;
-            while (sc->messages[i][len] && len < OS_FB_MSG_LEN) len++;
-            len = os_display_cells(sc->messages[i], len);   /* Lot 72: cells, not bytes */
-            need = (len + maxc - 1) / maxc + 1;  /* +1: wrap slack and gap */
-            if (lines + need > avail && i < n - 1) { first = i + 1; break; }
-            lines += need;
-        }
+        first = gfx_chat_first(sc, n, maxc, avail);
         yy = log_y + 8;
         for (i = first; i < n; i++) {
             int pos = 0, len = 0;

@@ -5,6 +5,7 @@
 #include "../../../include/os_charset.h"
 #include "../../../userspace/wf_entity.h"
 #include "../../../userspace/wf_html.h"
+#include "../../../userspace/wf_form.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -317,6 +318,18 @@ static void test_cyrillic_greek_charsets(void) {
         wf_html_set_charset(WF_CS_NONE);
         wf_html_reduce(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st);
         TEST_ASSERT_EQUAL(WF_CS_CP1251, st.charset);
+        {
+            /* the forms of the page take its charset (sent back in it) */
+            static wf_form_page_t fp;
+            wf_html_set_charset(WF_CS_NONE);
+            wf_html_reduce_ex(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st, 8000, &fp);
+            TEST_ASSERT_EQUAL(WF_CS_CP1251, fp.charset);
+            wf_html_set_charset(WF_CS_KOI8R);
+            wf_html_reduce_ex(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st, 8000, &fp);
+            TEST_ASSERT_EQUAL(WF_CS_KOI8R, fp.charset);
+            wf_html_set_charset(WF_CS_NONE);
+            wf_html_reduce(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st);
+        }
         TEST_ASSERT_EQUAL_STRING("\x90\xbf\xe0\xd8\xd2\xd5\xe2 \xdc\xd8\xe0\x81", st.title);
         TEST_ASSERT_NOT_NULL(strstr(g_out, "\x90\xbf\xe0\xd8\xd2\xd5\xe2 \xdc\xd8\xe0 \x81\x80 ?"));
         wf_html_text_display(g_out, (int)strlen(g_out), o, (int)sizeof(o));
