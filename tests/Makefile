@@ -758,7 +758,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_net_ifcfg: $(UNIT_DIR)/userspace/test_ne
 	@echo "Compiled userspace test: $(notdir $@)"
 
 # Lot 67: Ring 3 web stack (crypto, X.509, TLS 1.2 client, HTTP/1.1).
-WF_CRYPTO_SRCS = ../userspace/wf_bn.c ../userspace/wf_sha512.c ../userspace/wf_ec.c ../userspace/wf_rsa.c ../kernel/sha256.c
+WF_CRYPTO_SRCS = ../userspace/wf_bn.c ../userspace/wf_sha512.c ../userspace/wf_ec.c ../userspace/wf_p256.c ../userspace/wf_aead.c ../userspace/wf_rsa.c ../kernel/sha256.c
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_crypto: $(UNIT_DIR)/userspace/test_wf_crypto.c $(UNIT_DIR)/userspace/wf_vectors.h $(WF_CRYPTO_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_CRYPTO_SRCS) $(FRAMEWORK_SOURCES)
@@ -813,6 +813,10 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wsearch_api: $(UNIT_DIR)/userspace/test_
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/wsearch_api.c ../userspace/wsearch.c ../userspace/wf_entity.c $(FRAMEWORK_SOURCES)
 
 # Lot 72: browser images (wf_html <img>, wf_webimg atlas, engine atlas item)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_p256: $(UNIT_DIR)/userspace/test_wf_p256.c $(WF_CRYPTO_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_CRYPTO_SRCS) $(FRAMEWORK_SOURCES)
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_aead: $(UNIT_DIR)/userspace/test_wf_aead.c ../userspace/wf_aead.c ../userspace/wf_aead.h $(UNIT_DIR)/userspace/wf_aead_vectors.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/wf_aead.c $(FRAMEWORK_SOURCES)

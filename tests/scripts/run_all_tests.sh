@@ -218,8 +218,8 @@ run_test() {
     fi
     # Lot 67: Ring 3 web stack (wf_*), shares kernel SHA-256 / AES-GCM / X25519
     case "$(basename "$test_file")" in
-        test_wf_crypto.c|test_wf_x509.c|test_wf_http.c|test_wf_text.c|test_wf_form.c|test_wf_section.c)
-            extra_src="$extra_src $BASE_DIR/userspace/wf_bn.c $BASE_DIR/userspace/wf_sha512.c $BASE_DIR/userspace/wf_ec.c $BASE_DIR/userspace/wf_rsa.c $BASE_DIR/kernel/sha256.c"
+        test_wf_crypto.c|test_wf_x509.c|test_wf_http.c|test_wf_text.c|test_wf_form.c|test_wf_section.c|test_wf_p256.c|test_wf_aead.c)
+            extra_src="$extra_src $BASE_DIR/userspace/wf_bn.c $BASE_DIR/userspace/wf_sha512.c $BASE_DIR/userspace/wf_ec.c $BASE_DIR/userspace/wf_p256.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_rsa.c $BASE_DIR/kernel/sha256.c"
             cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1 -DWF_ROOTS_PEM=\"$BASE_DIR/initrd_content/etc/ca-roots.pem\""
             ;;
     esac
