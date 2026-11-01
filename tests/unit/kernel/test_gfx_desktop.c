@@ -1660,7 +1660,8 @@ static int addr_field_sig(const char *input) {
 static void test_lot72_chat_input_tail_page(void) {
     static char greek[OS_FB_INPUT_LEN], latin[OS_FB_INPUT_LEN];
     gfx_desktop_layout_t l;
-    int i, x, y, ga = 0, la = 0;
+    int i, x, y;
+    uint32_t ga = 0, la = 0;   /* unsigned: the hash wraps */
     /* chat input longer than the field: the tail starts after the
      * selector, and must still draw Greek */
     greek[0] = (char)0x8F;
