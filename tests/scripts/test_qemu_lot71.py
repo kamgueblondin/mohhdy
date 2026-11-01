@@ -262,7 +262,14 @@ def main():
             time.sleep(1.5)
             shot(mon, "controls-checked")
             say("GUI form: a click toggles the checkbox")
+            # The click also focuses the control (keyboard goes on from it):
+            # the first ESC leaves the field, the second closes the pane.
+            start = len(g.log_text())
             g.send_key(mon, "esc")
+            g.wait_for(proc, "osui web form blur", g.CMD_TIMEOUT, start)
+            start = len(g.log_text())
+            g.send_key(mon, "esc")
+            g.wait_for(proc, "osui web close", g.CMD_TIMEOUT, start)
             time.sleep(0.8)
             start = len(g.log_text())
             lw.type_line(mon, proc, "web %s/latin1.html" % u, mode="getc")

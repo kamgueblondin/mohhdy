@@ -358,7 +358,12 @@ def main():
         hub.heal_pair(b["mac"], c["mac"])
         cmd(c, "p2p-poll 5", "p2p-poll ok", timeout=30)
         cmd(c, "p2p-sync alpha", "p2p-sync ok asked 1")
-        wait_log(c, "p2p kv synced mode=eco v1 from alpha", 60, start_c)
+        # Lot 71: the longer cut (rtx give-up) lets the Lot 66 heal
+        # anti-entropy with beta win the race; any anti-entropy source is
+        # valid, a plain replicated (rtx) delivery is not.
+        wait_log(c, "p2p kv synced mode=eco v1 from ", 60, start_c)
+        if "p2p kv replicated mode=eco" in log(c, start_c):
+            raise RuntimeError("gamma got mode=eco by replication, not anti-entropy")
         wait_log(c, "p2p sync from alpha items ", 60, start_c)
         cmd(c, "p2p-kv", "p2p kv ok 2")
         cmd(a, "p2p-get nokey", "p2p-get pending asked 2")
