@@ -608,13 +608,16 @@ jobs:
             test_logs/
 
   lot72-images:
-    name: QEMU browser images and favicon (Lot 72)
+    name: QEMU browser images, favicon, TLS suites and glyph pages (Lot 72)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Generated fonts and glyph pages agree with the generator
+        run: make font-check
 
       - name: Restore apt package cache
         uses: actions/cache@v4

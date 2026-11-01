@@ -1074,6 +1074,12 @@ strict-image-check: $(OS_IMAGE) kernel-netlegacy pack-initrd
 	@echo "OK production initrd without the $(words $(TEST_ONLY_PROGRAMS)) test programs (they ship in $(INITRD_TEST_IMAGE))"
 	@echo "OK strict image without Ring 0 network stack; legacy image keeps only the Ring 0 NIC path; both images: boot FAT mount, overlay and journals by the Ring 3 atadriver, no ATA IDENTIFY or FAT PIO fallback"
 
+# Lot 72: the generated fonts and glyph page tables agree with
+# scripts/gen_bitmap_font.py (glyph count, page tables, no '?' glyphs).
+font-check:
+	@python3 scripts/gen_bitmap_font.py --check kernel/gfx_font_hd.h kernel/gfx_font8.h include/os_charset_pages.h
+.PHONY: font-check
+
 # Lot 47 (US-120): /roadmap.txt agrees with the US master phase 9 table and
 # with the prod-roadmap counts the QEMU production test expects.
 roadmap-check:

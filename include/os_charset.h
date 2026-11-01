@@ -12,10 +12,22 @@
  * The bitmap fonts (kernel/gfx_font8.h, kernel/gfx_font_hd.h, generated
  * by scripts/gen_bitmap_font.py) hold OS_GLYPH_COUNT glyphs in the order
  * of os_glyph_index(). Header only, freestanding, shared by the kernel
- * and Ring 3; no allocation, every output is bounded by its capacity. */
+ * and Ring 3; no allocation, every output is bounded by its capacity.
+ *
+ * Lot 72: glyph pages. The five bytes CP1252 leaves undefined (0x81,
+ * 0x8D, 0x8F, 0x90, 0x9D, os_page_sel[] in os_charset_pages.h) are page
+ * selectors: they draw nothing, take no cell, and make the bytes
+ * 0x80..0xFF after them mean the characters of a page: 0 CP1252 (the
+ * default at the start of every string), 1 Latin Extended-A, 2 Greek
+ * (ISO-8859-7 layout), 3 Cyrillic (ISO-8859-5 layout plus Ukrainian and
+ * Kazakh letters), 4 symbols (arrows, mathematics, box drawing, blocks).
+ * ASCII means the same in every page. A web TEXT item carries its page in
+ * bits 8..10 of os_fb_web_item_t.pad instead (the web engine never puts a
+ * selector in item text). The fonts hold OS_GLYPH_TOTAL glyphs. */
 #ifndef OS_CHARSET_H
 #define OS_CHARSET_H
 #include <stdint.h>
+#include "os_charset_pages.h"
 
 #define OS_GLYPH_COUNT 223      /* 95 ASCII + 32 CP1252 0x80..0x9F + 96 Latin-1 */
 #define OS_GLYPH_QMARK ('?' - 32)
@@ -119,43 +131,166 @@ static inline int os_utf8_seq_ok(const char *s, int n, int i) {
     return cp != OS_UNICODE_BAD || k - i > 1;
 }
 
+/* Lot 72: page of a selector byte, or -1 for any other byte. */
+static inline int os_page_of_sel(unsigned char c) {
+    int k;
+    if (c < 0x81u || c > 0x9Du) return -1;
+    for (k = 0; k < OS_PAGE_COUNT; k++)
+        if (os_page_sel[k] == c) return k;
+    return -1;
+}
+
+/* Glyph slot of display byte c in page p (page 0 = os_glyph_index). */
+static inline unsigned os_glyph_index_page(unsigned page, unsigned char c) {
+    if (page == 0u || page >= (unsigned)OS_PAGE_COUNT || c < 0x80u) return os_glyph_index(c);
+    return os_page_glyph[page - 1u][c - 0x80u];
+}
+
+/* Code point of display byte c in page p; 0 for a selector or a byte the
+ * page leaves undefined. */
+static inline uint32_t os_display_cp(unsigned page, unsigned char c) {
+    if (os_page_of_sel(c) >= 0) return 0;
+    if (c < 0x80u) return c;
+    if (page == 0u || page >= (unsigned)OS_PAGE_COUNT) return c >= 0xA0u ? c : os_cp1252_high[c - 0x80u];
+    return os_page_cp[page - 1u][c - 0x80u];
+}
+
+/* Page and byte of a code point: 0 when CP1252 has it, 1..4 from the
+ * page tables, -1 when no page has it. */
+static inline int os_cp_page(uint32_t cp, unsigned char *byte) {
+    unsigned char b = os_cp1252_exact(cp);
+    int lo = 0, hi = OS_PAGE_REV_COUNT - 1;
+    if (cp >= 0x20u && cp != 0x7Fu && (b || cp < 0x80u)) { *byte = b; return 0; }
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        uint32_t c = os_page_rev[mid] >> 16;
+        if (c == cp) { *byte = (unsigned char)(os_page_rev[mid] & 0xFFu); return (int)((os_page_rev[mid] >> 8) & 0xFFu); }
+        if (c < cp) lo = mid + 1; else hi = mid - 1;
+    }
+    return -1;
+}
+
+/* Writes code point cp as display bytes at out (cap bytes), the selector
+ * first when it is not in the current page *page (updated). Returns the
+ * bytes written, 0 when cp is dropped (controls, zero width), -1 when it
+ * does not fit. A code point no page has takes os_cp1252_from_cp (a
+ * close ASCII form or '?'). */
+static inline int os_display_put(uint32_t cp, int *page, char *out, int cap) {
+    unsigned char b = 0;
+    int p = cp < 0x20u ? -1 : os_cp_page(cp, &b), n = 0;
+    if (p < 0) {
+        b = os_cp1252_from_cp(cp);
+        if (!b) return 0;
+        p = b >= 0x80u ? 0 : *page;
+    }
+    if (b >= 0x80u && p != *page) n = 1;
+    if (n + 1 > cap) return -1;
+    if (n) { out[0] = (char)os_page_sel[p]; *page = p; }
+    out[n] = (char)b;
+    return n + 1;
+}
+
+/* Cells a display string takes (selectors take none). */
+static inline int os_display_cells(const char *s, int n) {
+    int i, c = 0;
+    for (i = 0; i < n && s[i]; i++)
+        if (os_page_of_sel((unsigned char)s[i]) < 0) c++;
+    return c;
+}
+
+/* Page in force at s[pos] (the last selector before it, else 0). */
+static inline int os_display_page_at(const char *s, int pos) {
+    int i, p = 0;
+    for (i = 0; i < pos && s[i]; i++) {
+        int k = os_page_of_sel((unsigned char)s[i]);
+        if (k >= 0) p = k;
+    }
+    return p;
+}
+
+/* Bytes of s (from byte 0, page 0) that hold at most cells cells: the
+ * prefix to draw in a field cells wide. */
+static inline int os_display_take(const char *s, int n, int cells) {
+    int i, c = 0;
+    for (i = 0; i < n && s[i]; i++) {
+        if (c == cells) break;
+        if (os_page_of_sel((unsigned char)s[i]) < 0) c++;
+    }
+    return i;
+}
+
 /* Converts text to display bytes. Well formed UTF-8 sequences are
- * decoded; any other byte >= 0x80 is taken as already CP1252 (so the
- * function is idempotent on display text). Returns the output length;
- * out is always NUL-terminated when cap > 0. */
+ * decoded; any other byte >= 0x80 is taken as already display text (so
+ * the function is idempotent on display text). Lot 72: a decoded code
+ * point outside CP1252 is written with its page selector; a selector in
+ * the input is display text, and after one (other than the page 0 one)
+ * high bytes are copied, not decoded as UTF-8 (Cyrillic display bytes
+ * often look like UTF-8 pairs). Returns the output length; out is always
+ * NUL-terminated when cap > 0. */
 static inline int os_text_to_display(const char *in, int n, char *out, int cap) {
-    int i = 0, o = 0;
+    int i = 0, o = 0, ip = 0, op = 0;
     if (cap <= 0) return 0;
     while (i < n && in[i] && o < cap - 1) {
         unsigned char c = (unsigned char)in[i];
-        if (c >= 0x80u && os_utf8_seq_ok(in, n, i)) {
-            uint32_t cp = os_utf8_next(in, n, &i);
-            unsigned char b = os_cp1252_from_cp(cp);
-            if (b) out[o++] = (char)b;
+        int sp;
+        if (c >= 0x80u && ip == 0 && os_utf8_seq_ok(in, n, i)) {
+            int k = i, r;
+            uint32_t cp = os_utf8_next(in, n, &k);
+            r = os_display_put(cp, &op, out + o, cap - 1 - o);
+            if (r < 0) break;
+            i = k;
+            o += r;
             continue;
         }
         i++;
+        sp = os_page_of_sel(c);
+        if (sp >= 0) {
+            ip = sp;
+            if (op != sp) { out[o++] = (char)c; op = sp; }
+            continue;
+        }
         if (c < 0x20u && c != '\n' && c != '\t') continue;
+        if (c >= 0x80u && op != ip) {
+            if (o + 2 > cap - 1) break;
+            out[o++] = (char)os_page_sel[ip];
+            op = ip;
+        }
         out[o++] = (char)c;
     }
     out[o] = 0;
     return o;
 }
 
-/* In place version (the output is never longer than the input). */
+/* In place version (the output is never longer than the input: a raw
+ * high byte that would need a selector it has no room for becomes '?'). */
 static inline int os_text_to_display_inplace(char *s, int cap) {
-    int r = 0, w = 0, n = 0;
+    int r = 0, w = 0, n = 0, ip = 0, op = 0;
     while (n < cap && s[n]) n++;
     while (r < n) {
         unsigned char c = (unsigned char)s[r];
-        if (c >= 0x80u && os_utf8_seq_ok(s, n, r)) {
-            uint32_t cp = os_utf8_next(s, n, &r);
-            unsigned char b = os_cp1252_from_cp(cp);
-            if (b) s[w++] = (char)b;
+        int sp;
+        if (c >= 0x80u && ip == 0 && os_utf8_seq_ok(s, n, r)) {
+            char tmp[2];
+            int k = r, m, j;
+            uint32_t cp = os_utf8_next(s, n, &k);
+            m = os_display_put(cp, &op, tmp, 2);
+            r = k;
+            for (j = 0; j < m; j++) s[w++] = tmp[j];
             continue;
         }
         r++;
+        sp = os_page_of_sel(c);
+        if (sp >= 0) {
+            ip = sp;
+            if (op != sp) { s[w++] = (char)c; op = sp; }
+            continue;
+        }
         if (c < 0x20u && c != '\n' && c != '\t') continue;
+        if (c >= 0x80u && op != ip) {
+            if (w + 2 > r) { s[w++] = '?'; continue; }
+            s[w++] = (char)os_page_sel[ip];
+            op = ip;
+        }
         s[w++] = (char)c;
     }
     if (w < cap) s[w] = 0;
@@ -203,6 +338,40 @@ static inline int os_display_to_utf8(unsigned char b, char *out, int cap) {
     out[0] = (char)(0xE0u | (cp >> 12)); out[1] = (char)(0x80u | ((cp >> 6) & 0x3Fu)); out[2] = (char)(0x80u | (cp & 0x3Fu));
     return 3;
 }
+/* Lot 72: UTF-8 of display byte b in page p (a selector or an undefined
+ * byte of the page gives '?'; callers track selectors themselves). */
+static inline int os_display_to_utf8_page(unsigned page, unsigned char b, char *out, int cap) {
+    uint32_t cp;
+    if (page == 0u || b < 0x80u) return os_display_to_utf8(b, out, cap);
+    cp = os_display_cp(page, b);
+    if (!cp) cp = '?';
+    if (cp < 0x80u) { if (cap < 1) return 0; out[0] = (char)cp; return 1; }
+    if (cp < 0x800u) {
+        if (cap < 2) return 0;
+        out[0] = (char)(0xC0u | (cp >> 6)); out[1] = (char)(0x80u | (cp & 0x3Fu));
+        return 2;
+    }
+    if (cap < 3) return 0;
+    out[0] = (char)(0xE0u | (cp >> 12)); out[1] = (char)(0x80u | ((cp >> 6) & 0x3Fu)); out[2] = (char)(0x80u | (cp & 0x3Fu));
+    return 3;
+}
+
+/* A display string (selectors included) as UTF-8; returns the length,
+ * out NUL-terminated, cut on a whole character. */
+static inline int os_display_str_to_utf8(const char *s, int n, char *out, int cap) {
+    int i, o = 0, page = 0;
+    if (cap <= 0) return 0;
+    for (i = 0; i < n && s[i]; i++) {
+        int k = os_page_of_sel((unsigned char)s[i]), m;
+        if (k >= 0) { page = k; continue; }
+        m = os_display_to_utf8_page((unsigned)page, (unsigned char)s[i], out + o, cap - 1 - o);
+        if (m == 0) break;
+        o += m;
+    }
+    out[o] = 0;
+    return o;
+}
+
 /* VGA text mode and the console terminal window draw the VGA ROM font
  * (code page 437). Code points of CP437 0x80..0xAF (French letters are
  * all there except A/E/I/O/U with grave or circumflex in capitals). */
@@ -230,7 +399,42 @@ static inline unsigned char os_cp437_from_cp(uint32_t cp) {
     case 0xB2: return 0xFD;
     case 0xA0: return 0xFF;
     case 0x2219: return 0xF9;
+    /* Lot 72: the Greek letters and signs of CP437 0xE0..0xFE */
+    case 0x3B1: return 0xE0;
+    case 0x3B2: return 0xE1;
+    case 0x393: return 0xE2;
+    case 0x3C0: return 0xE3;
+    case 0x3A3: return 0xE4;
+    case 0x3C3: return 0xE5;
+    case 0x3BC: return 0xE6;
+    case 0x3C4: return 0xE7;
+    case 0x3A6: return 0xE8;
+    case 0x398: return 0xE9;
+    case 0x3A9: return 0xEA;
+    case 0x3B4: return 0xEB;
+    case 0x221E: return 0xEC;
+    case 0x3C6: return 0xED;
+    case 0x3B5: return 0xEE;
+    case 0x2229: return 0xEF;
+    case 0x2261: return 0xF0;
+    case 0x2265: return 0xF2;
+    case 0x2264: return 0xF3;
+    case 0x2248: return 0xF7;
+    case 0x221A: return 0xFB;
+    case 0x25A0: return 0xFE;
     default: break;
+    }
+    /* Lot 72: Greek and Cyrillic letters drawn like a Latin one */
+    {
+        static const uint16_t look[] = {
+            0x391, 'A', 0x392, 'B', 0x395, 'E', 0x396, 'Z', 0x397, 'H', 0x399, 'I', 0x39A, 'K', 0x39C, 'M',
+            0x39D, 'N', 0x39F, 'O', 0x3A1, 'P', 0x3A4, 'T', 0x3A5, 'Y', 0x3A7, 'X', 0x3BF, 'o', 0x3BD, 'v',
+            0x405, 'S', 0x406, 'I', 0x408, 'J', 0x410, 'A', 0x412, 'B', 0x415, 'E', 0x41A, 'K', 0x41C, 'M',
+            0x41D, 'H', 0x41E, 'O', 0x420, 'P', 0x421, 'C', 0x422, 'T', 0x425, 'X', 0x430, 'a', 0x435, 'e',
+            0x43E, 'o', 0x440, 'p', 0x441, 'c', 0x443, 'y', 0x445, 'x', 0x455, 's', 0x456, 'i', 0x458, 'j'
+        };
+        for (i = 0; i < sizeof(look) / sizeof(look[0]); i += 2)
+            if (look[i] == cp) return (unsigned char)look[i + 1];
     }
     if (cp >= 0xC0u && cp <= 0xFFu) return (unsigned char)os_latin1_base[cp - 0xC0u];
     if (cp == 0x152) return 'O';
