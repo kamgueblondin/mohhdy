@@ -92,7 +92,10 @@ check "tls13 default suite"  'TLS suite=TLS13-AES256-GCM-SHA384'                
 check "http keep-alive"      'KA total opened=1 reused=3'  "$CA" "http://127.0.0.1:$HP/ka/1" now - "ka:http://127.0.0.1:$HP/ka/2,http://127.0.0.1:$HP/ka/3,http://127.0.0.1:$HP/ka/4"
 check "https keep-alive"     'KA 2 rc=0 status=200 bytes=[0-9]+ reused=1 conn=0 suite=TLS13-AES256-GCM-SHA384' "$CA" "https://$M:$T13/ka/1" now 127.0.0.1 "ka:https://$M:$T13/ka/2,https://$M:$T13/ka/3"
 check "https keep-alive one handshake" 'KA total opened=1 reused=2' "$CA" "https://$M:$T13/ka/1" now 127.0.0.1 "ka:https://$M:$T13/ka/2,https://$M:$T13/ka/3"
-check "keep-alive host change" 'KA total opened=2 reused=1' "$CA" "http://127.0.0.1:$HP/ka/1" now - "ka:http://127.0.0.1:$HP/ka/2,https://$M:$T13/ka/3"
+# mohhdy.test is resolved by the 127.0.0.1 override like the other https
+# checks (no hosts entry needed); the host key still changes (name, port, scheme)
+check "keep-alive host change" 'KA total opened=2 reused=1' "$CA" "http://127.0.0.1:$HP/ka/1" now 127.0.0.1 "ka:http://127.0.0.1:$HP/ka/2,https://$M:$T13/ka/3"
+check "keep-alive host change new conn" 'KA 2 rc=0 status=200 bytes=[0-9]+ reused=0 conn=1 suite=TLS13-AES256-GCM-SHA384' "$CA" "http://127.0.0.1:$HP/ka/1" now 127.0.0.1 "ka:http://127.0.0.1:$HP/ka/2,https://$M:$T13/ka/3"
 check "server close honoured" 'KA total opened=2 reused=1' "$CA" "http://127.0.0.1:$HP/ka/1" now - "ka:http://127.0.0.1:$HP/kaclose/2,http://127.0.0.1:$HP/ka/3"
 check "keep-alive redirect"  'KA 0 rc=0 status=200 bytes=[0-9]+ reused=1 conn=1' "$CA" "http://127.0.0.1:$HP/redirect" now - "ka:http://127.0.0.1:$HP/ka/9"
 echo "[lot67-web-host] $pass passed, $fail failed"
