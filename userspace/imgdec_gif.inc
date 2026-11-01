@@ -70,6 +70,7 @@ static int gif_find_frame(gif_rd_t *r, imgdec_t *img, gif_frame_t *f, int *trans
         f->left = gif_u16(r); f->top = gif_u16(r); f->w = gif_u16(r); f->h = gif_u16(r);
         c = gif_u8(r);
         if (f->h < 0 || c < 0) return IMGDEC_E_TRUNC;
+        if (f->w > IMGDEC_MAX_DIM || f->h > IMGDEC_MAX_DIM) return IMGDEC_E_TOOBIG;
         f->interlace = (c >> 6) & 1;
         f->lct = 0; f->lct_size = 0;
         if (c & 0x80) {

@@ -9,14 +9,15 @@
  * sampling 1..2, restart markers. Arithmetic, lossless, 12-bit and CMYK
  * JPEG are refused with E_UNSUP.
  * Lot 72: GIF87a/89a (first frame, global or local palette, transparency
- * shown white, interlace, LZW up to 12 bits).
+ * shown white, interlace, LZW up to 12 bits) and .ico favicons (entry
+ * nearest 32 px, PNG or DIB 1/4/8/24/32 bits with AND mask).
  * Memory: PNG and JPEG need a caller-owned scratch of imgdec_scratch_need()
  * bytes (after probe); larger images are refused with IMGDEC_E_TOOBIG.
  * Nothing is allocated. */
 #ifndef IMGDEC_H
 #define IMGDEC_H
 
-enum { IMGDEC_NONE = 0, IMGDEC_PNM = 1, IMGDEC_BMP = 2, IMGDEC_PNG = 3, IMGDEC_JPEG = 4, IMGDEC_GIF = 5 };
+enum { IMGDEC_NONE = 0, IMGDEC_PNM = 1, IMGDEC_BMP = 2, IMGDEC_PNG = 3, IMGDEC_JPEG = 4, IMGDEC_GIF = 5, IMGDEC_ICO = 6 };
 enum {
     IMGDEC_OK = 0, IMGDEC_E_FORMAT = -1, IMGDEC_E_TRUNC = -2, IMGDEC_E_UNSUP = -3,
     IMGDEC_E_TOOBIG = -4, IMGDEC_E_INFLATE = -5, IMGDEC_E_CRC = -6
@@ -41,7 +42,11 @@ typedef struct {
     unsigned char pal[256][3];     /* PNG palette */
     int npal;
     int frames;            /* Lot 72: GIF images in the file (first one decoded) */
-    int gif_pixels;        /* Lot 72: GIF frame pixels decoded (less if the stream is cut) */
+    int gif_pixels;
+    int full_w, full_h;    /* Lot 72: size in the file (w, h are the decoded size) */
+    int scale_shift;
+    int ico_off, ico_len, ico_png;   /* Lot 72: chosen .ico entry (a PNG entry opens as IMGDEC_PNG) */
+    unsigned ico_need;       /* Lot 72: JPEG decoded at 1/2^shift (imgdec_open_scaled) */        /* Lot 72: GIF frame pixels decoded (less if the stream is cut) */
 } imgdec_t;
 
 /* format and size only (no pixel decoding, no scratch) */
@@ -50,6 +55,11 @@ int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img);
 unsigned imgdec_scratch_need(const imgdec_t *img);
 /* full decode; scratch holds PNG rows, or JPEG pixels plus SOF2 coefficients */
 int imgdec_open(const unsigned char *buf, int n, unsigned char *scratch, unsigned scratch_max, imgdec_t *img);
+/* Lot 72: JPEG decoded at 1/2^shift (0..3) of its size, point sampled,
+ * so a large photo fits a small scratch; other formats ignore shift.
+ * img->w / img->h are the decoded size, full_w / full_h the file size. */
+unsigned imgdec_scratch_need_scaled(const imgdec_t *img, int shift);
+int imgdec_open_scaled(const unsigned char *buf, int n, unsigned char *scratch, unsigned scratch_max, int shift, imgdec_t *img);
 /* one pixel of an opened image */
 void imgdec_pixel(const imgdec_t *img, int x, int y, unsigned char rgb[3]);
 /* nearest-neighbour render into rgb (max_w x max_h, row-major RGB).

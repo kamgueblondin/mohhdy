@@ -271,6 +271,9 @@ static int probe_pnm(const unsigned char *b, int n, imgdec_t *img) {
     return IMGDEC_OK;
 }
 
+static int probe_ico(const unsigned char *b, int n, imgdec_t *img);
+static unsigned ico_scratch_need(const imgdec_t *img);
+
 int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img) {
     int rc;
     if (!buf || !img || n <= 0) return IMGDEC_E_FORMAT;
@@ -280,6 +283,8 @@ int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img) {
     rc = probe_jpeg(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_JPEG) return rc;
     zero(img);
     rc = probe_gif(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_GIF) return rc;
+    zero(img);
+    rc = probe_ico(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_ICO) return rc;
     zero(img);
     rc = probe_bmp(buf, n, img); if (rc != IMGDEC_E_FORMAT) return rc;
     zero(img);
@@ -318,8 +323,9 @@ static unsigned png_raw_size(const imgdec_t *img) {
 unsigned imgdec_scratch_need(const imgdec_t *img) {
     if (!img) return 0U;
     if (img->fmt == IMGDEC_PNG) return png_raw_size(img) + (unsigned)img->w * (unsigned)img->h * (unsigned)img->channels;
-    if (img->fmt == IMGDEC_JPEG) return jpeg_scratch_need(img);
+    if (img->fmt == IMGDEC_JPEG) return jpeg_scratch_need(img, 0);
     if (img->fmt == IMGDEC_GIF) return gif_scratch_need(img);
+    if (img->fmt == IMGDEC_ICO) return ico_scratch_need(img);
     return 0U;
 }
 
@@ -419,12 +425,25 @@ static int open_png(const unsigned char *b, int n, unsigned char *scratch, unsig
     return IMGDEC_OK;
 }
 
+#include "imgdec_ico.inc"
+
+unsigned imgdec_scratch_need_scaled(const imgdec_t *img, int shift) {
+    if (img->fmt == IMGDEC_JPEG) return jpeg_scratch_need(img, shift < 0 ? 0 : shift > 3 ? 3 : shift);
+    return imgdec_scratch_need(img);
+}
+
 int imgdec_open(const unsigned char *buf, int n, unsigned char *scratch, unsigned scratch_max, imgdec_t *img) {
+    return imgdec_open_scaled(buf, n, scratch, scratch_max, 0, img);
+}
+
+int imgdec_open_scaled(const unsigned char *buf, int n, unsigned char *scratch, unsigned scratch_max, int shift, imgdec_t *img) {
     int rc = imgdec_probe(buf, n, img);
     if (rc) return rc;
+    img->full_w = img->w; img->full_h = img->h;
     if (img->fmt == IMGDEC_PNG) return open_png(buf, n, scratch, scratch_max, img);
-    if (img->fmt == IMGDEC_JPEG) return open_jpeg(buf, n, scratch, scratch_max, img);
+    if (img->fmt == IMGDEC_JPEG) return open_jpeg(buf, n, scratch, scratch_max, img, shift);
     if (img->fmt == IMGDEC_GIF) return open_gif(buf, n, scratch, scratch_max, img);
+    if (img->fmt == IMGDEC_ICO) return open_ico(buf, n, scratch, scratch_max, img);
     return IMGDEC_OK;
 }
 
@@ -490,7 +509,7 @@ int imgdec_render(const imgdec_t *img, unsigned char *rgb, int max_w, int max_h,
 }
 
 const char *imgdec_fmt_name(int fmt) {
-    switch (fmt) { case IMGDEC_PNM: return "pnm"; case IMGDEC_BMP: return "bmp"; case IMGDEC_PNG: return "png"; case IMGDEC_JPEG: return "jpeg"; case IMGDEC_GIF: return "gif"; default: return "inconnu"; }
+    switch (fmt) { case IMGDEC_PNM: return "pnm"; case IMGDEC_BMP: return "bmp"; case IMGDEC_PNG: return "png"; case IMGDEC_JPEG: return "jpeg"; case IMGDEC_GIF: return "gif"; case IMGDEC_ICO: return "ico"; default: return "inconnu"; }
 }
 
 const char *imgdec_strerror(int rc) {

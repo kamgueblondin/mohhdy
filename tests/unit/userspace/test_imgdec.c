@@ -210,6 +210,40 @@ static void test_jpeg_refusals_and_bounds(void) {
 }
 
 
+
+/* Lot 72: scaled JPEG decode = point samples of the full decode */
+static void jpeg_scaled_matches(const unsigned char *buf, int n) {
+    static unsigned char full[64 * 1024], sc[64 * 1024];
+    imgdec_t a, b;
+    int shift, x, y;
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(buf, n, full, sizeof(full), &a));
+    for (shift = 1; shift <= 3; shift++) {
+        TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_probe(buf, n, &b));
+        TEST_ASSERT_TRUE(imgdec_scratch_need_scaled(&b, shift) < imgdec_scratch_need(&b));
+        TEST_ASSERT_EQUAL(IMGDEC_E_TOOBIG, imgdec_open_scaled(buf, n, sc, imgdec_scratch_need_scaled(&b, shift) - 1, shift, &b));
+        TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open_scaled(buf, n, sc, sizeof(sc), shift, &b));
+        TEST_ASSERT_EQUAL((a.w + (1 << shift) - 1) >> shift, b.w);
+        TEST_ASSERT_EQUAL((a.h + (1 << shift) - 1) >> shift, b.h);
+        TEST_ASSERT_EQUAL(a.w, b.full_w);
+        TEST_ASSERT_EQUAL(shift, b.scale_shift);
+        for (y = 0; y < b.h; y++)
+            for (x = 0; x < b.w; x++) {
+                unsigned char p[3], q[3];
+                imgdec_pixel(&a, x << shift, y << shift, p);
+                imgdec_pixel(&b, x, y, q);
+                TEST_ASSERT_EQUAL(p[0], q[0]); TEST_ASSERT_EQUAL(p[1], q[1]); TEST_ASSERT_EQUAL(p[2], q[2]);
+            }
+    }
+}
+
+static void test_jpeg_scaled_decode(void) {
+    jpeg_scaled_matches(img_mire444_jpg, sizeof(img_mire444_jpg));
+    jpeg_scaled_matches(img_mire420_jpg, sizeof(img_mire420_jpg));
+    jpeg_scaled_matches(img_mire_gray_jpg, sizeof(img_mire_gray_jpg));
+    jpeg_scaled_matches(img_mire_rst_jpg, sizeof(img_mire_rst_jpg));
+    jpeg_scaled_matches(img_mire_prog_jpg, sizeof(img_mire_prog_jpg));
+}
+
 /* ---- Lot 72: GIF ------------------------------------------------------ */
 static void gif_expect(const imgdec_t *img, int x, int y, int shift) {
     unsigned char c[3];
@@ -325,6 +359,49 @@ static void test_gif_render_scaled(void) {
     TEST_ASSERT_EQUAL(255, g_rgb[1]);
 }
 
+
+/* ---- Lot 72: ICO (favicons) ------------------------------------------- */
+static void ico_check(const unsigned char *buf, int n, int want_png) {
+    imgdec_t img;
+    unsigned char c[3];
+    int x, y;
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_probe(buf, n, &img));
+    TEST_ASSERT_EQUAL(IMGDEC_ICO, img.fmt);
+    TEST_ASSERT_EQUAL(32, img.w);                      /* entry nearest 32 px */
+    TEST_ASSERT_EQUAL(want_png, img.ico_png);
+    TEST_ASSERT_EQUAL(IMGDEC_E_TOOBIG, imgdec_open(buf, n, g_scratch, imgdec_scratch_need(&img) - 1, &img));
+    TEST_ASSERT_EQUAL(IMGDEC_OK, imgdec_open(buf, n, g_scratch, sizeof(g_scratch), &img));
+    for (y = 0; y < 32; y += 3)
+        for (x = 4; x < 32; x += 3) {
+            imgdec_pixel(&img, x, y, c);
+            TEST_ASSERT_EQUAL((x * 8) & 255, c[0]);
+            TEST_ASSERT_EQUAL((y * 8) & 255, c[1]);
+            TEST_ASSERT_EQUAL(((x + y) * 4) & 255, c[2]);
+        }
+    if (!want_png) {                                   /* alpha 0: white */
+        imgdec_pixel(&img, 1, 5, c);
+        TEST_ASSERT_EQUAL(255, c[0]); TEST_ASSERT_EQUAL(255, c[1]); TEST_ASSERT_EQUAL(255, c[2]);
+    }
+}
+
+static void test_ico_png_and_dib(void) {
+    static unsigned char bad[sizeof(gif_ico_bmp)];
+    imgdec_t img;
+    int k;
+    ico_check(gif_ico_png, sizeof(gif_ico_png), 1);
+    ico_check(gif_ico_bmp, sizeof(gif_ico_bmp), 0);
+    TEST_ASSERT_EQUAL_STRING("ico", imgdec_fmt_name(IMGDEC_ICO));
+    TEST_ASSERT_EQUAL(IMGDEC_E_TRUNC, imgdec_probe(gif_ico_bmp, 30, &img));
+    /* corrupt directory and DIB headers stay bounded */
+    for (k = 0; k < 200; k++) {
+        memcpy(bad, gif_ico_bmp, sizeof(bad));
+        bad[(k * 7) % 80] ^= (unsigned char)(k + 1);
+        bad[(k * 131) % (int)sizeof(bad)] ^= 0x5A;
+        if (imgdec_probe(bad, sizeof(bad), &img) == IMGDEC_OK && imgdec_scratch_need(&img) <= sizeof(g_scratch))
+            (void)imgdec_open(bad, sizeof(bad), g_scratch, sizeof(g_scratch), &img);
+    }
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_bmp24);
@@ -341,7 +418,9 @@ int main(void) {
     RUN_TEST(test_png_scratch_bound_new_variants);
     RUN_TEST(test_jpeg_baseline);
     RUN_TEST(test_jpeg_refusals_and_bounds);
+    RUN_TEST(test_jpeg_scaled_decode);
     RUN_TEST(test_gif_plain);
+    RUN_TEST(test_ico_png_and_dib);
     RUN_TEST(test_gif_interlaced);
     RUN_TEST(test_gif_local_table);
     RUN_TEST(test_gif_big_12bit_codes);
