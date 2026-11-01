@@ -186,7 +186,14 @@ int shell_fetch_line(const char* line) {
         wf_html_set_charset(wf_charset_header(g_res.content_type, ctlen(g_res.content_type)));
         static char reduced[16384];
         (void)wf_html_reduce((const char*)g_body, g_res.body_len, 0, reduced, (int)sizeof(reduced), &st);
-        if (st.title[0]) { print_string("fetch title "); print_string(st.title); print_string("\n"); }
+        if (st.title[0]) {
+            /* Lot 72: the title is display bytes (glyph pages); the console
+             * prints UTF-8, and names a page charset other than UTF-8 */
+            static char tu[sizeof(st.title) * 3 + 1];
+            wf_display_to_utf8(st.title, (int)sizeof(st.title), tu, (int)sizeof(tu));
+            print_string("fetch title "); print_string(tu); print_string("\n");
+        }
+        if (st.charset != WF_CS_UTF8) { print_string("fetch charset "); print_string(wf_charset_name(st.charset)); print_string("\n"); }
         (void)wf_html_text_display(reduced, st.out_bytes, g_text, max_show + 1 < (int)sizeof(g_text) ? max_show + 1 : (int)sizeof(g_text));
     } else {
         int n = g_res.body_len < max_show ? g_res.body_len : max_show;

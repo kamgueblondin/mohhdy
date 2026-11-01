@@ -24,7 +24,7 @@ static int g_images;
 void wf_html_set_images(int on) { g_images = on ? 1 : 0; }
 static int g_cs_set = WF_CS_NONE;
 static wf_form_page_t* g_forms;
-void wf_html_set_charset(int cs) { g_cs_set = cs == WF_CS_LATIN1 ? WF_CS_LATIN1 : cs == WF_CS_UTF8 ? WF_CS_UTF8 : WF_CS_NONE; }
+void wf_html_set_charset(int cs) { g_cs_set = cs >= WF_CS_UTF8 && cs <= WF_CS_LAST ? cs : WF_CS_NONE; }   /* Lot 72: Cyrillic / Greek charsets too */
 
 static int ends_with(const ob_t* b, const char* s) {
     int l = 0, i;
@@ -491,7 +491,7 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
         g_cs = sn >= 0 ? sn : WF_CS_UTF8;
     }
     st->charset = g_cs;
-    if (forms) forms->latin1 = g_cs == WF_CS_LATIN1;
+    if (forms) forms->charset = g_cs;   /* Lot 72: any page charset (was latin1 only) */
     if (node_budget <= 0) node_budget = WF_HTML_NODE_BUDGET;
     b.o = out; b.cap = cap; b.n = 0; b.full = 0; b.nodes = 0;
     if (cap < 64) { if (cap > 0) out[0] = 0; return 0; }
@@ -681,8 +681,9 @@ static int html_text(const char* in, int n, char* out, int cap, int display) {
             i++; nl = 0; last_sp = 0;
             continue;
         }
-        if (in[i] == '&' || (!display && cs == WF_CS_LATIN1 && (unsigned char)in[i] >= 0x80U)) {
-            /* Lot 71: any character reference, and Latin-1 bytes, as UTF-8 */
+        if (in[i] == '&' || (!display && WF_CS_SINGLE(cs) && (unsigned char)in[i] >= 0x80U)) {
+            /* Lot 71: any character reference, and Latin-1 bytes, as UTF-8.
+             * Lot 72: bytes of the Cyrillic / Greek single-byte charsets too */
             int k = i;
             uint32_t cp = wf_text_next(in, n, &k, cs, 1);
             if (cp && (k > i + 1 || cp != '&')) {

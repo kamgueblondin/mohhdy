@@ -25,6 +25,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                 a favicon link; the image bytes are the unit test fixtures
                 (tests/unit/userspace/imgdec*_samples.h), /lot72/img/NAME
   /favicon.ico  Lot 72: the .ico fixture (DIB entries)
+  /lot72/cp1251.html  Lot 72: a windows-1251 page (charset in the header)
+                with a GET form whose field holds Cyrillic text: the
+                browser must send it back in windows-1251 (/echo)
+  /lot72/greek.html   Lot 72: an ISO-8859-7 page (charset in a meta tag)
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -202,6 +206,19 @@ class H(http.server.BaseHTTPRequestHandler):
         """Lot 71 routes: forms, charsets, long page, SearXNG, cookies."""
         if p == "/lot72/images.html":
             self._send(200, LOT72_PAGE.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot72/cp1251.html":
+            page = ("<html><head><title>\u041d\u043e\u0432\u043e\u0441\u0442\u0438</title></head><body>"
+                    "<p>\u041f\u0440\u0438\u0432\u0435\u0442, \u043c\u0438\u0440! \u20ac 5</p>"
+                    "<form action=\"/echo\" method=\"get\"><input type=\"text\" name=\"q\" "
+                    "value=\"\u041c\u0438\u0440\"><input type=\"submit\" value=\"OK\"></form></body></html>")
+            self._send(200, page.encode("cp1251"), "text/html; charset=windows-1251")
+            return True
+        if p == "/lot72/greek.html":
+            page = ("<html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-8859-7\">"
+                    "<title>\u0395\u03b9\u03b4\u03ae\u03c3\u03b5\u03b9\u03c2</title></head><body>"
+                    "<p>\u039a\u03b1\u03bb\u03b7\u03bc\u03ad\u03c1\u03b1 \u03ba\u03cc\u03c3\u03bc\u03b5</p></body></html>")
+            self._send(200, page.encode("iso8859_7"), "text/html")
             return True
         if p.startswith("/lot72/img/") or p == "/favicon.ico":
             name = "fav.ico" if p == "/favicon.ico" else p[len("/lot72/img/"):]

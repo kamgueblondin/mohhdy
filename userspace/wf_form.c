@@ -1,6 +1,7 @@
 /* wf_form.c - Lot 71: forms of a fetched page (see wf_form.h). */
 #include "wf_form.h"
 #include "wf_entity.h"
+#include "../include/os_charset.h"
 
 static int f_len(const char *s) { int n = 0; while (s && s[n]) n++; return n; }
 static void f_cpy(char *d, int cap, const char *s) {
@@ -407,13 +408,38 @@ static int hexd(int v) { return v < 10 ? '0' + v : 'A' + v - 10; }
 int wf_form_urlencode_append(char *out, int cap, int len, const char *s) {
     return wf_form_urlencode_append_cs(out, cap, len, s, 0);
 }
-int wf_form_urlencode_append_cs(char *out, int cap, int len, const char *s, int latin1) {
-    static char u8[WF_FORM_VALUE * 3 + 4];
+/* Lot 72: display text (glyph pages) to the bytes of single-byte charset
+ * cs; a character cs lacks becomes "&#N;" as browsers send it */
+static int to_single_byte(const char *s, int cs, char *out, int cap) {
+    int i, n = 0, page = 0;
+    for (i = 0; s[i] && n < cap - 1; i++) {
+        unsigned char c = (unsigned char)s[i], b;
+        uint32_t cp;
+        int sel = os_page_of_sel(c);
+        if (sel >= 0) { page = sel; continue; }
+        cp = os_display_cp((unsigned)page, c);
+        b = wf_charset_byte(cs, cp);
+        if (b) { out[n++] = (char)b; continue; }
+        {
+            char d[12];
+            int k = 0;
+            uint32_t v = cp;
+            do { d[k++] = (char)('0' + v % 10u); v /= 10u; } while (v && k < 10);
+            if (n + k + 3 >= cap) break;
+            out[n++] = '&'; out[n++] = '#';
+            while (k > 0) out[n++] = d[--k];
+            out[n++] = ';';
+        }
+    }
+    out[n] = 0;
+    return n;
+}
+
+int wf_form_urlencode_append_cs(char *out, int cap, int len, const char *s, int cs) {
+    static char u8[WF_FORM_VALUE * 8 + 4];
     int i, n;
-    if (latin1) {
-        for (n = 0; s[n] && n < (int)sizeof(u8) - 1; n++) u8[n] = s[n];
-        u8[n] = 0;
-    } else n = wf_display_to_utf8(s, f_len(s), u8, (int)sizeof(u8));
+    if (WF_CS_SINGLE(cs)) n = to_single_byte(s, cs, u8, (int)sizeof(u8));
+    else n = wf_display_to_utf8(s, f_len(s), u8, (int)sizeof(u8));
     for (i = 0; i < n; i++) {
         unsigned char c = (unsigned char)u8[i];
         if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '*') {
@@ -452,11 +478,11 @@ int wf_form_submit(const wf_form_page_t *p, int fi, int submitter, wf_form_submi
         if ((fl->type == WF_FIELD_CHECKBOX || fl->type == WF_FIELD_RADIO) && !fl->checked) continue;
         if (fl->type == WF_FIELD_SELECT && !fl->nopt) continue;
         if (len) { if (len + 1 >= (int)sizeof(q)) return -1; q[len++] = '&'; q[len] = 0; }
-        len = wf_form_urlencode_append_cs(q, (int)sizeof(q), len, fl->name, p->latin1);
+        len = wf_form_urlencode_append_cs(q, (int)sizeof(q), len, fl->name, p->charset);
         if (len < 0 || len + 1 >= (int)sizeof(q)) return -1;
         q[len++] = '=';
         q[len] = 0;
-        len = wf_form_urlencode_append_cs(q, (int)sizeof(q), len, fl->value, p->latin1);
+        len = wf_form_urlencode_append_cs(q, (int)sizeof(q), len, fl->value, p->charset);
         if (len < 0) return -1;
     }
     out->method = f->method;

@@ -23,7 +23,10 @@ back in UTF-8, and the title in UTF-8; in the GUI, the 8x8 glyphs of
 the page (kernel/gfx_font8.h, found by their U+XXXX comment) are matched
 pixel for pixel on the screen: dark glyph pixels on the white page, and
 light glyph pixels in the dark title bar. A glyph drawn from the wrong
-page (the CP1252 byte) does not match.
+page (the CP1252 byte) does not match. Page charsets: fetch of a
+windows-1251 page (charset in the header) and of an ISO-8859-7 page
+(meta tag) prints the title and text in UTF-8; the windows-1251 form is
+submitted back in windows-1251 (the server sees q=%CC%E8%F0).
 """
 from __future__ import print_function
 
@@ -210,6 +213,25 @@ def main():
                 if word not in paged.get(page, ""):
                     raise RuntimeError("web-render lot72: no page %d item with %r; items %r" % (page, word, paged))
             say("console: Greek, Cyrillic, Latin Ext-A and symbol items keep their glyph page, title in UTF-8")
+            # ---- single-byte Cyrillic / Greek page charsets over HTTP
+            b0 = log_size()
+            lw.run(mon, proc, "fetch http://10.0.2.2:%d/lot72/cp1251.html" % hp, "fetch body-begin", lw.FETCH_TIMEOUT, fail=["fetch error"])
+            out = log_utf8(b0)
+            for want in ("fetch title \u041d\u043e\u0432\u043e\u0441\u0442\u0438", "fetch charset windows-1251",
+                         "\u041f\u0440\u0438\u0432\u0435\u0442, \u043c\u0438\u0440! \u20ac 5"):
+                if want not in out:
+                    raise RuntimeError("cp1251 page: want %r in:\n%s" % (want, out[-1500:]))
+            b0 = log_size()
+            lw.run(mon, proc, "fetch http://10.0.2.2:%d/lot72/greek.html" % hp, "fetch body-begin", lw.FETCH_TIMEOUT, fail=["fetch error"])
+            out = log_utf8(b0)
+            for want in ("fetch title \u0395\u03b9\u03b4\u03ae\u03c3\u03b5\u03b9\u03c2", "fetch charset iso-8859-7",
+                         "\u039a\u03b1\u03bb\u03b7\u03bc\u03ad\u03c1\u03b1 \u03ba\u03cc\u03c3\u03bc\u03b5"):
+                if want not in out:
+                    raise RuntimeError("iso-8859-7 page: want %r in:\n%s" % (want, out[-1500:]))
+            lw.run(mon, proc, "web-open http://10.0.2.2:%d/lot72/cp1251.html" % hp, "osui web page sections", fail=["error"])
+            lw.run(mon, proc, "web-submit", "osui web form submit", fail=["form error"])
+            wait_server("ECHO GET q='q=%CC%E8%F0'", 30)
+            say("charsets: windows-1251 (header) and iso-8859-7 (meta) pages decoded; the form goes back in windows-1251")
             # ---- console
             lw.run(mon, proc, "web-images on", "web-images on", 30)
             out = lw.run(mon, proc, "web-open %s/lot72/images.html" % u, "osui web page sections", fail=["error"])

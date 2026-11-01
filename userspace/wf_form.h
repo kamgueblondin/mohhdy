@@ -73,8 +73,10 @@ typedef struct {
     int focus;                   /* focused field or -1 */
     int dropped;                 /* controls past the limits */
     int current;                 /* form being parsed, -1 outside any form */
-    int latin1;                  /* page charset Latin-1 / CP1252: submitted as is (browsers
-                                    encode a form in the page charset), else UTF-8 */
+    int charset;                 /* page charset (WF_CS_*, userspace/wf_entity.h): browsers
+                                    encode a form in the page charset. Lot 71: Latin-1 / CP1252
+                                    (field "latin1"); Lot 72: any single-byte charset, a
+                                    character it lacks is sent as &#N; (HTML rule) */
     char opt_pool[WF_FORM_OPT_POOL];   /* "value\0label\0" per option */
     int opt_used;
     int opt_dropped;
@@ -130,8 +132,10 @@ int wf_form_submit(const wf_form_page_t *p, int f, int submitter, wf_form_submit
 /* application/x-www-form-urlencoded pair encoding of display bytes
  * (converted to UTF-8 first). Returns the new length or -1 on overflow. */
 int wf_form_urlencode_append(char *out, int cap, int len, const char *s);
-/* Lot 71: same in the page charset (latin1: display bytes, CP1252). */
-int wf_form_urlencode_append_cs(char *out, int cap, int len, const char *s, int latin1);
+/* Lot 71: same in the page charset. Lot 72: cs is WF_CS_* (0 = UTF-8,
+ * 1 = Latin-1 as before); s is display text with glyph pages, each
+ * character is written in cs, or as &#N; when cs has no byte for it. */
+int wf_form_urlencode_append_cs(char *out, int cap, int len, const char *s, int cs);
 /* First form that has a visible text field (for "web-input"), or -1. */
 int wf_form_first_text(const wf_form_page_t *p, int form);
 /* "mohhdy-form:f:N" -> field N; "mohhdy-form:s:N" -> submit field N.

@@ -1078,6 +1078,7 @@ strict-image-check: $(OS_IMAGE) kernel-netlegacy pack-initrd
 # scripts/gen_bitmap_font.py (glyph count, page tables, no '?' glyphs).
 font-check:
 	@python3 scripts/gen_bitmap_font.py --check kernel/gfx_font_hd.h kernel/gfx_font8.h include/os_charset_pages.h
+	@python3 scripts/gen_charset_tables.py --check
 .PHONY: font-check
 
 # Lot 47 (US-120): /roadmap.txt agrees with the US master phase 9 table and
