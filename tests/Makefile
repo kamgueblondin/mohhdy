@@ -383,7 +383,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ps2_decode: $(UNIT_DIR)/userspace/test_p
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/ps2_decode.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webeng: $(UNIT_DIR)/userspace/test_webeng.c $(UNIT_DIR)/userspace/webeng_lot52.inc $(UNIT_DIR)/userspace/webeng_lot53.inc $(UNIT_DIR)/userspace/webeng_lot54.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot55_*.inc) $(UNIT_DIR)/userspace/webeng_lot56.inc $(UNIT_DIR)/userspace/webeng_lot56b.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot57_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot58_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot59_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot60_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot61*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot62*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot63*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot64*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot69*.inc) ../include/os_ui_scale.h ../userspace/webeng.c ../userspace/webeng.h ../userspace/imgdec.c ../userspace/imgdec.h ../userspace/imgdec_jpeg.inc ../include/os_syscalls.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webeng: $(UNIT_DIR)/userspace/test_webeng.c $(UNIT_DIR)/userspace/webeng_lot52.inc $(UNIT_DIR)/userspace/webeng_lot53.inc $(UNIT_DIR)/userspace/webeng_lot54.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot55_*.inc) $(UNIT_DIR)/userspace/webeng_lot56.inc $(UNIT_DIR)/userspace/webeng_lot56b.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot57_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot58_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot59_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot60_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot61*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot62*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot63*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot64*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot69*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot72*.inc) ../include/os_ui_scale.h ../include/os_charset.h ../include/os_charset_pages.h ../userspace/wf_entity_table.inc ../userspace/webeng.c ../userspace/webeng.h ../userspace/imgdec.c ../userspace/imgdec.h ../userspace/imgdec_jpeg.inc ../include/os_syscalls.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
@@ -479,7 +479,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_form: $(UNIT_DIR)/userspace/test_os
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_form.c ../userspace/fsops.c ../userspace/osui_app.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_imgdec: $(UNIT_DIR)/userspace/test_imgdec.c $(UNIT_DIR)/userspace/imgdec_samples.h ../userspace/imgdec.c ../userspace/imgdec_jpeg.inc ../userspace/imgdec.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_imgdec: $(UNIT_DIR)/userspace/test_imgdec.c $(UNIT_DIR)/userspace/imgdec_samples.h $(UNIT_DIR)/userspace/imgdec_gif_samples.h ../userspace/imgdec.c ../userspace/imgdec_jpeg.inc ../userspace/imgdec_gif.inc ../userspace/imgdec_ico.inc ../userspace/imgdec.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
@@ -516,9 +516,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_user_heap: $(UNIT_DIR)/kernel/test_user_hea
 	$(CC) $(CFLAGS_KERNEL) -I.. -o $@ $< ../kernel/user_heap.c $(FRAMEWORK_SOURCES)
 
 # Lot 69 (US-076): portable self-tests shared with the ARM boot
-$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_arm_portable: $(UNIT_DIR)/kernel/test_arm_portable.c ../arch/arm/arm_portable.c ../arch/arm/arm_portable.h ../kernel/aes_gcm.c ../kernel/edid.c ../userspace/p2p_flow.c ../userspace/p2p_pace.c ../userspace/p2p_rtx.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_arm_portable: $(UNIT_DIR)/kernel/test_arm_portable.c ../arch/arm/arm_portable.c ../arch/arm/arm_portable.h ../kernel/aes_gcm.c ../kernel/edid.c ../userspace/p2p_flow.c ../userspace/p2p_pace.c ../userspace/p2p_rtx.c ../userspace/wf_aead.c ../include/os_charset.h ../include/os_charset_pages.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_KERNEL) -I.. -I../kernel -I../userspace -I../include -o $@ $< ../arch/arm/arm_portable.c ../kernel/aes_gcm.c ../kernel/edid.c ../userspace/p2p_flow.c ../userspace/p2p_pace.c ../userspace/p2p_rtx.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_KERNEL) -I.. -I../kernel -I../userspace -I../include -o $@ $< ../arch/arm/arm_portable.c ../kernel/aes_gcm.c ../kernel/edid.c ../userspace/p2p_flow.c ../userspace/p2p_pace.c ../userspace/p2p_rtx.c ../userspace/wf_aead.c $(FRAMEWORK_SOURCES)
 
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_edid: $(UNIT_DIR)/kernel/test_edid.c ../kernel/edid.c ../kernel/edid.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
@@ -758,7 +758,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_net_ifcfg: $(UNIT_DIR)/userspace/test_ne
 	@echo "Compiled userspace test: $(notdir $@)"
 
 # Lot 67: Ring 3 web stack (crypto, X.509, TLS 1.2 client, HTTP/1.1).
-WF_CRYPTO_SRCS = ../userspace/wf_bn.c ../userspace/wf_sha512.c ../userspace/wf_ec.c ../userspace/wf_rsa.c ../kernel/sha256.c
+WF_CRYPTO_SRCS = ../userspace/wf_bn.c ../userspace/wf_sha512.c ../userspace/wf_ec.c ../userspace/wf_p256.c ../userspace/wf_aead.c ../userspace/wf_rsa.c ../kernel/sha256.c
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_crypto: $(UNIT_DIR)/userspace/test_wf_crypto.c $(UNIT_DIR)/userspace/wf_vectors.h $(WF_CRYPTO_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_CRYPTO_SRCS) $(FRAMEWORK_SOURCES)
@@ -812,8 +812,21 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wsearch_api: $(UNIT_DIR)/userspace/test_
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/wsearch_api.c ../userspace/wsearch.c ../userspace/wf_entity.c $(FRAMEWORK_SOURCES)
 
+# Lot 72: browser images (wf_html <img>, wf_webimg atlas, engine atlas item)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_p256: $(UNIT_DIR)/userspace/test_wf_p256.c $(WF_CRYPTO_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_CRYPTO_SRCS) $(FRAMEWORK_SOURCES)
+
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_aead: $(UNIT_DIR)/userspace/test_wf_aead.c ../userspace/wf_aead.c ../userspace/wf_aead.h $(UNIT_DIR)/userspace/wf_aead_vectors.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/wf_aead.c $(FRAMEWORK_SOURCES)
+
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_webimg: $(UNIT_DIR)/userspace/test_wf_webimg.c $(WF_NET_SRCS) ../userspace/wf_webimg.c ../userspace/webeng.c ../userspace/imgdec.c ../userspace/imgdec_gif.inc ../userspace/imgdec_ico.inc ../userspace/imgdec_jpeg.inc $(wildcard ../userspace/wf_*.h) ../userspace/webeng.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) ../userspace/wf_webimg.c ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
+
 # Lot 67: URL / HTTP / DNS / TLS PRF / fetch
-WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_entity.c ../userspace/wf_form.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_cookie.c ../userspace/wf_inflate.c ../kernel/aes_gcm.c ../kernel/x25519.c $(WF_X509_SRCS)
+WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_entity.c ../userspace/wf_form.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_cookie.c ../userspace/wf_inflate.c ../kernel/x25519.c $(WF_X509_SRCS)
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_http: $(UNIT_DIR)/userspace/test_wf_http.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)

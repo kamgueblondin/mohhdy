@@ -102,6 +102,67 @@ int gfx_desktop_set_image(const os_fb_image_t *img) {
     return 0;
 }
 
+/* Lot 72: web pane images (kernel copy of the Ring 3 atlas) */
+static os_fb_webimg_t g_webimg;
+static int g_webimg_valid;
+
+int gfx_desktop_webimg_valid(const os_fb_webimg_t *a) {
+    int k;
+    if (!a || a->magic != OS_FB_WEBIMG_MAGIC) return 0;
+    for (k = 0; k < OS_FB_WEBIMG_SLOTS; k++) {
+        uint32_t px = (uint32_t)a->slot[k].w * (uint32_t)a->slot[k].h;
+        if (!a->slot[k].w || !a->slot[k].h) continue;
+        if (a->slot[k].off > OS_FB_WEBIMG_PIXELS || px > OS_FB_WEBIMG_PIXELS - a->slot[k].off) return 0;
+    }
+    return 1;
+}
+
+int gfx_desktop_set_webimg(const os_fb_webimg_t *a) {
+    uint32_t i, used = 0;
+    int k;
+    if (!a) { g_webimg_valid = 0; return 0; }
+    if (!gfx_desktop_webimg_valid(a)) { g_webimg_valid = 0; return -1; }
+    g_webimg.magic = a->magic;
+    g_webimg.gen = a->gen;
+    for (k = 0; k < OS_FB_WEBIMG_SLOTS; k++) {
+        uint32_t end;
+        g_webimg.slot[k] = a->slot[k];
+        end = a->slot[k].off + (uint32_t)a->slot[k].w * (uint32_t)a->slot[k].h;
+        if (a->slot[k].w && a->slot[k].h && end > used) used = end;
+    }
+    for (i = 0; i < used * 3U; i++) g_webimg.rgb[i] = a->rgb[i];
+    g_webimg_valid = 1;
+    return 0;
+}
+
+/* Draws slot k scaled (nearest) into x, y, dw x dh, clipped to cx0..cx1. */
+static void draw_webimg(uint32_t *fb, int w, int h, int k, int x, int y, int dw, int dh,
+                        int cx0, int cy0, int cx1, int cy1) {
+    const os_fb_webimg_slot_t *s;
+    int px, py;
+    if (!g_webimg_valid || k < 0 || k >= OS_FB_WEBIMG_SLOTS || dw <= 0 || dh <= 0) return;
+    s = &g_webimg.slot[k];
+    if (!s->w || !s->h) return;
+    if (cx0 < 0) cx0 = 0;
+    if (cy0 < 0) cy0 = 0;
+    if (cx1 > w) cx1 = w;
+    if (cy1 > h) cy1 = h;
+    for (py = 0; py < dh; py++) {
+        int sy = y + py, ry;
+        const uint8_t *row;
+        if (sy < cy0 || sy >= cy1) continue;
+        ry = (int)(((uint32_t)py * s->h) / (uint32_t)dh);
+        row = g_webimg.rgb + ((uint32_t)s->off + (uint32_t)ry * s->w) * 3U;
+        for (px = 0; px < dw; px++) {
+            int sx = x + px;
+            const uint8_t *p;
+            if (sx < cx0 || sx >= cx1) continue;
+            p = row + ((uint32_t)px * s->w / (uint32_t)dw) * 3U;
+            fb[sy * w + sx] = RGB(p[0], p[1], p[2]);
+        }
+    }
+}
+
 /* Image area: the grid below its first (caption) row, the image scaled by
  * an integer factor (or down, nearest) to fit, centered. */
 void gfx_desktop_image_rect(const gfx_rect_t *box, gfx_rect_t *out) {
@@ -919,12 +980,12 @@ static int glyph_smooth(const uint8_t *g, int q, int dx, int dy, int n) {
 }
 
 /* One glyph at scale q: 1x the 8x8 font; above, the native font of the
- * scale (or the smoothed upscale in font mode 1). */
-int gfx_glyph_pixel(char ch, int q, int dx, int dy) {
-    unsigned idx;
+ * scale (or the smoothed upscale in font mode 1). Lot 72: by glyph slot
+ * (os_glyph_index_page), so the glyph pages draw too. */
+static int glyph_pixel_idx(unsigned idx, int q, int dx, int dy) {
     int n = os_ui_px(8, q), cell;
     if (dx < 0 || dy < 0 || dx >= n || dy >= n) return 0;
-    idx = os_glyph_index((unsigned char)ch);   /* Lot 71: CP1252 / Latin-1 */
+    if (idx >= OS_GLYPH_TOTAL) idx = OS_GLYPH_QMARK;
     if (q == 4) return glyph_bit(gfx_font8[idx], dx, dy);
     if (g_font_mode) return glyph_smooth(gfx_font8[idx], q, dx, dy, n);
     cell = gfx_glyph_source_cell(q);
@@ -941,13 +1002,20 @@ int gfx_glyph_pixel(char ch, int q, int dx, int dy) {
     }
 }
 
-static void draw_char_bits(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
+int gfx_glyph_pixel(char ch, int q, int dx, int dy) {
+    return glyph_pixel_idx(os_glyph_index((unsigned char)ch), q, dx, dy);   /* Lot 71: CP1252 / Latin-1 */
+}
+
+/* Lot 72: display byte ch of glyph page `page` (include/os_charset.h) */
+int gfx_glyph_pixel_page(int page, char ch, int q, int dx, int dy) {
+    return glyph_pixel_idx(os_glyph_index_page((unsigned)page, (unsigned char)ch), q, dx, dy);
+}
+
+static void draw_glyph_bits(uint32_t *fb, int w, int h, int x, int y, unsigned idx, uint32_t c) {
     int gy, gx, n;
+    if (idx >= OS_GLYPH_TOTAL) idx = OS_GLYPH_QMARK;
     if (g_tq == OS_UI_Q1) {
-        unsigned idx;
-        const uint8_t *g;
-        idx = os_glyph_index((unsigned char)ch);
-        g = gfx_font8[idx];
+        const uint8_t *g = gfx_font8[idx];
         for (gy = 0; gy < 8; gy++) {
             uint8_t bits = g[gy];
             for (gx = 0; gx < 8; gx++) {
@@ -956,30 +1024,53 @@ static void draw_char_bits(uint32_t *fb, int w, int h, int x, int y, char ch, ui
         }
         return;
     }
-    if (ch == ' ') return;
+    if (idx == 0) return;   /* space */
     n = os_ui_px(8, g_tq);
     for (gy = 0; gy < n; gy++) {
         if (y + gy < 0 || y + gy >= h) continue;
         for (gx = 0; gx < n; gx++)
-            if (gfx_glyph_pixel(ch, g_tq, gx, gy)) put(fb, w, h, x + gx, y + gy, c);
+            if (glyph_pixel_idx(idx, g_tq, gx, gy)) put(fb, w, h, x + gx, y + gy, c);
     }
 }
 
-static void draw_char(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
+static void draw_glyph(uint32_t *fb, int w, int h, int x, int y, unsigned idx, uint32_t c) {
     int o = g_tq >= 8 ? g_tq / 4 : 1;
-    draw_char_bits(fb, w, h, x + o, y + o, ch, RGB(8, 12, 16));
-    draw_char_bits(fb, w, h, x, y, ch, c);
+    draw_glyph_bits(fb, w, h, x + o, y + o, idx, RGB(8, 12, 16));
+    draw_glyph_bits(fb, w, h, x, y, idx, c);
+}
+
+static void draw_char(uint32_t *fb, int w, int h, int x, int y, char ch, uint32_t c) {
+    draw_glyph(fb, w, h, x, y, os_glyph_index((unsigned char)ch), c);
+}
+
+/* Lot 72: draws at most nbytes bytes (-1 = up to the NUL) and maxc cells
+ * (-1 = no limit) of display text starting in glyph page `page`; page
+ * selectors switch the page and take no cell. Returns the cells drawn. */
+static int draw_text_seg(uint32_t *fb, int w, int h, int x, int y, const char *s, int nbytes, int maxc, int page, uint32_t c) {
+    int i, cells = 0;
+    if (!s) return 0;
+    for (i = 0; s[i] && (nbytes < 0 || i < nbytes); i++) {
+        int k = os_page_of_sel((unsigned char)s[i]);
+        if (k >= 0) { page = k; continue; }
+        if (maxc >= 0 && cells >= maxc) break;
+        draw_glyph(fb, w, h, x + cells * CW, y, os_glyph_index_page((unsigned)page, (unsigned char)s[i]), c);
+        cells++;
+    }
+    return cells;
 }
 
 static void draw_text(uint32_t *fb, int w, int h, int x, int y, const char *s, uint32_t c) {
-    int cx = x;
+    int cx = x, page = 0;
     if (!s) return;
     while (*s) {
+        int k = os_page_of_sel((unsigned char)*s);
         if (*s == '\n') {
             y += os_ui_line_h(g_tq);
             cx = x;
+        } else if (k >= 0) {
+            page = k;
         } else {
-            draw_char(fb, w, h, cx, y, *s, c);
+            draw_glyph(fb, w, h, cx, y, os_glyph_index_page((unsigned)page, (unsigned char)*s), c);
             cx += CW;
         }
         s++;
@@ -987,18 +1078,39 @@ static void draw_text(uint32_t *fb, int w, int h, int x, int y, const char *s, u
 }
 
 static void draw_text_n(uint32_t *fb, int w, int h, int x, int y, const char *s, int maxc, uint32_t c) {
-    int cx = x, n = 0;
-    if (!s) return;
-    while (*s && n < maxc) {
-        draw_char(fb, w, h, cx, y, *s, c);
-        cx += CW;
-        s++;
-        n++;
-    }
+    (void)draw_text_seg(fb, w, h, x, y, s, -1, maxc < 0 ? 0 : maxc, 0, c);
 }
 
-/* Lot 68: text in a fixed-height bar (title bars, menu bar): scaled up to
- * OS_UI_Q_CHROME_MAX and centred on the 1x position; maxpx bounds width. */
+/* Lot 72: one wrapped line of t from byte pos: the bytes that fill at
+ * most maxc cells, cut after the last space past half the line when the
+ * text goes on. */
+/* Lot 72: first chat message shown when the newest ones fill `avail`
+ * lines of maxc cells (each message: its wrapped lines + 1 of gap). A
+ * message is measured in cells: page selectors take none. */
+int gfx_chat_first(const os_fb_scene_t *sc, int n, int maxc, int avail) {
+    int i, lines = 0;
+    if (maxc < 1) maxc = 1;
+    for (i = n - 1; i >= 0; i--) {
+        int len = 0, need;
+        while (sc->messages[i][len] && len < OS_FB_MSG_LEN) len++;
+        len = os_display_cells(sc->messages[i], len);   /* cells, not bytes */
+        need = (len + maxc - 1) / maxc + 1;  /* +1: wrap slack and gap */
+        if (lines + need > avail && i < n - 1) return i + 1;
+        lines += need;
+    }
+    return 0;
+}
+
+int gfx_text_wrap_take(const char *t, int pos, int len, int maxc) {
+    int take = os_display_take(t + pos, len - pos, maxc), k, cells;
+    if (pos + take >= len) return len - pos;
+    for (k = take, cells = maxc; k > 0 && cells > maxc / 2; k--) {
+        if (t[pos + k] == ' ') return k;
+        if (os_page_of_sel((unsigned char)t[pos + k - 1]) < 0) cells--;
+    }
+    return take > 0 ? take : 1;
+}
+
 static void draw_title(uint32_t *fb, int w, int h, int x, int y, const char *s, int maxpx, uint32_t c) {
     int keep = g_tq;
     if (g_tq > OS_UI_Q_CHROME_MAX) g_tq = OS_UI_Q_CHROME_MAX;
@@ -1236,12 +1348,18 @@ static void llm_text(char *d, int max, const char *pre, const os_fb_scene_t *sc,
 }
 
 /* Long input: show its end (where the user types), not its start. */
-static const char *input_tail(const char *s, int maxc) {
-    int n = 0;
-    if (!s) return "";
+/* the end of the input line that fits maxc cells, in the page in force
+ * there (Lot 72) */
+static void draw_input_tail(uint32_t *fb, int w, int h, int x, int y, const char *s, int maxc, uint32_t c) {
+    int n = 0, cells, start = 0;
+    if (!s) return;
     while (s[n]) n++;
-    if (maxc > 0 && n > maxc) return s + (n - maxc);
-    return s;
+    cells = os_display_cells(s, n);
+    while (maxc > 0 && cells > maxc && start < n) {
+        if (os_page_of_sel((unsigned char)s[start]) < 0) cells--;
+        start++;
+    }
+    (void)draw_text_seg(fb, w, h, x, y, s + start, -1, maxc, os_display_page_at(s, start), c);
 }
 
 /* Lot 69: shared title bar of the full screen web / editor windows */
@@ -1280,9 +1398,22 @@ static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh
         draw_text(fb, w, h, g_addr_lay.addr_fwd.x + 6, a->y + (a->h - TS(8)) / 2, ">", RGB(232, 238, 244));
         round_rect_a(fb, w, h, a->x, a->y, a->w, a->h, 6, RGB(244, 247, 250), 255);
         stroke_round(fb, w, h, a->x, a->y, a->w, a->h, 6, RGB(61, 154, 138), 2);
-        c = (a->w - 16) / CW;
-        draw_text_n(fb, w, h, a->x + 8, a->y + (a->h - TS(8)) / 2, txt, c,
-                    sc->input[0] ? RGB(16, 24, 32) : RGB(110, 120, 130));
+        {
+            /* Lot 72: the favicon of the page shown, at the start of the
+             * address field (the full web window shows it before its title) */
+            int tx = a->x + 8;
+            if (g_webimg_valid && g_webimg.slot[OS_FB_WEBIMG_FAVICON].w) {
+                int fs = a->h - 8;
+                if (fs > os_ui_px(16, g_tq)) fs = os_ui_px(16, g_tq);
+                if (fs >= 8) {
+                    draw_webimg(fb, w, h, OS_FB_WEBIMG_FAVICON, tx, a->y + (a->h - fs) / 2, fs, fs, tx, a->y, tx + fs, a->y + a->h);
+                    tx += fs + 6;
+                }
+            }
+            c = (a->x + a->w - 8 - tx) / CW;
+            draw_text_n(fb, w, h, tx, a->y + (a->h - TS(8)) / 2, txt, c,
+                        sc->input[0] ? RGB(16, 24, 32) : RGB(110, 120, 130));
+        }
         round_rect_a(fb, w, h, g_addr_lay.addr_go.x, a->y, g_addr_lay.addr_go.w, a->h, 6, RGB(31, 122, 106), 255);
         draw_text(fb, w, h, g_addr_lay.addr_go.x + 8, a->y + (a->h - TS(8)) / 2, "Aller", RGB(255, 255, 255));
         top = a->y + a->h + 10 + TS(4);
@@ -1415,7 +1546,15 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
         gfx_wm_draw_grip(fb, w, h, w, gr, GFX_DESKTOP_PANE_TITLE_H, g_wm_q, RGB(120, 140, 150));
     }
     g_tq = q;
-    draw_title(fb, w, h, fr.x + 8 + 2 * 34 + 8, fr.y + 12, sc->web_title, fr.w + 16 - 96 - 80 - 3 * 30, RGB(232, 238, 244));
+    {
+        /* Lot 72: favicon of the page before its title */
+        int tx = fr.x + 8 + 2 * 34 + 8, fav = os_ui_px(16, q);
+        if (g_webimg_valid && g_webimg.slot[OS_FB_WEBIMG_FAVICON].w) {
+            draw_webimg(fb, w, h, OS_FB_WEBIMG_FAVICON, tx, fr.y + 16 - fav / 2, fav, fav, tx, fr.y, tx + fav, fr.y + 32);
+            tx += fav + 6;
+        }
+        draw_title(fb, w, h, tx, fr.y + 12, sc->web_title, fr.w + 16 - 96 - 80 - 3 * 30 - (tx - (fr.x + 8 + 2 * 34 + 8)), RGB(232, 238, 244));
+    }
     g_tq = OS_UI_Q1;
     for (i = 0; i < 2; i++) {
         gfx_desktop_web_nav(w, h, i, &nav);
@@ -1436,6 +1575,8 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
         uint32_t c = it->color & 0xFFFFFFu;
         if (it->kind == OS_FB_WEB_RECT) {
             web_fill_clip(fb, w, h, x, y, iw, ih, c, ox, oy, cx1, cy1);
+        } else if (it->kind == OS_FB_WEB_IMAGE) {
+            draw_webimg(fb, w, h, (int)it->pad, x, y, iw, ih, ox, oy, cx1, cy1);
         } else if (it->kind == OS_FB_WEB_BORDER) {
             int t = os_ui_px(it->bold ? it->bold : 1, q);
             if (t < 1) t = 1;
@@ -1446,7 +1587,9 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
         } else if (it->kind == OS_FB_WEB_TEXT) {
             /* Lot 69: pad = the item's CSS font scale (quarters); glyphs
              * draw at web zoom * pad / 4, capped at the 4x cell. */
-            int fq = (it->pad >= 4 && it->pad <= 16) ? it->pad : OS_UI_Q1;
+            /* Lot 72: bits 8..10 of pad = the item's glyph page */
+            int fq = ((it->pad & 0xFFu) >= 4 && (it->pad & 0xFFu) <= 16) ? (int)(it->pad & 0xFFu) : OS_UI_Q1;
+            unsigned page = (unsigned)(it->pad >> 8) & 7u;
             int tq = os_ui_q_clamp((q * fq + 2) / 4);
             int k, gh, icw;
             g_tq = tq;
@@ -1456,8 +1599,9 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
             for (k = 0; k < OS_FB_WEB_TEXT_LEN && it->text[k]; k++) {
                 int gx = x + k * icw;
                 if (gx < ox || gx + icw + 1 > cx1) continue;
-                draw_char_bits(fb, w, h, gx, y, it->text[k], c);
-                if (it->bold) draw_char_bits(fb, w, h, gx + (tq >= 8 ? tq / 4 : 1), y, it->text[k], c);
+                unsigned gi = os_glyph_index_page(page, (unsigned char)it->text[k]);
+                draw_glyph_bits(fb, w, h, gx, y, gi, c);
+                if (it->bold) draw_glyph_bits(fb, w, h, gx + (tq >= 8 ? tq / 4 : 1), y, gi, c);
             }
             g_tq = q;
             (void)cw;
@@ -1498,7 +1642,7 @@ static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh,
     }
     draw_text(fb, w, h, x + 18, prompt_y, "MOHHDY> ", RGB(201, 232, 223));
     if (sc && sc->input[0]) {
-        draw_text_n(fb, w, h, x + 18 + 8 * CW, prompt_y, input_tail(sc->input, maxc - 8), maxc - 8, RGB(232, 238, 244));
+        draw_input_tail(fb, w, h, x + 18 + 8 * CW, prompt_y, sc->input, maxc - 8, RGB(232, 238, 244));
     } else {
         fill_rect(fb, w, h, x + 18 + 8 * CW, prompt_y, CW, TS(10), RGB(61, 154, 138));
     }
@@ -1511,12 +1655,8 @@ static int draw_text_wrap(uint32_t *fb, int w, int h, int x, int y, const char *
     while (t[len]) len++;
     if (maxc < 4) maxc = 4;
     while (pos < len && used < max_lines) {
-        int take = len - pos, k;
-        if (take > maxc) {
-            take = maxc;
-            for (k = maxc; k > maxc / 2; k--) if (t[pos + k] == ' ') { take = k; break; }
-        }
-        draw_text_n(fb, w, h, x, y + used * line_h, t + pos, take, c);
+        int take = gfx_text_wrap_take(t, pos, len, maxc);
+        (void)draw_text_seg(fb, w, h, x, y + used * line_h, t + pos, take, maxc, os_display_page_at(t, pos), c);
         pos += take;
         while (pos < len && t[pos] == ' ') pos++;
         used++;
@@ -1569,16 +1709,10 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
         }
     } else {
         /* messages wrap on word boundaries; the newest stay visible */
-        int maxc = (rw - 48) / CW, lines = 0, avail = (y + rh - 92 - log_y) / TS(11), first = 0, yy, need;
+        int maxc = (rw - 48) / CW, avail = (y + rh - 92 - log_y) / TS(11), first, yy;
         (void)stub;
         if (maxc < 8) maxc = 8;
-        for (i = n - 1; i >= 0; i--) {
-            int len = 0;
-            while (sc->messages[i][len] && len < OS_FB_MSG_LEN) len++;
-            need = (len + maxc - 1) / maxc + 1;  /* +1: wrap slack and gap */
-            if (lines + need > avail && i < n - 1) { first = i + 1; break; }
-            lines += need;
-        }
+        first = gfx_chat_first(sc, n, maxc, avail);
         yy = log_y + 8;
         for (i = first; i < n; i++) {
             int pos = 0, len = 0;
@@ -1586,12 +1720,8 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
             while (msg[len] && len < OS_FB_MSG_LEN) len++;
             fill_rect(fb, w, h, x + 16, yy, 2, TS(9), RGB(61, 154, 138));
             while (pos < len && yy + TS(10) < y + rh - 84) {
-                int take = len - pos, k;
-                if (take > maxc) {
-                    take = maxc;
-                    for (k = maxc; k > maxc / 2; k--) if (msg[pos + k] == ' ') { take = k; break; }
-                }
-                draw_text_n(fb, w, h, x + 20, yy, msg + pos, take, RGB(232, 238, 244));
+                int take = gfx_text_wrap_take(msg, pos, len, maxc);
+                (void)draw_text_seg(fb, w, h, x + 20, yy, msg + pos, take, maxc, os_display_page_at(msg, pos), RGB(232, 238, 244));
                 pos += take;
                 while (pos < len && msg[pos] == ' ') pos++;
                 yy += TS(11);
@@ -1600,7 +1730,7 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
         }
     }
     fill_rect(fb, w, h, x + 14, y + rh - 42 - (TS(10) + 18), rw - 28, TS(10) + 18, RGB(16, 25, 32));
-    if (sc && sc->input[0]) draw_text_n(fb, w, h, x + 20, y + rh - 51 - TS(10), input_tail(sc->input, (rw - 48) / CW), (rw - 48) / CW, RGB(232, 238, 244));
+    if (sc && sc->input[0]) draw_input_tail(fb, w, h, x + 20, y + rh - 51 - TS(10), sc->input, (rw - 48) / CW, RGB(232, 238, 244));
     else draw_text_n(fb, w, h, x + 20, y + rh - 51 - TS(10), g_tq <= OS_UI_Q1 ? "Prompt ou /help, /browser, /shell ..." : "Prompt ou /help", (rw - 40) / CW, RGB(154, 168, 181));
     {
         /* Lot 68: the send button and the labels follow the text scale;

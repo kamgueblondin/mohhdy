@@ -5,6 +5,7 @@
 #include "../../framework/unity.h"
 #include "../../../userspace/wf_form.h"
 #include "../../../userspace/wf_fetch.h"
+#include "../../../userspace/wf_entity.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -73,10 +74,37 @@ static void test_submit_get(void) {
     TEST_ASSERT_EQUAL(-1, wf_form_submit(&g_fp, 3, -1, &g_sub));
     /* a Latin-1 page (www.google.com sends ISO-8859-1): the form is sent
      * in the page charset, as browsers do; CP1252 0x80 stays one byte */
-    g_fp.latin1 = 1;
+    g_fp.charset = WF_CS_LATIN1;
     wf_form_insert(&g_fp, (char)0x80);
     TEST_ASSERT_EQUAL(0, wf_form_submit(&g_fp, 0, -1, &g_sub));
     TEST_ASSERT_EQUAL_STRING("https://www.google.com/search?hl=fr&q=mohhdy+os+%26+caf%E9%80", g_sub.url);
+}
+
+/* Lot 72: a form is sent in its page charset: windows-1251 and koi8-r
+ * Cyrillic letters (typed as glyph page 3 display bytes) become one byte,
+ * the euro sign is 0x88 in windows-1251, and a letter the charset lacks
+ * (Greek alpha) is sent as &#945; as browsers do; on a Latin-1 page the
+ * Greek letter is &#945; too instead of its raw page byte */
+static void test_submit_page_charsets(void) {
+    wf_url_t base;
+    wf_form_reset(&g_fp);
+    TEST_ASSERT_EQUAL(0, wf_url_parse("http://10.0.2.2/ru", &base));
+    TEST_ASSERT_EQUAL(0, wf_form_begin(&g_fp, &base, "/s", "get", 0));
+    /* "\x90\xbf\xe0\xd8" = page 3 (ISO-8859-5 layout): Cyrillic Pe, er, i */
+    TEST_ASSERT_EQUAL(0, wf_form_add(&g_fp, &base, "text", "q", "\x90\xbf\xe0\xd8\x81 \x80\x8f\xe1\x81", 0, 0, 0));
+    wf_form_end(&g_fp);
+    g_fp.charset = WF_CS_CP1251;
+    TEST_ASSERT_EQUAL(0, wf_form_submit(&g_fp, 0, -1, &g_sub));
+    TEST_ASSERT_EQUAL_STRING("http://10.0.2.2/s?q=%CF%F0%E8+%88%26%23945%3B", g_sub.url);
+    g_fp.charset = WF_CS_KOI8R;
+    TEST_ASSERT_EQUAL(0, wf_form_submit(&g_fp, 0, -1, &g_sub));
+    TEST_ASSERT_EQUAL_STRING("http://10.0.2.2/s?q=%F0%D2%C9+%26%238364%3B%26%23945%3B", g_sub.url);
+    g_fp.charset = WF_CS_LATIN1;
+    TEST_ASSERT_EQUAL(0, wf_form_submit(&g_fp, 0, -1, &g_sub));
+    TEST_ASSERT_EQUAL_STRING("http://10.0.2.2/s?q=%26%231055%3B%26%231088%3B%26%231080%3B+%80%26%23945%3B", g_sub.url);
+    g_fp.charset = WF_CS_UTF8;
+    TEST_ASSERT_EQUAL(0, wf_form_submit(&g_fp, 0, -1, &g_sub));
+    TEST_ASSERT_EQUAL_STRING("http://10.0.2.2/s?q=%D0%9F%D1%80%D0%B8+%E2%82%AC%CE%B1", g_sub.url);
 }
 
 static void test_submit_post_and_query_replaced(void) {
@@ -389,6 +417,7 @@ int main(void) {
     RUN_TEST(test_keyboard_controls);
     RUN_TEST(test_edit_and_display);
     RUN_TEST(test_submit_get);
+    RUN_TEST(test_submit_page_charsets);
     RUN_TEST(test_submit_post_and_query_replaced);
     RUN_TEST(test_password_display_and_implicit_form);
     RUN_TEST(test_bounds);

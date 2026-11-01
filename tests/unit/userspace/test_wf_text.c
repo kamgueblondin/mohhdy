@@ -5,6 +5,7 @@
 #include "../../../include/os_charset.h"
 #include "../../../userspace/wf_entity.h"
 #include "../../../userspace/wf_html.h"
+#include "../../../userspace/wf_form.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -165,7 +166,20 @@ static void test_reduce_accents(void) {
     TEST_ASSERT_EQUAL_STRING("Caf\xe9 & cr\xe8me", st.title);
     TEST_ASSERT_NOT_NULL(strstr(g_out, "<title>Caf\xe9 &amp; cr\xe8me</title>"));
     TEST_ASSERT_NOT_NULL(strstr(g_out, "L\x92\xe9t\xe9 \xe0 Paris, \xab bient\xf4t \xbb \x9cuvre 5\x80 a&lt;b"));
-    TEST_ASSERT_NOT_NULL(strstr(g_out, "L\xf3" "dz ?"));
+    {
+        /* Lot 72 (was "L\xf3dz ?": base letters): L stroke and z acute
+         * keep their glyphs through the Latin Extended-A page */
+        unsigned char bl = 0, bz = 0;
+        char want[16], u8[32];
+        const char *at;
+        TEST_ASSERT_EQUAL(1, os_cp_page(0x141, &bl));
+        TEST_ASSERT_EQUAL(1, os_cp_page(0x17A, &bz));
+        snprintf(want, sizeof(want), "%c%c%c\xf3" "d%c%c ?%c", 0x8D, bl, 0x81, 0x8D, bz, 0x81);
+        at = strstr(g_out, want);
+        TEST_ASSERT_NOT_NULL(at);
+        wf_display_to_utf8(at, (int)strlen(want), u8, (int)sizeof(u8));
+        TEST_ASSERT_EQUAL_STRING("\xc5\x81\xc3\xb3" "d\xc5\xba ?", u8);
+    }
     TEST_ASSERT_EQUAL(WF_CS_UTF8, st.charset);
 }
 
@@ -262,6 +276,118 @@ static void test_html_text_display(void) {
     TEST_ASSERT_EQUAL_STRING("caf\xc3\xa9 \xc5\x93uvre \xe2\x82\xac & <b>\n", o);
 }
 
+
+/* Lot 72: Greek and Cyrillic pages through the reader view: the reduced
+ * page carries page selectors (every text run ends in page 0), the title
+ * too, and the console text is the original UTF-8 again */
+/* Lot 72: the HTML 4 names whose code point is in a glyph page (Greek,
+ * arrows, math) are decoded like their numeric reference; a name with no
+ * glyph (&spades;) is still not decoded */
+static void test_named_refs_pages(void) {
+    char o[64];
+    TEST_ASSERT_EQUAL(0x3B1, (int)wf_entity_lookup("alpha", 5));
+    TEST_ASSERT_EQUAL(0x391, (int)wf_entity_lookup("Alpha", 5));
+    TEST_ASSERT_EQUAL(0x2192, (int)wf_entity_lookup("rarr", 4));
+    TEST_ASSERT_EQUAL(0x221A, (int)wf_entity_lookup("radic", 5));
+    TEST_ASSERT_EQUAL(0x3C9, (int)wf_entity_lookup("omega", 5));
+    TEST_ASSERT_EQUAL(0x2019, (int)wf_entity_lookup("rsquo", 5));
+    TEST_ASSERT_EQUAL(0, (int)wf_entity_lookup("spades", 6));
+    wf_text_display("&alpha;&le;x", 12, WF_CS_UTF8, 1, o, (int)sizeof(o));
+    TEST_ASSERT_EQUAL_STRING("\x8f\xe1\x9d\xa2x\x81", o);
+}
+
+/* Lot 72: Cyrillic and Greek single-byte page charsets: the meta tag or
+ * the header names the charset, the bytes become glyph page letters, the
+ * console text is UTF-8 again; an undefined byte (0x98 in windows-1251)
+ * is U+FFFD, shown as '?' */
+static void test_cyrillic_greek_charsets(void) {
+    wf_html_stats_t st;
+    char o[256];
+    TEST_ASSERT_EQUAL(WF_CS_CP1251, wf_charset_from("text/html; charset=windows-1251", -1));
+    TEST_ASSERT_EQUAL(WF_CS_KOI8R, wf_charset_from("KOI8-R", -1));
+    TEST_ASSERT_EQUAL(WF_CS_KOI8U, wf_charset_from("koi8-u", -1));
+    TEST_ASSERT_EQUAL(WF_CS_ISO8859_5, wf_charset_from("iso-8859-5", -1));
+    TEST_ASSERT_EQUAL(WF_CS_ISO8859_7, wf_charset_from("text/html;charset=\"ISO-8859-7\"", -1));
+    TEST_ASSERT_EQUAL(WF_CS_CP1253, wf_charset_from("windows-1253", -1));
+    TEST_ASSERT_EQUAL(WF_CS_UTF8, wf_charset_from("windows-1250", -1));
+    TEST_ASSERT_EQUAL_STRING("koi8-u", wf_charset_name(WF_CS_KOI8U));
+    TEST_ASSERT_EQUAL_STRING("utf-8", wf_charset_name(42));
+    {
+        static const char page[] = "<html><head><meta charset=\"windows-1251\"><title>\xcf\xf0\xe8\xe2\xe5\xf2 \xec\xe8\xf0</title></head>"
+                                   "<body><p>\xcf\xf0\xe8\xe2\xe5\xf2 \xec\xe8\xf0 \x88 \x98</p></body></html>";
+        wf_html_set_charset(WF_CS_NONE);
+        wf_html_reduce(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st);
+        TEST_ASSERT_EQUAL(WF_CS_CP1251, st.charset);
+        {
+            /* the forms of the page take its charset (sent back in it) */
+            static wf_form_page_t fp;
+            wf_html_set_charset(WF_CS_NONE);
+            wf_html_reduce_ex(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st, 8000, &fp);
+            TEST_ASSERT_EQUAL(WF_CS_CP1251, fp.charset);
+            wf_html_set_charset(WF_CS_KOI8R);
+            wf_html_reduce_ex(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st, 8000, &fp);
+            TEST_ASSERT_EQUAL(WF_CS_KOI8R, fp.charset);
+            wf_html_set_charset(WF_CS_NONE);
+            wf_html_reduce(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st);
+        }
+        TEST_ASSERT_EQUAL_STRING("\x90\xbf\xe0\xd8\xd2\xd5\xe2 \xdc\xd8\xe0\x81", st.title);
+        TEST_ASSERT_NOT_NULL(strstr(g_out, "\x90\xbf\xe0\xd8\xd2\xd5\xe2 \xdc\xd8\xe0 \x81\x80 ?"));
+        wf_html_text_display(g_out, (int)strlen(g_out), o, (int)sizeof(o));
+        TEST_ASSERT_NOT_NULL(strstr(o, "\xd0\x9f\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82 \xd0\xbc\xd0\xb8\xd1\x80 \xe2\x82\xac ?"));
+    }
+    {
+        static const char page[] = "<p>\xc5\xeb\xeb\xdc\xe4\xe1</p><p>\xeb\xc9\xa7\xd7</p>";
+        wf_html_set_charset(WF_CS_ISO8859_7);
+        wf_html_reduce(page, 13, 0, g_out, (int)sizeof(g_out), &st);
+        TEST_ASSERT_NOT_NULL(strstr(g_out, "\x8f\xc5\xeb\xeb\xdc\xe4\xe1\x81"));
+        wf_html_set_charset(WF_CS_KOI8U);
+        wf_html_reduce(page + 13, (int)sizeof(page) - 14, 0, g_out, (int)sizeof(g_out), &st);
+        TEST_ASSERT_NOT_NULL(strstr(g_out, "\x90\xba\xd8\xf7\xd2\x81"));
+    }
+    /* raw text of a koi8-r page (html_text without the reduce step) */
+    wf_html_set_charset(WF_CS_KOI8R);
+    wf_html_text("<p>\xed\xc9\xd2</p>", 10, o, (int)sizeof(o));
+    TEST_ASSERT_EQUAL_STRING("\xd0\x9c\xd0\xb8\xd1\x80\n", o);
+    TEST_ASSERT_EQUAL(0xCF, wf_charset_byte(WF_CS_CP1251, 0x41F));
+    TEST_ASSERT_EQUAL(0, wf_charset_byte(WF_CS_CP1251, 0x3B1));
+    TEST_ASSERT_EQUAL(0x80, wf_charset_byte(WF_CS_LATIN1, 0x20AC));
+    TEST_ASSERT_EQUAL('a', wf_charset_byte(WF_CS_KOI8R, 'a'));
+    TEST_ASSERT_EQUAL(0, wf_charset_byte(WF_CS_UTF8, 0xE9));
+    wf_html_set_charset(WF_CS_UTF8);
+}
+
+static void test_reduce_greek_cyrillic(void) {
+    static const char page[] =
+        "<html><head><title>\xce\x95\xce\xbb\xce\xbb\xce\xb7\xce\xbd\xce\xb9\xce\xba\xce\xac</title></head><body>"
+        "<p>\xce\xb1\xce\xb2\xce\xb3 caf\xc3\xa9</p><p>\xd0\xa2\xd0\x90\xd0\xa1\xd0\xa1 &#x416; \xe2\x86\x92 &amp;</p></body></html>";
+    wf_html_stats_t st;
+    char o[256];
+    wf_html_set_charset(WF_CS_UTF8);
+    wf_html_reduce(page, (int)sizeof(page) - 1, 0, g_out, (int)sizeof(g_out), &st);
+    TEST_ASSERT_EQUAL_STRING("\x8f\xc5\xeb\xeb\xe7\xed\xe9\xea\xdc\x81", st.title);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "\x8f\xe1\xe2\xe3 caf\x81\xe9"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "\x90\xc2\xb0\xc1\xc1 \xb6 \x9d\x83 &amp;\x81</p>"));
+    wf_html_text_display(g_out, (int)strlen(g_out), o, (int)sizeof(o));
+    TEST_ASSERT_NOT_NULL(strstr(o, "\xce\xb1\xce\xb2\xce\xb3 caf\xc3\xa9\n"));
+    TEST_ASSERT_NOT_NULL(strstr(o, "\xd0\xa2\xd0\x90\xd0\xa1\xd0\xa1 \xd0\x96 \xe2\x86\x92 &\n"));
+    /* the page is reset at every tag: page 0 bytes after a tag stay CP1252 */
+    {
+        static const char two[] = "<p>\x8f\xe1</p><p>\xe9</p>";
+        wf_html_text_display(two, (int)sizeof(two) - 1, o, (int)sizeof(o));
+    }
+    TEST_ASSERT_EQUAL_STRING("\xce\xb1\n\xc3\xa9\n", o);
+    /* attribute and title text (wf_text_display) and form values back */
+    wf_text_display("\xce\xa9 x", 4, WF_CS_UTF8, 1, o, (int)sizeof(o));
+    TEST_ASSERT_EQUAL_STRING("\x8f\xd9 x\x81", o);
+    wf_text_display("\xce\xa9\xce\xa9\xce\xa9", 6, WF_CS_UTF8, 0, o, 5);   /* room kept for the closing selector */
+    TEST_ASSERT_EQUAL_STRING("\x8f\xd9\xd9\x81", o);
+    {
+        char u[32];
+        wf_display_to_utf8("\x8f\xd9\x81\xe9", 4, u, (int)sizeof(u));
+        TEST_ASSERT_EQUAL_STRING("\xce\xa9\xc3\xa9", u);
+    }
+}
+
 /* Lot 71: the Content-Type charset wins over a <meta> (www.google.com
  * sends ISO-8859-1 bytes with a UTF-8 meta) */
 static void test_header_charset_wins(void) {
@@ -297,6 +423,9 @@ int main(void) {
     RUN_TEST(test_reduce_forms);
     RUN_TEST(test_reduce_budget_ex);
     RUN_TEST(test_html_text_display);
+    RUN_TEST(test_reduce_greek_cyrillic);
+    RUN_TEST(test_named_refs_pages);
+    RUN_TEST(test_cyrillic_greek_charsets);
     RUN_TEST(test_header_charset_wins);
     unity_print_results();
     unity_cleanup();

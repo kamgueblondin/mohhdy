@@ -67,6 +67,9 @@ int wsearch_api_parse(int kind, const char *body, int len, wsearch_page_t *page)
 int wsearch_parse_json(const char *json, int len, wsearch_page_t *page);
 int wsearch_parse_searx_html(const char *html, int len, wsearch_page_t *page);
 int wsearch_parse_google_html(const char *html, int len, wsearch_page_t *page);
+/* Lot 72: 1 and the decoded query when url is the target of a Google
+ * search form (https://www.google.TLD/search?...q=...), else 0. */
+int wsearch_google_form(const char *url, char *q, int cap);
 /* {"query":{"search":[{"title":...,"snippet":...}]}} of the MediaWiki
  * API; result URLs are built on https://LANG.wikipedia.org/wiki/. */
 int wsearch_parse_wiki(const char *json, int len, const char *lang, wsearch_page_t *page);

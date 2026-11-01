@@ -202,6 +202,7 @@ static void zero(imgdec_t *img) {
 static int sane(int w, int h) { return w > 0 && h > 0 && w <= IMGDEC_MAX_DIM && h <= IMGDEC_MAX_DIM; }
 
 #include "imgdec_jpeg.inc"
+#include "imgdec_gif.inc"
 
 /* ---- probe ------------------------------------------------------------ */
 static int probe_png(const unsigned char *b, int n, imgdec_t *img) {
@@ -270,6 +271,9 @@ static int probe_pnm(const unsigned char *b, int n, imgdec_t *img) {
     return IMGDEC_OK;
 }
 
+static int probe_ico(const unsigned char *b, int n, imgdec_t *img);
+static unsigned ico_scratch_need(const imgdec_t *img);
+
 int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img) {
     int rc;
     if (!buf || !img || n <= 0) return IMGDEC_E_FORMAT;
@@ -277,6 +281,10 @@ int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img) {
     rc = probe_png(buf, n, img); if (rc != IMGDEC_E_FORMAT) return rc;
     zero(img);
     rc = probe_jpeg(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_JPEG) return rc;
+    zero(img);
+    rc = probe_gif(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_GIF) return rc;
+    zero(img);
+    rc = probe_ico(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_ICO) return rc;
     zero(img);
     rc = probe_bmp(buf, n, img); if (rc != IMGDEC_E_FORMAT) return rc;
     zero(img);
@@ -315,7 +323,9 @@ static unsigned png_raw_size(const imgdec_t *img) {
 unsigned imgdec_scratch_need(const imgdec_t *img) {
     if (!img) return 0U;
     if (img->fmt == IMGDEC_PNG) return png_raw_size(img) + (unsigned)img->w * (unsigned)img->h * (unsigned)img->channels;
-    if (img->fmt == IMGDEC_JPEG) return jpeg_scratch_need(img);
+    if (img->fmt == IMGDEC_JPEG) return jpeg_scratch_need(img, 0);
+    if (img->fmt == IMGDEC_GIF) return gif_scratch_need(img);
+    if (img->fmt == IMGDEC_ICO) return ico_scratch_need(img);
     return 0U;
 }
 
@@ -360,6 +370,7 @@ static int open_png(const unsigned char *b, int n, unsigned char *scratch, unsig
     int pos = 8, got_end = 0, ch = img->channels, pal = img->color_type == 3;
     int fbpp = (ch * img->depth) / 8 < 1 ? 1 : (ch * img->depth) / 8;
     if (!scratch || need > smax) return IMGDEC_E_TOOBIG;
+    { int k; for (k = 0; k < 256; k++) img->pal_a[k] = 255; }
     r.nseg = 0; r.cur = 0; r.pos = 0; r.bitbuf = 0; r.bitcnt = 0; r.eof = 0;
     while (pos + 12 <= n) {
         unsigned len = be32(b + pos);
@@ -370,6 +381,10 @@ static int open_png(const unsigned char *b, int n, unsigned char *scratch, unsig
             unsigned k;
             img->npal = (int)(len / 3) > 256 ? 256 : (int)(len / 3);
             for (k = 0; k < (unsigned)img->npal; k++) { img->pal[k][0] = type[4 + k * 3]; img->pal[k][1] = type[5 + k * 3]; img->pal[k][2] = type[6 + k * 3]; }
+        } else if (pal && type[0] == 't' && type[1] == 'R' && type[2] == 'N' && type[3] == 'S') {
+            /* Lot 72: palette transparency, composed over white */
+            unsigned k;
+            for (k = 0; k < len && k < 256; k++) img->pal_a[k] = type[4 + k];
         } else if (type[0] == 'I' && type[1] == 'D' && type[2] == 'A' && type[3] == 'T') {
             if (r.nseg >= MAX_SEG) return IMGDEC_E_UNSUP;
             r.seg[r.nseg] = type + 4; r.len[r.nseg] = (int)len; r.nseg++;
@@ -415,12 +430,34 @@ static int open_png(const unsigned char *b, int n, unsigned char *scratch, unsig
     return IMGDEC_OK;
 }
 
+#include "imgdec_ico.inc"
+
+unsigned imgdec_scratch_need_scaled(const imgdec_t *img, int shift) {
+    if (img->fmt == IMGDEC_JPEG) return jpeg_scratch_need(img, shift < 0 ? 0 : shift > 3 ? 3 : shift);
+    return imgdec_scratch_need(img);
+}
+
 int imgdec_open(const unsigned char *buf, int n, unsigned char *scratch, unsigned scratch_max, imgdec_t *img) {
+    return imgdec_open_scaled(buf, n, scratch, scratch_max, 0, img);
+}
+
+int imgdec_open_scaled(const unsigned char *buf, int n, unsigned char *scratch, unsigned scratch_max, int shift, imgdec_t *img) {
     int rc = imgdec_probe(buf, n, img);
     if (rc) return rc;
+    img->full_w = img->w; img->full_h = img->h;
     if (img->fmt == IMGDEC_PNG) return open_png(buf, n, scratch, scratch_max, img);
-    if (img->fmt == IMGDEC_JPEG) return open_jpeg(buf, n, scratch, scratch_max, img);
+    if (img->fmt == IMGDEC_JPEG) return open_jpeg(buf, n, scratch, scratch_max, img, shift);
+    if (img->fmt == IMGDEC_GIF) return open_gif(buf, n, scratch, scratch_max, img);
+    if (img->fmt == IMGDEC_ICO) return open_ico(buf, n, scratch, scratch_max, img);
     return IMGDEC_OK;
+}
+
+/* Lot 72: with img->over_white, PNG alpha (RGBA, gray+alpha, palette
+ * tRNS) is composed over a white page: a transparent logo no longer shows
+ * a black box. The raw samples stay the default (image viewer, tests). */
+static void over_white(unsigned char rgb[3], unsigned a) {
+    int k;
+    for (k = 0; k < 3; k++) rgb[k] = (unsigned char)((rgb[k] * a + 255U * (255U - a) + 127U) / 255U);
 }
 
 void imgdec_pixel(const imgdec_t *img, int x, int y, unsigned char rgb[3]) {
@@ -439,10 +476,13 @@ void imgdec_pixel(const imgdec_t *img, int x, int y, unsigned char rgb[3]) {
     if (img->fmt == IMGDEC_PNG && img->color_type == 3) {
         int k = p[0] < img->npal ? p[0] : 0;
         rgb[0] = img->pal[k][0]; rgb[1] = img->pal[k][1]; rgb[2] = img->pal[k][2];
+        if (img->over_white && img->pal_a[k] != 255) over_white(rgb, img->pal_a[k]);
     } else if (img->channels >= 3) {
         rgb[0] = p[0]; rgb[1] = p[1]; rgb[2] = p[2];
+        if (img->over_white && img->fmt == IMGDEC_PNG && img->channels == 4 && p[3] != 255) over_white(rgb, p[3]);
     } else {
         rgb[0] = rgb[1] = rgb[2] = p[0];
+        if (img->over_white && img->fmt == IMGDEC_PNG && img->channels == 2 && p[1] != 255) over_white(rgb, p[1]);
     }
 }
 
@@ -485,7 +525,7 @@ int imgdec_render(const imgdec_t *img, unsigned char *rgb, int max_w, int max_h,
 }
 
 const char *imgdec_fmt_name(int fmt) {
-    switch (fmt) { case IMGDEC_PNM: return "pnm"; case IMGDEC_BMP: return "bmp"; case IMGDEC_PNG: return "png"; case IMGDEC_JPEG: return "jpeg"; default: return "inconnu"; }
+    switch (fmt) { case IMGDEC_PNM: return "pnm"; case IMGDEC_BMP: return "bmp"; case IMGDEC_PNG: return "png"; case IMGDEC_JPEG: return "jpeg"; case IMGDEC_GIF: return "gif"; case IMGDEC_ICO: return "ico"; default: return "inconnu"; }
 }
 
 const char *imgdec_strerror(int rc) {

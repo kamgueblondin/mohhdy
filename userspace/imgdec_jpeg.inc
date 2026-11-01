@@ -285,8 +285,9 @@ static int probe_jpeg(const unsigned char *b, int n, imgdec_t *img) {
     return jpeg_headers(b, n, img, 0, 2, 1);
 }
 
-static unsigned jpeg_scratch_need(const imgdec_t *img) {
-    unsigned pix = (unsigned)img->w * (unsigned)img->h * (unsigned)img->channels;
+static int jscaled(int full, int shift) { return (full + (1 << shift) - 1) >> shift; }
+static unsigned jpeg_scratch_need(const imgdec_t *img, int shift) {
+    unsigned pix = (unsigned)jscaled(img->w, shift) * (unsigned)jscaled(img->h, shift) * (unsigned)img->channels;
     unsigned mcuw, mcuh, nmx, nmy, blocks, off, coef;
     if (!img->jpeg_prog || img->jpeg_hmax < 1 || img->jpeg_vmax < 1 || img->jpeg_mcu < 1) return pix;
     mcuw = 8U * (unsigned)img->jpeg_hmax;
@@ -302,6 +303,23 @@ static unsigned jpeg_scratch_need(const imgdec_t *img) {
 }
 
 static unsigned char jclamp(int v) { return (unsigned char)(v < 0 ? 0 : v > 255 ? 255 : v); }
+
+/* Lot 72: scaled decode. The pixels of a JPEG decoded at 1/2^shift
+ * (imgdec_open_scaled) are point samples of the full image; only the
+ * output (img->w x img->h) is stored, so a 4096x4096 photo needs a
+ * 512x512 buffer at shift 3. g_jfull_* are the full dimensions. */
+static int g_jfull_w, g_jfull_h, g_jshift, g_jmask;
+static void jpeg_put(unsigned char *scratch, const imgdec_t *img, int x, int y, const int *s) {
+    unsigned at = (unsigned)(y >> g_jshift) * (unsigned)img->w + (unsigned)(x >> g_jshift);
+    if (g_j.nc == 1) scratch[at] = (unsigned char)s[0];
+    else {
+        unsigned char *o = scratch + at * 3U;
+        int cb = s[1] - 128, cr = s[2] - 128;
+        o[0] = jclamp(s[0] + ((1436 * cr + 512) >> 10));
+        o[1] = jclamp(s[0] - ((352 * cb + 731 * cr - 512) >> 10));
+        o[2] = jclamp(s[0] + ((1815 * cb + 512) >> 10));
+    }
+}
 
 static int sat16(int v) { return v > 32767 ? 32767 : v < -32768 ? -32768 : v; }
 
@@ -495,36 +513,35 @@ static void jpeg_paint(unsigned char *scratch, const imgdec_t *img) {
             }
             for (py = 0; py < mcuh; py++) {
                 int y = my * mcuh + py;
-                if (y >= img->h) break;
+                if (y >= g_jfull_h) break;
                 for (px = 0; px < mcuw; px++) {
                     int x = mx * mcuw + px, s[3], base = 0;
-                    if (x >= img->w) break;
+                    if (x >= g_jfull_w) break;
+                    if ((x | y) & g_jmask) continue;
                     for (k = 0; k < g_j.nc; k++) {
                         int sx = px * g_j.c[k].h / g_j.hmax, sy = py * g_j.c[k].v / g_j.vmax;
                         s[k] = g_j.blk[base + (sy >> 3) * g_j.c[k].h + (sx >> 3)][(sy & 7) * 8 + (sx & 7)];
                         base += g_j.c[k].h * g_j.c[k].v;
                     }
-                    if (g_j.nc == 1) scratch[(unsigned)y * (unsigned)img->w + (unsigned)x] = (unsigned char)s[0];
-                    else {
-                        unsigned char *o = scratch + ((unsigned)y * (unsigned)img->w + (unsigned)x) * 3U;
-                        int cb = s[1] - 128, cr = s[2] - 128;
-                        o[0] = jclamp(s[0] + ((1436 * cr + 512) >> 10));
-                        o[1] = jclamp(s[0] - ((352 * cb + 731 * cr - 512) >> 10));
-                        o[2] = jclamp(s[0] + ((1815 * cb + 512) >> 10));
-                    }
+                    jpeg_put(scratch, img, x, y, s);
                 }
             }
         }
 }
 
+static void jpeg_set_scaled(imgdec_t *img) {
+    img->w = jscaled(g_jfull_w, g_jshift);
+    img->h = jscaled(g_jfull_h, g_jshift);
+}
+
 static int open_jpeg_prog(const unsigned char *b, int n, unsigned char *scratch, imgdec_t *img) {
     jbits_t r;
-    unsigned pix = (unsigned)img->w * (unsigned)img->h * (unsigned)img->channels;
+    unsigned pix = (unsigned)jscaled(g_jfull_w, g_jshift) * (unsigned)jscaled(g_jfull_h, g_jshift) * (unsigned)img->channels;
     unsigned off = (pix + 1U) & ~1U, blocks, i;
     int guard = 0, rc, k;
     int mcuw = 8 * g_j.hmax, mcuh = 8 * g_j.vmax;
-    g_j.nmx = (img->w + mcuw - 1) / mcuw;
-    g_j.nmy = (img->h + mcuh - 1) / mcuh;
+    g_j.nmx = (g_jfull_w + mcuw - 1) / mcuw;
+    g_j.nmy = (g_jfull_h + mcuh - 1) / mcuh;
     g_j.bpm = img->jpeg_mcu;
     blocks = (unsigned)g_j.nmx * (unsigned)g_j.nmy * (unsigned)g_j.bpm;
     g_j.coef = (short *)(void *)(scratch + off);
@@ -543,20 +560,27 @@ static int open_jpeg_prog(const unsigned char *b, int n, unsigned char *scratch,
         r.pos = g_j.sos; r.bits = 0; r.nbits = 0; r.marker = 0;
     }
     if (!g_j.eoi) return IMGDEC_E_TRUNC;
+    jpeg_set_scaled(img);
     jpeg_paint(scratch, img);
     img->data = scratch;
     img->stride = img->w * img->channels;
     return IMGDEC_OK;
 }
 
-static int open_jpeg(const unsigned char *b, int n, unsigned char *scratch, unsigned smax, imgdec_t *img) {
+static int open_jpeg(const unsigned char *b, int n, unsigned char *scratch, unsigned smax, imgdec_t *img, int shift) {
     jbits_t r;
     int rc, mx, my, mcuw, mcuh, nmx, nmy, k, left;
-    unsigned need = jpeg_scratch_need(img);
+    unsigned need;
+    if (shift < 0) shift = 0;
+    if (shift > 3) shift = 3;
+    need = jpeg_scratch_need(img, shift);
     if (!scratch || need > smax || need == 0xFFFFFFFFU) return IMGDEC_E_TOOBIG;
     rc = jpeg_headers(b, n, img, 1, 2, 1);
     if (rc) return rc;
+    g_jfull_w = img->w; g_jfull_h = img->h; g_jshift = shift; g_jmask = (1 << shift) - 1;
+    img->full_w = img->w; img->full_h = img->h; img->scale_shift = shift;
     if (g_j.prog) return open_jpeg_prog(b, n, scratch, img);
+    jpeg_set_scaled(img);
     if (!g_j.sos) return IMGDEC_E_TRUNC;
     for (k = 0; k < g_j.nc; k++) {
         if (!g_j.qvalid[g_j.c[k].tq] || !g_j.dc[g_j.c[k].td].valid || !g_j.ac[g_j.c[k].ta].valid) return IMGDEC_E_FORMAT;
@@ -564,7 +588,7 @@ static int open_jpeg(const unsigned char *b, int n, unsigned char *scratch, unsi
     }
     r.b = b; r.n = n; r.pos = g_j.sos; r.bits = 0; r.nbits = 0; r.marker = 0;
     mcuw = 8 * g_j.hmax; mcuh = 8 * g_j.vmax;
-    nmx = (img->w + mcuw - 1) / mcuw; nmy = (img->h + mcuh - 1) / mcuh;
+    nmx = (g_jfull_w + mcuw - 1) / mcuw; nmy = (g_jfull_h + mcuh - 1) / mcuh;
     left = g_j.dri;
     for (my = 0; my < nmy; my++)
         for (mx = 0; mx < nmx; mx++) {
@@ -591,23 +615,17 @@ static int open_jpeg(const unsigned char *b, int n, unsigned char *scratch, unsi
             if (g_j.dri) left--;
             for (py = 0; py < mcuh; py++) {
                 int y = my * mcuh + py;
-                if (y >= img->h) break;
+                if (y >= g_jfull_h) break;
                 for (px = 0; px < mcuw; px++) {
                     int x = mx * mcuw + px, s[3], base = 0;
-                    if (x >= img->w) break;
+                    if (x >= g_jfull_w) break;
+                    if ((x | y) & g_jmask) continue;
                     for (k = 0; k < g_j.nc; k++) {
                         int sx = px * g_j.c[k].h / g_j.hmax, sy = py * g_j.c[k].v / g_j.vmax;
                         s[k] = g_j.blk[base + (sy >> 3) * g_j.c[k].h + (sx >> 3)][(sy & 7) * 8 + (sx & 7)];
                         base += g_j.c[k].h * g_j.c[k].v;
                     }
-                    if (g_j.nc == 1) scratch[(unsigned)y * (unsigned)img->w + (unsigned)x] = (unsigned char)s[0];
-                    else {
-                        unsigned char *o = scratch + ((unsigned)y * (unsigned)img->w + (unsigned)x) * 3U;
-                        int cb = s[1] - 128, cr = s[2] - 128;
-                        o[0] = jclamp(s[0] + ((1436 * cr + 512) >> 10));
-                        o[1] = jclamp(s[0] - ((352 * cb + 731 * cr - 512) >> 10));
-                        o[2] = jclamp(s[0] + ((1815 * cb + 512) >> 10));
-                    }
+                    jpeg_put(scratch, img, x, y, s);
                 }
             }
         }

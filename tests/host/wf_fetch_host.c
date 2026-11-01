@@ -128,6 +128,31 @@ int main(int argc, char** argv) {
         e.now = now;
     }
     if (argc > 4 && strcmp(argv[4], "-") != 0) g_force_ip = argv[4];
+    if (argc > 5 && strncmp(argv[5], "suite:", 6) == 0) {
+        /* Lot 72: offer one TLS suite only */
+        e.tls_suite = wf_tls_suite_by_name(argv[5] + 6);
+        if (!e.tls_suite) { printf("FETCH FAIL: unknown suite %s\n", argv[5] + 6); return 1; }
+        argc = 5;
+    }
+    if (argc > 5 && strncmp(argv[5], "ka:", 3) == 0) {
+        /* Lot 72: keep-alive: argv[2] then each comma-separated URL of
+         * argv[5]; prints the connections opened and the reuses */
+        static char list[2048];
+        char* tok;
+        int opened, reused, i = 1;
+        e.keepalive = 1;
+        snprintf(list, sizeof(list), "%s", argv[5] + 3);
+        rc = wf_fetch(&e, argv[2], g_body, (int)sizeof(g_body) - 1, &r);
+        printf("KA 0 rc=%d status=%d bytes=%d reused=%d conn=%d suite=%s %s\n", rc, r.status, r.body_len, r.reused, r.connections, r.suite, r.err);
+        for (tok = strtok(list, ","); tok; tok = strtok(0, ","), i++) {
+            rc = wf_fetch(&e, tok, g_body, (int)sizeof(g_body) - 1, &r);
+            printf("KA %d rc=%d status=%d bytes=%d reused=%d conn=%d suite=%s %s\n", i, rc, r.status, r.body_len, r.reused, r.connections, r.suite, r.err);
+        }
+        wf_fetch_drop(&e);
+        wf_fetch_conn_stats(&opened, &reused);
+        printf("KA total opened=%d reused=%d\n", opened, reused);
+        return 0;
+    }
     if (argc > 5 && strncmp(argv[5], "search:", 7) == 0) {
         /* search:KIND:QUERY against the engine base URL argv[2] */
         static wsearch_cfg_t cfg;

@@ -197,6 +197,7 @@ static int web_viewport_w(void) {
     return v;
 }
 
+static int (*g_wops_atlas_dims)(void *ctx, int slot, int *w, int *h);
 static int osui_web_pipeline(const char *src, int n) {
     int defined = 0, expanded = 0, kept = 0, dropped = 0, vdef = 0, unres = 0, m, rc, k;
     webrt_viewport_t vp;
@@ -230,6 +231,7 @@ static int osui_web_pipeline(const char *src, int n) {
     rc = we_style(&g_web);
     if (rc != 0) return rc;
     we_set_image_reader(web_image_read, 0);
+    we_set_image_atlas(g_wops_atlas_dims, 0);   /* Lot 72: fetched images */
     g_web_vw = web_viewport_w();
     return we_layout_viewport(&g_web, g_web_vw, OSUI_WEB_VIEWPORT_H);
 }
@@ -276,6 +278,30 @@ static int web_error_page(const char *url, const char *why, char *o, int cap) {
     return k;
 }
 
+/* Lot 72: a local page is UTF-8; the web engine reads display bytes (one
+ * byte per cell, include/os_charset.h). Each run between '<' and '>' is
+ * converted on its own, so every text chunk the engine sees starts in
+ * glyph page 0 and carries its own page selector. Returns the new length
+ * (never longer). */
+int osui_gui_web_src_to_display(char *s, int n) {
+    int r = 0, w = 0;
+    while (r < n) {
+        int e = r, m, k;
+        char keep;
+        if (s[r] == '<' || s[r] == '>') { s[w++] = s[r++]; continue; }
+        while (e < n && s[e] != '<' && s[e] != '>') e++;
+        keep = e < n ? s[e] : 0;
+        s[e] = 0;
+        m = os_text_to_display_inplace(s + r, e - r + 1);
+        for (k = 0; k < m; k++) s[w + k] = s[r + k];
+        w += m;
+        if (e < n) s[e] = keep;
+        r = e;
+    }
+    if (w < n) s[w] = 0;
+    return w;
+}
+
 int osui_gui_web_load(const char *file, char *status, int max) {
     int n = -1, rc;
     static char sq[WSEARCH_QUERY + 8];
@@ -319,6 +345,7 @@ int osui_gui_web_load(const char *file, char *status, int max) {
     }
     if (n < 0) { if (status) { scpy(status, max, "osui web error=not_found file="); scpy(status + slen(status), max - slen(status), file); } return -1; }
     g_web_src[n] = 0;
+    n = osui_gui_web_src_to_display(g_web_src, n);
     rc = osui_web_pipeline(g_web_src, n);
     if (status) {
         scpy(status, max, rc == 0 ? "osui web render file=" : "osui web error=render file=");
@@ -386,7 +413,10 @@ static int web_go(const char *file, int push, char *out, int out_max) {
 static void gui_cat_u(char *d, int max, unsigned v);
 /* Lot 71: page ops of the shell (sections, forms) */
 static const osui_web_page_ops_t *g_wops;
-void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops) { g_wops = ops; }
+void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops) {
+    g_wops = ops;
+    g_wops_atlas_dims = ops ? ops->atlas_dims : 0;
+}
 static int web_nsections(void) { return (g_wops && g_wops->sections && osui_gui_web_is_url(g_web_file)) ? g_wops->sections() : 0; }
 
 /* Shows section k of the kept page; keep: the scroll offset stays (a
@@ -1350,6 +1380,13 @@ static int sys_vga_term(void) {
     return rc;
 }
 
+/* Lot 72: web pane images (SYS_VGA_BLIT 6); 0 clears */
+static void sys_vga_webimg(const os_fb_webimg_t *a) {
+    int rc;
+    asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_VGA_BLIT), "b"(6), "c"(a) : "memory");
+    (void)rc;
+}
+
 /* UX5: viewer image (SYS_VGA_BLIT 5); 0 clears */
 static void sys_vga_image(const os_fb_image_t *img) {
     int rc;
@@ -1387,6 +1424,10 @@ static void sys_vga_blit_scene(const os_fb_scene_t *scene) { (void)scene; }
 static const os_fb_image_t *g_test_img;
 static int g_test_img_calls;
 static void sys_vga_image(const os_fb_image_t *img) { g_test_img = img; g_test_img_calls++; }
+static const os_fb_webimg_t *g_test_webimg;
+static int g_test_webimg_calls;
+static void sys_vga_webimg(const os_fb_webimg_t *a) { g_test_webimg = a; g_test_webimg_calls++; }
+const os_fb_webimg_t *osui_gui_test_webimg(int *calls) { if (calls) *calls = g_test_webimg_calls; return g_test_webimg; }
 const os_fb_image_t *osui_gui_test_image(int *calls) { if (calls) *calls = g_test_img_calls; return g_test_img; }
 static void sys_vga_leave(void) {}
 static int sys_vga_term(void) { return 0; }
@@ -1394,6 +1435,24 @@ static int sys_getc_gui(void) { return 0; }
 static void serial_puts(const char *s) { (void)s; }
 static void yield_gui(void) {}
 #endif
+
+/* Lot 72: the atlas of the fetched page goes to the compositor when its
+ * generation changes; a local page or a closed browser clears it. */
+static uint32_t g_webimg_gen;
+static int g_webimg_sent;
+static void webimg_sync(void) {
+    const os_fb_webimg_t *a = 0;
+    if (g_web_active && g_wops && g_wops->atlas && osui_gui_web_is_url(g_web_file)) a = g_wops->atlas();
+    if (a) {
+        if (g_webimg_sent && g_webimg_gen == a->gen) return;
+        sys_vga_webimg(a);
+        g_webimg_sent = 1;
+        g_webimg_gen = a->gen;
+    } else if (g_webimg_sent) {
+        sys_vga_webimg(0);
+        g_webimg_sent = 0;
+    }
+}
 
 void osui_gui_set_input(const char *text) {
     scpy(g_input, 96, text);
@@ -1555,6 +1614,7 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
     int k;
     if (!scene) return;
     image_sync();   /* UX5: viewer pixels, only when they change */
+    webimg_sync();  /* Lot 72: web page images, only when they change */
     for (k = 0; k < (int)sizeof(*scene); k++) ((char *)scene)[k] = 0;
     scene->magic = OS_FB_MAGIC;
     scene->version = 8; /* 3: term_attr (pm-ide syntax classes), 4: web display list, 5: llm, 6: pane_live, 7: app windows, 8: text scale */
@@ -1668,7 +1728,11 @@ void osui_gui_fill_scene(os_fb_scene_t *scene) {
         for (i = 0; i < (int)scene->nterm && i < OS_FB_TERM_MAX; i++) os_text_to_display_inplace(scene->term[i], OS_FB_TERM_LEN);
     os_text_to_display_inplace(scene->web_title, OS_FB_TERM_LEN);
     os_text_to_display_inplace(scene->input, OS_FB_INPUT_LEN);
-    for (i = 0; i < (int)scene->nweb && i < OS_FB_WEB_ITEMS; i++) os_text_to_display_inplace(scene->web[i].text, OS_FB_WEB_TEXT_LEN);
+    /* Lot 72: a TEXT item of another glyph page (pad bits 8..10) holds
+     * that page's bytes, which may look like UTF-8: it is left as is */
+    for (i = 0; i < (int)scene->nweb && i < OS_FB_WEB_ITEMS; i++)
+        if (scene->web[i].kind != OS_FB_WEB_TEXT || !((scene->web[i].pad >> 8) & 7u))
+            os_text_to_display_inplace(scene->web[i].text, OS_FB_WEB_TEXT_LEN);
 }
 
 void osui_gui_render(uint16_t *cells) {

@@ -11,7 +11,7 @@ python3 "$ROOT/scripts/lot67_gen_pki.py" "$W/pki" >/dev/null || { echo "FAIL: pk
 gcc -O1 -m32 -Wall -Werror -I"$ROOT/userspace" -I"$ROOT/kernel" -I"$ROOT/include" -o wf_fetch_host \
     "$ROOT/tests/host/wf_fetch_host.c" \
     "$ROOT"/userspace/wf_http.c "$ROOT"/userspace/wf_dns.c "$ROOT"/userspace/wf_tls.c "$ROOT"/userspace/wf_fetch.c "$ROOT"/userspace/wf_cookie.c "$ROOT"/userspace/wf_inflate.c \
-    "$ROOT"/userspace/wf_x509.c "$ROOT"/userspace/wf_bn.c "$ROOT"/userspace/wf_sha512.c "$ROOT"/userspace/wf_ec.c \
+    "$ROOT"/userspace/wf_x509.c "$ROOT"/userspace/wf_bn.c "$ROOT"/userspace/wf_sha512.c "$ROOT"/userspace/wf_ec.c "$ROOT"/userspace/wf_p256.c "$ROOT"/userspace/wf_aead.c \
     "$ROOT"/userspace/wf_rsa.c "$ROOT"/userspace/wf_html.c "$ROOT"/userspace/wf_entity.c "$ROOT"/userspace/wf_form.c \
     "$ROOT"/userspace/wf_section.c "$ROOT"/userspace/wsearch_api.c "$ROOT"/userspace/wsearch.c "$ROOT"/kernel/sha256.c "$ROOT"/kernel/aes_gcm.c "$ROOT"/kernel/x25519.c || { echo "FAIL: build"; exit 1; }
 HP=$((20000 + $$ % 20000)); SP=$((HP + 1))
@@ -40,10 +40,10 @@ check "unknown CA"           'certificate rejected: unknown issuer'     "$ROOT/i
 check "clock after expiry"   'certificate rejected: certificate expired' "$CA" "https://mohhdy.test:$SP/hello" 20400101000000 127.0.0.1
 check "no clock is reported" 'time_checked=0'                           "$CA" "https://mohhdy.test:$SP/hello" noclock 127.0.0.1
 check "404 is a response"    'FETCH OK status=404'                      "$CA" "http://127.0.0.1:$HP/nope"
-# Lot 69: TLS 1.3, P-256 ECDHE, Content-Encoding, cross-scheme redirect
+# Lot 69: TLS 1.3, P-256 ECDHE (Lot 72: OpenSSL prefers AES-256-GCM-SHA384 now that it is offered), Content-Encoding, cross-scheme redirect
 T13=$((SP + 1)); T13R=$((SP + 2)); P256=$((SP + 3))
-check "tls13 ecdsa"          'TLS suite=TLS13-AES128-GCM-SHA256 leaf=mohhdy.test anchor=MOHHDY Test Root' "$CA" "https://mohhdy.test:$T13/hello" now 127.0.0.1
-check "tls13 rsa-pss"        'TLS suite=TLS13-AES128-GCM-SHA256 leaf=mohhdy.test'  "$CA" "https://mohhdy.test:$T13R/page.html" now 127.0.0.1
+check "tls13 ecdsa"          'TLS suite=TLS13-AES256-GCM-SHA384 leaf=mohhdy.test anchor=MOHHDY Test Root' "$CA" "https://mohhdy.test:$T13/hello" now 127.0.0.1
+check "tls13 rsa-pss"        'TLS suite=TLS13-AES256-GCM-SHA384 leaf=mohhdy.test'  "$CA" "https://mohhdy.test:$T13R/page.html" now 127.0.0.1
 check "tls13 host mismatch"  'certificate rejected: host name mismatch' "$CA" "https://evil.test:$T13/hello" now 127.0.0.1
 check "tls13 unknown CA"     'certificate rejected: unknown issuer'     "$ROOT/initrd_content/etc/ca-roots.pem" "https://mohhdy.test:$T13/hello" now 127.0.0.1
 check "tls12 p256 ecdhe-rsa" 'TLS suite=ECDHE-RSA-AES128-GCM-SHA256 leaf=mohhdy.test' "$CA" "https://mohhdy.test:$P256/hello" now 127.0.0.1
@@ -73,5 +73,30 @@ check "select by label"      'url=http://127.0.0.1:[0-9]+/echo\?t=web&lr=lang_en
 check "cookie after redirect" 'COOKIES set=2 sent=2 refused=1 kept=2'   "$CA" "$U/cookie/login" now -
 check "cookie sent"          'cookie=sid=s3cr3t-session; theme=dark'    "$CA" "$U/cookie/login" now -
 check "cookie values hidden" '127.0.0.1 /cookie sid len=14 host-only httponly' "$CA" "$U/cookie/login" now -
+# Lot 72: every TLS suite against OpenSSL (the client offers only one),
+# HTTP keep-alive and connection reuse (one TCP port on the server side)
+T12E=$((SP + 4)); T12R=$((SP + 5)); M=mohhdy.test
+check "tls13 aes256-gcm"     'TLS suite=TLS13-AES256-GCM-SHA384 leaf=mohhdy.test'        "$CA" "https://$M:$T13/page.html" now 127.0.0.1 suite:TLS13-AES256-GCM-SHA384
+check "tls13 chacha20"       'TLS suite=TLS13-CHACHA20-POLY1305-SHA256 leaf=mohhdy.test' "$CA" "https://$M:$T13/page.html" now 127.0.0.1 suite:TLS13-CHACHA20-POLY1305-SHA256
+check "tls13 aes128-gcm"     'TLS suite=TLS13-AES128-GCM-SHA256 leaf=mohhdy.test'        "$CA" "https://$M:$T13/page.html" now 127.0.0.1 suite:1301
+check "tls13 rsa aes256"     'TLS suite=TLS13-AES256-GCM-SHA384 leaf=mohhdy.test'        "$CA" "https://$M:$T13R/page.html" now 127.0.0.1 suite:1302
+check "tls13 rsa chacha20"   'TLS suite=TLS13-CHACHA20-POLY1305-SHA256 leaf=mohhdy.test' "$CA" "https://$M:$T13R/page.html" now 127.0.0.1 suite:0x1303
+check "tls12 ecdsa aes256"   'TLS suite=ECDHE-ECDSA-AES256-GCM-SHA384 leaf=mohhdy.test'  "$CA" "https://$M:$T12E/page.html" now 127.0.0.1 suite:ECDHE-ECDSA-AES256-GCM-SHA384
+check "tls12 ecdsa chacha20" 'TLS suite=ECDHE-ECDSA-CHACHA20-POLY1305 leaf=mohhdy.test'  "$CA" "https://$M:$T12E/page.html" now 127.0.0.1 suite:cca9
+check "tls12 rsa aes256 p256" 'TLS suite=ECDHE-RSA-AES256-GCM-SHA384 leaf=mohhdy.test'   "$CA" "https://$M:$T12R/page.html" now 127.0.0.1 suite:c030
+check "tls12 rsa chacha20"   'TLS suite=ECDHE-RSA-CHACHA20-POLY1305 leaf=mohhdy.test'    "$CA" "https://$M:$T12R/page.html" now 127.0.0.1 suite:cca8
+check "tls12 big chacha20"   'FETCH OK status=200 bytes=204800 '                         "$CA" "https://$M:$T12E/big" now 127.0.0.1 suite:cca9
+check "tls13 big aes256"     'FETCH OK status=200 bytes=204800 '                         "$CA" "https://$M:$T13/big" now 127.0.0.1 suite:1302
+check "suite not offered"    'FETCH FAIL: TLS: alert from server'                        "$CA" "https://$M:$T12E/hello" now 127.0.0.1 suite:c030
+check "tls13 default suite"  'TLS suite=TLS13-AES256-GCM-SHA384'                         "$CA" "https://$M:$T13/hello" now 127.0.0.1
+check "http keep-alive"      'KA total opened=1 reused=3'  "$CA" "http://127.0.0.1:$HP/ka/1" now - "ka:http://127.0.0.1:$HP/ka/2,http://127.0.0.1:$HP/ka/3,http://127.0.0.1:$HP/ka/4"
+check "https keep-alive"     'KA 2 rc=0 status=200 bytes=[0-9]+ reused=1 conn=0 suite=TLS13-AES256-GCM-SHA384' "$CA" "https://$M:$T13/ka/1" now 127.0.0.1 "ka:https://$M:$T13/ka/2,https://$M:$T13/ka/3"
+check "https keep-alive one handshake" 'KA total opened=1 reused=2' "$CA" "https://$M:$T13/ka/1" now 127.0.0.1 "ka:https://$M:$T13/ka/2,https://$M:$T13/ka/3"
+# mohhdy.test is resolved by the 127.0.0.1 override like the other https
+# checks (no hosts entry needed); the host key still changes (name, port, scheme)
+check "keep-alive host change" 'KA total opened=2 reused=1' "$CA" "http://127.0.0.1:$HP/ka/1" now 127.0.0.1 "ka:http://127.0.0.1:$HP/ka/2,https://$M:$T13/ka/3"
+check "keep-alive host change new conn" 'KA 2 rc=0 status=200 bytes=[0-9]+ reused=0 conn=1 suite=TLS13-AES256-GCM-SHA384' "$CA" "http://127.0.0.1:$HP/ka/1" now 127.0.0.1 "ka:http://127.0.0.1:$HP/ka/2,https://$M:$T13/ka/3"
+check "server close honoured" 'KA total opened=2 reused=1' "$CA" "http://127.0.0.1:$HP/ka/1" now - "ka:http://127.0.0.1:$HP/kaclose/2,http://127.0.0.1:$HP/ka/3"
+check "keep-alive redirect"  'KA 0 rc=0 status=200 bytes=[0-9]+ reused=1 conn=1' "$CA" "http://127.0.0.1:$HP/redirect" now - "ka:http://127.0.0.1:$HP/ka/9"
 echo "[lot67-web-host] $pass passed, $fail failed"
 [ $fail -eq 0 ]

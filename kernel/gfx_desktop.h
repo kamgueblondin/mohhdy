@@ -91,6 +91,11 @@ void gfx_desktop_full_rect(int w, int h, gfx_rect_t *r);
 int gfx_desktop_full_maximized(void);
 /* UX5: viewer image (copied; 0 or a bad image clears). Returns 0 / -1. */
 int gfx_desktop_set_image(const os_fb_image_t *img);
+/* Lot 72: web pane images (SYS_VGA_BLIT 6); 0 clears. -1 if a slot is
+ * outside the pixel array (nothing is kept then). */
+int gfx_desktop_set_webimg(const os_fb_webimg_t *a);
+/* Lot 72: atlas validation, shared with the host tests */
+int gfx_desktop_webimg_valid(const os_fb_webimg_t *a);
 /* Rectangle the image of slot occupies in box (0 size when none). */
 void gfx_desktop_image_rect(const gfx_rect_t *box, gfx_rect_t *out);
 void gfx_desktop_app_grid_fit(const gfx_rect_t *box, int *rows, int *cols);
@@ -101,6 +106,13 @@ int gfx_desktop_app_grid_y(int q);
 int gfx_desktop_surface_q(const os_fb_scene_t *sc, int zslot, int w, int h);
 int gfx_desktop_chrome_q(const os_fb_scene_t *sc, int w, int h);
 int gfx_glyph_pixel(char ch, int q, int dx, int dy);
+/* Lot 72: display byte ch of a glyph page (include/os_charset.h) */
+int gfx_glyph_pixel_page(int page, char ch, int q, int dx, int dy);
+/* Lot 72: bytes of display text t from pos that make one wrapped line of
+ * at most maxc cells (page selectors take none) */
+int gfx_text_wrap_take(const char *t, int pos, int len, int maxc);
+/* Lot 72: first chat message shown in avail lines of maxc cells */
+int gfx_chat_first(const os_fb_scene_t *sc, int n, int maxc, int avail);
 /* Lot 69: 0 native fonts (default), 1 smoothed 8x8 upscale */
 void gfx_desktop_set_font_mode(int mode);
 int gfx_desktop_font_mode(void);

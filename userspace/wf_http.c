@@ -120,6 +120,11 @@ int wf_http_build_get(const wf_url_t* u, char* o, int cap) { return wf_http_buil
  * values with CR/LF are refused (no header injection). */
 int wf_http_build_request(const wf_url_t* u, const char* method, const char* ctype, int body_len, const char* extra,
                           char* o, int cap) {
+    return wf_http_build_request_ka(u, method, ctype, body_len, extra, 0, o, cap);
+}
+
+int wf_http_build_request_ka(const wf_url_t* u, const char* method, const char* ctype, int body_len, const char* extra,
+                             int keepalive, char* o, int cap) {
     int p = 0, i;
     if (ctype) for (i = 0; ctype[i]; i++) if (ctype[i] == '\r' || ctype[i] == '\n') return -1;
     if (extra) {
@@ -137,7 +142,8 @@ int wf_http_build_request(const wf_url_t* u, const char* method, const char* cty
     if (p >= 0) p = put(o, cap, p, u->host);
     if (p >= 0 && u->port != (u->https ? 443 : 80)) { p = put(o, cap, p, ":"); if (p >= 0) p = put_int(o, cap, p, u->port); }
     if (p >= 0) p = put(o, cap, p, "\r\nUser-Agent: Mohhdy-fetch/1.0\r\nAccept: text/html,text/plain,*/*\r\n"
-                                   "Accept-Encoding: gzip, deflate\r\nConnection: close\r\n");
+                                   "Accept-Encoding: gzip, deflate\r\nConnection: ");
+    if (p >= 0) p = put(o, cap, p, keepalive ? "keep-alive\r\n" : "close\r\n");
     if (p >= 0 && body_len >= 0) {
         p = put(o, cap, p, "Content-Type: ");
         if (p >= 0) p = put(o, cap, p, ctype ? ctype : "application/x-www-form-urlencoded");
@@ -202,6 +208,7 @@ static int parse_head(wf_http_resp_t* r) {
     if (h[8] != ' ' || h[9] < '1' || h[9] > '5' || h[10] < '0' || h[10] > '9' || h[11] < '0' || h[11] > '9')
         return fail(r, "bad status line");
     r->status = (h[9] - '0') * 100 + (h[10] - '0') * 10 + (h[11] - '0');
+    if (h[7] == '0') r->conn_close = 1;          /* HTTP/1.0: closes unless it says keep-alive */
     for (p = 12; p < n && h[p] != '\n'; p++) {}
     {
         int s = 13 < p ? 13 : p, e = p;
@@ -242,6 +249,14 @@ static int parse_head(wf_http_resp_t* r) {
                 k = slen(tmp);
                 if (k >= 7 && tmp[k - 7] == 'c' && prefix_ci(tmp + k - 7, "chunked")) r->chunked = 1;
                 else if (!(k == 8 && prefix_ci(tmp, "identity"))) return fail(r, "unsupported Transfer-Encoding");
+            } else if (nl == 10 && prefix_ci(name, "connection")) {
+                char tmp[64];
+                int k;
+                copy_val(val, vl, tmp, (int)sizeof(tmp));
+                for (k = 0; tmp[k]; k++) {
+                    if (prefix_ci(tmp + k, "close")) r->conn_close = 1;
+                    if (prefix_ci(tmp + k, "keep-alive")) r->conn_close = 0;
+                }
             } else if (nl == 8 && prefix_ci(name, "location")) {
                 copy_val(val, vl, r->location, (int)sizeof(r->location));
             } else if (nl == 12 && prefix_ci(name, "content-type")) {
@@ -263,7 +278,7 @@ static int parse_head(wf_http_resp_t* r) {
     if (r->chunked) { r->content_length = -1; r->state = ST_CHUNK_SIZE; r->line_len = 0; }
     else if (r->status == 204 || r->status == 304 || (r->status >= 100 && r->status < 200)) r->state = ST_DONE;
     else if (r->content_length >= 0) { r->remaining = r->content_length; r->state = r->remaining ? ST_BODY_LEN : ST_DONE; }
-    else r->state = ST_BODY_CLOSE;
+    else { r->state = ST_BODY_CLOSE; r->conn_close = 1; }
     return 0;
 }
 

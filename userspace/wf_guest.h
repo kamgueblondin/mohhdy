@@ -25,4 +25,10 @@ int wf_guest_roots(int* test_ca);
 const char* wf_guest_now(void);
 /* Lot 71: the shell session cookie jar (memory only, never persisted) */
 wf_cookie_jar_t* wf_guest_cookies(void);
+/* Lot 72: HTTP keep-alive on/off (default on) and the TLS suite offered
+ * alone (0 = every suite). */
+void wf_guest_set_keepalive(int on);
+int wf_guest_keepalive(void);
+void wf_guest_set_tls_suite(uint16_t id);
+uint16_t wf_guest_tls_suite(void);
 #endif

@@ -122,7 +122,7 @@ enum { WE_DECO_UNDER = 1, WE_DECO_OVER = 2, WE_DECO_THROUGH = 4 };
 #define WE_IMAGE_SCRATCH_MAX 65536
 #define WE_IMAGE_MAX_W 64
 #define WE_IMAGE_MAX_H 64
-#define WE_IMAGE_WORKSPACE_MAX (WE_IMAGE_SOURCE_MAX + WE_IMAGE_SCRATCH_MAX + 8192)
+#define WE_IMAGE_WORKSPACE_MAX (WE_IMAGE_SOURCE_MAX + WE_IMAGE_SCRATCH_MAX + 8192 + 512 + WE_MAX_NODES)   /* Lot 72: + PNG tRNS table in imgdec_t, + atlas slot per node */
 
 enum { WE_FLOAT_NONE, WE_FLOAT_LEFT, WE_FLOAT_RIGHT };
 enum { WE_LIST_NONE, WE_LIST_DISC, WE_LIST_DECIMAL, WE_LIST_SQUARE,
@@ -180,6 +180,7 @@ typedef struct { int8_t x, y, spread; uint8_t blur, inset, has_color; uint32_t c
 
 typedef struct {
     uint8_t is_text, attr_flags, has_text;
+    uint8_t glyph_page;         /* Lot 72: page of a text node's bytes 0x80..0xFF */
     we_length_t length[WE_LENGTH_PROPS];
     int16_t aspect_num, aspect_den;
     uint8_t lead_space, trail_space, html_space, pending_html_space;
@@ -399,6 +400,7 @@ typedef struct {
     uint32_t page_w, page_h;
     uint32_t flex_lines, grid_lines, floats, table_rows;
     uint32_t images, image_refused;
+    uint32_t atlas_images;      /* Lot 72: fetched images painted as one atlas item */
 } we_perf_t;
 
 typedef struct {
@@ -434,6 +436,18 @@ typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1
  * Rendering is synchronous and non-reentrant, like the shared workspace. */
 typedef int (*we_image_read_fn)(void *ctx, const char *path, unsigned char *dst, int cap);
 void we_set_image_reader(we_image_read_fn read, void *ctx);
+
+/* Lot 72: images fetched by the browser. An <img src="mohhdy-img:K">
+ * names slot K of the web atlas (os_fb_webimg_t, decoded and scaled in
+ * Ring 3 by wf_webimg); the engine asks its size and paints ONE display
+ * item OS_FB_WEB_IMAGE (pad = K) that the compositor scales, instead of
+ * runs of rectangles (local images stay as before). Returns 0 and the
+ * slot size, or < 0 for an empty slot. Passing 0 disables it. */
+#define WE_ATLAS_SCHEME "mohhdy-img:"
+#define WE_ATLAS_MAX_W 1024
+#define WE_ATLAS_MAX_H 1024
+typedef int (*we_image_atlas_fn)(void *ctx, int slot, int *w, int *h);
+void we_set_image_atlas(we_image_atlas_fn dims, void *ctx);
 
 /* Each phase returns 0 or a negative error. we_render runs all three. */
 int we_parse(we_doc_t* d, const char* html, int len);

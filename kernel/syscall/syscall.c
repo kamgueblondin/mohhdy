@@ -2899,6 +2899,17 @@ void syscall_handler(cpu_state_t* cpu) {
                     if (cpu->eax == 0U) gfx_fb_redraw_desktop();
                     break;
                 }
+                /* 6 (Lot 72): web pane images, ECX = os_fb_webimg_t* or 0 */
+                if (cpu->ebx == 6U) {
+                    if (!cpu->ecx) { cpu->eax = (uint32_t)gfx_desktop_set_webimg(0); gfx_fb_redraw_desktop(); break; }
+                    if (!syscall_user_range((const void*)cpu->ecx, (uint32_t)sizeof(os_fb_webimg_t), 0)) {
+                        cpu->eax = (uint32_t)-1;
+                        break;
+                    }
+                    cpu->eax = (uint32_t)gfx_desktop_set_webimg((const os_fb_webimg_t*)cpu->ecx);
+                    if (cpu->eax == 0U) gfx_fb_redraw_desktop();
+                    break;
+                }
                 /* 4: framebuffer size (w << 16 | h), 0 without VBE */
                 if (cpu->ebx == 4U) {
                     cpu->eax = gfx_fb_width() > 0 ? ((uint32_t)gfx_fb_width() << 16) | (uint32_t)gfx_fb_height() : 0U;

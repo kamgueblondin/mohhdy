@@ -20,8 +20,54 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /latin1.html  Lot 71: an ISO-8859-1 page with accents and entities
   /long.html    Lot 71: a long page (1500 paragraphs, about 120 KiB)
   /searx/search?q=Q[&format=json]  Lot 71: SearXNG-like results
+  /lot72/images.html  Lot 72: a page with PNG, GIF (animated), JPEG
+                (baseline, progressive), a missing image with alt text and
+                a favicon link; the image bytes are the unit test fixtures
+                (tests/unit/userspace/imgdec*_samples.h), /lot72/img/NAME
+  /favicon.ico  Lot 72: the .ico fixture (DIB entries)
+  /lot72/cp1251.html  Lot 72: a windows-1251 page (charset in the header)
+                with a GET form whose field holds Cyrillic text: the
+                browser must send it back in windows-1251 (/echo)
+  /lot72/greek.html   Lot 72: an ISO-8859-7 page (charset in a meta tag)
 Every request is logged on stdout ("REQ <scheme> <path>")."""
-import html, http.server, socketserver, ssl, sys, threading, urllib.parse
+import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
+
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _c_arrays(path):
+    """byte arrays of a generated C header: name -> bytes"""
+    out = {}
+    try:
+        text = open(path).read()
+    except OSError:
+        return out
+    for m in re.finditer(r"static const unsigned char (\w+)\[\d+\] = \{(.*?)\};", text, re.S):
+        out[m.group(1)] = bytes(int(x, 0) for x in re.findall(r"0x[0-9a-fA-F]+|\d+", m.group(2)))
+    return out
+
+
+_IMG = {}
+for _h in ("imgdec_samples.h", "imgdec_gif_samples.h"):
+    _IMG.update(_c_arrays(os.path.join(_ROOT, "tests", "unit", "userspace", _h)))
+LOT72_FILES = {
+    "mire.png": ("img_mire_png", "image/png"),
+    "mire444.jpg": ("img_mire444_jpg", "image/jpeg"),
+    "mire-prog.jpg": ("img_mire_prog_jpg", "image/jpeg"),
+    "anim.gif": ("gif_anim", "image/gif"),
+    "big.gif": ("gif_big", "image/gif"),
+    "fav.ico": ("gif_ico_bmp", "image/x-icon"),
+}
+LOT72_PAGE = ("<!doctype html><html><head><meta charset=\"utf-8\"><title>Images Lot 72</title>"
+              "<link rel=\"icon\" href=\"/lot72/img/fav.ico\"></head><body>"
+              "<h1>Images dans le navigateur</h1>"
+              "<p>PNG <img src=\"img/mire.png\" width=\"144\" height=\"96\" alt=\"mire png\"> "
+              "GIF <img src=\"/lot72/img/anim.gif\" alt=\"gif\"></p>"
+              "<p>JPEG <img src=\"img/mire444.jpg\" width=\"96\"> progressif "
+              "<img data-src=\"img/mire-prog.jpg\" src=\"data:image/gif;base64,R0lGODlh\" width=\"96\"></p>"
+              "<p><img src=\"img/big.gif\" alt=\"grande image\"></p>"
+              "<p>absente : <img src=\"img/absente.png\" alt=\"image absente\"></p>"
+              "<p>FIN-IMAGES</p></body></html>")
 
 PAGE = (b"<!doctype html><html><head><title>Mohhdy offline test page</title></head>"
         b"<body><h1>Hello from the Lot 67 test server</h1>"
@@ -35,7 +81,26 @@ class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def _ka_log(self):
+        # Lot 72: client port per request (keep-alive reuse shows one port)
+        print(f"KA port={self.client_address[1]} path={self.path}", flush=True)
+
     def do_GET(self):
+        if self.path.startswith("/ka/"):
+            self._ka_log()
+            self._send(200, ("keep-alive answer %s\n" % self.path[4:]).encode(), "text/plain")
+            return
+        if self.path.startswith("/kaclose/"):
+            # answers then closes: the client must open a new connection
+            self._ka_log()
+            body = b"closing\n"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            self.close_connection = True
+            return
         scheme = "https" if isinstance(self.connection, ssl.SSLSocket) else "http"
         print(f"REQ {scheme} {self.path} host={self.headers.get('Host')}", flush=True)
         p = self.path
@@ -139,6 +204,31 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def _lot71(self, p, body, post=False):
         """Lot 71 routes: forms, charsets, long page, SearXNG, cookies."""
+        if p == "/lot72/images.html":
+            self._send(200, LOT72_PAGE.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot72/cp1251.html":
+            page = ("<html><head><title>\u041d\u043e\u0432\u043e\u0441\u0442\u0438</title></head><body>"
+                    "<p>\u041f\u0440\u0438\u0432\u0435\u0442, \u043c\u0438\u0440! \u20ac 5</p>"
+                    "<form action=\"/echo\" method=\"get\"><input type=\"text\" name=\"q\" "
+                    "value=\"\u041c\u0438\u0440\"><input type=\"submit\" value=\"OK\"></form></body></html>")
+            self._send(200, page.encode("cp1251"), "text/html; charset=windows-1251")
+            return True
+        if p == "/lot72/greek.html":
+            page = ("<html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-8859-7\">"
+                    "<title>\u0395\u03b9\u03b4\u03ae\u03c3\u03b5\u03b9\u03c2</title></head><body>"
+                    "<p>\u039a\u03b1\u03bb\u03b7\u03bc\u03ad\u03c1\u03b1 \u03ba\u03cc\u03c3\u03bc\u03b5</p></body></html>")
+            self._send(200, page.encode("iso8859_7"), "text/html")
+            return True
+        if p.startswith("/lot72/img/") or p == "/favicon.ico":
+            name = "fav.ico" if p == "/favicon.ico" else p[len("/lot72/img/"):]
+            print(f"IMG {name} port={self.client_address[1]}", flush=True)
+            ent = LOT72_FILES.get(name)
+            if ent is None or ent[0] not in _IMG:
+                self._send(404, b"no image\n", "text/plain")
+            else:
+                self._send(200, _IMG[ent[0]], ent[1])
+            return True
         if p == "/controls.html":
             page = ("<html><head><meta charset=\"utf-8\"><title>Options</title></head><body>"
                     "<form action=\"/echo\" method=\"get\">"
@@ -247,17 +337,24 @@ def main():
     tls.socket = ctx.wrap_socket(tls.socket, server_side=True)
     threading.Thread(target=plain.serve_forever, daemon=True).start()
     # Lot 69: sp+1 TLS 1.3 only (ECDSA leaf), sp+2 TLS 1.3 only (RSA leaf,
-    # RSA-PSS CertificateVerify), sp+3 TLS 1.2 ECDHE-RSA with P-256 only
+    # RSA-PSS CertificateVerify), sp+3 TLS 1.2 ECDHE-RSA with P-256 only.
+    # Lot 72: sp+4 TLS 1.2 ECDSA leaf and sp+5 TLS 1.2 RSA leaf with the
+    # AES-256-GCM-SHA384 and ChaCha20-Poly1305 suites (P-256 on sp+5).
     extra = []
-    for off, ver, chain, key, curve in ((1, "1.3", "server_chain", "server_key", None),
-                                        (2, "1.3", "server_rsa_chain", "server_rsa_key", None),
-                                        (3, "1.2", "server_rsa_chain", "server_rsa_key", "prime256v1")):
+    for off, ver, chain, key, curve, ciphers in (
+            (1, "1.3", "server_chain", "server_key", None, None),
+            (2, "1.3", "server_rsa_chain", "server_rsa_key", None, None),
+            (3, "1.2", "server_rsa_chain", "server_rsa_key", "prime256v1", "ECDHE-RSA-AES128-GCM-SHA256"),
+            (4, "1.2", "server_chain", "server_key", None,
+             "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256"),
+            (5, "1.2", "server_rsa_chain", "server_rsa_key", "prime256v1",
+             "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256")):
         c = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         if ver == "1.3":
             c.minimum_version = ssl.TLSVersion.TLSv1_3
         else:
             c.minimum_version = c.maximum_version = ssl.TLSVersion.TLSv1_2
-            c.set_ciphers("ECDHE-RSA-AES128-GCM-SHA256")
+            c.set_ciphers(ciphers)
         if curve:
             c.set_ecdh_curve(curve)
         c.load_cert_chain(f"{pki}/{chain}.pem", f"{pki}/{key}.pem")
@@ -265,7 +362,7 @@ def main():
         srv.socket = c.wrap_socket(srv.socket, server_side=True)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         extra.append(sp + off)
-    print(f"READY http={hp} https={sp} tls13={extra[0]} tls13rsa={extra[1]} p256={extra[2]}", flush=True)
+    print(f"READY http={hp} https={sp} tls13={extra[0]} tls13rsa={extra[1]} p256={extra[2]} tls12ec={extra[3]} tls12rsa={extra[4]}", flush=True)
     tls.serve_forever()
 
 

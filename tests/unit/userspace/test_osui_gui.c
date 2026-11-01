@@ -466,6 +466,42 @@ static void test_gui_web_pane_pipeline(void) {
     osui_gui_set_ide_ops(0, 0, 0);
 }
 
+
+/* Lot 72: a local UTF-8 page with Greek and Cyrillic: the source becomes
+ * display bytes run by run (page reset at every tag), the engine gives
+ * TEXT items with their page in pad, and the scene keeps the page bytes
+ * as they are (Cyrillic "TA" is C2 B0, a valid UTF-8 pair) */
+static void test_gui_web_glyph_pages(void) {
+    uint32_t i;
+    int greek = 0, cyr = 0, fr = 0;
+    char src[96];
+    int n;
+    strcpy(src, "<p title=\"\xce\xb1\">\xce\xb2</p><p>\xce\xb3</p>");
+    n = osui_gui_web_src_to_display(src, (int)strlen(src));
+    TEST_ASSERT_EQUAL_STRING("<p title=\"\x8f\xe1\">\x8f\xe2</p><p>\x8f\xe3</p>", src);
+    TEST_ASSERT_EQUAL((int)strlen(src), n);
+    setup();
+    osui_gui_set_ide_ops(fake_load, fake_save, fake_exec);
+    strcpy(g_fake_file, "<p>\xd0\xa2\xd0\x90\xd0\xa1\xd0\xa1</p><p>\xce\x95\xce\xbb\xce\xbb\xce\xac\xce\xb4\xce\xb1</p><p>\xc3\xa9t\xc3\xa9</p>");
+    g_fake_len = (int)strlen(g_fake_file);
+    feed_str("web g.html");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_active());
+    osui_gui_fill_scene(&g_scene);
+    for (i = 0; i < g_scene.nweb; i++) {
+        const os_fb_web_item_t *it = &g_scene.web[i];
+        if (it->kind != OS_FB_WEB_TEXT) continue;
+        if (strcmp(it->text, "\xc2\xb0\xc1\xc1") == 0 && ((it->pad >> 8) & 7) == 3) cyr = 1;
+        if (strcmp(it->text, "\xc5\xeb\xeb\xdc\xe4\xe1") == 0 && ((it->pad >> 8) & 7) == 2) greek = 1;
+        if (strcmp(it->text, "\xe9t\xe9") == 0 && ((it->pad >> 8) & 7) == 0) fr = 1;
+    }
+    TEST_ASSERT_EQUAL(1, cyr);
+    TEST_ASSERT_EQUAL(1, greek);
+    TEST_ASSERT_EQUAL(1, fr);
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_ide_ops(0, 0, 0);
+}
+
 /* Lot 9 (US-077): "mobile-ui ARGS" on the desktop goes to the hook, the
  * hook's display list fills the web pane, typed keys still reach the input
  * line (taps), ESC closes. */
@@ -1210,6 +1246,7 @@ int main(void) {
     RUN_TEST(test_gui_media_rendering);
     RUN_TEST(test_gui_pm_ide_fullscreen);
     RUN_TEST(test_gui_web_pane_pipeline);
+    RUN_TEST(test_gui_web_glyph_pages);
     RUN_TEST(test_gui_web_pipeline_sanitized);
     RUN_TEST(test_gui_mobile_pane);
     RUN_TEST(test_gui_live_panes);

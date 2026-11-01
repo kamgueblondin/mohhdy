@@ -40,6 +40,8 @@ void osui_gui_ide_output(const char *text);
 /* Lot 61: explicit viewport height for fixed boxes and the scroll bound. */
 #define OSUI_WEB_VIEWPORT_H 480
 int osui_gui_web_load(const char *file, char *status, int max);
+/* Lot 72: local UTF-8 page source to display bytes, page reset at every tag */
+int osui_gui_web_src_to_display(char *s, int n);
 int osui_gui_persist_read(const char *path, char *buf, int cap);
 int osui_gui_persist_write(const char *path, const char *buf, int n);
 /* Lot 67: "web https://..." (or http://) loads the page over the network
@@ -62,6 +64,10 @@ typedef struct {
     int (*submit)(int n, char *src, int src_max, char *final_url, int url_max, char *status, int st_max);
     int (*forms_list)(char *out, int cap);
     int (*find)(const char *text, int from, int *count);   /* Lot 71: section of a match, or -1 */
+    /* Lot 72: images of the shown page (wf_webimg): the atlas sent to the
+     * compositor when it changes, and the slot sizes for the engine */
+    const os_fb_webimg_t *(*atlas)(void);
+    int (*atlas_dims)(void *ctx, int slot, int *w, int *h);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
 /* "web-open URL|FILE", "web-forms", "web-section N|next|prev", "web-input N TEXT", "web-submit [N]",

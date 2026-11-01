@@ -480,6 +480,9 @@ typedef struct {
 #define OS_FB_WEB_RECT 1
 #define OS_FB_WEB_TEXT 2
 #define OS_FB_WEB_BORDER 3
+/* Lot 72: an image of the web atlas (os_fb_webimg_t): pad = slot,
+ * scaled by the compositor to w x h page pixels. */
+#define OS_FB_WEB_IMAGE 4
 #define OS_FB_WEB_ITEMS 96
 #define OS_FB_WEB_TEXT_LEN 48
 typedef struct {
@@ -575,6 +578,27 @@ typedef struct {
     uint16_t w, h;              /* <= OS_FB_IMG_MAX_W x OS_FB_IMG_MAX_H */
     uint8_t rgb[OS_FB_IMG_MAX_W * OS_FB_IMG_MAX_H * 3];
 } os_fb_image_t;
+
+/* Lot 72: images of the web pane (<img> of the page shown, and the
+ * favicon in slot OS_FB_WEBIMG_FAVICON drawn before the title).
+ * SYS_VGA_BLIT EBX = 6, ECX = os_fb_webimg_t* (0 clears). The Ring 3
+ * browser decodes and scales the images; the kernel only checks every
+ * slot lies inside rgb[] and keeps a copy. Slot pixels are RGB rows of
+ * w * 3 bytes starting at pixel offset off. */
+#define OS_FB_WEBIMG_MAGIC 0x31424557U   /* 'WEB1' */
+#define OS_FB_WEBIMG_SLOTS 12
+#define OS_FB_WEBIMG_FAVICON 0
+#define OS_FB_WEBIMG_PIXELS (256 * 256)
+typedef struct {
+    uint16_t w, h;              /* 0 = empty slot */
+    uint32_t off;               /* first pixel in rgb[] (pixels, not bytes) */
+} os_fb_webimg_slot_t;
+typedef struct {
+    uint32_t magic;
+    uint32_t gen;               /* changes with the content */
+    os_fb_webimg_slot_t slot[OS_FB_WEBIMG_SLOTS];
+    uint8_t rgb[OS_FB_WEBIMG_PIXELS * 3];
+} os_fb_webimg_t;
 
 typedef struct {
     uint32_t magic;

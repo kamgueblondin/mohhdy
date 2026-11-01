@@ -8,6 +8,14 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 72 (browser images, Google without JavaScript, TLS AES-256 / ChaCha20, constant-time P-256, keep-alive, Greek and Cyrillic glyphs)
+
+- Images in the browser: PNG (transparency), GIF, JPEG (progressive, scaled), ICO and BMP decoded in Ring 3, fetched per section and drawn from a web atlas (`OS_FB_WEB_IMAGE`, `SYS_VGA_BLIT` 6); favicon in the web window title and the Browser-OS address field. `web-images`.
+- Google: the form goes to the basic HTML version (`gbv=1`); measured 2026-11-01, Google still answers "update your browser", detected and reported, fallback engines used.
+- TLS: AES-256-GCM and ChaCha20-Poly1305 (TLS 1.3 and 1.2), constant-time P-256 ladder, HTTP keep-alive with connection reuse (`tls-suite`, `http-keepalive`). AES S-box table not cache-timing hardened.
+- Glyph pages: Latin Extended-A, Greek, Cyrillic and symbols behind the five undefined CP1252 bytes, 616 glyphs, one byte per cell; web pages, GUI strings and the VGA console. Page charsets windows-1251, koi8-r/u, iso-8859-5/7, windows-1253; forms sent in the page charset. Proof `make qemu-lot72`.
+- US-031 partial (images, glyph pages, charsets). US-076 partial: ARM self-tests add `wf_aead.c` and the glyph pages. US-068/073, US-080/081 unchanged, US-078/US-097 still simule. ABI review points: [lot72_plan.md](lot72_plan.md) section 9.
+
 ## Lot 71 (forms, Latin-1, long pages, full-screen window, search fallbacks, retransmission)
 
 - HTML forms in the shell and the GUI (one code path): GET and POST, page charset encoding, click/type/Enter in the GUI, checkboxes, radios and selects. The google.com form submits correctly, but Google answers with a JavaScript-only page (`blocked js-required`).

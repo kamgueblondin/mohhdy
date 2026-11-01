@@ -3,6 +3,7 @@
 #include "wf_entity.h"
 #include "../include/os_charset.h"
 #include "wf_entity_table.inc"
+#include "wf_charset_table.inc"
 
 static int e_low(int c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
 static int e_alpha(int c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
@@ -86,6 +87,13 @@ int wf_charset_from(const char *v, int n) {
     int i = 0, s;
     static const char *const latin[] = { "iso-8859-1", "iso8859-1", "latin1", "latin-1", "windows-1252", "cp1252",
                                          "us-ascii", "ascii", "iso-8859-15", "l1", 0 };
+    static const struct { const char *name; int cs; } others[] = {
+        { "windows-1251", WF_CS_CP1251 }, { "cp1251", WF_CS_CP1251 }, { "x-cp1251", WF_CS_CP1251 },
+        { "koi8-r", WF_CS_KOI8R }, { "koi8r", WF_CS_KOI8R }, { "koi8-u", WF_CS_KOI8U }, { "koi8-ru", WF_CS_KOI8U },
+        { "iso-8859-5", WF_CS_ISO8859_5 }, { "iso8859-5", WF_CS_ISO8859_5 }, { "cyrillic", WF_CS_ISO8859_5 },
+        { "iso-8859-7", WF_CS_ISO8859_7 }, { "iso8859-7", WF_CS_ISO8859_7 }, { "greek", WF_CS_ISO8859_7 },
+        { "iso-ir-126", WF_CS_ISO8859_7 }, { "windows-1253", WF_CS_CP1253 }, { "cp1253", WF_CS_CP1253 },
+        { 0, 0 } };
     if (!v) return WF_CS_UTF8;
     if (n < 0) { n = 0; while (v[n]) n++; }
     /* "text/html; charset=..." or a bare name */
@@ -99,8 +107,25 @@ int wf_charset_from(const char *v, int n) {
     {
         int k;
         for (k = 0; latin[k]; k++) if (ci_eq(v + s, i - s, latin[k])) return WF_CS_LATIN1;
+        for (k = 0; others[k].name; k++) if (ci_eq(v + s, i - s, others[k].name)) return others[k].cs;
     }
     return WF_CS_UTF8;
+}
+
+unsigned char wf_charset_byte(int cs, uint32_t cp) {
+    int k;
+    if (cp < 0x80u) return (unsigned char)cp;
+    if (cs == WF_CS_LATIN1) return os_cp1252_exact(cp);
+    if (cs < WF_CS_CP1251 || cs > WF_CS_LAST || cp > 0xFFFFu) return 0;
+    for (k = 0; k < 128; k++)
+        if (wf_cs_high[cs - WF_CS_CP1251][k] == cp) return (unsigned char)(0x80 + k);
+    return 0;
+}
+
+const char *wf_charset_name(int cs) {
+    static const char *const names[] = { "utf-8", "windows-1252", "windows-1251", "koi8-r", "koi8-u",
+                                         "iso-8859-5", "iso-8859-7", "windows-1253" };
+    return cs >= 0 && cs <= WF_CS_LAST ? names[cs] : "utf-8";
 }
 
 int wf_charset_header(const char *v, int n) {
@@ -141,37 +166,49 @@ uint32_t wf_text_next(const char *s, int n, int *i, int cs, int ent) {
         if (c >= 0x80u && c <= 0x9Fu) return os_cp1252_high[c - 0x80u] ? os_cp1252_high[c - 0x80u] : OS_UNICODE_BAD;
         return c;
     }
+    if (cs >= WF_CS_CP1251 && cs <= WF_CS_LAST) {
+        /* Lot 72: Cyrillic / Greek single-byte page charsets */
+        uint16_t cp = wf_cs_high[cs - WF_CS_CP1251][c - 0x80u];
+        (*i)++;
+        return cp ? cp : OS_UNICODE_BAD;
+    }
     return os_utf8_next(s, n, i);
 }
 
+/* Lot 72: characters outside CP1252 get their glyph page selector; the
+ * text ends in page 0 (one byte is kept for the closing selector). */
 int wf_text_display(const char *s, int n, int cs, int collapse, char *out, int cap) {
-    int i = 0, o = 0, sp = 1;
+    int i = 0, o = 0, sp = 1, page = 0;
     if (cap <= 0) return 0;
-    while (i < n && o < cap - 1) {
+    while (i < n && o < cap - 2) {
         uint32_t cp = wf_text_next(s, n, &i, cs, 1);
-        unsigned char b;
+        int m;
         if (cp == 0) break;
         if (collapse && (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == '\f' || cp == 0xA0u)) {
             if (!sp) { out[o++] = ' '; sp = 1; }
             continue;
         }
         if (cp == '\r') continue;
-        b = os_cp1252_from_cp(cp);
-        if (!b) continue;
-        out[o++] = (char)b;
+        m = os_display_put(cp, &page, out + o, cap - 2 - o);
+        if (m < 0) break;
+        if (m == 0) continue;
+        o += m;
         sp = 0;
     }
     if (collapse) while (o > 0 && out[o - 1] == ' ') o--;
+    if (page) out[o++] = (char)os_page_sel[0];
     out[o] = 0;
     return o;
 }
 
 int wf_display_to_utf8(const char *s, int n, char *out, int cap) {
-    int i, o = 0;
+    int i, o = 0, page = 0;
     if (cap <= 0) return 0;
     for (i = 0; i < n && s[i]; i++) {
         char t[4];
-        int k = os_display_to_utf8((unsigned char)s[i], t, 4), j;
+        int k, j, q = os_page_of_sel((unsigned char)s[i]);
+        if (q >= 0) { page = q; continue; }   /* Lot 72: glyph page selector */
+        k = os_display_to_utf8_page((unsigned)page, (unsigned char)s[i], t, 4);
         if (o + k > cap - 1) break;
         for (j = 0; j < k; j++) out[o++] = t[j];
     }

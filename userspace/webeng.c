@@ -4,6 +4,7 @@
 /* Lot 61: the kernel 8x8 font, shared read-only for partial glyph clipping. */
 #include "../kernel/gfx_font8.h"
 #include "../include/os_charset.h"
+#include "wf_entity_table.inc"
 #include "../include/os_ui_scale.h"
 
 /* ---------- small helpers (no libc) ---------- */
@@ -126,6 +127,33 @@ static int css_hex(char c) {
  * dashes to their ASCII forms, no-break and other spaces to a space, the
  * soft hyphen to WE_SHY); other code points become '?'. Unknown names
  * keep the '&'. Returns the bytes used, 0 for a plain '&'. */
+/* Lot 71/72: the display bytes of code point `code` (include/os_charset.h):
+ * CP1252 / Latin-1 as one byte; Greek, Cyrillic, Latin Extended-A and
+ * symbols as the page selector, the byte, then back to page 0; '?'
+ * when there is no glyph. */
+static void char_ref_cp(int code, char out[4]) {
+    unsigned char b = 0;
+    int pg = code > 0 ? os_cp_page((uint32_t)code, &b) : -1;
+    out[1] = 0;
+    if (pg > 0 && b < 0xFFu) {
+        out[0] = (char)os_page_sel[pg]; out[1] = (char)b; out[2] = (char)os_page_sel[0]; out[3] = 0;
+        return;
+    }
+    b = code > 0 ? os_cp1252_from_cp((uint32_t)code) : 0;
+    out[0] = b >= 0x20u && b != 0x7Fu && b < 0xFFu ? (char)b : '?';
+}
+
+/* Lot 72: wf_entity_table order (unsigned bytes, shorter first) */
+static int ent_cmp(const char *a, const char *b, int bl) {
+    int i;
+    for (i = 0; i < bl; i++) {
+        unsigned char x = (unsigned char)a[i], y = (unsigned char)b[i];
+        if (!x) return -1;
+        if (x != y) return x < y ? -1 : 1;
+    }
+    return a[bl] ? 1 : 0;
+}
+
 static int char_ref(const char *s, int n, char out[4]) {
     static const char *const names[] = { "amp", "lt", "gt", "quot", "apos", "nbsp", "shy", "mdash", "ndash", "hellip",
         "lsquo", "rsquo", "ldquo", "rdquo", "laquo", "raquo", "copy", "reg", "trade", "times", "middot", "bull",
@@ -150,12 +178,7 @@ static int char_ref(const char *s, int n, char out[4]) {
         else if (code == 8220 || code == 8221) out[0] = '"';
         else if (code == 8230) { out[0] = out[1] = out[2] = '.'; out[3] = 0; }
         else if (code == 173) out[0] = WE_SHY;
-        else {
-            /* Lot 71: Latin-1 and CP1252 code points have a glyph in the
-             * display charset (include/os_charset.h). */
-            unsigned char b = code > 0 ? os_cp1252_from_cp((uint32_t)code) : 0;
-            out[0] = b >= 0x20u && b != 0x7Fu && b < 0xFFu ? (char)b : '?';
-        }
+        else char_ref_cp(code, out);
         return i + 1;
     }
     for (k = 0; k < (int)(sizeof(names) / sizeof(names[0])); k++) {
@@ -165,40 +188,26 @@ static int char_ref(const char *s, int n, char out[4]) {
             return l + 2;
         }
     }
+    /* Lot 72: the other HTML 4 names that have a glyph (&eacute;, &alpha;,
+     * &rarr;, &le;), from the shared sorted table, case-sensitive */
+    for (k = 1; k < n && k <= 10 && ((s[k] >= 'a' && s[k] <= 'z') || (s[k] >= 'A' && s[k] <= 'Z') || (s[k] >= '0' && s[k] <= '9')); k++) {}
+    if (k > 1 && k < n && s[k] == ';') {
+        int lo = 0, hi = WF_ENTITY_COUNT - 1;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2, c = ent_cmp(wf_entity_table[mid].name, s + 1, k - 1);
+            if (c == 0) { char_ref_cp(wf_entity_table[mid].cp, out); return k + 1; }
+            if (c < 0) lo = mid + 1;
+            else hi = mid - 1;
+        }
+    }
     return 0;
 }
 
-/* Decode entities. Spaces stay in the buffer when the chunk has a glyph or
- * a pre ancestor needs its newlines. A whitespace-only chunk between
- * ordinary elements still collapses to one html space, as before. */
-static int add_text(we_doc_t* d, int parent, const char* s, int n) {
-    char buf[WE_TEXT_SOURCE_MAX];
-    if (n > 0) d->nodes[parent].has_text = 1;
-    int i = 0, o = 0, graphic = 0, newline = 0, idx;
-    while (i < n && o < (int)sizeof(buf) - 1) {
-        char c = s[i];
-        if (c == '\r') { i++; continue; }
-        if (c == '&') {
-            char rep[4];
-            int used = char_ref(s + i, n - i, rep), k;
-            if (!used) { rep[0] = '&'; rep[1] = 0; used = 1; }
-            for (k = 0; rep[k] && o < (int)sizeof(buf) - 1; k++) { if (rep[k] != ' ' && rep[k] != WE_SHY) graphic = 1; buf[o++] = rep[k]; }
-            i += used;
-            continue;
-        }
-        if (w_space(c)) {
-            buf[o++] = c == '\n' ? '\n' : c == '\t' ? '\t' : ' ';   /* lot 63: tabs kept for tab-size */
-            if (c == '\n') newline = 1;
-            i++;
-            continue;
-        }
-        graphic = 1;
-        /* Lot 71: the source is in display bytes (CP1252); the font has
-         * glyphs for 0x80..0xFE. */
-        buf[o++] = (c >= 32 && c < 127) || ((unsigned char)c >= 0x80u && (unsigned char)c < 0xFFu) ? c : '?';
-        i++;
-    }
-    if (i < n) diag(d, "text source exceeds limit", parent);
+/* Lot 72: one text node of add_text: the glyph page its bytes 0x80..0xFF
+ * belong to (include/os_charset.h) is kept on the node; every TEXT item
+ * painted from it carries the page in pad bits 8..10. */
+static int add_text_node(we_doc_t* d, int parent, const char* buf, int o, int graphic, int newline, int page) {
+    int idx;
     if (!graphic && !(ancestor_pre(d, parent) && newline)) {
         if (o > 0) d->nodes[parent].pending_html_space = 1;
         return 0;
@@ -206,10 +215,61 @@ static int add_text(we_doc_t* d, int parent, const char* s, int n) {
     idx = new_node(d, parent);
     if (idx < 0) return -1;
     d->nodes[idx].is_text = 1;
+    d->nodes[idx].glyph_page = (uint8_t)(page > 0 ? page : 0);
     if (pool_put(d, buf, o, &d->nodes[idx].text_off) != 0) return -1;
     d->nodes[idx].text_len = (uint16_t)o;
     d->perf.text_nodes++;
     return 0;
+}
+
+/* Decode entities. Spaces stay in the buffer when the chunk has a glyph or
+ * a pre ancestor needs its newlines. A whitespace-only chunk between
+ * ordinary elements still collapses to one html space, as before.
+ * Lot 72: page selectors of the source take no cell: they are removed and
+ * the bytes after them keep their page on the node; where the page of the
+ * high bytes changes inside a chunk, the chunk is split into two text
+ * nodes (one page per node, so a byte is still one cell). */
+static int add_text(we_doc_t* d, int parent, const char* s, int n) {
+    char buf[WE_TEXT_SOURCE_MAX];
+    if (n > 0) d->nodes[parent].has_text = 1;
+    int i = 0, o = 0, graphic = 0, newline = 0, page = 0, node_page = -1;
+    while (i < n && o < (int)sizeof(buf) - 1) {
+        char c = s[i], rep[4];
+        int k, used = 1, sp;
+        if (c == '\r') { i++; continue; }
+        if (c == '&') {
+            used = char_ref(s + i, n - i, rep);
+            if (!used) { rep[0] = '&'; rep[1] = 0; used = 1; }
+        } else {
+            rep[0] = c;
+            rep[1] = 0;
+        }
+        i += used;
+        for (k = 0; rep[k] && o < (int)sizeof(buf) - 1; k++) {
+            unsigned char u = (unsigned char)rep[k];
+            sp = os_page_of_sel(u);
+            if (sp >= 0) { page = sp; continue; }
+            if (w_space((char)u) && c != '&') {
+                buf[o++] = u == '\n' ? '\n' : u == '\t' ? '\t' : ' ';   /* lot 63: tabs kept for tab-size */
+                if (u == '\n') newline = 1;
+                continue;
+            }
+            if (u >= 0x80u && u < 0xFFu) {
+                if (node_page >= 0 && node_page != page) {
+                    /* the page changes: what came before is one node */
+                    if (add_text_node(d, parent, buf, o, graphic, newline, node_page) != 0) return -1;
+                    o = 0; graphic = 0; newline = 0;
+                }
+                node_page = page;
+            }
+            if (rep[k] != ' ' && rep[k] != WE_SHY) graphic = 1;
+            /* Lot 71: the source is in display bytes (CP1252); the font has
+             * glyphs for 0x80..0xFE. */
+            buf[o++] = c == '&' ? rep[k] : ((u >= 32 && u < 127) || (u >= 0x80u && u < 0xFFu) ? (char)u : '?');
+        }
+    }
+    if (i < n) diag(d, "text source exceeds limit", parent);
+    return add_text_node(d, parent, buf, o, graphic, newline, node_page);
 }
 
 static int find_ci(const char* s, int n, int from, const char* word) {
@@ -4672,10 +4732,34 @@ static struct {
     char path[256];
     int16_t natural_w[WE_MAX_NODES], natural_h[WE_MAX_NODES];
     uint8_t failed[WE_MAX_NODES];
+    uint8_t atlas[WE_MAX_NODES];        /* Lot 72: slot + 1 of a fetched image, 0 = local */
     int ready_idx;
 } image_work;
 typedef char image_workspace_is_bounded[
     sizeof(image_work) <= WE_IMAGE_WORKSPACE_MAX ? 1 : -1];
+
+static we_image_atlas_fn image_atlas;
+static void *image_atlas_ctx;
+void we_set_image_atlas(we_image_atlas_fn dims, void *ctx) {
+    image_atlas = dims;
+    image_atlas_ctx = ctx;
+}
+
+/* Lot 72: "mohhdy-img:K" -> K (0..254), else -1 */
+static int image_atlas_slot(const we_doc_t *d, const we_node_t *n) {
+    static const char scheme[] = WE_ATLAS_SCHEME;
+    int i, k = 0, len = n->src_len;
+    if (!w_eq(n->tag, "img") || len < (int)sizeof(scheme)) return -1;
+    for (i = 0; scheme[i]; i++) if (d->pool[n->src_off + i] != scheme[i]) return -1;
+    if (i >= len) return -1;
+    for (; i < len; i++) {
+        char c = d->pool[n->src_off + i];
+        if (c < '0' || c > '9') return -1;
+        k = k * 10 + (c - '0');
+        if (k > 254) return -1;
+    }
+    return k;
+}
 
 void we_set_image_reader(we_image_read_fn read, void *ctx) {
     image_read = read;
@@ -4718,6 +4802,18 @@ static int image_open(we_doc_t *d, int idx) {
     if (image_work.ready_idx == idx) return 0;
     image_work.ready_idx = -1;
     if (!(w_eq(n->tag, "img") ? n->src_len : n->bgi_len)) return -1;
+    {
+        int slot = image_atlas_slot(d, n), aw = 0, ah = 0;
+        if (slot >= 0) {
+            if (!image_atlas || image_atlas(image_atlas_ctx, slot, &aw, &ah) || aw < 1 || ah < 1)
+                return image_fail(d, "image atlas slot empty", idx);
+            image_work.atlas[idx] = (uint8_t)(slot + 1);
+            image_work.natural_w[idx] = (int16_t)aw;
+            image_work.natural_h[idx] = (int16_t)ah;
+            return 0;
+        }
+        image_work.atlas[idx] = 0;
+    }
     if (n->parent >= 0 && d->nodes[n->parent].wmode != WE_WM_HORIZONTAL)   /* lot 64: runs would be transposed */
         return image_fail(d, "image in vertical flow refused", idx);
     if (image_local_path(d, n)) return image_fail(d, "image local path refused", idx);
@@ -4796,6 +4892,18 @@ static int image_paint(we_doc_t *d, int idx, int x, int y, int available, int as
     int w, h, rw, rh, ox, oy, row, col, nr = 0, room = WE_MAX_ITEMS - (int)d->nitems;
     int background = n->object_fit_set && n->has_bg && n->display == WE_DISP_INLINE;
     if (image_dimensions(d, idx, available, assigned_w, assigned_h, &w, &h) || image_open(d, idx)) return -1;
+    if (image_work.atlas[idx]) {
+        /* Lot 72: one item, scaled by the compositor */
+        os_fb_web_item_t *it;
+        if (room < 1 + (background ? 1 : 0)) return image_fail(d, "image display budget exceeded", idx);
+        if (background) emit(d, idx, OS_FB_WEB_RECT, x, y, w, h, n->bg);
+        it = emit(d, idx, OS_FB_WEB_IMAGE, x, y, w, h, 0);
+        (void)it;   /* pad = slot, written after the display list passes */
+        n->x = (int16_t)x; n->y = (int16_t)y; n->w = (int16_t)w; n->h = (int16_t)h;
+        d->perf.images++;
+        d->perf.atlas_images++;
+        return h;
+    }
     if (background) room--;
     image_fit_box(n, w, h, image_work.decoded.w, image_work.decoded.h, &rw, &rh, &ox, &oy);
     for (row = 0; row < h; row++) {
@@ -5773,6 +5881,13 @@ static int image_dimensions(we_doc_t *d, int idx, int available, int assigned_w,
         else *h = n->aspect_num ? ratio_height(n, *w) : *w * nh / nw;
         if (assigned_h >= 0) *h = assigned_h;
         *h = height_constraint(d, idx, *h, parent);
+    }
+    if (image_work.atlas[idx]) {
+        /* Lot 72: a fetched image keeps its ratio inside the atlas bound */
+        if (*w > WE_ATLAS_MAX_W) { *h = *h * WE_ATLAS_MAX_W / *w; *w = WE_ATLAS_MAX_W; }
+        if (*h > WE_ATLAS_MAX_H) { *w = *w * WE_ATLAS_MAX_H / *h; *h = WE_ATLAS_MAX_H; }
+        if (*w < 1 || *h < 1) return image_fail(d, "image output exceeds limit", idx);
+        return 0;
     }
     if (*w < 1 || *h < 1 || *w > WE_IMAGE_MAX_W || *h > WE_IMAGE_MAX_H)
         return image_fail(d, "image output exceeds limit", idx);
@@ -11126,6 +11241,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     w_zero(image_work.failed, sizeof(image_work.failed));
     w_zero(image_work.natural_w, sizeof(image_work.natural_w));
     w_zero(image_work.natural_h, sizeof(image_work.natural_h));
+    w_zero(image_work.atlas, sizeof(image_work.atlas));
     w_zero(measure_cache, sizeof(measure_cache));
     measure_budget = WE_MEASURE_BUDGET;
     { uint32_t i; for (i = 0; i < d->nnodes; i++) {
@@ -11163,7 +11279,13 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
           if (d->items[i].kind == OS_FB_WEB_TEXT && o >= 0 && o < (int)d->nnodes) {
               int q = node_q(d, o);
               if (q != OS_UI_Q1) d->items[i].pad = (uint16_t)q;
+              /* Lot 72: the glyph page of the text node in bits 8..10 */
+              if (d->nodes[o].is_text && d->nodes[o].glyph_page)
+                  d->items[i].pad = (uint16_t)(d->items[i].pad | ((d->nodes[o].glyph_page & 7u) << 8));
           }
+          /* Lot 72: an atlas image carries its slot in pad */
+          if (d->items[i].kind == OS_FB_WEB_IMAGE && o >= 0 && o < (int)d->nnodes && image_work.atlas[o])
+              d->items[i].pad = (uint16_t)(image_work.atlas[o] - 1);
       } }
     if (math_refused) diag(d, "math evaluation refused", -1);
     if (wavy_decoration) diag(d, "wavy decoration painted solid", -1);

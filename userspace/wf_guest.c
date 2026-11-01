@@ -295,11 +295,20 @@ wf_cookie_jar_t* wf_guest_cookies(void) {
     return &g_jar;
 }
 
+/* Lot 72: HTTP keep-alive (on by default) and the forced TLS suite */
+static int g_keepalive = 1;
+static uint16_t g_tls_suite;
+static unsigned g_last_fetch;
+void wf_guest_set_keepalive(int on) { g_keepalive = on ? 1 : 0; }
+int wf_guest_keepalive(void) { return g_keepalive; }
+void wf_guest_set_tls_suite(uint16_t id) { g_tls_suite = id; }
+uint16_t wf_guest_tls_suite(void) { return g_tls_suite; }
+
 int wf_guest_fetch_ex(const char* url, const wf_fetch_req_t* req, uint8_t* body, int cap, wf_fetch_result_t* res,
                       wf_guest_log_fn log) {
     static gnet_t g;
     static wf_fetch_env_t e;
-    int i;
+    int i, rc;
     for (i = 0; i < (int)sizeof(g); i++) ((uint8_t*)&g)[i] = 0;
     for (i = 0; i < (int)sizeof(e); i++) ((uint8_t*)&e)[i] = 0;
     load_roots();
@@ -313,11 +322,18 @@ int wf_guest_fetch_ex(const char* url, const wf_fetch_req_t* req, uint8_t* body,
     e.now = wf_guest_now();
     e.max_redirects = WF_FETCH_MAX_REDIRECTS;
     e.jar = wf_guest_cookies();   /* Lot 71: shared by fetch, the browser, forms and search */
+    e.keepalive = g_keepalive;
+    e.tls_suite = g_tls_suite;
     if (ifc_get(&g.ifc) != 0) {
         const char* m = "no network interface (no DHCP lease: boot with -netdev user + ne2k_isa)";
         for (i = 0; i < (int)sizeof(res->err) - 1 && m[i]; i++) res->err[i] = m[i];
         res->err[i] = 0;
         return -1;
     }
-    return wf_fetch_ex(&e, url, req, body, cap, res);
+    /* an idle kept-alive connection older than 10 s is dropped first (most
+     * servers close theirs after 5-15 s; a dead one would cost a timeout) */
+    if (!g_keepalive || ticks() - g_last_fetch > 1000U) wf_fetch_drop(&e);
+    rc = wf_fetch_ex(&e, url, req, body, cap, res);
+    g_last_fetch = ticks();
+    return rc;
 }

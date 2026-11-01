@@ -33,6 +33,9 @@ int wf_http_build_get(const wf_url_t* u, char* out, int cap);
  * header value. The body is sent after the head by the caller. */
 int wf_http_build_request(const wf_url_t* u, const char* method, const char* ctype, int body_len, const char* extra,
                           char* out, int cap);
+/* Lot 72: same with "Connection: keep-alive" when keepalive is 1. */
+int wf_http_build_request_ka(const wf_url_t* u, const char* method, const char* ctype, int body_len, const char* extra,
+                             int keepalive, char* out, int cap);
 
 #define WF_HTTP_HDR_MAX (32 * 1024)   /* Lot 69: youtube.com sends ~10 KiB of headers */
 #define WF_HTTP_LOC_MAX 1024
@@ -52,6 +55,7 @@ typedef struct {
     int body_len;
     int truncated;           /* body larger than body_cap: rest discarded */
     int done;                /* full message received */
+    int conn_close;          /* Lot 72: the server closes after this response (Connection: close, HTTP/1.0, body to EOF) */
     int error;               /* < 0: protocol error */
     const char* error_text;
     /* parser state */

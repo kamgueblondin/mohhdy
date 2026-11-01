@@ -7,8 +7,18 @@
 #define WF_ENTITY_H
 #include <stdint.h>
 
-/* Source charset of a page. */
-enum { WF_CS_UTF8 = 0, WF_CS_LATIN1 = 1 };
+/* Source charset of a page. Lot 72: the single-byte Cyrillic and Greek
+ * page charsets, decoded through userspace/wf_charset_table.inc (same
+ * order); their letters reach the glyph pages of include/os_charset.h. */
+enum { WF_CS_UTF8 = 0, WF_CS_LATIN1 = 1, WF_CS_CP1251 = 2, WF_CS_KOI8R = 3, WF_CS_KOI8U = 4,
+       WF_CS_ISO8859_5 = 5, WF_CS_ISO8859_7 = 6, WF_CS_CP1253 = 7, WF_CS_LAST = 7 };
+/* Lot 72: 1 for a single-byte charset (Latin-1 and the tables above) */
+#define WF_CS_SINGLE(cs) ((cs) >= WF_CS_LATIN1 && (cs) <= WF_CS_LAST)
+/* Lot 72: byte of code point cp in single-byte charset cs, 0 when cs has
+ * none (ASCII is itself). */
+unsigned char wf_charset_byte(int cs, uint32_t cp);
+/* Lot 72: short name of cs ("utf-8", "windows-1251", ...) */
+const char *wf_charset_name(int cs);
 
 /* Code point of the character reference at s[0] == '&' (n bytes left):
  * named (&eacute; &amp; ...; the ';' may be missing for the Latin-1 names
@@ -22,7 +32,10 @@ uint32_t wf_entity_lookup(const char *name, int len);
 
 /* charset from a Content-Type value or a <meta charset> / http-equiv
  * value: WF_CS_LATIN1 for iso-8859-1, latin1, windows-1252, cp1252,
- * us-ascii; WF_CS_UTF8 otherwise. */
+ * us-ascii; Lot 72: WF_CS_CP1251 (windows-1251, cp1251), WF_CS_KOI8R
+ * (koi8-r), WF_CS_KOI8U (koi8-u), WF_CS_ISO8859_5, WF_CS_ISO8859_7
+ * (also iso-ir-126, greek), WF_CS_CP1253 (windows-1253); WF_CS_UTF8
+ * otherwise. */
 int wf_charset_from(const char *v, int n);
 /* Lot 71: charset parameter of a Content-Type header, or WF_CS_NONE when
  * the header has none (then a <meta> of the page decides). */
