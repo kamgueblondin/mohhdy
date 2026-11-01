@@ -570,7 +570,13 @@ void print_cursor_left(void) {
     vga_console_set_cursor(vga_x, vga_y);
 }
 
+#if CONFIG_UTF8_VGA
+static int console_page;   /* Lot 72: glyph page of display bytes on this line */
+#endif
 void print_char(char c, int x, int y, char color) {
+#if CONFIG_UTF8_VGA
+    if (c == '\n') console_page = 0;
+#endif
     if (ansi_state == NORMAL) {
 #if CONFIG_UTF8_VGA
         // Décodage UTF-8 minimal et rendu VGA via CP437
@@ -597,10 +603,17 @@ void print_char(char c, int x, int y, char color) {
             if ((uc & 0xE0) == 0xC0) { utf8_expected_continuations = 1; utf8_codepoint = (uc & 0x1F); return; }
             if ((uc & 0xF0) == 0xE0) { utf8_expected_continuations = 2; utf8_codepoint = (uc & 0x0F); return; }
             if ((uc & 0xF8) == 0xF0) { utf8_expected_continuations = 3; utf8_codepoint = (uc & 0x07); return; }
-            /* Lot 71: a lone high byte is display text (CP1252), not lost */
+            /* Lot 71: a lone high byte is display text (CP1252), not lost.
+             * Lot 72: a page selector switches the glyph page until the
+             * end of the line and prints nothing; a byte of another page
+             * takes its code point's CP437 glyph (box drawing, some Greek
+             * letters) or a look-alike. */
             {
-                uint32_t cp1 = (uc >= 0xA0) ? uc : (os_cp1252_high[uc - 0x80] ? os_cp1252_high[uc - 0x80] : '?');
-                c = (char)os_cp437_from_cp(cp1);
+                uint32_t cp1 = '?';
+                char mapped;
+                if (!os_display_stream_cp(&console_page, uc, &cp1)) return;
+                if (unicode_to_cp437(cp1, &mapped)) c = mapped;
+                else c = '?';
             }
         }
 #endif

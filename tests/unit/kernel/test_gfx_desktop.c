@@ -1500,9 +1500,215 @@ static void test_lot69_browser_address_bar(void) {
     vga_desktop_set(0);
 }
 
+/* Lot 72: glyph pages. A byte of page 2 (Greek) draws its own glyph, not
+ * the CP1252 letter of the same byte nor '?'; ASCII is the same in every
+ * page. */
+static void test_lot72_glyph_pages(void) {
+    static const int qs[5] = { 4, 6, 8, 12, 16 };
+    int k, x, y;
+    for (k = 0; k < 5; k++) {
+        int q = qs[k], n = os_ui_px(8, q), d_lat = 0, d_q = 0, ink = 0, same = 1;
+        for (y = 0; y < n; y++)
+            for (x = 0; x < n; x++) {
+                int g = gfx_glyph_pixel_page(2, (char)0xE1, q, x, y);   /* alpha */
+                ink += g;
+                d_lat += g != gfx_glyph_pixel((char)0xE1, q, x, y);    /* a acute */
+                d_q += g != gfx_glyph_pixel('?', q, x, y);
+                if (gfx_glyph_pixel_page(3, 'A', q, x, y) != gfx_glyph_pixel('A', q, x, y)) same = 0;
+            }
+        TEST_ASSERT_TRUE(ink > 4);
+        TEST_ASSERT_TRUE(d_lat > 2);
+        TEST_ASSERT_TRUE(d_q > 2);
+        TEST_ASSERT_TRUE(same);
+        TEST_ASSERT_EQUAL(0, gfx_glyph_pixel_page(2, (char)0xE1, q, n, 0));
+    }
+    /* page 0 is the Lot 71 font */
+    for (y = 0; y < 8; y++)
+        for (x = 0; x < 8; x++) TEST_ASSERT_EQUAL(gfx_glyph_pixel((char)0xE9, 4, x, y), gfx_glyph_pixel_page(0, (char)0xE9, 4, x, y));
+}
+
+/* web TEXT item: pad bits 8..10 = page, low byte = font scale */
+static void web_item_page(int pad, const char *text) {
+    blank_scene();
+    g_scene.version = 8;
+    g_scene.ui_scale_q = 4;
+    g_scene.pane = OS_FB_PANE_WEB;
+    strcpy(g_scene.web_title, "pages");
+    g_scene.nweb = 1;
+    g_scene.web[0].kind = OS_FB_WEB_TEXT; g_scene.web[0].x = 10; g_scene.web[0].y = 20;
+    g_scene.web[0].w = 40; g_scene.web[0].h = 16;
+    g_scene.web[0].pad = (uint16_t)pad;
+    g_scene.web[0].color = 0x00AA00; strcpy(g_scene.web[0].text, text);
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+}
+
+static int ink_matches(int px, int py, int page, char ch, int q) {
+    int x, y, n = os_ui_px(8, q), bad = 0;
+    for (y = 0; y < n; y++)
+        for (x = 0; x < n; x++) {
+            int want = gfx_glyph_pixel_page(page, ch, q, x, y);
+            int got = near_rgb(gfx_desktop_pixel(g_fb, W, H, px + x, py + y), 0x00, 0xAA, 0x00, 8);
+            bad += want != got;
+        }
+    return bad == 0;
+}
+
+static void test_lot72_web_item_page(void) {
+    int ox, oy, pw, ph;
+    gfx_desktop_web_origin(W, H, &ox, &oy, &pw, &ph);
+    web_item_page(2 << 8, "\xe1\xe2");
+    TEST_ASSERT_TRUE(ink_matches(ox + 10, oy + 20, 2, (char)0xE1, 4));
+    TEST_ASSERT_TRUE(ink_matches(ox + 18, oy + 20, 2, (char)0xE2, 4));
+    TEST_ASSERT_FALSE(ink_matches(ox + 10, oy + 20, 0, (char)0xE1, 4));
+    web_item_page(0, "\xe1\xe2");
+    TEST_ASSERT_TRUE(ink_matches(ox + 10, oy + 20, 0, (char)0xE1, 4));
+    /* the page bits do not disturb the font scale: 2x Cyrillic */
+    web_item_page((3 << 8) | 8, "\xb6");
+    TEST_ASSERT_TRUE(ink_matches(ox + 10, oy + 20, 3, (char)0xB6, 8));
+    web_item_page(8, "\xb6");
+    TEST_ASSERT_TRUE(ink_matches(ox + 10, oy + 20, 0, (char)0xB6, 8));
+}
+
+/* GUI strings carry in-band selectors: they take no cell and switch the
+ * page of the bytes after them (title of the full web window) */
+static int title_ink(const char *title, uint32_t *sig) {
+    int x, y, n = 0;
+    uint32_t hsh = 2166136261u;
+    blank_scene();
+    g_scene.version = 8;
+    g_scene.ui_scale_q = 4;
+    g_scene.pane = OS_FB_PANE_WEB;
+    strcpy(g_scene.web_title, title);
+    gfx_desktop_draw_no_cursor(&g_scene, g_fb, W, H);
+    for (y = 0; y < 80; y++)
+        for (x = 0; x < W / 2; x++)
+            if (near_rgb(gfx_desktop_pixel(g_fb, W, H, x, y), 232, 238, 244, 2)) { n++; hsh = (hsh ^ (uint32_t)(y * W + x)) * 16777619u; }
+    *sig = hsh;
+    return n;
+}
+
+static void test_lot72_title_selectors(void) {
+    uint32_t a, b, c, d;
+    int na = title_ink("web ab\x8f\xe1\xe2", &a);    /* Greek alpha beta */
+    int nb = title_ink("web ab\x81\xe1\xe2", &b);    /* page 0: a acute, a circumflex */
+    int nc = title_ink("web ab\xe1\xe2", &c);
+    title_ink("web ab\x8f\xe1\xe2\x81", &d);         /* a trailing selector draws nothing */
+    TEST_ASSERT_TRUE(na > 20 && nb > 20);
+    TEST_ASSERT_TRUE(a != b);
+    TEST_ASSERT_EQUAL(nb, nc);                       /* the page 0 selector takes no cell */
+    TEST_ASSERT_EQUAL(b, c);
+    TEST_ASSERT_EQUAL(a, d);
+}
+
+static void test_lot72_wrap_take_cells(void) {
+    char t[128];
+    int i, n = 0;
+    /* 20 Greek letters, each behind its own selector: 40 bytes, 20 cells */
+    for (i = 0; i < 20; i++) { t[n++] = (char)0x8F; t[n++] = (char)0xE1; }
+    t[n] = 0;
+    TEST_ASSERT_EQUAL(n, gfx_text_wrap_take(t, 0, n, 20));        /* fits one line of 20 cells */
+    TEST_ASSERT_EQUAL(20, gfx_text_wrap_take(t, 0, n, 10));       /* 10 cells = 20 bytes */
+    strcpy(t, "abc def ghij");
+    TEST_ASSERT_EQUAL(7, gfx_text_wrap_take(t, 0, 12, 8));         /* cut at the space */
+    TEST_ASSERT_EQUAL(12, gfx_text_wrap_take(t, 0, 12, 12));
+    TEST_ASSERT_EQUAL(5, gfx_text_wrap_take("abcdefghij", 0, 10, 5));   /* no space: hard cut */
+    /* a selector inside the line is not counted as a cell */
+    strcpy(t, "ab\x8f\xe1\xe2 cd ef");
+    TEST_ASSERT_EQUAL(8, gfx_text_wrap_take(t, 0, (int)strlen(t), 8));
+}
+
+/* the input line keeps its page when only its end fits (address field) */
+static int addr_field_sig(const char *input) {
+    gfx_desktop_layout_t l;
+    const gfx_rect_t *a;
+    int x, y;
+    uint32_t hsh = 2166136261u;
+    vga_desktop_set(1);
+    gfx_desktop_wm_reset();
+    blank_scene();
+    g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+    g_scene.pane = OS_FB_PANE_BROWSER;
+    strcpy(g_scene.input, input);
+    redraw(&l);
+    a = &l.pane_win.addr;
+    for (y = a->y + 2; y < a->y + a->h - 2; y++)
+        for (x = a->x + 2; x < a->x + a->w - 2; x++)
+            if (g_fb[y * W + x] == 0x101820u) hsh = (hsh ^ (uint32_t)(y * W + x)) * 16777619u;
+    vga_desktop_set(0);
+    return (int)hsh;
+}
+
+static void test_lot72_chat_input_tail_page(void) {
+    static char greek[OS_FB_INPUT_LEN], latin[OS_FB_INPUT_LEN];
+    gfx_desktop_layout_t l;
+    int i, x, y, ga = 0, la = 0;
+    /* chat input longer than the field: the tail starts after the
+     * selector, and must still draw Greek */
+    greek[0] = (char)0x8F;
+    for (i = 1; i < OS_FB_INPUT_LEN - 1; i++) { greek[i] = (char)0xE1; latin[i - 1] = (char)0xE1; }
+    greek[OS_FB_INPUT_LEN - 1] = 0;
+    latin[OS_FB_INPUT_LEN - 2] = 0;
+    blank_scene();
+    g_scene.version = 8;
+    strcpy(g_scene.input, greek);
+    redraw(&l);
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) if (near_rgb(g_fb[y * W + x], 232, 238, 244, 0)) ga = ga * 31 + x + y * W;
+    strcpy(g_scene.input, latin);
+    redraw(&l);
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) if (near_rgb(g_fb[y * W + x], 232, 238, 244, 0)) la = la * 31 + x + y * W;
+    TEST_ASSERT_TRUE(ga != la);
+    /* the address field draws pages from the start of the text */
+    TEST_ASSERT_TRUE(addr_field_sig("ab\x8f\xe1") != addr_field_sig("ab\xe1"));
+    TEST_ASSERT_EQUAL(addr_field_sig("ab\x81\xe1"), addr_field_sig("ab\xe1"));
+}
+
+/* Lot 72: the favicon of the page also starts the Browser-OS address
+ * field, and the text moves right of it */
+static void test_lot72_favicon_in_address_bar(void) {
+    gfx_desktop_layout_t l;
+    const gfx_rect_t *a;
+    int k, green, x, y, first_dark = -1;
+    memset(&g_atlas, 0, sizeof(g_atlas));
+    g_atlas.magic = OS_FB_WEBIMG_MAGIC;
+    g_atlas.slot[0].w = 16; g_atlas.slot[0].h = 16;
+    for (k = 0; k < 256; k++) { g_atlas.rgb[k * 3] = 0; g_atlas.rgb[k * 3 + 1] = 200; g_atlas.rgb[k * 3 + 2] = 0; }
+    vga_desktop_set(1);
+    gfx_desktop_wm_reset();
+    blank_scene();
+    g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+    g_scene.pane = OS_FB_PANE_BROWSER;
+    strcpy(g_scene.input, "example.com");
+    TEST_ASSERT_EQUAL(0, gfx_desktop_set_webimg(&g_atlas));
+    redraw(&l);
+    a = &l.pane_win.addr;
+    green = count_near(a->x, a->y, a->x + 40, a->y + a->h, 0, 200, 0, 0);
+    TEST_ASSERT_TRUE(green >= 12 * 12);
+    for (x = a->x + 2; x < a->x + 80 && first_dark < 0; x++)
+        for (y = a->y + 2; y < a->y + a->h - 2; y++)
+            if (g_fb[y * W + x] == 0x101820u) { first_dark = x; break; }
+    TEST_ASSERT_TRUE(first_dark >= a->x + 8 + 16);
+    /* no favicon: nothing green, the text starts at the field edge */
+    TEST_ASSERT_EQUAL(0, gfx_desktop_set_webimg(0));
+    redraw(&l);
+    TEST_ASSERT_EQUAL(0, count_near(a->x, a->y, a->x + 40, a->y + a->h, 0, 200, 0, 0));
+    first_dark = -1;
+    for (x = a->x + 2; x < a->x + 80 && first_dark < 0; x++)
+        for (y = a->y + 2; y < a->y + a->h - 2; y++)
+            if (g_fb[y * W + x] == 0x101820u) { first_dark = x; break; }
+    TEST_ASSERT_TRUE(first_dark >= a->x + 8 && first_dark < a->x + 8 + 8);
+    g_scene.input[0] = 0;
+    vga_desktop_set(0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_center_desktop_not_text_mode);
+    RUN_TEST(test_lot72_glyph_pages);
+    RUN_TEST(test_lot72_web_item_page);
+    RUN_TEST(test_lot72_title_selectors);
+    RUN_TEST(test_lot72_wrap_take_cells);
+    RUN_TEST(test_lot72_chat_input_tail_page);
+    RUN_TEST(test_lot72_favicon_in_address_bar);
     RUN_TEST(test_chat_and_dock_and_stage);
     RUN_TEST(test_float_chat_and_browser_pane);
     RUN_TEST(test_shell_pane_shows_prompt);

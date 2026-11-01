@@ -216,6 +216,26 @@ static void test_cp437(void) {
     TEST_ASSERT_EQUAL('l', os_cp437_from_cp(0x142));      /* Latin Ext-A: base letter */
 }
 
+/* the VGA console stream: selectors print nothing and set the page */
+static void test_stream_cp(void) {
+    int page = 0;
+    uint32_t cp = 0;
+    TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 0xE9, &cp));
+    TEST_ASSERT_EQUAL(0xE9, cp);
+    TEST_ASSERT_EQUAL(0, os_display_stream_cp(&page, 0x8F, &cp));
+    TEST_ASSERT_EQUAL(2, page);
+    TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 0xE1, &cp));
+    TEST_ASSERT_EQUAL(0x3B1, cp);
+    TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 'x', &cp));
+    TEST_ASSERT_EQUAL('x', cp);
+    TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 0xFF, &cp));   /* undefined in page 2 */
+    TEST_ASSERT_EQUAL('?', cp);
+    TEST_ASSERT_EQUAL(0, os_display_stream_cp(&page, 0x81, &cp));
+    TEST_ASSERT_EQUAL(0, page);
+    TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 0x81 + 1, &cp));
+    TEST_ASSERT_EQUAL(0x201A, cp);
+}
+
 static int glyph_blank8(unsigned g) {
     int y;
     for (y = 0; y < 8; y++) if (gfx_font8[g][y]) return 0;
@@ -271,6 +291,7 @@ int main(void) {
     RUN_TEST(test_cells_take_page_at);
     RUN_TEST(test_utf8_out);
     RUN_TEST(test_cp437);
+    RUN_TEST(test_stream_cp);
     RUN_TEST(test_fonts);
     unity_print_results();
     unity_cleanup();

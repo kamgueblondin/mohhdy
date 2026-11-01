@@ -190,6 +190,17 @@ static inline int os_display_put(uint32_t cp, int *page, char *out, int cap) {
     return n + 1;
 }
 
+/* A display byte arriving on a byte stream (the VGA console): a selector
+ * sets *page and gives 0 (print nothing); another byte gives 1 and its
+ * code point in *cp ('?' when the page leaves it undefined). */
+static inline int os_display_stream_cp(int *page, unsigned char c, uint32_t *cp) {
+    int k = os_page_of_sel(c);
+    if (k >= 0) { *page = k; return 0; }
+    *cp = os_display_cp((unsigned)*page, c);
+    if (!*cp) *cp = '?';
+    return 1;
+}
+
 /* Cells a display string takes (selectors take none). */
 static inline int os_display_cells(const char *s, int n) {
     int i, c = 0;
