@@ -4672,10 +4672,34 @@ static struct {
     char path[256];
     int16_t natural_w[WE_MAX_NODES], natural_h[WE_MAX_NODES];
     uint8_t failed[WE_MAX_NODES];
+    uint8_t atlas[WE_MAX_NODES];        /* Lot 72: slot + 1 of a fetched image, 0 = local */
     int ready_idx;
 } image_work;
 typedef char image_workspace_is_bounded[
     sizeof(image_work) <= WE_IMAGE_WORKSPACE_MAX ? 1 : -1];
+
+static we_image_atlas_fn image_atlas;
+static void *image_atlas_ctx;
+void we_set_image_atlas(we_image_atlas_fn dims, void *ctx) {
+    image_atlas = dims;
+    image_atlas_ctx = ctx;
+}
+
+/* Lot 72: "mohhdy-img:K" -> K (0..254), else -1 */
+static int image_atlas_slot(const we_doc_t *d, const we_node_t *n) {
+    static const char scheme[] = WE_ATLAS_SCHEME;
+    int i, k = 0, len = n->src_len;
+    if (!w_eq(n->tag, "img") || len < (int)sizeof(scheme)) return -1;
+    for (i = 0; scheme[i]; i++) if (d->pool[n->src_off + i] != scheme[i]) return -1;
+    if (i >= len) return -1;
+    for (; i < len; i++) {
+        char c = d->pool[n->src_off + i];
+        if (c < '0' || c > '9') return -1;
+        k = k * 10 + (c - '0');
+        if (k > 254) return -1;
+    }
+    return k;
+}
 
 void we_set_image_reader(we_image_read_fn read, void *ctx) {
     image_read = read;
@@ -4718,6 +4742,18 @@ static int image_open(we_doc_t *d, int idx) {
     if (image_work.ready_idx == idx) return 0;
     image_work.ready_idx = -1;
     if (!(w_eq(n->tag, "img") ? n->src_len : n->bgi_len)) return -1;
+    {
+        int slot = image_atlas_slot(d, n), aw = 0, ah = 0;
+        if (slot >= 0) {
+            if (!image_atlas || image_atlas(image_atlas_ctx, slot, &aw, &ah) || aw < 1 || ah < 1)
+                return image_fail(d, "image atlas slot empty", idx);
+            image_work.atlas[idx] = (uint8_t)(slot + 1);
+            image_work.natural_w[idx] = (int16_t)aw;
+            image_work.natural_h[idx] = (int16_t)ah;
+            return 0;
+        }
+        image_work.atlas[idx] = 0;
+    }
     if (n->parent >= 0 && d->nodes[n->parent].wmode != WE_WM_HORIZONTAL)   /* lot 64: runs would be transposed */
         return image_fail(d, "image in vertical flow refused", idx);
     if (image_local_path(d, n)) return image_fail(d, "image local path refused", idx);
@@ -4796,6 +4832,18 @@ static int image_paint(we_doc_t *d, int idx, int x, int y, int available, int as
     int w, h, rw, rh, ox, oy, row, col, nr = 0, room = WE_MAX_ITEMS - (int)d->nitems;
     int background = n->object_fit_set && n->has_bg && n->display == WE_DISP_INLINE;
     if (image_dimensions(d, idx, available, assigned_w, assigned_h, &w, &h) || image_open(d, idx)) return -1;
+    if (image_work.atlas[idx]) {
+        /* Lot 72: one item, scaled by the compositor */
+        os_fb_web_item_t *it;
+        if (room < 1 + (background ? 1 : 0)) return image_fail(d, "image display budget exceeded", idx);
+        if (background) emit(d, idx, OS_FB_WEB_RECT, x, y, w, h, n->bg);
+        it = emit(d, idx, OS_FB_WEB_IMAGE, x, y, w, h, 0);
+        (void)it;   /* pad = slot, written after the display list passes */
+        n->x = (int16_t)x; n->y = (int16_t)y; n->w = (int16_t)w; n->h = (int16_t)h;
+        d->perf.images++;
+        d->perf.atlas_images++;
+        return h;
+    }
     if (background) room--;
     image_fit_box(n, w, h, image_work.decoded.w, image_work.decoded.h, &rw, &rh, &ox, &oy);
     for (row = 0; row < h; row++) {
@@ -5773,6 +5821,13 @@ static int image_dimensions(we_doc_t *d, int idx, int available, int assigned_w,
         else *h = n->aspect_num ? ratio_height(n, *w) : *w * nh / nw;
         if (assigned_h >= 0) *h = assigned_h;
         *h = height_constraint(d, idx, *h, parent);
+    }
+    if (image_work.atlas[idx]) {
+        /* Lot 72: a fetched image keeps its ratio inside the atlas bound */
+        if (*w > WE_ATLAS_MAX_W) { *h = *h * WE_ATLAS_MAX_W / *w; *w = WE_ATLAS_MAX_W; }
+        if (*h > WE_ATLAS_MAX_H) { *w = *w * WE_ATLAS_MAX_H / *h; *h = WE_ATLAS_MAX_H; }
+        if (*w < 1 || *h < 1) return image_fail(d, "image output exceeds limit", idx);
+        return 0;
     }
     if (*w < 1 || *h < 1 || *w > WE_IMAGE_MAX_W || *h > WE_IMAGE_MAX_H)
         return image_fail(d, "image output exceeds limit", idx);
@@ -11126,6 +11181,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     w_zero(image_work.failed, sizeof(image_work.failed));
     w_zero(image_work.natural_w, sizeof(image_work.natural_w));
     w_zero(image_work.natural_h, sizeof(image_work.natural_h));
+    w_zero(image_work.atlas, sizeof(image_work.atlas));
     w_zero(measure_cache, sizeof(measure_cache));
     measure_budget = WE_MEASURE_BUDGET;
     { uint32_t i; for (i = 0; i < d->nnodes; i++) {
@@ -11164,6 +11220,9 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
               int q = node_q(d, o);
               if (q != OS_UI_Q1) d->items[i].pad = (uint16_t)q;
           }
+          /* Lot 72: an atlas image carries its slot in pad */
+          if (d->items[i].kind == OS_FB_WEB_IMAGE && o >= 0 && o < (int)d->nnodes && image_work.atlas[o])
+              d->items[i].pad = (uint16_t)(image_work.atlas[o] - 1);
       } }
     if (math_refused) diag(d, "math evaluation refused", -1);
     if (wavy_decoration) diag(d, "wavy decoration painted solid", -1);

@@ -102,6 +102,67 @@ int gfx_desktop_set_image(const os_fb_image_t *img) {
     return 0;
 }
 
+/* Lot 72: web pane images (kernel copy of the Ring 3 atlas) */
+static os_fb_webimg_t g_webimg;
+static int g_webimg_valid;
+
+int gfx_desktop_webimg_valid(const os_fb_webimg_t *a) {
+    int k;
+    if (!a || a->magic != OS_FB_WEBIMG_MAGIC) return 0;
+    for (k = 0; k < OS_FB_WEBIMG_SLOTS; k++) {
+        uint32_t px = (uint32_t)a->slot[k].w * (uint32_t)a->slot[k].h;
+        if (!a->slot[k].w || !a->slot[k].h) continue;
+        if (a->slot[k].off > OS_FB_WEBIMG_PIXELS || px > OS_FB_WEBIMG_PIXELS - a->slot[k].off) return 0;
+    }
+    return 1;
+}
+
+int gfx_desktop_set_webimg(const os_fb_webimg_t *a) {
+    uint32_t i, used = 0;
+    int k;
+    if (!a) { g_webimg_valid = 0; return 0; }
+    if (!gfx_desktop_webimg_valid(a)) { g_webimg_valid = 0; return -1; }
+    g_webimg.magic = a->magic;
+    g_webimg.gen = a->gen;
+    for (k = 0; k < OS_FB_WEBIMG_SLOTS; k++) {
+        uint32_t end;
+        g_webimg.slot[k] = a->slot[k];
+        end = a->slot[k].off + (uint32_t)a->slot[k].w * (uint32_t)a->slot[k].h;
+        if (a->slot[k].w && a->slot[k].h && end > used) used = end;
+    }
+    for (i = 0; i < used * 3U; i++) g_webimg.rgb[i] = a->rgb[i];
+    g_webimg_valid = 1;
+    return 0;
+}
+
+/* Draws slot k scaled (nearest) into x, y, dw x dh, clipped to cx0..cx1. */
+static void draw_webimg(uint32_t *fb, int w, int h, int k, int x, int y, int dw, int dh,
+                        int cx0, int cy0, int cx1, int cy1) {
+    const os_fb_webimg_slot_t *s;
+    int px, py;
+    if (!g_webimg_valid || k < 0 || k >= OS_FB_WEBIMG_SLOTS || dw <= 0 || dh <= 0) return;
+    s = &g_webimg.slot[k];
+    if (!s->w || !s->h) return;
+    if (cx0 < 0) cx0 = 0;
+    if (cy0 < 0) cy0 = 0;
+    if (cx1 > w) cx1 = w;
+    if (cy1 > h) cy1 = h;
+    for (py = 0; py < dh; py++) {
+        int sy = y + py, ry;
+        const uint8_t *row;
+        if (sy < cy0 || sy >= cy1) continue;
+        ry = (int)(((uint32_t)py * s->h) / (uint32_t)dh);
+        row = g_webimg.rgb + ((uint32_t)s->off + (uint32_t)ry * s->w) * 3U;
+        for (px = 0; px < dw; px++) {
+            int sx = x + px;
+            const uint8_t *p;
+            if (sx < cx0 || sx >= cx1) continue;
+            p = row + ((uint32_t)px * s->w / (uint32_t)dw) * 3U;
+            fb[sy * w + sx] = RGB(p[0], p[1], p[2]);
+        }
+    }
+}
+
 /* Image area: the grid below its first (caption) row, the image scaled by
  * an integer factor (or down, nearest) to fit, centered. */
 void gfx_desktop_image_rect(const gfx_rect_t *box, gfx_rect_t *out) {
@@ -1415,7 +1476,15 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
         gfx_wm_draw_grip(fb, w, h, w, gr, GFX_DESKTOP_PANE_TITLE_H, g_wm_q, RGB(120, 140, 150));
     }
     g_tq = q;
-    draw_title(fb, w, h, fr.x + 8 + 2 * 34 + 8, fr.y + 12, sc->web_title, fr.w + 16 - 96 - 80 - 3 * 30, RGB(232, 238, 244));
+    {
+        /* Lot 72: favicon of the page before its title */
+        int tx = fr.x + 8 + 2 * 34 + 8, fav = os_ui_px(16, q);
+        if (g_webimg_valid && g_webimg.slot[OS_FB_WEBIMG_FAVICON].w) {
+            draw_webimg(fb, w, h, OS_FB_WEBIMG_FAVICON, tx, fr.y + 16 - fav / 2, fav, fav, tx, fr.y, tx + fav, fr.y + 32);
+            tx += fav + 6;
+        }
+        draw_title(fb, w, h, tx, fr.y + 12, sc->web_title, fr.w + 16 - 96 - 80 - 3 * 30 - (tx - (fr.x + 8 + 2 * 34 + 8)), RGB(232, 238, 244));
+    }
     g_tq = OS_UI_Q1;
     for (i = 0; i < 2; i++) {
         gfx_desktop_web_nav(w, h, i, &nav);
@@ -1436,6 +1505,8 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
         uint32_t c = it->color & 0xFFFFFFu;
         if (it->kind == OS_FB_WEB_RECT) {
             web_fill_clip(fb, w, h, x, y, iw, ih, c, ox, oy, cx1, cy1);
+        } else if (it->kind == OS_FB_WEB_IMAGE) {
+            draw_webimg(fb, w, h, (int)it->pad, x, y, iw, ih, ox, oy, cx1, cy1);
         } else if (it->kind == OS_FB_WEB_BORDER) {
             int t = os_ui_px(it->bold ? it->bold : 1, q);
             if (t < 1) t = 1;

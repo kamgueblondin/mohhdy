@@ -20,4 +20,14 @@ int shell_page_form_key(int key);
 int shell_page_form_set(int n, const char* value);
 int shell_page_forms_list(char* out, int cap);
 int shell_page_submit(int n, char* src, int src_max, char* final_url, int url_max, char* status, int st_max);
+/* Lot 72: images of the fetched page (wf_webimg): the atlas for the
+ * compositor, slot sizes for the engine, on / off ("web-images") and the
+ * counters of the last section. */
+#include "../include/os_syscalls.h"
+#include "wf_webimg.h"
+const os_fb_webimg_t* shell_page_atlas(void);
+int shell_page_atlas_dims(void* ctx, int slot, int* w, int* h);
+void shell_page_images(int on);
+int shell_page_images_on(void);
+const wf_webimg_stats_t* shell_page_image_stats(void);
 #endif

@@ -19,6 +19,9 @@ typedef struct { char* o; int cap; int n; int full; int nodes; } ob_t;
  * has one (HTML rule: the transport wins), else a <meta> of the page,
  * else UTF-8; and the form sink of the GUI reader view. */
 static int g_cs = WF_CS_UTF8;
+/* Lot 72: <img> kept for the GUI (wf_html_set_images) */
+static int g_images;
+void wf_html_set_images(int on) { g_images = on ? 1 : 0; }
 static int g_cs_set = WF_CS_NONE;
 static wf_form_page_t* g_forms;
 void wf_html_set_charset(int cs) { g_cs_set = cs == WF_CS_LATIN1 ? WF_CS_LATIN1 : cs == WF_CS_UTF8 ? WF_CS_UTF8 : WF_CS_NONE; }
@@ -355,6 +358,112 @@ static int form_tag(ob_t* b, const char* in, int n, int i, int j, int e, int clo
     return next;
 }
 
+
+/* Lot 72: attribute that is a positive pixel count ("120", "120px") */
+static int attr_px(const char* in, int s, int e, const char* name) {
+    char v[12];
+    int k, x = 0;
+    if (get_attr(in, s, e, name, v, (int)sizeof(v)) <= 0) return 0;
+    for (k = 0; v[k] >= '0' && v[k] <= '9' && k < 5; k++) x = x * 10 + (v[k] - '0');
+    if (v[k] == '%') return 0;
+    if (v[k] && v[k] != 'p' && v[k] != '.') return 0;
+    return x;
+}
+
+/* Lot 72: image source of an <img>: src, else the lazy-loading data-src,
+ * else the first srcset candidate; data: URLs are left out (counted). */
+static int img_source(const char* in, int s, int e, char* out, int cap) {
+    static const char* const names[] = {"src", "data-src", "data-lazy-src", "srcset", 0};
+    int k;
+    for (k = 0; names[k]; k++) {
+        int n = get_attr(in, s, e, names[k], out, cap), i;
+        if (n <= 0) continue;
+        if (k == 3) {   /* srcset: first URL, up to a space or comma */
+            for (i = 0; out[i] && !is_sp(out[i]) && out[i] != ','; i++) {}
+            out[i] = 0;
+            n = i;
+        }
+        if (n >= 5 && lc(out[0]) == 'd' && lc(out[1]) == 'a' && lc(out[2]) == 't' && lc(out[3]) == 'a' && out[4] == ':')
+            continue;
+        {   /* &amp; in query strings */
+            int r = 0, w = 0;
+            while (r < n) {
+                if (out[r] == '&') {
+                    int used = 0;
+                    uint32_t cp = wf_entity_decode(out + r, n - r, &used);
+                    if (used && cp > 0 && cp < 0x80u) { out[w++] = (char)cp; r += used; continue; }
+                }
+                out[w++] = out[r++];
+            }
+            out[w] = 0;
+            n = w;
+        }
+        if (n > 0) return n;
+    }
+    out[0] = 0;
+    return 0;
+}
+
+/* Lot 72: <img> for the GUI: absolute src, size attributes, alt text.
+ * Tracking pixels (1x1, 2x2) are dropped. */
+static void put_img(ob_t* b, const char* in, int j, int e, const wf_url_t* base, wf_html_stats_t* st) {
+    static char src[WF_URL_PATH_MAX], alt[96], abs_url[WF_URL_HOST_MAX + WF_URL_PATH_MAX + 16];
+    static wf_url_t u;
+    int w = attr_px(in, j, e, "width"), h = attr_px(in, j, e, "height"), k;
+    if ((w && w <= 2) || (h && h <= 2)) { st->images_dropped++; return; }
+    if (img_source(in, j, e, src, (int)sizeof(src)) <= 0 || !base || !href_web(src) || wf_url_resolve(base, src, &u) != 0 ||
+        st->images >= WF_HTML_IMG_MAX) {
+        st->images_dropped++;
+        return;
+    }
+    wf_url_format(&u, abs_url, (int)sizeof(abs_url));
+    get_attr_text(in, j, e, "alt", alt, (int)sizeof(alt));
+    ob_s(b, "<img src=\"");
+    for (k = 0; abs_url[k]; k++) if (abs_url[k] != '"' && abs_url[k] != '<' && abs_url[k] != '>') ob_c(b, abs_url[k]);
+    ob_c(b, '"');
+    if (w) { ob_s(b, " width=\""); put_num(b, w); ob_c(b, '"'); }
+    if (h) { ob_s(b, " height=\""); put_num(b, h); ob_c(b, '"'); }
+    ob_s(b, " alt=\"");
+    for (k = 0; alt[k]; k++) {
+        char c = alt[k];
+        if (c == '"' || c == '<' || c == '>' || c == '&') c = ' ';
+        ob_c(b, c);
+    }
+    ob_s(b, "\">");
+    b->nodes++;
+    st->images++;
+}
+
+/* Lot 72: favicon declared in <head> (<link rel="icon" ...>, also
+ * "shortcut icon" and "apple-touch-icon"), made absolute; else 0. */
+static void find_icon(const char* in, int n, const wf_url_t* base, wf_html_stats_t* st) {
+    static char rel[48], href[WF_URL_PATH_MAX];
+    static wf_url_t u;
+    int i, best = 0;
+    st->icon[0] = 0;
+    if (!base) return;
+    for (i = 0; i + 5 < n; i++) {
+        int e, q = 0, rank = 0;
+        if (in[i] != '<' || lc(in[i + 1]) != 'l' || lc(in[i + 2]) != 'i' || lc(in[i + 3]) != 'n' || lc(in[i + 4]) != 'k' ||
+            !is_sp(in[i + 5]))
+            continue;
+        e = i + 5;
+        while (e < n && (q || in[e] != '>')) { if (in[e] == '"' || in[e] == '\'') q = (q == in[e]) ? 0 : (q ? q : in[e]); e++; }
+        if (get_attr(in, i + 5, e, "rel", rel, (int)sizeof(rel)) > 0) {
+            int k;
+            for (k = 0; rel[k]; k++) rel[k] = lc(rel[k]);
+            if (seq(rel, "icon") || seq(rel, "shortcut icon")) rank = 2;
+            else if (seq(rel, "apple-touch-icon")) rank = 1;
+        }
+        if (rank > best && get_href(in, i + 5, e, href, (int)sizeof(href)) > 0 && href_web(href) &&
+            wf_url_resolve(base, href, &u) == 0) {
+            wf_url_format(&u, st->icon, (int)sizeof(st->icon));
+            best = rank;
+        }
+        if (seq_pre(in + i, "<body") || best == 2) break;
+    }
+}
+
 int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int cap, wf_html_stats_t* st) {
     return wf_html_reduce_ex(in, n, base, out, cap, st, WF_HTML_NODE_BUDGET, 0);
 }
@@ -403,6 +512,7 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
             t++;
         }
     }
+    if (g_images) find_icon(in, n, base, st);
     ob_s(&b, "<html><head><title>");
     if (!st->title[0]) ob_s(&b, "(untitled)");
     for (k = 0; st->title[k]; k++) {
@@ -455,6 +565,13 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
                 chrome_block(in, j, e)) {
                 st->blocks_dropped++;
                 i = skip_block(in, n, e + 1, name);
+                continue;
+            }
+            if (g_images && !close && seq(name, "img")) {
+                if (!ob_room(&b, 900)) { b.full = 1; break; }
+                put_img(&b, in, j, e, base, st);
+                last_sp = 0;
+                i = e < n ? e + 1 : n;
                 continue;
             }
             if (in_list(name, KEEP)) {

@@ -507,6 +507,57 @@ static void test_web_pane_display_list(void) {
     TEST_ASSERT_EQUAL(0, count_near(ox + 10, oy + 10, ox + 40, oy + 30, 255, 0, 0, 0));
 }
 
+
+/* Lot 72: images of the web pane come from the atlas (SYS_VGA_BLIT 6),
+ * one OS_FB_WEB_IMAGE item per image, scaled and clipped; a bad atlas is
+ * refused whole; the favicon is drawn before the title. */
+static os_fb_webimg_t g_atlas;
+static void test_web_pane_atlas_images(void) {
+    int ox, oy, pw, ph, k;
+    memset(&g_atlas, 0, sizeof(g_atlas));
+    g_atlas.magic = OS_FB_WEBIMG_MAGIC;
+    /* slot 1: 2x1, red then blue */
+    g_atlas.slot[1].w = 2; g_atlas.slot[1].h = 1; g_atlas.slot[1].off = 300;
+    g_atlas.rgb[900] = 255; g_atlas.rgb[901] = 0; g_atlas.rgb[902] = 0;
+    g_atlas.rgb[903] = 0; g_atlas.rgb[904] = 0; g_atlas.rgb[905] = 255;
+    /* slot 0 favicon: 16x16 green */
+    g_atlas.slot[0].w = 16; g_atlas.slot[0].h = 16;
+    for (k = 0; k < 256; k++) { g_atlas.rgb[k * 3] = 0; g_atlas.rgb[k * 3 + 1] = 200; g_atlas.rgb[k * 3 + 2] = 0; }
+    TEST_ASSERT_EQUAL(0, gfx_desktop_set_webimg(&g_atlas));
+    memset(&g_scene, 0, sizeof(g_scene));
+    g_scene.magic = OS_FB_MAGIC;
+    g_scene.version = 4;
+    g_scene.pane = OS_FB_PANE_WEB;
+    strcpy(g_scene.web_title, "images");
+    g_scene.nweb = 2;
+    g_scene.web[0].kind = OS_FB_WEB_IMAGE; g_scene.web[0].x = 10; g_scene.web[0].y = 10;
+    g_scene.web[0].w = 40; g_scene.web[0].h = 20; g_scene.web[0].pad = 1;
+    /* an empty slot paints nothing */
+    g_scene.web[1].kind = OS_FB_WEB_IMAGE; g_scene.web[1].x = 100; g_scene.web[1].y = 10;
+    g_scene.web[1].w = 40; g_scene.web[1].h = 20; g_scene.web[1].pad = 7;
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    gfx_desktop_web_origin(W, H, &ox, &oy, &pw, &ph);
+    TEST_ASSERT_EQUAL(20 * 20, count_near(ox + 10, oy + 10, ox + 30, oy + 30, 255, 0, 0, 0));
+    TEST_ASSERT_EQUAL(20 * 20, count_near(ox + 30, oy + 10, ox + 50, oy + 30, 0, 0, 255, 0));
+    TEST_ASSERT_EQUAL(0, count_near(ox + 100, oy + 10, ox + 140, oy + 30, 255, 0, 0, 0));
+    TEST_ASSERT_TRUE(near_rgb(gfx_desktop_pixel(g_fb, W, H, ox + 120, oy + 20), 255, 255, 255, 0));
+    /* favicon: green square in the title bar, above the page */
+    TEST_ASSERT_TRUE(count_near(0, 0, W, oy, 0, 200, 0, 0) >= 16 * 16);
+    /* a slot outside the pixel array: refused, nothing drawn */
+    g_atlas.slot[2].w = 300; g_atlas.slot[2].h = 300; g_atlas.slot[2].off = 0;
+    TEST_ASSERT_EQUAL(0, gfx_desktop_webimg_valid(&g_atlas));
+    TEST_ASSERT_EQUAL(-1, gfx_desktop_set_webimg(&g_atlas));
+    g_atlas.slot[2].w = 1; g_atlas.slot[2].h = 1; g_atlas.slot[2].off = OS_FB_WEBIMG_PIXELS;
+    TEST_ASSERT_EQUAL(0, gfx_desktop_webimg_valid(&g_atlas));
+    g_atlas.slot[2].off = 0xFFFFFFF0U;
+    TEST_ASSERT_EQUAL(0, gfx_desktop_webimg_valid(&g_atlas));
+    g_atlas.magic = 0;
+    TEST_ASSERT_EQUAL(0, gfx_desktop_webimg_valid(&g_atlas));
+    gfx_desktop_draw(&g_scene, g_fb, W, H);
+    TEST_ASSERT_EQUAL(0, count_near(ox + 10, oy + 10, ox + 30, oy + 30, 255, 0, 0, 0));
+    TEST_ASSERT_EQUAL(0, gfx_desktop_set_webimg(0));
+}
+
 /* Window manager on the OS-UI windows (kernel/gfx_wm.c): every pane and
  * the chat have minimize / maximize / close, a title drag, the dock and
  * the menu restore a minimized window, the menu marks the active one. */
@@ -1468,6 +1519,7 @@ int main(void) {
     RUN_TEST(test_p2p_collab_prod_panes_drawing);
     RUN_TEST(test_vbe_layout_automation_under_load);
     RUN_TEST(test_web_pane_display_list);
+    RUN_TEST(test_web_pane_atlas_images);
     RUN_TEST(test_window_manager_panes_and_chat);
     RUN_TEST(test_app_windows_events_and_z_order);
     RUN_TEST(test_generic_app_slots_z_order);

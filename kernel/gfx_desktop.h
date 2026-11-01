@@ -91,6 +91,11 @@ void gfx_desktop_full_rect(int w, int h, gfx_rect_t *r);
 int gfx_desktop_full_maximized(void);
 /* UX5: viewer image (copied; 0 or a bad image clears). Returns 0 / -1. */
 int gfx_desktop_set_image(const os_fb_image_t *img);
+/* Lot 72: web pane images (SYS_VGA_BLIT 6); 0 clears. -1 if a slot is
+ * outside the pixel array (nothing is kept then). */
+int gfx_desktop_set_webimg(const os_fb_webimg_t *a);
+/* Lot 72: atlas validation, shared with the host tests */
+int gfx_desktop_webimg_valid(const os_fb_webimg_t *a);
 /* Rectangle the image of slot occupies in box (0 size when none). */
 void gfx_desktop_image_rect(const gfx_rect_t *box, gfx_rect_t *out);
 void gfx_desktop_app_grid_fit(const gfx_rect_t *box, int *rows, int *cols);

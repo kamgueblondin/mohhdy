@@ -9,6 +9,7 @@
 #include "wf_form.h"
 #include "wf_section.h"
 #include "shell_search.h"
+#include "wf_webimg.h"
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
@@ -26,6 +27,43 @@ static wf_sections_t g_sec;
 static wf_form_page_t g_forms;
 static int g_cur;
 static int g_page_ok;
+
+/* Lot 72: images of the page shown in the GUI (atlas + decode buffers,
+ * about 1.7 MiB, see wf_webimg.h) */
+static wf_webimg_t g_wi;
+static char g_img_tmp[16384];
+static wf_webimg_stats_t g_img_st;
+static int g_img_on = 1;
+
+static int img_fetch(void* ctx, const char* url, uint8_t* buf, int cap) {
+    static wf_fetch_result_t r;
+    (void)ctx;
+    if (wf_guest_fetch_ex(url, 0, buf, cap, &r, 0) != 0) return -1;
+    if (r.status != 200) return -1;
+    if (r.truncated) return cap + 1;
+    return r.body_len;
+}
+static const wf_webimg_io_t g_img_io = {0, img_fetch};
+
+const os_fb_webimg_t* shell_page_atlas(void) { return g_wi.atlas.magic ? &g_wi.atlas : 0; }
+int shell_page_atlas_dims(void* ctx, int slot, int* w, int* h) { (void)ctx; return wf_webimg_dims(&g_wi, slot, w, h); }
+void shell_page_images(int on) { g_img_on = on ? 1 : 0; }
+int shell_page_images_on(void) { return g_img_on; }
+const wf_webimg_stats_t* shell_page_image_stats(void) { return &g_img_st; }
+
+/* Section src (n bytes) with its images fetched and rewritten in place. */
+static int with_images(char* src, int n, int src_max) {
+    int m, k;
+    if (!g_img_on || n <= 0 || n >= (int)sizeof(g_img_tmp)) return n;
+    for (k = 0; k < n; k++) g_img_tmp[k] = src[k];
+    m = wf_webimg_section(&g_wi, g_img_tmp, n, src, src_max, &g_img_io, &g_img_st);
+    if (m < 0) {   /* did not fit: the section without its images */
+        for (k = 0; k < n; k++) src[k] = g_img_tmp[k];
+        src[n] = 0;
+        return n;
+    }
+    return m;
+}
 
 static int s_pre(const char* s, const char* p) { while (*p && *s == *p) { s++; p++; } return *p == 0; }
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
@@ -193,12 +231,23 @@ static int page_fetch(const char* url, const wf_fetch_req_t* req, char* src, int
     if (wf_url_parse(g_res.url, &base) != 0) return -1;
     if (is_html(&g_res, g_body, g_res.body_len)) {
         wf_html_set_charset(wf_charset_header(g_res.content_type, ctlen(g_res.content_type)));
+        wf_html_set_images(g_img_on);
         g_full_n = wf_html_reduce_ex((const char*)g_body, g_res.body_len, &base, g_full, (int)sizeof(g_full), &st,
                                      PAGE_NODE_BUDGET, &g_forms);
         if (g_full_n > 0 && wf_section_index(g_full, g_full_n, &g_sec) > 0) {
             g_page_ok = 1;
             g_cur = 0;
             n = wf_section_render(g_full, g_full_n, &g_sec, 0, &g_forms, src, src_max);
+            /* Lot 72: favicon and the images of section 0 */
+            if (g_img_on) {
+                static char page_url[sizeof(g_res.url)];
+                for (i = 0; g_res.url[i] && i < (int)sizeof(page_url) - 1; i++) page_url[i] = g_res.url[i];
+                page_url[i] = 0;
+                wf_webimg_reset(&g_wi);
+                for (i = 0; i < (int)sizeof(g_img_st); i++) ((char*)&g_img_st)[i] = 0;
+                (void)wf_webimg_favicon(&g_wi, page_url, st.icon[0] ? st.icon : 0, &g_img_io, &g_img_st);
+                if (n > 0) n = with_images(src, n, src_max);
+            }
         } else {
             n = wf_html_reduce((const char*)g_body, g_res.body_len, &base, src, src_max, &st);
         }
@@ -231,6 +280,11 @@ static int page_fetch(const char* url, const wf_fetch_req_t* req, char* src, int
             scat(status, st_max, " sections "); scat_int(status, st_max, g_sec.n);
             scat(status, st_max, " forms "); scat_int(status, st_max, g_forms.nforms);
             scat(status, st_max, " fields "); scat_int(status, st_max, g_forms.nfields);
+            if (g_img_on) {
+                scat(status, st_max, " images "); scat_int(status, st_max, g_img_st.shown);
+                scat(status, st_max, "/"); scat_int(status, st_max, g_img_st.found);
+                scat(status, st_max, " favicon "); scat(status, st_max, g_wi.atlas.slot[0].w ? "ok" : "none");
+            }
         }
     }
     return n;
@@ -251,7 +305,10 @@ int shell_page_current(void) { return g_page_ok ? g_cur : 0; }
 int shell_page_section(int k, char* src, int src_max) {
     if (!g_page_ok || k < 0 || k >= g_sec.n) return -1;
     g_cur = k;
-    return wf_section_render(g_full, g_full_n, &g_sec, k, &g_forms, src, src_max);
+    {
+        int n = wf_section_render(g_full, g_full_n, &g_sec, k, &g_forms, src, src_max);
+        return n > 0 ? with_images(src, n, src_max) : n;   /* Lot 72 */
+    }
 }
 
 /* "mohhdy-form:f:N" focuses field N (0), "mohhdy-form:s:N" asks to submit

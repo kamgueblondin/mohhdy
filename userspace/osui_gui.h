@@ -62,6 +62,10 @@ typedef struct {
     int (*submit)(int n, char *src, int src_max, char *final_url, int url_max, char *status, int st_max);
     int (*forms_list)(char *out, int cap);
     int (*find)(const char *text, int from, int *count);   /* Lot 71: section of a match, or -1 */
+    /* Lot 72: images of the shown page (wf_webimg): the atlas sent to the
+     * compositor when it changes, and the slot sizes for the engine */
+    const os_fb_webimg_t *(*atlas)(void);
+    int (*atlas_dims)(void *ctx, int slot, int *w, int *h);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
 /* "web-open URL|FILE", "web-forms", "web-section N|next|prev", "web-input N TEXT", "web-submit [N]",
