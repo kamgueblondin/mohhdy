@@ -1,5 +1,6 @@
 /* wsearch.c - Lot 69: Internet search without JavaScript (see wsearch.h). */
 #include "wsearch.h"
+#include "../include/os_charset.h"
 
 static int w_len(const char *s) { int n = 0; while (s && s[n]) n++; return n; }
 static int w_low(int c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
@@ -333,8 +334,21 @@ int wsearch_format(const wsearch_page_t *pg, char *o, int cap) {
 }
 
 /* text escaped for HTML */
+/* Lot 71: the results are UTF-8 (console); the page for the web engine
+ * gets display bytes (include/os_charset.h) so accents are drawn. */
 static int cat_esc(char *o, int cap, int n, const char *s) {
+    int sl = w_len(s);
     for (; s && *s && n < cap - 7; s++) {
+        if ((unsigned char)*s >= 0x80u && os_utf8_seq_ok(s, sl, 0)) {
+            int k = 0;
+            uint32_t cp = os_utf8_next(s, sl, &k);
+            unsigned char b = os_cp1252_from_cp(cp);
+            if (b) { o[n++] = (char)b; o[n] = 0; }
+            s += k - 1;
+            sl -= k;
+            continue;
+        }
+        sl--;
         if (*s == '<') n = w_cat(o, cap, n, "&lt;");
         else if (*s == '>') n = w_cat(o, cap, n, "&gt;");
         else if (*s == '&') n = w_cat(o, cap, n, "&amp;");

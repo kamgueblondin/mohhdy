@@ -118,7 +118,9 @@ int p2p_flow_on_ack(p2p_flow_t* f, uint32_t ctr, uint32_t now_us) {
     return 1;
 }
 
-int p2p_flow_expire(p2p_flow_t* f, uint32_t now_us) {
+int p2p_flow_expire(p2p_flow_t* f, uint32_t now_us) { return p2p_flow_expire_list(f, now_us, 0, 0); }
+
+int p2p_flow_expire_list(p2p_flow_t* f, uint32_t now_us, uint32_t* lost, int cap) {
     uint32_t i, to;
     int n = 0;
     if (!f) return 0;
@@ -128,6 +130,7 @@ int p2p_flow_expire(p2p_flow_t* f, uint32_t now_us) {
         f->pkt[i].used = 0;
         f->inflight--;
         f->lost++;
+        if (lost && n < cap) lost[n] = f->pkt[i].ctr;
         n++;
     }
     if (n) {

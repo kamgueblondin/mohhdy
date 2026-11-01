@@ -320,6 +320,8 @@ void arm_main(void) {
         kputs((m & ARM_PORT_AES_GCM) ? "arm aes-gcm self-test ok (kernel/aes_gcm.c)\n" : "arm aes-gcm self-test FAILED\n");
         kputs((m & ARM_PORT_EDID) ? "arm edid self-test ok 1280x800 325x203mm 15.1in (kernel/edid.c)\n" : "arm edid self-test FAILED\n");
         kputs((m & ARM_PORT_FLOW) ? "arm p2p flow self-test ok rate 62500 backoff 54687 (userspace/p2p_flow.c)\n" : "arm p2p flow self-test FAILED\n");
+        kputs((m & ARM_PORT_RTX) ? "arm p2p rtx self-test ok resent 1 dedup ok (userspace/p2p_rtx.c)\n" : "arm p2p rtx self-test FAILED\n");
+        kputs((m & ARM_PORT_CHARSET) ? "arm charset self-test ok utf8 to cp1252 (include/os_charset.h)\n" : "arm charset self-test FAILED\n");
     }
     gic_init();
     timer_arm();

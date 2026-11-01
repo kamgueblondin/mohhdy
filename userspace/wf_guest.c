@@ -285,6 +285,18 @@ static wf_guest_log_fn g_log_fn;
 static void g_log(void* net, const char* line) { (void)net; if (g_log_fn) g_log_fn(line); }
 
 int wf_guest_fetch(const char* url, uint8_t* body, int cap, wf_fetch_result_t* res, wf_guest_log_fn log) {
+    return wf_guest_fetch_ex(url, 0, body, cap, res, log);
+}
+
+static wf_cookie_jar_t g_jar;
+static int g_jar_ready;
+wf_cookie_jar_t* wf_guest_cookies(void) {
+    if (!g_jar_ready) { wf_cookie_jar_init(&g_jar); g_jar_ready = 1; }
+    return &g_jar;
+}
+
+int wf_guest_fetch_ex(const char* url, const wf_fetch_req_t* req, uint8_t* body, int cap, wf_fetch_result_t* res,
+                      wf_guest_log_fn log) {
     static gnet_t g;
     static wf_fetch_env_t e;
     int i;
@@ -300,11 +312,12 @@ int wf_guest_fetch(const char* url, uint8_t* body, int cap, wf_fetch_result_t* r
     e.trust = &g_trust;
     e.now = wf_guest_now();
     e.max_redirects = WF_FETCH_MAX_REDIRECTS;
+    e.jar = wf_guest_cookies();   /* Lot 71: shared by fetch, the browser, forms and search */
     if (ifc_get(&g.ifc) != 0) {
         const char* m = "no network interface (no DHCP lease: boot with -netdev user + ne2k_isa)";
         for (i = 0; i < (int)sizeof(res->err) - 1 && m[i]; i++) res->err[i] = m[i];
         res->err[i] = 0;
         return -1;
     }
-    return wf_fetch(&e, url, body, cap, res);
+    return wf_fetch_ex(&e, url, req, body, cap, res);
 }

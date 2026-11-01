@@ -8,6 +8,15 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 71 (forms, Latin-1, long pages, full-screen window, search fallbacks, retransmission)
+
+- HTML forms in the shell and the GUI (one code path): GET and POST, page charset encoding, click/type/Enter in the GUI, checkboxes, radios and selects. The google.com form submits correctly, but Google answers with a JavaScript-only page (`blocked js-required`).
+- Cookies: bounded session jar (`wf_cookie.c`, `cookies`), sent after a login redirect, values never shown, memory only.
+- Latin-1 text: header charset wins over meta, accents drawn by the web engine and the console. Long pages are read section by section. Proof `make qemu-lot71`.
+- The full-screen web/editor window restores, moves, resizes and maximizes. The chat width no longer follows a resized pane (root cause fixed).
+- Search: `search-config` (SearXNG URL, Brave/Google keys in `/persist`), fallback chain ending with the Wikipedia API. Public engines bot-check this IP; a private engine must be configured by the user.
+- US-068/US-073 partial: lost messages and KV puts are resent (`p2p_rtx`), delivered once. US-076 partial: ARM self-tests add `p2p_rtx.c` and `os_charset.h`. US-080/081 unchanged, US-078/US-097 still simule. Details: [lot71_plan.md](lot71_plan.md).
+
 ## Lot 69 (font sizes, Internet search, form factors applied, per-peer pacing, ARM)
 
 - US-031 partial: CSS `font-size` per element (h1-h6, px/em/rem/%/pt, keywords) and font-relative `line-height`; each text item carries its scale. Sizes under 16 px stay on the 8 px cell (single bitmap font).

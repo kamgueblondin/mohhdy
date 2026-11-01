@@ -1,0 +1,5 @@
+{"query": "mohhdy os", "number_of_results": 0, "results": [
+ {"url": "https://example.org/a", "title": "R\u00e9sultat \"un\"", "content": "Texte \u00e0 lire <b>gras</b>", "engine": "brave", "parsed_url": ["https", "example.org", "/a", "", "", ""], "score": 2.5, "positions": [1, 2], "publishedDate": null},
+ {"url": "https://example.org/b", "title": "Emoji \ud83d\ude00 et \u0153uvre", "content": "", "engine": "ddg", "score": 1, "category": "general"},
+ {"title": "pas d'url", "content": "ignor\u00e9"}
+], "answers": [], "corrections": [], "infoboxes": [{"infobox": "x", "urls": [{"title": "lien infobox", "url": "https://example.org/info"}]}], "suggestions": ["mohhdy kernel"], "unresponsive_engines": []}

@@ -341,11 +341,29 @@ def main():
         wait_log(b, "p2p kv replicated mode=eco v1 from alpha", 60)
         if "mode=eco" in log(c, start_c):
             raise RuntimeError("gamma received mode=eco during the hub cut")
+        # Lot 71: alpha resends the lost put (p2p_rtx) at most 3 times while
+        # the cut lasts, then gives it up; anti-entropy must deliver it.
+        for _round in range(30):
+            cmd(a, "p2p-poll 5", "p2p-poll ok", timeout=30)
+            start_fl = cmd(a, "p2p-flow gamma", "p2p flow peer gamma ")
+            m = re.search(r"rtx kept \d+ acked \d+ resent (\d+) gave_up (\d+)", log(a, start_fl))
+            if m and int(m.group(2)) >= 1:
+                break
+        else:
+            raise RuntimeError("alpha did not give up the put during the cut: %s" % log(a, start_fl)[-400:])
+        if int(m.group(1)) < 3:
+            raise RuntimeError("alpha gave up before 3 resends: %s" % m.group(0))
+        say("scenario 2: put to gamma resent %s times during the cut, then given up" % m.group(1))
         hub.heal_pair(a["mac"], c["mac"])
         hub.heal_pair(b["mac"], c["mac"])
         cmd(c, "p2p-poll 5", "p2p-poll ok", timeout=30)
         cmd(c, "p2p-sync alpha", "p2p-sync ok asked 1")
-        wait_log(c, "p2p kv synced mode=eco v1 from alpha", 60, start_c)
+        # Lot 71: the longer cut (rtx give-up) lets the Lot 66 heal
+        # anti-entropy with beta win the race; any anti-entropy source is
+        # valid, a plain replicated (rtx) delivery is not.
+        wait_log(c, "p2p kv synced mode=eco v1 from ", 60, start_c)
+        if "p2p kv replicated mode=eco" in log(c, start_c):
+            raise RuntimeError("gamma got mode=eco by replication, not anti-entropy")
         wait_log(c, "p2p sync from alpha items ", 60, start_c)
         cmd(c, "p2p-kv", "p2p kv ok 2")
         cmd(a, "p2p-get nokey", "p2p-get pending asked 2")

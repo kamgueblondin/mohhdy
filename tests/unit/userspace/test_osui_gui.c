@@ -5,6 +5,7 @@
 #include "../../framework/test_kernel.h"
 #include "osui_runtime.h"
 #include "osui_gui.h"
+#include "webeng.h"
 #include "osui_tools.h"
 #include "os_syscalls.h"
 #include "osui_ide.h"
@@ -1056,6 +1057,137 @@ static void test_lot69_browser_pane_address_line(void) {
     TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web"));
 }
 
+/* Lot 71: a fetched page shown by sections, its form field focused by a
+ * click, typed into, and submitted with Enter, through the page ops (the
+ * shell side, userspace/shell_fetch.c, is tested in test_wf_form and
+ * test_wf_section). */
+we_doc_t *osui_gui_web_doc(void);
+static int g_m_sec, g_m_keys, g_m_submits, g_m_focus = -1, g_m_set;
+static char g_m_val[64];
+static int m_section_src(int k, char *src, int cap) {
+    char tmp[600];
+    int n;
+    n = snprintf(tmp, sizeof(tmp),
+                 "<html><head><title>Sec %d</title></head><body><h1>Section %d</h1>"
+                 "<p><a href=\"mohhdy-form:f:0\">[ %s%s ]</a> <a href=\"mohhdy-form:s:1\">[ Envoyer ]</a></p>"
+                 "<p>texte</p></body></html>", k + 1, k + 1, g_m_val, g_m_focus == 0 ? "_" : "");
+    if (n >= cap) return -1;
+    memcpy(src, tmp, (size_t)n + 1);
+    return n;
+}
+static int m_fetch(const char *url, char *src, int src_max, char *final_url, int url_max, char *status, int st_max) {
+    (void)url_max; (void)st_max;
+    snprintf(final_url, 64, "%s", url);
+    snprintf(status, 64, "osui web fetch ok fake");
+    g_m_sec = 0;
+    return m_section_src(0, src, src_max);
+}
+static int m_sections(void) { return 2; }
+static int m_current(void) { return g_m_sec; }
+static int m_section(int k, char *src, int cap) { g_m_sec = k; return m_section_src(k, src, cap); }
+static int m_form_link(const char *href) {
+    if (strcmp(href, "mohhdy-form:f:0") == 0) { g_m_focus = 0; return 0; }
+    if (strcmp(href, "mohhdy-form:s:1") == 0) return 1;
+    return -1;
+}
+static int m_form_key(int key) {
+    size_t l = strlen(g_m_val);
+    if (g_m_focus < 0) return -1;
+    g_m_keys++;
+    if (key == '\n') return 1;
+    if (key == OS_VGA_KEY_ESC) { g_m_focus = -1; return 2; }
+    if (key == '\b') { if (l) g_m_val[l - 1] = 0; return 0; }
+    if (key >= 0x20 && l + 1 < sizeof(g_m_val)) { g_m_val[l] = (char)key; g_m_val[l + 1] = 0; return 0; }
+    return -1;
+}
+static int m_form_set(int n, const char *v) { if (n != 0) return -1; snprintf(g_m_val, sizeof(g_m_val), "%s", v); g_m_set++; return 0; }
+static int m_submit(int n, char *src, int src_max, char *final_url, int url_max, char *status, int st_max) {
+    (void)n; (void)url_max; (void)st_max;
+    g_m_submits++;
+    g_m_focus = -1;
+    snprintf(final_url, 96, "https://example.com/search?q=%s", g_m_val);
+    snprintf(status, 64, "osui web fetch ok fake method GET");
+    return snprintf(src, (size_t)src_max, "<html><head><title>Resultats</title></head><body><p>ok %s</p></body></html>", g_m_val);
+}
+static int m_flist(char *out, int cap) { return snprintf(out, (size_t)cap, "osui web forms 1 fields 2\n"); }
+static int find_link(const char *want, int *x, int *y) {
+    char href[128];
+    int px, py;
+    for (py = 0; py < 300; py += 2)
+        for (px = 0; px < 600; px += 2)
+            if (we_link_at(osui_gui_web_doc(), px, py, href, (int)sizeof(href)) > 0 && strcmp(href, want) == 0) {
+                *x = px; *y = py; return 1;
+            }
+    return 0;
+}
+static void test_lot71_web_sections_and_form(void) {
+    static const osui_web_page_ops_t ops = { m_sections, m_current, m_section, m_form_link, m_form_key,
+                                             m_form_set, m_submit, m_flist };
+    char ev[64];
+    int x, y, i;
+    setup();
+    osui_gui_set_web_fetch(m_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    g_m_val[0] = 0; g_m_focus = -1; g_m_keys = g_m_submits = g_m_set = 0;
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://example.com/", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_active());
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web page sections 2"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-section", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web section 1/2"));
+    /* click the field: focus, then typing goes to it, not to the input line */
+    TEST_ASSERT(find_link("mohhdy-form:f:0", &x, &y));
+    snprintf(ev, sizeof(ev), "web click %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_event(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form focus f:0"));
+    TEST_ASSERT_EQUAL(0, g_m_focus);
+    osui_gui_set_input("");
+    for (i = 0; "mohhdy"[i]; i++) osui_gui_feed_key("mohhdy"[i], g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('x', g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('\b', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("mohhdy", g_m_val);
+    TEST_ASSERT_EQUAL_STRING("", osui_gui_input());
+    TEST_ASSERT_EQUAL_STRING("Sec 1", osui_gui_web_doc()->title);
+    /* Enter submits; the answer page is shown with its final URL */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, g_m_submits);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form submit osui web fetch ok fake method GET"));
+    TEST_ASSERT_EQUAL_STRING("Resultats", osui_gui_web_doc()->title);
+    /* console path: same code (web-input then web-submit) */
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://example.com/", g_out, (int)sizeof(g_out)));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-input 0 caf\xe9", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web input ok"));
+    TEST_ASSERT_EQUAL_STRING("caf\xe9", g_m_val);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-forms", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web forms 1 fields 2"));
+    osui_gui_web_command("web-submit", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(2, g_m_submits);
+    /* sections: web-section 2, and DOWN past the end of section 1 */
+    osui_gui_web_command("web-open https://example.com/", g_out, (int)sizeof(g_out));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-section 2", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web section 2/2"));
+    TEST_ASSERT_EQUAL_STRING("Sec 2", osui_gui_web_doc()->title);
+    osui_gui_web_command("web-section 1", g_out, (int)sizeof(g_out));
+    memset(g_out, 0, sizeof(g_out));
+    for (i = 0; i < 40 && g_m_sec == 0; i++) osui_gui_feed_key(OS_VGA_KEY_DOWN, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, g_m_sec);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web section 2/2"));
+    for (i = 0; i < 40 && g_m_sec == 1; i++) osui_gui_feed_key(OS_VGA_KEY_UP, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, g_m_sec);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-section 9", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "error=out_of_range"));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_web_page_ops(0);
+    osui_gui_set_web_fetch(0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_lot12_vfs_and_browser_inspection_views);
@@ -1086,6 +1218,7 @@ int main(void) {
     RUN_TEST(test_gui_viewer_pixels_and_editor_size);
     RUN_TEST(test_gui_parity_panels);
     RUN_TEST(test_gui_web_links_history);
+    RUN_TEST(test_lot71_web_sections_and_form);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

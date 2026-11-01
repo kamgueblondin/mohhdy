@@ -5,13 +5,27 @@
 #include "shell_fetch.h"
 #include "wf_guest.h"
 #include "wf_html.h"
+#include "wf_entity.h"
+#include "wf_form.h"
+#include "wf_section.h"
 #include "shell_search.h"
+#include "../include/os_syscalls.h"
 
 void print_string(const char* s);
 
 static uint8_t g_body[256 * 1024];
 static wf_fetch_result_t g_res;
 static char g_text[8192];
+/* Lot 71: the whole reduced page of the GUI (shown by sections) and its
+ * forms. Bounded: 192 KiB of reduced HTML, WF_SECTION_MAX sections. */
+#define PAGE_FULL_MAX (192 * 1024)
+#define PAGE_NODE_BUDGET 6000
+static char g_full[PAGE_FULL_MAX];
+static int g_full_n;
+static wf_sections_t g_sec;
+static wf_form_page_t g_forms;
+static int g_cur;
+static int g_page_ok;
 
 static int s_pre(const char* s, const char* p) { while (*p && *s == *p) { s++; p++; } return *p == 0; }
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
@@ -29,6 +43,7 @@ static void scat_int(char* d, int max, int v) {
     while (k) { char c[2]; c[0] = t[--k]; c[1] = 0; scat(d, max, c); }
 }
 
+static int ctlen(const char* s) { int n = 0; while (s[n]) n++; return n; }
 static int g_verbose;
 static void log_line(const char* l) {
     if (!g_verbose) return;
@@ -128,10 +143,11 @@ int shell_fetch_line(const char* line) {
     g_body[g_res.body_len] = 0;
     if (!raw && is_html(&g_res, g_body, g_res.body_len)) {
         wf_html_stats_t st;
+        wf_html_set_charset(wf_charset_header(g_res.content_type, ctlen(g_res.content_type)));
         static char reduced[16384];
         (void)wf_html_reduce((const char*)g_body, g_res.body_len, 0, reduced, (int)sizeof(reduced), &st);
         if (st.title[0]) { print_string("fetch title "); print_string(st.title); print_string("\n"); }
-        (void)wf_html_text(reduced, st.out_bytes, g_text, max_show + 1 < (int)sizeof(g_text) ? max_show + 1 : (int)sizeof(g_text));
+        (void)wf_html_text_display(reduced, st.out_bytes, g_text, max_show + 1 < (int)sizeof(g_text) ? max_show + 1 : (int)sizeof(g_text));
     } else {
         int n = g_res.body_len < max_show ? g_res.body_len : max_show;
         for (i = 0; i < n; i++) {
@@ -146,7 +162,10 @@ int shell_fetch_line(const char* line) {
     return 0;
 }
 
-int shell_fetch_page(const char* url, char* src, int src_max, char* final_url, int url_max, char* status, int st_max) {
+/* Lot 71: GET or a form request (POST body) for the GUI. The reduced page
+ * keeps its forms; section 0 is written into src. */
+static int page_fetch(const char* url, const wf_fetch_req_t* req, char* src, int src_max, char* final_url, int url_max,
+                      char* status, int st_max) {
     static char line_out[600];
     static wf_url_t base;
     wf_html_stats_t st;
@@ -154,8 +173,11 @@ int shell_fetch_page(const char* url, char* src, int src_max, char* final_url, i
     g_verbose = 0;
     if (status && st_max > 0) status[0] = 0;
     /* Lot 69: "search:QUERY" is the result page of a search */
-    if (s_pre(url, "search:")) return shell_search_page(url + 7, src, src_max, final_url, url_max, status, st_max);
-    if (wf_guest_fetch(url, g_body, (int)sizeof(g_body) - 1, &g_res, 0) != 0) {
+    if (!req && s_pre(url, "search:")) {
+        g_page_ok = 0;
+        return shell_search_page(url + 7, src, src_max, final_url, url_max, status, st_max);
+    }
+    if (wf_guest_fetch_ex(url, req, g_body, (int)sizeof(g_body) - 1, &g_res, 0) != 0) {
         if (status) {
             scat(status, st_max, "osui web fetch error=");
             scat(status, st_max, g_res.err[0] ? g_res.err : "failed");
@@ -167,9 +189,19 @@ int shell_fetch_page(const char* url, char* src, int src_max, char* final_url, i
     for (i = 0; i < url_max - 1 && g_res.url[i]; i++) final_url[i] = g_res.url[i];
     final_url[i] = 0;
     g_body[g_res.body_len] = 0;
+    g_page_ok = 0;
     if (wf_url_parse(g_res.url, &base) != 0) return -1;
     if (is_html(&g_res, g_body, g_res.body_len)) {
-        n = wf_html_reduce((const char*)g_body, g_res.body_len, &base, src, src_max, &st);
+        wf_html_set_charset(wf_charset_header(g_res.content_type, ctlen(g_res.content_type)));
+        g_full_n = wf_html_reduce_ex((const char*)g_body, g_res.body_len, &base, g_full, (int)sizeof(g_full), &st,
+                                     PAGE_NODE_BUDGET, &g_forms);
+        if (g_full_n > 0 && wf_section_index(g_full, g_full_n, &g_sec) > 0) {
+            g_page_ok = 1;
+            g_cur = 0;
+            n = wf_section_render(g_full, g_full_n, &g_sec, 0, &g_forms, src, src_max);
+        } else {
+            n = wf_html_reduce((const char*)g_body, g_res.body_len, &base, src, src_max, &st);
+        }
     } else {
         /* text/plain and others: shown escaped in a <pre> */
         int k = 0, lim = g_res.body_len;
@@ -193,7 +225,140 @@ int shell_fetch_page(const char* url, char* src, int src_max, char* final_url, i
         scat(status, st_max, "osui web fetch ok ");
         scat(status, st_max, line_out);
         scat(status, st_max, " reduced ");
-        scat_int(status, st_max, n);
+        scat_int(status, st_max, g_page_ok ? g_full_n : n);
+        if (req && req->method) { scat(status, st_max, " method "); scat(status, st_max, req->method); }
+        if (g_page_ok) {
+            scat(status, st_max, " sections "); scat_int(status, st_max, g_sec.n);
+            scat(status, st_max, " forms "); scat_int(status, st_max, g_forms.nforms);
+            scat(status, st_max, " fields "); scat_int(status, st_max, g_forms.nfields);
+        }
     }
     return n;
+}
+
+int shell_fetch_page(const char* url, char* src, int src_max, char* final_url, int url_max, char* status, int st_max) {
+    return page_fetch(url, 0, src, src_max, final_url, url_max, status, st_max);
+}
+
+int shell_page_sections(void) { return g_page_ok ? g_sec.n : 0; }
+/* Lot 71: "web-find": section of the first match at or after from */
+int shell_page_find(const char* text, int from, int* count) {
+    if (count) *count = 0;
+    if (!g_page_ok) return -1;
+    return wf_section_find(g_full, g_full_n, &g_sec, text, from, count);
+}
+int shell_page_current(void) { return g_page_ok ? g_cur : 0; }
+int shell_page_section(int k, char* src, int src_max) {
+    if (!g_page_ok || k < 0 || k >= g_sec.n) return -1;
+    g_cur = k;
+    return wf_section_render(g_full, g_full_n, &g_sec, k, &g_forms, src, src_max);
+}
+
+/* "mohhdy-form:f:N" focuses field N (0), "mohhdy-form:s:N" asks to submit
+ * with button N (1), other links -1. */
+int shell_page_form_link(const char* href) {
+    int n, t;
+    if (!g_page_ok) return -1;
+    t = wf_form_href(href, &n);
+    if (t <= 0 || n < 0 || n >= g_forms.nfields) return -1;
+    if (g_forms.field[n].type == WF_FIELD_SUBMIT) { g_forms.focus = n; return 1; }
+    /* Lot 71: a checkbox, radio or select acts on the click */
+    if (wf_form_is_toggle(&g_forms, n)) {
+        if (wf_form_activate(&g_forms, n) != 0) return -1;
+        (void)wf_form_focus(&g_forms, n);   /* Tab, Space and arrows go on from here */
+        return 2;
+    }
+    (void)wf_form_focus(&g_forms, n);
+    return 0;
+}
+
+/* Key in the focused field: 0 changed (render again), 1 Enter (submit),
+ * 2 focus left (ESC), -1 not used (no focused field). */
+int shell_page_form_key(int key) {
+    if (!g_page_ok || g_forms.focus < 0) return -1;
+    if (key == OS_VGA_KEY_ESC) { g_forms.focus = -1; return 2; }
+    if (key == '\n' || key == '\r') return 1;
+    if (key == '\t') { (void)wf_form_focus_next(&g_forms, 1); return 0; }
+    if (key == '\b') { (void)wf_form_backspace(&g_forms); return 0; }
+    if (key == OS_TERM_KEY_DEL) { (void)wf_form_delete(&g_forms); return 0; }
+    if (key == OS_VGA_KEY_LEFT) { (void)wf_form_move(&g_forms, -1); return 0; }
+    if (key == OS_VGA_KEY_RIGHT) { (void)wf_form_move(&g_forms, 1); return 0; }
+    if (key == OS_TERM_KEY_HOME) { (void)wf_form_move(&g_forms, -1000); return 0; }
+    if (key == OS_TERM_KEY_END) { (void)wf_form_move(&g_forms, 1000); return 0; }
+    if (key >= 0x20 && key <= 0xff && key != 0x7f) { (void)wf_form_insert(&g_forms, (char)key); return 0; }
+    return -1;
+}
+
+/* Lot 71: "web-forms": one line per form and per visible field. */
+int shell_page_forms_list(char* out, int cap) {
+    int i;
+    out[0] = 0;
+    if (!g_page_ok) { scat(out, cap, "osui web forms none\n"); return 0; }
+    scat(out, cap, "osui web forms "); scat_int(out, cap, g_forms.nforms);
+    scat(out, cap, " fields "); scat_int(out, cap, g_forms.nfields);
+    scat(out, cap, " dropped "); scat_int(out, cap, g_forms.dropped); scat(out, cap, "\n");
+    for (i = 0; i < g_forms.nforms; i++) {
+        scat(out, cap, "form "); scat_int(out, cap, i);
+        scat(out, cap, g_forms.form[i].method == WF_METHOD_POST ? " POST " : " GET ");
+        scat(out, cap, g_forms.form[i].action);
+        scat(out, cap, "\n");
+    }
+    for (i = 0; i < g_forms.nfields; i++) {
+        const wf_field_t* f = &g_forms.field[i];
+        static const char* const tn[9] = { "?", "text", "password", "textarea", "hidden", "submit", "checkbox", "radio", "select" };
+        scat(out, cap, "field "); scat_int(out, cap, i);
+        scat(out, cap, " form "); scat_int(out, cap, f->form);
+        scat(out, cap, " "); scat(out, cap, tn[f->type <= 8 ? f->type : 0]);
+        scat(out, cap, " name="); scat(out, cap, f->name);
+        if (f->type != WF_FIELD_PASSWORD) { scat(out, cap, " value="); scat(out, cap, f->value); }
+        if (f->type == WF_FIELD_CHECKBOX || f->type == WF_FIELD_RADIO) scat(out, cap, f->checked ? " checked" : " unchecked");
+        if (f->type == WF_FIELD_SELECT) {
+            int k;
+            scat(out, cap, " options");
+            for (k = 0; k < f->nopt; k++) {
+                const char* ov = wf_form_option_value(&g_forms, i, k);
+                scat(out, cap, k == f->sel ? " *" : " ");
+                scat(out, cap, ov && ov[0] ? ov : "\"\"");
+            }
+        }
+        if (g_forms.focus == i) scat(out, cap, " focus");
+        scat(out, cap, "\n");
+    }
+    return 0;
+}
+
+/* Sets field n (console "web-input"); 0 or -1. */
+int shell_page_form_set(int n, const char* value) {
+    if (!g_page_ok || n < 0 || n >= g_forms.nfields) return -1;
+    if (wf_form_set(&g_forms, n, value) != 0) return -1;
+    g_forms.focus = wf_form_is_toggle(&g_forms, n) ? -1 : n;
+    return 0;
+}
+
+/* Submits the form of the focused field (or field n when n >= 0): GET
+ * builds the URL, POST sends the urlencoded body. Same output as
+ * shell_fetch_page for the new page. */
+int shell_page_submit(int n, char* src, int src_max, char* final_url, int url_max, char* status, int st_max) {
+    static wf_form_submit_t sub;
+    static char url[WF_FORM_SUBMIT_MAX];
+    wf_fetch_req_t rq;
+    int f, submitter = -1, i;
+    if (status && st_max > 0) status[0] = 0;
+    if (!g_page_ok) { if (status) scat(status, st_max, "osui web form error=no_form"); return -1; }
+    if (n < 0) n = g_forms.focus;
+    if (n < 0 || n >= g_forms.nfields) n = wf_form_first_text(&g_forms, -1);
+    if (n < 0) { if (status) scat(status, st_max, "osui web form error=no_form"); return -1; }
+    f = g_forms.field[n].form;
+    if (g_forms.field[n].type == WF_FIELD_SUBMIT) submitter = n;
+    if (wf_form_submit(&g_forms, f, submitter, &sub) != 0) {
+        if (status) scat(status, st_max, "osui web form error=submit_refused (multipart or too long)");
+        return -1;
+    }
+    for (i = 0; sub.url[i] && i < (int)sizeof(url) - 1; i++) url[i] = sub.url[i];
+    url[i] = 0;
+    if (sub.method == WF_METHOD_POST) {
+        rq.method = "POST"; rq.body = sub.body; rq.body_len = sub.body_len; rq.ctype = sub.content_type; rq.extra = 0;
+        return page_fetch(url, &rq, src, src_max, final_url, url_max, status, st_max);
+    }
+    return page_fetch(url, 0, src, src_max, final_url, url_max, status, st_max);
 }

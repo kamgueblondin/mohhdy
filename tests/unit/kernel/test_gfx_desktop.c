@@ -1290,6 +1290,112 @@ static void test_lot69_every_window_shared_chrome(void) {
     vga_desktop_set(0);
 }
 
+/* Lot 71: the full-screen web / editor window restores, moves, resizes
+ * and maximizes again with the shared buttons; the page origin and the
+ * back / forward buttons follow the placed window. */
+static void test_lot71_full_window_restore_resize(void) {
+    static const uint8_t full[2] = { OS_FB_PANE_WEB, OS_FB_PANE_IDE };
+    gfx_desktop_layout_t l;
+    gfx_rect_t f0, f1, f2, f3, nav;
+    gfx_wm_rect_t r;
+    int k, x, y, n, ox, oy, pw, ph, q;
+    vga_desktop_set(1);
+    for (k = 0; k < 2; k++) {
+        gfx_desktop_wm_reset();
+        blank_scene();
+        g_scene.version = 7;
+        g_scene.app_focus = 0xFF;
+        g_scene.pane = full[k];
+        redraw(&l);
+        q = l.chrome_q < 4 ? 4 : l.chrome_q;
+        n = gfx_wm_btn(GFX_DESKTOP_PANE_TITLE_H, q);
+        TEST_ASSERT(gfx_desktop_full_maximized());
+        gfx_desktop_full_rect(W, H, &f0);
+        TEST_ASSERT_EQUAL(8, f0.x);
+        TEST_ASSERT_EQUAL(l.bar_h + 8, f0.y);
+        TEST_ASSERT_EQUAL(W - 16, f0.w);
+        gfx_desktop_web_origin(W, H, &ox, &oy, &pw, &ph);
+        TEST_ASSERT_EQUAL(16, ox);
+        TEST_ASSERT_EQUAL(l.bar_h + 48, oy);
+        TEST_ASSERT_EQUAL(W - 32, pw);
+        /* maximize button: restore to a smaller centered window */
+        r.x = f0.x; r.y = f0.y; r.w = f0.w; r.h = f0.h;
+        gfx_wm_button_pos(r, GFX_DESKTOP_PANE_TITLE_H, q, GFX_WM_HIT_MAX, &x, &y);
+        click_at(x + n / 2, y + n / 2);
+        redraw(&l);
+        TEST_ASSERT(!gfx_desktop_full_maximized());
+        gfx_desktop_full_rect(W, H, &f1);
+        TEST_ASSERT(f1.w < f0.w && f1.h < f0.h && f1.x > f0.x && f1.y > f0.y);
+        gfx_desktop_web_origin(W, H, &ox, &oy, &pw, &ph);
+        TEST_ASSERT_EQUAL(f1.x + 8, ox);
+        TEST_ASSERT_EQUAL(f1.w - 16, pw);
+        gfx_desktop_web_nav(W, H, 0, &nav);
+        TEST_ASSERT_EQUAL(f1.x + 8, nav.x);
+        TEST_ASSERT_EQUAL(f1.y + 6, nav.y);
+        /* the close button followed the window */
+        r.x = f1.x; r.y = f1.y; r.w = f1.w; r.h = f1.h;
+        gfx_wm_button_pos(r, GFX_DESKTOP_PANE_TITLE_H, q, GFX_WM_HIT_CLOSE, &x, &y);
+        TEST_ASSERT_EQUAL(x, l.pane_win.traffic.x);
+        /* title drag moves it */
+        drag(f1.x + 200, f1.y + 8, f1.x + 150, f1.y + 28);
+        redraw(&l);
+        gfx_desktop_full_rect(W, H, &f2);
+        TEST_ASSERT_EQUAL(f1.x - 50, f2.x);
+        TEST_ASSERT_EQUAL(f1.y + 20, f2.y);
+        TEST_ASSERT_EQUAL(f1.w, f2.w);
+        /* the grip resizes it, the web view follows */
+        drag(f2.x + f2.w - 3, f2.y + f2.h - 3, f2.x + f2.w - 83, f2.y + f2.h - 43);
+        redraw(&l);
+        gfx_desktop_full_rect(W, H, &f3);
+        TEST_ASSERT_EQUAL(f2.w - 80, f3.w);
+        TEST_ASSERT_EQUAL(f2.h - 40, f3.h);
+        gfx_desktop_web_origin(W, H, &ox, &oy, &pw, &ph);
+        TEST_ASSERT_EQUAL(f3.w - 16, pw);
+        /* maximize again: the Lot 69 place */
+        r.x = f3.x; r.y = f3.y; r.w = f3.w; r.h = f3.h;
+        gfx_wm_button_pos(r, GFX_DESKTOP_PANE_TITLE_H, q, GFX_WM_HIT_MAX, &x, &y);
+        click_at(x + n / 2, y + n / 2);
+        redraw(&l);
+        TEST_ASSERT(gfx_desktop_full_maximized());
+        gfx_desktop_full_rect(W, H, &f1);
+        TEST_ASSERT_EQUAL(f0.x, f1.x);
+        TEST_ASSERT_EQUAL(f0.w, f1.w);
+        TEST_ASSERT_EQUAL(f0.h, f1.h);
+    }
+    gfx_desktop_wm_reset();
+    vga_desktop_set(0);
+}
+
+/* Lot 71: resizing or moving the pane keeps the floating chat width
+ * (it used to follow the room right of the pane on every drag). */
+static void test_lot71_chat_width_stable_on_pane_resize(void) {
+    static const int sizes[3][2] = { { 1024, 768 }, { 1280, 720 }, { 800, 600 } };
+    gfx_desktop_layout_t l, m;
+    int k, gx, gy;
+    vga_desktop_set(1);
+    for (k = 0; k < 3; k++) {
+        gfx_desktop_wm_reset();
+        blank_scene();
+        g_scene.chat_mode = OS_FB_CHAT_FLOAT;
+        g_scene.pane = OS_FB_PANE_BROWSER;
+        gfx_desktop_get_layout(&g_scene, sizes[k][0], sizes[k][1], &l);
+        if (sizes[k][0] != W) continue;   /* the mouse runs on the W x H test screen */
+        redraw(&l);
+        gx = l.pane_win.box.x + l.pane_win.box.w - 3;
+        gy = l.pane_win.box.y + l.pane_win.box.h - 3;
+        drag(gx, gy, gx + 120, gy);
+        redraw(&m);
+        TEST_ASSERT_EQUAL(l.pane_win.box.w + 120, m.pane_win.box.w);
+        TEST_ASSERT_EQUAL(l.chat_win.box.w, m.chat_win.box.w);
+        TEST_ASSERT_EQUAL(l.chat_win.box.h, m.chat_win.box.h);
+        drag(gx + 120, gy, gx - 100, gy);
+        redraw(&m);
+        TEST_ASSERT_EQUAL(l.chat_win.box.w, m.chat_win.box.w);
+    }
+    gfx_desktop_wm_reset();
+    vga_desktop_set(0);
+}
+
 static void test_lot69_browser_address_bar(void) {
     gfx_desktop_layout_t l;
     char got[64];
@@ -1379,6 +1485,8 @@ int main(void) {
     RUN_TEST(test_lot69_form_layout);
     RUN_TEST(test_lot69_browser_address_bar);
     RUN_TEST(test_lot69_every_window_shared_chrome);
+    RUN_TEST(test_lot71_full_window_restore_resize);
+    RUN_TEST(test_lot71_chat_width_stable_on_pane_resize);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

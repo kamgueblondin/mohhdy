@@ -4,7 +4,7 @@ static void test_l63_text_character_references(void) {
                  "<p>&lsquo;&rsquo;&ldquo;&rdquo;&laquo;&raquo;&reg;&trade;&times;&middot;&bull;&ndash;&apos;&lt;&gt;&quot;</p>"
                  "<p>&#8211;&#8212;&#8216;&#8220;&#8221;&#8230;&#9;&#160;&#8194;&#8202;&#8203;&#XA0;&#1234567;&#12345678;</p>"
                  "<p>&ensp;&emsp;&thinsp;.&#x2a;&#X2B;&#xg;&#x;&amp</p></body>", 640);
-    TEST_ASSERT_NOT_NULL(find_text("a'bAAc-...(c)'?xyEUR&bogus;&#;&#12a z& q"));   /* numeric, named, soft hyphen, unknown */
+    TEST_ASSERT_NOT_NULL(find_text("a'bAAc-...(c)'\xe9" "xyEUR&bogus;&#;&#12a z& q"));   /* numeric, named, soft hyphen, unknown; Lot 71: &#xe9; keeps its glyph */
     TEST_ASSERT_NOT_NULL(find_text("''\"\"<<>>(R)TMx.*-'<>\""));
     TEST_ASSERT_NOT_NULL(find_text("--'\"\"... ? ?&#12345678;"));   /* spaces collapse, 7 digits at most */
     TEST_ASSERT_NOT_NULL(find_text(".*+&#xg;&#x;&amp"));             /* leading spaces collapse */

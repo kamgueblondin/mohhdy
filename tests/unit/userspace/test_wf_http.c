@@ -320,9 +320,10 @@ static void test_html_reduce_real_shapes(void) {
     TEST_ASSERT_EQUAL(0, wf_url_parse("https://fr.wikipedia.org/", &base));
     m = wf_html_reduce(page, n, &base, out, (int)sizeof(out), &st);
     TEST_ASSERT_TRUE(m > 0);
-    TEST_ASSERT_NOT_NULL(strstr(st.title, "Wikipedia, l'encyclopedie libre"));
-    TEST_ASSERT_NOT_NULL(strstr(out, "<h1>Bienvenue sur Wikipedia</h1>"));
-    TEST_ASSERT_NOT_NULL(strstr(out, "L'encyclopedie libre - que vous pouvez ameliorer."));
+    /* Lot 71: accents are kept as display bytes (CP1252), the em dash too */
+    TEST_ASSERT_NOT_NULL(strstr(st.title, "Wikip\xe9" "dia, l'encyclop\xe9" "die libre"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "<h1>Bienvenue sur Wikip\xe9" "dia</h1>"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "L'encyclop\xe9" "die libre \x97 que vous pouvez am\xe9liorer."));
     TEST_ASSERT_NULL(strstr(out, "Lang0"));
     TEST_ASSERT_NULL(strstr(out, "secret"));
     TEST_ASSERT_NULL(strstr(out, "Nav<"));

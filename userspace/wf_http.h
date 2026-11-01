@@ -27,6 +27,12 @@ int wf_url_format(const wf_url_t* u, char* out, int cap);
 
 /* Builds the GET request. Returns length or -1. */
 int wf_http_build_get(const wf_url_t* u, char* out, int cap);
+/* Lot 71: request head for method ("GET" / "POST"); body_len >= 0 adds
+ * Content-Type (ctype, default urlencoded) and Content-Length; extra is
+ * 0 or header lines each ending with CRLF. -1 on overflow or CR/LF in a
+ * header value. The body is sent after the head by the caller. */
+int wf_http_build_request(const wf_url_t* u, const char* method, const char* ctype, int body_len, const char* extra,
+                          char* out, int cap);
 
 #define WF_HTTP_HDR_MAX (32 * 1024)   /* Lot 69: youtube.com sends ~10 KiB of headers */
 #define WF_HTTP_LOC_MAX 1024

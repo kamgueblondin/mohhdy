@@ -1,0 +1,10 @@
+{
+  "kind": "customsearch#search",
+  "url": {"type": "application/json", "template": "https://www.googleapis.com/customsearch/v1?q={searchTerms}"},
+  "queries": {"request": [{"title": "Google Custom Search - mohhdy", "totalResults": "2", "searchTerms": "mohhdy", "count": 2}]},
+  "searchInformation": {"searchTime": 0.2, "formattedTotalResults": "2"},
+  "items": [
+    {"kind": "customsearch#result", "title": "Mohhdy - Documentation", "htmlTitle": "<b>Mohhdy</b> - Documentation", "link": "https://docs.example.com/mohhdy", "displayLink": "docs.example.com", "snippet": "La documentation du syst\u00e8me Mohhdy.", "pagemap": {"metatags": [{"og:title": "x"}]}},
+    {"kind": "customsearch#result", "title": "Mohhdy forum", "link": "https://forum.example.com/t/1", "snippet": "Questions et r\u00e9ponses."}
+  ]
+}

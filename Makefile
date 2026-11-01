@@ -1404,7 +1404,7 @@ ARM_IMAGE = $(ARM_DIR)/mohhdy-arm.elf
 ARM_OBJS = $(ARM_DIR)/boot.o $(ARM_DIR)/arm_kernel.o $(ARM_DIR)/arm_mmu.o \
 	$(ARM_DIR)/ipc.o $(ARM_DIR)/sha256.o $(ARM_DIR)/user_tasks.o \
 	$(ARM_DIR)/arm_portable.o $(ARM_DIR)/aes_gcm.o $(ARM_DIR)/edid.o \
-	$(ARM_DIR)/p2p_flow.o $(ARM_DIR)/p2p_pace.o
+	$(ARM_DIR)/p2p_flow.o $(ARM_DIR)/p2p_pace.o $(ARM_DIR)/p2p_rtx.o
 
 $(ARM_DIR)/%.o: arch/arm/%.S
 	@mkdir -p $(ARM_DIR)
@@ -1419,7 +1419,7 @@ $(ARM_DIR)/sha256.o: kernel/sha256.c kernel/sha256.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
 # Lot 69 (US-076): more portable sources compiled unchanged
-$(ARM_DIR)/arm_portable.o: arch/arm/arm_portable.c arch/arm/arm_portable.h kernel/aes_gcm.h kernel/edid.h userspace/p2p_flow.h
+$(ARM_DIR)/arm_portable.o: arch/arm/arm_portable.c arch/arm/arm_portable.h kernel/aes_gcm.h kernel/edid.h userspace/p2p_flow.h userspace/p2p_rtx.h include/os_charset.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
 $(ARM_DIR)/aes_gcm.o: kernel/aes_gcm.c kernel/aes_gcm.h
@@ -1429,6 +1429,9 @@ $(ARM_DIR)/edid.o: kernel/edid.c kernel/edid.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
 $(ARM_DIR)/p2p_flow.o: userspace/p2p_flow.c userspace/p2p_flow.h userspace/p2p_pace.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
+$(ARM_DIR)/p2p_rtx.o: userspace/p2p_rtx.c userspace/p2p_rtx.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
 $(ARM_DIR)/p2p_pace.o: userspace/p2p_pace.c userspace/p2p_pace.h
@@ -1506,6 +1509,10 @@ gguf-kvm-benchmark-check:
 .PHONY: qemu-gui-lot69-windows
 qemu-gui-lot69-windows: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_gui_lot69_windows.py
+
+.PHONY: qemu-lot71
+qemu-lot71: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot71.py
 
 .PHONY: qemu-web-layout
 qemu-web-layout: $(OS_IMAGE) pack-initrd disk

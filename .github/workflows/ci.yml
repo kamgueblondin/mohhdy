@@ -572,6 +572,41 @@ jobs:
           path: |
             test_logs/
 
+  lot71-forms:
+    name: QEMU forms, Latin-1, long pages, full window, chat width (Lot 71)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      # Offline: local test server on 10.0.2.2 (slirp). About 3 min under TCG.
+      - name: QEMU forms, sections, search config, full window and chat width
+        run: make qemu-lot71
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot71-forms-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   lot68-text-scale:
     name: QEMU desktop text scale and Ctrl zoom (Lot 68)
     runs-on: ubuntu-latest

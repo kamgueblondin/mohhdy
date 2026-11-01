@@ -496,6 +496,7 @@ static char ansi_buffer[16];
 static int ansi_pos = 0;
 static char current_color = 0x0F; // Blanc sur noir par défaut
 
+#include "../include/os_charset.h"
 #if CONFIG_UTF8_VGA
 // Suivi minimal UTF-8 pour l'affichage VGA (le port série reste octet-par-octet)
 static int utf8_expected_continuations = 0;
@@ -529,20 +530,12 @@ static int unicode_to_cp437(unsigned int cp, char* out) {
         case 0x2592: *out = (char)0xB1; return 1; // ▒
         case 0x2593: *out = (char)0xB2; return 1; // ▓
         case 0x2588: *out = (char)0xDB; return 1; // █
-        case 0x2013: case 0x2014: *out = '-'; return 1; // – —
-        case 0x00E9: case 0x00E8: case 0x00EA: case 0x00EB: *out = 'e'; return 1; // é è ê ë
-        case 0x00E0: case 0x00E1: case 0x00E2: case 0x00E4: *out = 'a'; return 1; // à á â ä
-        case 0x00E7: *out = 'c'; return 1; // ç
-        case 0x00F1: *out = 'n'; return 1; // ñ
-        case 0x00FC: case 0x00F9: case 0x00FA: *out = 'u'; return 1; // ü ù ú
-        case 0x00F6: case 0x00F3: case 0x00F4: *out = 'o'; return 1; // ö ó ô
-        case 0x00ED: case 0x00EF: case 0x00EC: *out = 'i'; return 1; // í ï ì
-        case 0x00C9: *out = 'E'; return 1; // É
-        case 0x00C7: *out = 'C'; return 1; // Ç
-        case 0x00D1: *out = 'N'; return 1; // Ñ
-        case 0x00DC: *out = 'U'; return 1; // Ü
-        case 0x00C0: *out = 'A'; return 1; // À
-        default: return 0;
+        default:
+            /* Lot 71: accented letters use the CP437 glyphs of the VGA ROM
+             * font (e-acute, c-cedilla, a-grave...) instead of the base
+             * letter; the rest of CP1252 a look-alike (include/os_charset.h) */
+            *out = (char)os_cp437_from_cp(cp);
+            return 1;
     }
 }
 #endif
@@ -604,7 +597,11 @@ void print_char(char c, int x, int y, char color) {
             if ((uc & 0xE0) == 0xC0) { utf8_expected_continuations = 1; utf8_codepoint = (uc & 0x1F); return; }
             if ((uc & 0xF0) == 0xE0) { utf8_expected_continuations = 2; utf8_codepoint = (uc & 0x0F); return; }
             if ((uc & 0xF8) == 0xF0) { utf8_expected_continuations = 3; utf8_codepoint = (uc & 0x07); return; }
-            return; // octet >127 non conforme, ignorer
+            /* Lot 71: a lone high byte is display text (CP1252), not lost */
+            {
+                uint32_t cp1 = (uc >= 0xA0) ? uc : (os_cp1252_high[uc - 0x80] ? os_cp1252_high[uc - 0x80] : '?');
+                c = (char)os_cp437_from_cp(cp1);
+            }
         }
 #endif
         if (c != '\x1b') {

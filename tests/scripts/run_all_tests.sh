@@ -144,7 +144,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/stun.c"
     fi
     if [ "$(basename "$test_file")" = "test_p2p.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/stun.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+        extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/stun.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
     fi
     if [ "$(basename "$test_file")" = "test_mobile_ui.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/mobile_ui.c $BASE_DIR/userspace/platform.c"
@@ -169,7 +169,7 @@ run_test() {
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_osui_p2p_prod_perf.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
         cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
@@ -218,7 +218,7 @@ run_test() {
     fi
     # Lot 67: Ring 3 web stack (wf_*), shares kernel SHA-256 / AES-GCM / X25519
     case "$(basename "$test_file")" in
-        test_wf_crypto.c|test_wf_x509.c|test_wf_http.c)
+        test_wf_crypto.c|test_wf_x509.c|test_wf_http.c|test_wf_text.c|test_wf_form.c|test_wf_section.c)
             extra_src="$extra_src $BASE_DIR/userspace/wf_bn.c $BASE_DIR/userspace/wf_sha512.c $BASE_DIR/userspace/wf_ec.c $BASE_DIR/userspace/wf_rsa.c $BASE_DIR/kernel/sha256.c"
             cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1 -DWF_ROOTS_PEM=\"$BASE_DIR/initrd_content/etc/ca-roots.pem\""
             ;;
@@ -226,9 +226,13 @@ run_test() {
     case "$(basename "$test_file")" in
         test_wf_x509.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c" ;;
         test_p2p_pace.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
+        test_wf_cookie.c) extra_src="$extra_src $BASE_DIR/userspace/wf_cookie.c" ;;
+        test_p2p_rtx.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_rtx.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
         test_p2p_flow.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
         test_p2p_bwe.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
-        test_wf_http.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
+        test_wf_text.c|test_wf_form.c|test_wf_section.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/userspace/wf_section.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
+        test_wsearch_api.c) extra_src="$extra_src $BASE_DIR/userspace/wsearch_api.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/wf_entity.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
+        test_wf_http.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
     esac
     if [ "$(basename "$test_file")" = "test_tokenizer.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/llm/gpt2_tokenizer.c"
@@ -286,8 +290,8 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/wsearch.c"
     fi
     if [ "$(basename "$test_file")" = "test_arm_portable.c" ]; then
-        extra_src="$extra_src $BASE_DIR/arch/arm/arm_portable.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/edid.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c"
-        cflags="$cflags -I$BASE_DIR/kernel -I$BASE_DIR/userspace"
+        extra_src="$extra_src $BASE_DIR/arch/arm/arm_portable.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/edid.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_rtx.c"
+        cflags="$cflags -I$BASE_DIR/kernel -I$BASE_DIR/userspace -I$BASE_DIR/include"
     fi
     if [ "$(basename "$test_file")" = "test_edid.c" ]; then
         extra_src="$extra_src $BASE_DIR/kernel/edid.c"

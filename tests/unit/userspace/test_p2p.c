@@ -1974,8 +1974,57 @@ void test_lot69_per_peer_flow_and_data_acks(void) {
     g_cut[2][0] = g_cut[0][2] = 0;
 }
 
+static int count_of(const char* hay, const char* needle) {
+    int c = 0;
+    const char* q = hay;
+    while ((q = strstr(q, needle)) != 0) { c++; q += strlen(needle); }
+    return c;
+}
+
+/* Lot 71 (US-068/US-073): a lost message is sent again and delivered
+ * once; a message whose ack was lost is resent and not delivered twice. */
+void test_lot71_retransmission_and_dedup(void) {
+    char out[1024];
+    p2p_peer_t *pb, *pa;
+    setup(2, 0);
+    run(2, 300);
+    pb = p2p_find(&g_n[0], "beta");
+    pa = p2p_find(&g_n[1], "alpha");
+    TEST_ASSERT_TRUE(pb && pb->keyed && pa && pa->keyed);
+    /* 1. the datagram itself is lost */
+    g_cut[0][1] = 1;
+    TEST_ASSERT_TRUE(p2p_send_text(&g_n[0], &g_h[0], "beta", "lost-once") >= 0);
+    g_cut[0][1] = 0;
+    TEST_ASSERT_EQUAL(0, count_of(g_out[1], "p2p msg from alpha: lost-once"));
+    run(2, 4000);
+    TEST_ASSERT_EQUAL(1, count_of(g_out[1], "p2p msg from alpha: lost-once"));
+    TEST_ASSERT_TRUE(pb->rtx.resent >= 1U);
+    TEST_ASSERT_EQUAL(0U, pb->rtx.gave_up);
+    TEST_ASSERT_TRUE(g_n[1].rx_type[P2P_I_RTX] >= 1U);
+    /* 2. the datagram arrives, its ack does not */
+    g_cut[1][0] = 1;
+    TEST_ASSERT_TRUE(p2p_send_text(&g_n[0], &g_h[0], "beta", "ack-lost") >= 0);
+    run(2, 100);
+    g_cut[1][0] = 0;
+    run(2, 4000);
+    TEST_ASSERT_EQUAL(1, count_of(g_out[1], "p2p msg from alpha: ack-lost"));
+    TEST_ASSERT_TRUE(pa->rtx.dup_rx >= 1U);
+    TEST_ASSERT_TRUE(pb->rtx.acked >= 1U);
+    /* 3. a peer cut for good: tries used up, the copy is given up */
+    g_cut[0][1] = g_cut[1][0] = 1;
+    TEST_ASSERT_TRUE(p2p_send_text(&g_n[0], &g_h[0], "beta", "never") >= 0);
+    run(2, 20000);
+    g_cut[0][1] = g_cut[1][0] = 0;
+    TEST_ASSERT_TRUE(pb->rtx.gave_up >= 1U);
+    TEST_ASSERT_EQUAL(0, count_of(g_out[1], "p2p msg from alpha: never"));
+    TEST_ASSERT_EQUAL(0, p2p_flow_cmd(&g_n[0], 0, 0, out, (int)sizeof(out)));
+    TEST_ASSERT_NOT_NULL(strstr(out, " rtx kept "));
+    TEST_ASSERT_NOT_NULL(strstr(out, " gave_up "));
+}
+
 int main(void) {
     unity_init();
+    RUN_TEST(test_lot71_retransmission_and_dedup);
     RUN_TEST(test_discovery_and_keys);
     RUN_TEST(test_qos_bwe_probe_train);
     RUN_TEST(test_lot69_per_peer_flow_and_data_acks);

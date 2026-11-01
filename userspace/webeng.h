@@ -27,9 +27,14 @@
 #include <stdint.h>
 #include "os_syscalls.h"
 
+/* Lot 71: WE_POOL raised for text heavy pages. Long pages are cut into
+ * sections of at most 120 nodes by wf_section (the reader view), so the
+ * node and item tables keep their size: WE_MAX_ITEMS is the scene
+ * limit, the image and layout workspaces are sized by it. */
 #define WE_MAX_NODES 160
+#define WE_MAX_ITEMS OS_FB_WEB_ITEMS
 #define WE_MAX_RULES 48
-#define WE_POOL 6144
+#define WE_POOL 32768
 #define WE_TEXT_SOURCE_MAX 512
 #define WE_CSS_MAX 2048
 #define WE_MAX_DIAG 8
@@ -406,8 +411,8 @@ typedef struct {
     uint8_t css_parsed;
     we_rule_t rules[WE_MAX_RULES];
     uint32_t nrules;
-    os_fb_web_item_t items[OS_FB_WEB_ITEMS];
-    int16_t item_owner[OS_FB_WEB_ITEMS];
+    os_fb_web_item_t items[WE_MAX_ITEMS];
+    int16_t item_owner[WE_MAX_ITEMS];
     uint32_t nitems;
     char title[48];
     char diag[WE_MAX_DIAG][WE_DIAG_LEN];

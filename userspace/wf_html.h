@@ -7,6 +7,7 @@
 #ifndef WF_HTML_H
 #define WF_HTML_H
 #include "wf_http.h"
+#include "wf_form.h"
 
 typedef struct {
     int in_bytes;
@@ -16,12 +17,29 @@ typedef struct {
     int blocks_dropped;   /* script/style/svg/... elements removed */
     int links;
     int truncated;        /* output budget reached */
+    int charset;          /* Lot 71: WF_CS_* used for the text */
     char title[96];
 } wf_html_stats_t;
 
-/* Returns the output length (NUL-terminated, < cap). base may be 0. */
+/* Returns the output length (NUL-terminated, < cap). base may be 0.
+ * Stops at 140 nodes (console and tests). Text is display bytes
+ * (include/os_charset.h): UTF-8 / Latin-1 and character references
+ * decoded, '<' '>' '&' re-escaped. */
 int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int cap, wf_html_stats_t* st);
+/* Lot 71: same with a node budget (the GUI keeps whole pages and shows
+ * them in sections, wf_html_section) and, when forms is not 0, the forms
+ * of the page recorded there and their controls written as placeholders
+ * (see wf_form.h); with forms = 0 forms are dropped as before. */
+int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, int cap, wf_html_stats_t* st,
+                      int node_budget, wf_form_page_t* forms);
+/* Charset announced by the server (Content-Type), WF_CS_*, or
+ * WF_CS_NONE: then a <meta> charset in the page decides (HTML rule: the
+ * transport charset wins). Applies to the next reduce. */
+void wf_html_set_charset(int cs);
 /* Plain text of a page for the console (tags removed, blocks on new
- * lines, entities &amp; &lt; &gt; &quot; &#39; &nbsp; decoded). */
+ * lines). Lot 71: every character reference decoded and the text written
+ * as UTF-8 (the console decodes UTF-8), Latin-1 pages converted. */
 int wf_html_text(const char* in, int n, char* out, int cap);
+/* Lot 71: same for a reduced page (display bytes in, UTF-8 out). */
+int wf_html_text_display(const char* in, int n, char* out, int cap);
 #endif

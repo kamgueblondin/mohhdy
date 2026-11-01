@@ -92,6 +92,11 @@ int wf_url_resolve(const wf_url_t* b, const char* loc, wf_url_t* out) {
     *out = *b;
     if (loc[0] == '/') {
         p = 0;
+    } else if (loc[0] == '?') {
+        /* Lot 71: "?query" keeps the whole base path (RFC 3986 5.2.2), a
+         * form whose action is "?q=" used to land on the directory */
+        for (i = 0; b->path[i] && b->path[i] != '?'; i++) {}
+        p = i;
     } else {
         /* relative: keep the base directory (up to the last '/', before any query) */
         for (i = 0; b->path[i] && b->path[i] != '?'; i++) if (b->path[i] == '/') last = i;
@@ -108,15 +113,40 @@ int wf_url_resolve(const wf_url_t* b, const char* loc, wf_url_t* out) {
     return 0;
 }
 
-int wf_http_build_get(const wf_url_t* u, char* o, int cap) {
-    int p = 0;
-    p = put(o, cap, p, "GET ");
+int wf_http_build_get(const wf_url_t* u, char* o, int cap) { return wf_http_build_request(u, "GET", 0, -1, 0, o, cap); }
+
+/* Lot 71: GET or POST; ctype and the body length only for a body
+ * (body_len >= 0), extra: header lines ending with CRLF (or 0). Header
+ * values with CR/LF are refused (no header injection). */
+int wf_http_build_request(const wf_url_t* u, const char* method, const char* ctype, int body_len, const char* extra,
+                          char* o, int cap) {
+    int p = 0, i;
+    if (ctype) for (i = 0; ctype[i]; i++) if (ctype[i] == '\r' || ctype[i] == '\n') return -1;
+    if (extra) {
+        /* every line must end with CRLF and no bare CR / LF in between */
+        for (i = 0; extra[i]; i++) {
+            if (extra[i] == '\n' && (i == 0 || extra[i - 1] != '\r')) return -1;
+            if (extra[i] == '\r' && extra[i + 1] != '\n') return -1;
+        }
+        if (i > 0 && (i < 2 || extra[i - 1] != '\n')) return -1;
+    }
+    p = put(o, cap, p, method);
+    if (p >= 0) p = put(o, cap, p, " ");
     if (p >= 0) p = put(o, cap, p, u->path);
     if (p >= 0) p = put(o, cap, p, " HTTP/1.1\r\nHost: ");
     if (p >= 0) p = put(o, cap, p, u->host);
     if (p >= 0 && u->port != (u->https ? 443 : 80)) { p = put(o, cap, p, ":"); if (p >= 0) p = put_int(o, cap, p, u->port); }
     if (p >= 0) p = put(o, cap, p, "\r\nUser-Agent: Mohhdy-fetch/1.0\r\nAccept: text/html,text/plain,*/*\r\n"
-                                   "Accept-Encoding: gzip, deflate\r\nConnection: close\r\n\r\n");
+                                   "Accept-Encoding: gzip, deflate\r\nConnection: close\r\n");
+    if (p >= 0 && body_len >= 0) {
+        p = put(o, cap, p, "Content-Type: ");
+        if (p >= 0) p = put(o, cap, p, ctype ? ctype : "application/x-www-form-urlencoded");
+        if (p >= 0) p = put(o, cap, p, "\r\nContent-Length: ");
+        if (p >= 0) p = put_int(o, cap, p, body_len);
+        if (p >= 0) p = put(o, cap, p, "\r\n");
+    }
+    if (p >= 0 && extra) p = put(o, cap, p, extra);
+    if (p >= 0) p = put(o, cap, p, "\r\n");
     return p;
 }
 

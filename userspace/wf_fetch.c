@@ -46,7 +46,7 @@ static void ip_str(const uint8_t ip[4], char* o) {
 }
 
 /* One request on a fresh connection. 0 = response parsed. */
-static int one(const wf_fetch_env_t* env, const wf_url_t* u, uint8_t* body, int cap, wf_fetch_result_t* res) {
+static int one(const wf_fetch_env_t* env, const wf_url_t* u, const wf_fetch_req_t* rq, uint8_t* body, int cap, wf_fetch_result_t* res) {
     static char req[WF_URL_PATH_MAX + WF_URL_HOST_MAX + 256];
     static uint8_t buf[4096];
     static char ipb[20];
@@ -66,7 +66,23 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, uint8_t* body, int 
     h = env->connect(env->net, ip, u->port);
     if (h < 0) { scopy(res->err, (int)sizeof(res->err), "TCP connect failed"); return -1; }
     br.env = env; br.h = h;
-    rl = wf_http_build_get(u, req, (int)sizeof(req));
+    {
+        /* Lot 71: the jar's Cookie line goes after the caller's extra lines */
+        static char ex[WF_COOKIE_HDR + 1024];
+        const char* extra = rq ? rq->extra : 0;
+        if (env->jar) {
+            int el = 0, ck;
+            uint32_t before = env->jar->sent;
+            ex[0] = 0;
+            if (extra) { while (extra[el] && el < (int)sizeof(ex) - 1) { ex[el] = extra[el]; el++; } ex[el] = 0; }
+            if (extra && extra[el]) { env->close(env->net, h); scopy(res->err, (int)sizeof(res->err), "request too long"); return -1; }
+            ck = wf_cookie_header(env->jar, u->host, u->path, u->https, ex + el, (int)sizeof(ex) - el);
+            if (ck > 0) { extra = ex; res->cookies_sent = (int)(env->jar->sent - before); }
+            else res->cookies_sent = 0;
+        }
+        rl = wf_http_build_request(u, rq && rq->method ? rq->method : "GET", rq ? rq->ctype : 0,
+                                   rq && rq->body ? rq->body_len : -1, extra, req, (int)sizeof(req));
+    }
     if (rl < 0) { env->close(env->net, h); scopy(res->err, (int)sizeof(res->err), "request too long"); return -1; }
     res->https = u->https;
     if (u->https) {
@@ -84,7 +100,8 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, uint8_t* body, int 
         scopy(res->not_after, (int)sizeof(res->not_after), g_tls.chain.not_after);
         res->time_checked = g_tls.chain.time_checked;
         logf2(env, "tls ok: ", res->suite);
-        if (wf_tls_write(&g_tls, (const uint8_t*)req, rl) != rl) {
+        if (wf_tls_write(&g_tls, (const uint8_t*)req, rl) != rl ||
+            (rq && rq->body && rq->body_len > 0 && wf_tls_write(&g_tls, (const uint8_t*)rq->body, rq->body_len) != rq->body_len)) {
             scopy(res->err, (int)sizeof(res->err), "TLS write failed");
             env->close(env->net, h);
             return -1;
@@ -93,6 +110,12 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, uint8_t* body, int 
         int off = 0;
         while (off < rl) {
             n = env->send(env->net, h, (const uint8_t*)req + off, rl - off);
+            if (n <= 0) { scopy(res->err, (int)sizeof(res->err), "send failed"); env->close(env->net, h); return -1; }
+            off += n;
+        }
+        off = 0;
+        while (rq && rq->body && off < rq->body_len) {
+            n = env->send(env->net, h, (const uint8_t*)rq->body + off, rq->body_len - off);
             if (n <= 0) { scopy(res->err, (int)sizeof(res->err), "send failed"); env->close(env->net, h); return -1; }
             off += n;
         }
@@ -141,11 +164,23 @@ static int one(const wf_fetch_env_t* env, const wf_url_t* u, uint8_t* body, int 
         if (tr) res->truncated = 1;
     }
     scopy(res->content_type, (int)sizeof(res->content_type), g_resp.content_type);
+    if (env->jar && g_resp.status) {
+        int k = wf_cookie_from_head(env->jar, u->host, u->path, u->https, g_resp.hdr, g_resp.hdr_len, env->now);
+        res->cookies_set += k;
+        if (k) logf2(env, "cookies stored for ", u->host);
+    }
     return 0;
 }
 
 int wf_fetch(const wf_fetch_env_t* env, const char* url, uint8_t* body, int cap, wf_fetch_result_t* res) {
+    return wf_fetch_ex(env, url, 0, body, cap, res);
+}
+
+int wf_fetch_ex(const wf_fetch_env_t* env, const char* url, const wf_fetch_req_t* req0, uint8_t* body, int cap,
+                wf_fetch_result_t* res) {
     static wf_url_t u, next;
+    static wf_fetch_req_t rq;
+    const wf_fetch_req_t* req = req0;
     int max = env->max_redirects, i;
     uint8_t* z = (uint8_t*)res;
     for (i = 0; i < (int)sizeof(*res); i++) z[i] = 0;
@@ -154,9 +189,9 @@ int wf_fetch(const wf_fetch_env_t* env, const char* url, uint8_t* body, int cap,
     if (wf_url_parse(url, &u) != 0) { scopy(res->err, (int)sizeof(res->err), "bad URL"); return -1; }
     for (i = 0;; i++) {
         wf_url_format(&u, res->url, (int)sizeof(res->url));
-        logf2(env, "GET ", res->url);
+        logf2(env, req && req->method ? "POST " : "GET ", res->url);
         res->suite[0] = 0; res->leaf_cn[0] = 0; res->anchor_cn[0] = 0; res->time_checked = 0;
-        if (one(env, &u, body, cap, res) != 0) return -1;
+        if (one(env, &u, req, body, cap, res) != 0) return -1;
         if (!(res->status == 301 || res->status == 302 || res->status == 303 || res->status == 307 || res->status == 308))
             return 0;
         if (!g_resp.location[0]) return 0;
@@ -173,6 +208,16 @@ int wf_fetch(const wf_fetch_env_t* env, const char* url, uint8_t* body, int cap,
             return -1;
         }
         logf2(env, "redirect -> ", g_resp.location);
+        if (req) {
+            /* 301/302/303 after a POST: GET without body; the extra headers
+             * (API keys) never follow to another host */
+            int same = 1, k;
+            for (k = 0; u.host[k] || next.host[k]; k++) if (u.host[k] != next.host[k]) { same = 0; break; }
+            rq = *req;
+            if (res->status != 307 && res->status != 308) { rq.method = 0; rq.body = 0; rq.body_len = 0; rq.ctype = 0; }
+            if (!same || u.port != next.port) rq.extra = 0;
+            req = (rq.method || rq.extra) ? &rq : 0;
+        }
         u = next;
         res->redirects++;
     }
