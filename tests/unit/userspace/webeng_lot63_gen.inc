@@ -153,11 +153,11 @@ static void test_l63_gen_selectors(void) {
                            "p:first-child::before{content:'1'}p:hover::before{content:'h'}p::before{content:'c'}p::first-child{color:red}"
                            "p::before x{content:'b'}p{color:#ff0000}")
                  "<p id=x>x</p><p id=y>y</p></body>", 320);
-    TEST_ASSERT_EQUAL(6, l61_diag_count("css selector unsupported"));
+    TEST_ASSERT_EQUAL(5, l61_diag_count("css selector unsupported"));   /* lot 73: p:hover::before parses */
     TEST_ASSERT_EQUAL(0xFF0000, find_text("x")->color);   /* a refused ::before does not leak into the next rule */
     TEST_ASSERT_EQUAL_STRING("1", l63_gen("x", WE_PSEUDO_BEFORE));   /* structural pseudo-class before ::before */
     TEST_ASSERT_EQUAL_STRING("c", l63_gen("y", WE_PSEUDO_BEFORE));
-    TEST_ASSERT_EQUAL(5, (int)g_doc.nrules);
+    TEST_ASSERT_EQUAL(6, (int)g_doc.nrules);   /* lot 73: + the never-matching p:hover::before */
     lot52_render(L63_STYLE("p{margin:0}p::before {content:'+'}::before{content:'-'}") "<p id=p>x</p></body>", 320);
     TEST_ASSERT_EQUAL_STRING("+", l63_gen("p", WE_PSEUDO_BEFORE));   /* trailing space allowed, the type adds specificity */
 }

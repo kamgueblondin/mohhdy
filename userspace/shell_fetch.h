@@ -30,4 +30,9 @@ int shell_page_atlas_dims(void* ctx, int slot, int* w, int* h);
 void shell_page_images(int on);
 int shell_page_images_on(void);
 const wf_webimg_stats_t* shell_page_image_stats(void);
+/* Lot 73: animated images of the shown page (wf_webimg_tick at the 100 Hz
+ * system ticks), frames copied so far, one line per animation */
+int shell_page_anim_tick(void);
+unsigned shell_page_anim_changes(void);
+int shell_page_anim_text(char* out, int cap);
 #endif

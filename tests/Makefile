@@ -484,7 +484,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_imgdec: $(UNIT_DIR)/userspace/test_imgde
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_tools: $(UNIT_DIR)/userspace/test_osui_tools.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_tools.h ../userspace/osui_panes.c ../userspace/osui_app.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_tools: $(UNIT_DIR)/userspace/test_osui_tools.c $(UNIT_DIR)/userspace/imgdec_webp_samples.h $(UNIT_DIR)/userspace/imgdec_anim_samples.h ../userspace/imgdec_webp.inc ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_tools.h ../userspace/osui_panes.c ../userspace/osui_app.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_panes.c ../userspace/osui_app.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
@@ -817,16 +817,44 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_p256: $(UNIT_DIR)/userspace/test_wf_p
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_CRYPTO_SRCS) $(FRAMEWORK_SOURCES)
 
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_aes_ct: $(UNIT_DIR)/userspace/test_aes_ct.c ../include/os_aes_ct.h ../userspace/wf_aead.c ../kernel/aes_gcm.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/wf_aead.c ../kernel/aes_gcm.c $(FRAMEWORK_SOURCES)
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_aead: $(UNIT_DIR)/userspace/test_wf_aead.c ../userspace/wf_aead.c ../userspace/wf_aead.h $(UNIT_DIR)/userspace/wf_aead_vectors.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/wf_aead.c $(FRAMEWORK_SOURCES)
+
+# Lot 73: HTTP cache (wf_cache) and wf_fetch with it
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_cache: $(UNIT_DIR)/userspace/test_wf_cache.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)
+
+# Lot 73: srcset / sizes / media / type and <picture> in wf_html
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_srcset: $(UNIT_DIR)/userspace/test_wf_srcset.c $(WF_NET_SRCS) ../userspace/wf_srcset.h $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)
+
+# Lot 73: GIF animation (imgdec) and animated images in wf_webimg
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_imgdec_anim: $(UNIT_DIR)/userspace/test_imgdec_anim.c $(UNIT_DIR)/userspace/imgdec_anim_samples.h $(UNIT_DIR)/userspace/imgdec_gif_samples.h ../userspace/imgdec.c ../userspace/imgdec_gif.inc ../userspace/imgdec.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
+
+# Lot 73: WebP lossless (VP8L)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_imgdec_webp: $(UNIT_DIR)/userspace/test_imgdec_webp.c $(UNIT_DIR)/userspace/imgdec_webp_samples.h ../userspace/imgdec.c ../userspace/imgdec_webp.inc ../userspace/imgdec.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
+
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_webimg_anim: $(UNIT_DIR)/userspace/test_wf_webimg_anim.c $(UNIT_DIR)/userspace/imgdec_anim_samples.h $(WF_NET_SRCS) ../userspace/wf_webimg.c ../userspace/webeng.c ../userspace/imgdec.c ../userspace/imgdec_gif.inc $(wildcard ../userspace/wf_*.h) ../userspace/webeng.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) ../userspace/wf_webimg.c ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_webimg: $(UNIT_DIR)/userspace/test_wf_webimg.c $(WF_NET_SRCS) ../userspace/wf_webimg.c ../userspace/webeng.c ../userspace/imgdec.c ../userspace/imgdec_gif.inc ../userspace/imgdec_ico.inc ../userspace/imgdec_jpeg.inc $(wildcard ../userspace/wf_*.h) ../userspace/webeng.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) ../userspace/wf_webimg.c ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 
 # Lot 67: URL / HTTP / DNS / TLS PRF / fetch
-WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_entity.c ../userspace/wf_form.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_cookie.c ../userspace/wf_inflate.c ../kernel/x25519.c $(WF_X509_SRCS)
+WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_srcset.c ../userspace/wf_entity.c ../userspace/wf_form.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_cache.c ../userspace/wf_cookie.c ../userspace/wf_inflate.c ../kernel/x25519.c $(WF_X509_SRCS)
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_http: $(UNIT_DIR)/userspace/test_wf_http.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)

@@ -85,6 +85,7 @@ typedef struct {
     uint32_t sent, received, auth_fail, replay, throttled, down_events;
     uint32_t bucket_tick, bucket_used;
     uint32_t rx_win_last, rx_base16; /* Lot 6 (US-075): per-peer frames/s baseline */
+    uint32_t rx_dacks;               /* Lot 73: DACK frames, acks of our own data, not in that rate */
     uint32_t anomalies;              /* windows above 4x that baseline + 8 */
     uint8_t loss_percent;            /* US-063: estimated packet loss percentage (0..100) */
     uint32_t link_cost;              /* US-063: dynamic link cost metric derived from RTT & loss */

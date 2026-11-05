@@ -25,8 +25,12 @@ static void err(wf_webimg_stats_t* st, const char* what, const char* url) {
 }
 
 
+static int s_src_n;   /* bytes of the last file loaded into w->src */
+
 void wf_webimg_reset(wf_webimg_t* w) {
     int k;
+    for (k = 0; k < WF_WEBIMG_ANIM_MAX; k++) w->anim[k].slot = 0;
+    w->anim_used = 0;
     w->atlas.magic = OS_FB_WEBIMG_MAGIC;
     for (k = 0; k < OS_FB_WEBIMG_SLOTS; k++) {
         w->atlas.slot[k].w = w->atlas.slot[k].h = 0;
@@ -92,6 +96,7 @@ static int load(wf_webimg_t* w, const char* url, const wf_webimg_io_t* io, imgde
     if (st) st->fetched++;
     if (n < 0) { err(st, "fetch", url); return -1; }
     if (n > WF_WEBIMG_SRC_MAX) { err(st, "fichier trop gros", url); return -1; }
+    s_src_n = n;
     rc = imgdec_probe(w->src, n, img);
     if (rc) { err(st, imgdec_strerror(rc), url); return -1; }
     while (imgdec_scratch_need_scaled(img, shift) > WF_WEBIMG_SCRATCH && img->fmt == IMGDEC_JPEG && shift < 3) shift++;
@@ -119,6 +124,19 @@ static int alloc_px(wf_webimg_t* w, int* ow, int* oh) {
     }
 }
 
+typedef struct { char* o; int cap, n, full; } ob_t;
+static void put(ob_t* b, const char* s, int n) {
+    int i;
+    for (i = 0; i < n; i++) { if (b->n < b->cap - 1) b->o[b->n++] = s[i]; else b->full = 1; }
+}
+static void puts_(ob_t* b, const char* s) { put(b, s, s_len(s)); }
+static void putn(ob_t* b, int v) {
+    char t[8];
+    int k = 0;
+    do { t[k++] = (char)('0' + v % 10); v /= 10; } while (v && k < 7);
+    while (k) { char c = t[--k]; put(b, &c, 1); }
+}
+
 /* Keeps only the slots whose URL is in keep[] (and the favicon), packing
  * their pixels at the start of the atlas. */
 static void compact(wf_webimg_t* w, const uint8_t* keep) {
@@ -143,6 +161,131 @@ static void compact(wf_webimg_t* w, const uint8_t* keep) {
         done[best] = 1;
     }
     w->used = at;
+    /* Lot 73: animations of dropped slots go; the frame store is packed in
+     * allocation order (a move never overwrites frames still to move) */
+    {
+        uint32_t aat = 0;
+        int a, f;
+        for (a = 0; a < WF_WEBIMG_ANIM_MAX; a++) {
+            wf_webimg_anim_t* an = &w->anim[a];
+            uint32_t fpx;
+            if (!an->slot) continue;
+            if (!keep[an->slot] || !w->atlas.slot[an->slot].w) { an->slot = 0; continue; }
+            fpx = (uint32_t)an->w * an->h;
+            for (f = 0; f < an->nframes; f++) {
+                uint32_t i;
+                if (an->off[f] != aat)
+                    for (i = 0; i < fpx * 3U; i++) w->anim_rgb[aat * 3U + i] = w->anim_rgb[an->off[f] * 3U + i];
+                an->off[f] = aat;
+                aat += fpx;
+            }
+        }
+        w->anim_used = aat;
+    }
+}
+
+/* Lot 73: entries are kept in allocation order for the packing above */
+static int anim_free_entry(wf_webimg_t* w) {
+    int a, last = -1;
+    for (a = 0; a < WF_WEBIMG_ANIM_MAX; a++) if (w->anim[a].slot) last = a;
+    return last + 1 < WF_WEBIMG_ANIM_MAX ? last + 1 : -1;
+}
+
+/* Every frame of the GIF in w->src (s_src_n bytes) composed, scaled to
+ * ow x oh and stored for slot; frame 0 is copied into the atlas. Returns
+ * the frames stored (< 2: the image stays still). */
+static int anim_store(wf_webimg_t* w, int slot, int ow, int oh, wf_webimg_stats_t* st) {
+    static imgdec_t img;
+    static imgdec_anim_t a;
+    wf_webimg_anim_t* an;
+    uint32_t fpx = (uint32_t)ow * (uint32_t)oh, start = w->anim_used;
+    int e = anim_free_entry(w), rc, cut = 0;
+    if (e < 0) { if (st) st->anim_cut++; return 0; }
+    if (imgdec_probe(w->src, s_src_n, &img) != IMGDEC_OK || img.fmt != IMGDEC_GIF) return 0;
+    if (imgdec_anim_need(&img) > WF_WEBIMG_SCRATCH) { if (st) st->anim_cut++; return 0; }
+    if (imgdec_anim_begin(w->src, s_src_n, &img, &a, w->scratch, WF_WEBIMG_SCRATCH) != IMGDEC_OK) return 0;
+    an = &w->anim[e];
+    an->nframes = 0;
+    for (;;) {
+        rc = imgdec_anim_next(w->src, s_src_n, &img, &a, w->scratch, WF_WEBIMG_SCRATCH);
+        if (rc != 1) break;
+        if (an->nframes >= WF_WEBIMG_ANIM_FRAMES || w->anim_used + fpx > WF_WEBIMG_ANIM_PIXELS) { cut = 1; break; }
+        scale_into(&img, w->anim_rgb + w->anim_used * 3U, ow, oh);
+        an->off[an->nframes] = w->anim_used;
+        an->delay[an->nframes] = (uint16_t)(a.delay_cs < 2 ? WF_WEBIMG_ANIM_MIN_DELAY : (a.delay_cs > 65535 ? 65535 : a.delay_cs));
+        an->nframes++;
+        w->anim_used += fpx;
+    }
+    if (an->nframes < 2) { w->anim_used = start; an->slot = 0; if (cut && st) st->anim_cut++; return 0; }
+    an->slot = (uint8_t)slot;
+    an->cur = 0;
+    an->stopped = 0;
+    an->plays = 0;
+    an->started = 0;
+    an->loop = (int16_t)(a.loop > 32767 ? 32767 : a.loop);
+    an->w = (uint16_t)ow;
+    an->h = (uint16_t)oh;
+    {
+        uint32_t i;
+        for (i = 0; i < fpx * 3U; i++) w->atlas.rgb[w->atlas.slot[slot].off * 3U + i] = w->anim_rgb[an->off[0] * 3U + i];
+    }
+    if (st) { st->animated++; st->anim_frames += an->nframes; if (cut) st->anim_cut++; }
+    return an->nframes;
+}
+
+int wf_webimg_tick(wf_webimg_t* w, uint32_t now) {
+    int a, changed = 0;
+    if (w->atlas.magic != OS_FB_WEBIMG_MAGIC) return 0;
+    for (a = 0; a < WF_WEBIMG_ANIM_MAX; a++) {
+        wf_webimg_anim_t* an = &w->anim[a];
+        int next;
+        if (!an->slot || an->stopped) continue;
+        if (!an->started) { an->started = 1; an->due = now + an->delay[0]; continue; }
+        if ((int32_t)(now - an->due) < 0) continue;
+        next = an->cur + 1;
+        if (next >= an->nframes) {
+            an->plays++;
+            if (an->loop == 0 || (an->loop > 0 && an->plays <= an->loop)) next = 0;
+            else { an->stopped = 1; continue; }        /* stays on its last frame */
+        }
+        an->cur = (uint8_t)next;
+        {
+            uint32_t i, n = (uint32_t)an->w * an->h * 3U, dst = w->atlas.slot[an->slot].off * 3U;
+            for (i = 0; i < n; i++) w->atlas.rgb[dst + i] = w->anim_rgb[an->off[next] * 3U + i];
+        }
+        /* next change: one delay after the one due; after a long pause
+         * (window hidden), one delay after now, never a burst */
+        an->due += an->delay[next];
+        if ((int32_t)(now - an->due) >= 0) an->due = now + an->delay[next];
+        w->anim_changes++;
+        changed = 1;
+    }
+    if (changed) { w->gen++; w->atlas.gen = w->gen; }
+    return changed;
+}
+
+int wf_webimg_anim_text(const wf_webimg_t* w, char* out, int cap) {
+    ob_t b;
+    int a, f;
+    b.o = out; b.cap = cap; b.n = 0; b.full = 0;
+    if (cap < 1) return 0;
+    for (a = 0; a < WF_WEBIMG_ANIM_MAX; a++) {
+        const wf_webimg_anim_t* an = &w->anim[a];
+        if (!an->slot) continue;
+        puts_(&b, "anim slot "); putn(&b, an->slot);
+        puts_(&b, " frames "); putn(&b, an->nframes);
+        puts_(&b, " cur "); putn(&b, an->cur);
+        puts_(&b, " plays "); putn(&b, an->plays);
+        puts_(&b, " loop ");
+        if (an->loop < 0) puts_(&b, "once"); else if (an->loop == 0) puts_(&b, "forever"); else putn(&b, an->loop);
+        puts_(&b, " delays ");
+        for (f = 0; f < an->nframes; f++) { if (f) puts_(&b, ","); putn(&b, an->delay[f]); }
+        puts_(&b, " stopped "); putn(&b, an->stopped);
+        puts_(&b, " size "); putn(&b, an->w); puts_(&b, "x"); putn(&b, an->h);
+        puts_(&b, "\n");
+    }
+    out[b.n] = 0;
+    return b.n;
 }
 
 static int find_slot(const wf_webimg_t* w, const char* url) {
@@ -173,19 +316,6 @@ static int num(const char* s) {
     int v = 0, k;
     for (k = 0; s[k] >= '0' && s[k] <= '9' && k < 5; k++) v = v * 10 + (s[k] - '0');
     return v;
-}
-
-typedef struct { char* o; int cap, n, full; } ob_t;
-static void put(ob_t* b, const char* s, int n) {
-    int i;
-    for (i = 0; i < n; i++) { if (b->n < b->cap - 1) b->o[b->n++] = s[i]; else b->full = 1; }
-}
-static void puts_(ob_t* b, const char* s) { put(b, s, s_len(s)); }
-static void putn(ob_t* b, int v) {
-    char t[8];
-    int k = 0;
-    do { t[k++] = (char)('0' + v % 10); v /= 10; } while (v && k < 7);
-    while (k) { char c = t[--k]; put(b, &c, 1); }
 }
 
 /* end of the tag that starts at in[i] ('<'), quotes respected */
@@ -261,6 +391,7 @@ int wf_webimg_section(wf_webimg_t* w, const char* in, int n, char* out, int cap,
                             w->disp_w[free_slot] = (uint16_t)bw;
                             w->disp_h[free_slot] = (uint16_t)bh;
                             s_cpy(w->url[free_slot], url, WF_WEBIMG_URL);
+                            if (img.fmt == IMGDEC_GIF && img.frames > 1) (void)anim_store(w, free_slot, ow, oh, st);
                             w->gen++;
                             slot = free_slot;
                         }

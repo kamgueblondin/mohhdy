@@ -1432,7 +1432,7 @@ static void test_l58_width_invalid_29(void) {
     TEST_ASSERT_EQUAL(10, lot52_node("b")->y);
     TEST_ASSERT_EQUAL(200, lot52_node("b")->w);
     TEST_ASSERT_EQUAL(5, lot52_node("b")->h);
-    TEST_ASSERT_TRUE(lot52_has_diag("math length refused"));
+    TEST_ASSERT_TRUE(lot52_has_diag("css variable undefined"));   /* lot 73: var() of a missing variable */
     TEST_ASSERT_EQUAL(0, find_text("A")->x);
     TEST_ASSERT_EQUAL(1, find_text("A")->y);
     TEST_ASSERT_TRUE(lot52_node("a")->length[WE_LEN_WIDTH].count > 0);

@@ -68,6 +68,9 @@ typedef struct {
      * compositor when it changes, and the slot sizes for the engine */
     const os_fb_webimg_t *(*atlas)(void);
     int (*atlas_dims)(void *ctx, int slot, int *w, int *h);
+    /* Lot 73: advances the animated images (wf_webimg_tick); 1 when a
+     * frame changed (the atlas generation then differs and is resent) */
+    int (*anim_tick)(void);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
 /* "web-open URL|FILE", "web-forms", "web-section N|next|prev", "web-input N TEXT", "web-submit [N]",

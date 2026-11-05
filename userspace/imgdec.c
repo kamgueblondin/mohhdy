@@ -273,6 +273,9 @@ static int probe_pnm(const unsigned char *b, int n, imgdec_t *img) {
 
 static int probe_ico(const unsigned char *b, int n, imgdec_t *img);
 static unsigned ico_scratch_need(const imgdec_t *img);
+static int probe_webp(const unsigned char *b, int n, imgdec_t *img);
+static unsigned webp_scratch_need(const imgdec_t *img);
+static int open_webp(const unsigned char *b, int n, unsigned char *scratch, unsigned smax, imgdec_t *img);
 
 int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img) {
     int rc;
@@ -285,6 +288,8 @@ int imgdec_probe(const unsigned char *buf, int n, imgdec_t *img) {
     rc = probe_gif(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_GIF) return rc;
     zero(img);
     rc = probe_ico(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_ICO) return rc;
+    zero(img);
+    rc = probe_webp(buf, n, img); if (rc != IMGDEC_E_FORMAT || img->fmt == IMGDEC_WEBP) return rc;
     zero(img);
     rc = probe_bmp(buf, n, img); if (rc != IMGDEC_E_FORMAT) return rc;
     zero(img);
@@ -326,6 +331,7 @@ unsigned imgdec_scratch_need(const imgdec_t *img) {
     if (img->fmt == IMGDEC_JPEG) return jpeg_scratch_need(img, 0);
     if (img->fmt == IMGDEC_GIF) return gif_scratch_need(img);
     if (img->fmt == IMGDEC_ICO) return ico_scratch_need(img);
+    if (img->fmt == IMGDEC_WEBP) return webp_scratch_need(img);
     return 0U;
 }
 
@@ -431,6 +437,7 @@ static int open_png(const unsigned char *b, int n, unsigned char *scratch, unsig
 }
 
 #include "imgdec_ico.inc"
+#include "imgdec_webp.inc"
 
 unsigned imgdec_scratch_need_scaled(const imgdec_t *img, int shift) {
     if (img->fmt == IMGDEC_JPEG) return jpeg_scratch_need(img, shift < 0 ? 0 : shift > 3 ? 3 : shift);
@@ -449,6 +456,7 @@ int imgdec_open_scaled(const unsigned char *buf, int n, unsigned char *scratch, 
     if (img->fmt == IMGDEC_JPEG) return open_jpeg(buf, n, scratch, scratch_max, img, shift);
     if (img->fmt == IMGDEC_GIF) return open_gif(buf, n, scratch, scratch_max, img);
     if (img->fmt == IMGDEC_ICO) return open_ico(buf, n, scratch, scratch_max, img);
+    if (img->fmt == IMGDEC_WEBP) return open_webp(buf, n, scratch, scratch_max, img);
     return IMGDEC_OK;
 }
 
@@ -479,7 +487,7 @@ void imgdec_pixel(const imgdec_t *img, int x, int y, unsigned char rgb[3]) {
         if (img->over_white && img->pal_a[k] != 255) over_white(rgb, img->pal_a[k]);
     } else if (img->channels >= 3) {
         rgb[0] = p[0]; rgb[1] = p[1]; rgb[2] = p[2];
-        if (img->over_white && img->fmt == IMGDEC_PNG && img->channels == 4 && p[3] != 255) over_white(rgb, p[3]);
+        if (img->over_white && (img->fmt == IMGDEC_PNG || img->fmt == IMGDEC_WEBP) && img->channels == 4 && p[3] != 255) over_white(rgb, p[3]);
     } else {
         rgb[0] = rgb[1] = rgb[2] = p[0];
         if (img->over_white && img->fmt == IMGDEC_PNG && img->channels == 2 && p[1] != 255) over_white(rgb, p[1]);
@@ -525,7 +533,7 @@ int imgdec_render(const imgdec_t *img, unsigned char *rgb, int max_w, int max_h,
 }
 
 const char *imgdec_fmt_name(int fmt) {
-    switch (fmt) { case IMGDEC_PNM: return "pnm"; case IMGDEC_BMP: return "bmp"; case IMGDEC_PNG: return "png"; case IMGDEC_JPEG: return "jpeg"; case IMGDEC_GIF: return "gif"; case IMGDEC_ICO: return "ico"; default: return "inconnu"; }
+    switch (fmt) { case IMGDEC_PNM: return "pnm"; case IMGDEC_BMP: return "bmp"; case IMGDEC_PNG: return "png"; case IMGDEC_JPEG: return "jpeg"; case IMGDEC_GIF: return "gif"; case IMGDEC_ICO: return "ico"; case IMGDEC_WEBP: return "webp"; default: return "inconnu"; }
 }
 
 const char *imgdec_strerror(int rc) {

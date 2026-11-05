@@ -943,6 +943,7 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
     if (!g_rtx_depth && (inner == P2P_I_MSG || inner == P2P_I_PUT) && !p2p_rtx_accept(&p->rtx, p->rx_counter)) return;
     switch (inner) {
     case P2P_I_DACK:
+        p->rx_dacks++;
         if (p2p_flow_apply_acks(&p->flow, m, len, now(h) * (1000000U / P2P_HZ)) < 0) n->foreign++;
         else rtx_apply_acks(p, m, len);
         break;
@@ -1794,8 +1795,11 @@ void p2p_tick(p2p_node_t* n, const p2p_host_t* h, int budget) {
             p2p_peer_t* p = &n->peers[i];
             uint32_t rate;
             if (!p->used) continue;
-            rate = p->received - p->rx_win_last;
-            p->rx_win_last = p->received;
+            /* Lot 73: the DACK frames answer our own data frames (their
+             * number follows our send rate and how the peer's ticks cut
+             * its ack batches), so they are not traffic of that peer. */
+            rate = (p->received - p->rx_dacks) - p->rx_win_last;
+            p->rx_win_last = p->received - p->rx_dacks;
             if (n->analyze_windows >= P2P_ANALYZE_WARMUP && rate * 16U > 4U * p->rx_base16 + 8U * 16U) {
                 if ((int32_t)(n->solicited_until - t) > 0) n->solicited_skipped++;
                 else {

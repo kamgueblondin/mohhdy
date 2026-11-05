@@ -29,6 +29,10 @@ wf_cookie_jar_t* wf_guest_cookies(void);
  * alone (0 = every suite). */
 void wf_guest_set_keepalive(int on);
 int wf_guest_keepalive(void);
+/* Lot 73: HTTP cache of the guest fetches (wf_cache.h), on by default */
+void wf_guest_set_cache(int on);
+int wf_guest_cache_on(void);
+wf_cache_t* wf_guest_cache(void);
 void wf_guest_set_tls_suite(uint16_t id);
 uint16_t wf_guest_tls_suite(void);
 #endif

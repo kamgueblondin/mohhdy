@@ -1224,6 +1224,53 @@ static void test_lot71_web_sections_and_form(void) {
     osui_gui_set_web_fetch(0);
 }
 
+/* Lot 73: the GUI advances the animated images before it sends the atlas:
+ * a frame change (new generation) resends it, no change sends nothing */
+static os_fb_webimg_t g_m_atlas;
+static int g_m_ticks, g_m_tick_changes;
+static const os_fb_webimg_t *m_atlas(void) { return &g_m_atlas; }
+static int m_anim_tick(void) {
+    g_m_ticks++;
+    if (g_m_tick_changes) { g_m_tick_changes--; g_m_atlas.gen++; return 1; }
+    return 0;
+}
+const os_fb_webimg_t *osui_gui_test_webimg(int *calls);
+static void test_lot73_anim_tick_resends_atlas(void) {
+    static const osui_web_page_ops_t ops = { m_sections, m_current, m_section, m_form_link, m_form_key,
+                                             m_form_set, m_submit, m_flist, 0, m_atlas, 0, m_anim_tick };
+    static os_fb_scene_t scene;
+    int calls0, calls;
+    setup();
+    memset(&g_m_atlas, 0, sizeof(g_m_atlas));
+    g_m_atlas.magic = OS_FB_WEBIMG_MAGIC;
+    g_m_atlas.gen = 5;
+    g_m_ticks = 0; g_m_tick_changes = 0;
+    osui_gui_set_web_fetch(m_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://example.com/", g_out, (int)sizeof(g_out)));
+    osui_gui_fill_scene(&scene);
+    TEST_ASSERT_TRUE(g_m_ticks >= 1);
+    TEST_ASSERT_TRUE(osui_gui_test_webimg(&calls0) == &g_m_atlas);
+    osui_gui_fill_scene(&scene);
+    osui_gui_test_webimg(&calls);
+    TEST_ASSERT_EQUAL(calls0, calls);                 /* same generation: not resent */
+    g_m_tick_changes = 1;
+    osui_gui_fill_scene(&scene);
+    osui_gui_test_webimg(&calls);
+    TEST_ASSERT_EQUAL(calls0 + 1, calls);             /* new frame: resent */
+    TEST_ASSERT_EQUAL(6U, g_m_atlas.gen);
+    osui_gui_fill_scene(&scene);
+    osui_gui_test_webimg(&calls);
+    TEST_ASSERT_EQUAL(calls0 + 1, calls);
+    /* every scene asks: one tick per fill */
+    g_m_ticks = 0;
+    osui_gui_fill_scene(&scene);
+    osui_gui_fill_scene(&scene);
+    TEST_ASSERT_EQUAL(2, g_m_ticks);
+    osui_gui_set_web_page_ops(0);
+    osui_gui_set_web_fetch(0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_lot12_vfs_and_browser_inspection_views);
@@ -1256,6 +1303,7 @@ int main(void) {
     RUN_TEST(test_gui_parity_panels);
     RUN_TEST(test_gui_web_links_history);
     RUN_TEST(test_lot71_web_sections_and_form);
+    RUN_TEST(test_lot73_anim_tick_resends_atlas);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

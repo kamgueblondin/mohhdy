@@ -69,6 +69,10 @@ typedef struct {
     int img_fmt;                               /* Lot 45: IMGDEC_* (0: ASCII PNM path) */
     int zoom;                                  /* Lot 45: 0 fit, else percent */
     int pan_x, pan_y;                          /* Lot 45: source pixels at zoom */
+    /* Lot 73: an animated GIF plays in the viewer (space pauses) */
+    int anim, anim_paused, anim_done;          /* 1: two frames or more; paused; last play over */
+    int anim_frame, anim_plays;                /* frame shown (1 = first), plays finished */
+    unsigned anim_due;                         /* tick (1/100 s) of the next frame, 0 not started */
     char last[OSUI_TOOL_INPUT + 40];           /* parity: last command run */
     int psel;                                  /* parity: menu line kept across runs */
     /* PR 4: Form support */
@@ -108,6 +112,11 @@ int osui_tool_click(osui_tool_t *t, int row, int col, int dbl, const osui_tool_s
 int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src);
 /* chat: one generation step when generating; 1 when the view changed */
 int osui_tool_idle(osui_tool_t *t, const osui_tool_src_t *src);
+/* Lot 73: advance the viewer's animated GIF at tick now (1/100 s): 1 when
+ * a new frame is in osui_tool_image_rgb (img_gen bumped), else 0. The
+ * first call only starts the clock. Delays under 2/100 s play as 10, as
+ * browsers do; the NETSCAPE2.0 loop count is honoured (none: one play). */
+int osui_tool_anim_tick(osui_tool_t *t, unsigned now);
 void osui_tool_render(const osui_tool_t *t, osui_app_view_t *v);
 /* Lot 45 (US-G15): the window grid changed (maximize / restore / resize).
  * Rows follow at once; new text wraps at the new width; views without side

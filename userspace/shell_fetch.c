@@ -52,6 +52,10 @@ int shell_page_atlas_dims(void* ctx, int slot, int* w, int* h) { (void)ctx; retu
 void shell_page_images(int on) { g_img_on = on ? 1 : 0; }
 int shell_page_images_on(void) { return g_img_on; }
 const wf_webimg_stats_t* shell_page_image_stats(void) { return &g_img_st; }
+static unsigned anim_ticks(void) { int t; asm volatile("int $0x80" : "=a"(t) : "a"(SYS_TICKS) : "memory"); return (unsigned)t; }
+int shell_page_anim_tick(void) { return wf_webimg_tick(&g_wi, anim_ticks()); }
+unsigned shell_page_anim_changes(void) { return g_wi.anim_changes; }
+int shell_page_anim_text(char* out, int cap) { return wf_webimg_anim_text(&g_wi, out, cap); }
 
 /* Section src (n bytes) with its images fetched and rewritten in place. */
 static int with_images(char* src, int n, int src_max) {
@@ -179,6 +183,8 @@ int shell_fetch_line(const char* line) {
     print_string(line_out);
     print_string("\n");
     if (g_res.content_type[0]) { print_string("fetch content-type "); print_string(g_res.content_type); print_string("\n"); }
+    /* Lot 73: answered from the HTTP cache */
+    if (g_res.cached) { print_string(g_res.cached == 1 ? "fetch cache fresh\n" : "fetch cache revalidated\n"); }
     if (headers_only) return 0;
     g_body[g_res.body_len] = 0;
     if (!raw && is_html(&g_res, g_body, g_res.body_len)) {

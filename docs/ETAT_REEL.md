@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 73 (animated GIF, constant-time AES, multi-column fragmentation, line clamp, inside list markers, small-caps, underline offset)
+
+- Animated GIF in the browser: frames composed in Ring 3 (delay, disposal, NETSCAPE2.0 loop), advanced at 100 Hz into the image atlas slot (same `SYS_VGA_BLIT` 6 path, no ABI change); `web-anim`, `web-images` animated / frames / anim_cut.
+- AES without table: bitsliced Boyar-Peralta S-box (`include/os_aes_ct.h`) in `wf_aead.c` and `kernel/aes_gcm.c` (kernel source change for review), GHASH masked; FIPS-197, SP 800-38A and GCM known answers.
+- Engine: paragraphs cut between columns (orphans, widows, break-inside), `line-clamp` / `-webkit-line-clamp`, `flow-root` and `-webkit-box`, `list-style-position: inside`, small-caps (capitals), `text-underline-offset`. Proof `make qemu-lot73`.
+- US-031 partial, phase3_complete=false; roadmap statuses unchanged. Details and review points: [lot73_plan.md](lot73_plan.md).
+
 ## Lot 72 (browser images, Google without JavaScript, TLS AES-256 / ChaCha20, constant-time P-256, keep-alive, Greek and Cyrillic glyphs)
 
 - Images in the browser: PNG (transparency), GIF, JPEG (progressive, scaled), ICO and BMP decoded in Ring 3, fetched per section and drawn from a web atlas (`OS_FB_WEB_IMAGE`, `SYS_VGA_BLIT` 6); favicon in the web window title and the Browser-OS address field. `web-images`.

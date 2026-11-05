@@ -1,5 +1,6 @@
 /* wf_html.c - Lot 67: reader-view reduction of a fetched page (see wf_html.h). */
 #include "wf_html.h"
+#include "wf_srcset.h"
 #include "wf_entity.h"
 #include "../include/os_charset.h"
 
@@ -22,6 +23,13 @@ static int g_cs = WF_CS_UTF8;
 /* Lot 72: <img> kept for the GUI (wf_html_set_images) */
 static int g_images;
 void wf_html_set_images(int on) { g_images = on ? 1 : 0; }
+/* Lot 73: viewport for srcset / sizes / media, and the open <picture> */
+static int g_vw = WF_SRCSET_DEFAULT_VW, g_dpr = 100, g_pic;
+static char g_pic_url[WF_URL_PATH_MAX];
+void wf_html_set_viewport(int vw, int dpr100) {
+    g_vw = vw > 0 && vw <= 8192 ? vw : WF_SRCSET_DEFAULT_VW;
+    g_dpr = dpr100 > 0 && dpr100 <= 800 ? dpr100 : 100;
+}
 static int g_cs_set = WF_CS_NONE;
 static wf_form_page_t* g_forms;
 void wf_html_set_charset(int cs) { g_cs_set = cs >= WF_CS_UTF8 && cs <= WF_CS_LAST ? cs : WF_CS_NONE; }   /* Lot 72: Cyrillic / Greek charsets too */
@@ -377,36 +385,67 @@ static int attr_px(const char* in, int s, int e, const char* name) {
 
 /* Lot 72: image source of an <img>: src, else the lazy-loading data-src,
  * else the first srcset candidate; data: URLs are left out (counted). */
-static int img_source(const char* in, int s, int e, char* out, int cap) {
-    static const char* const names[] = {"src", "data-src", "data-lazy-src", "srcset", 0};
+static int str_n(const char* s) { int n = 0; while (s[n]) n++; return n; }
+
+static int is_data_url(const char* u) {
+    return lc(u[0]) == 'd' && lc(u[1]) == 'a' && lc(u[2]) == 't' && lc(u[3]) == 'a' && u[4] == ':';
+}
+
+/* Lot 73: srcset of tag [s, e) picked with its sizes into out */
+static int srcset_of(const char* in, int s, int e, char* out, int cap) {
+    static char set[WF_URL_PATH_MAX * 2], sizes[160];
+    if (get_attr(in, s, e, "srcset", set, (int)sizeof(set)) <= 0) return 0;
+    if (get_attr(in, s, e, "sizes", sizes, (int)sizeof(sizes)) <= 0) sizes[0] = 0;
+    if (wf_srcset_pick(set, sizes[0] ? sizes : 0, g_vw, g_dpr, out, cap) <= 0 || is_data_url(out)) { out[0] = 0; return 0; }
+    return str_n(out);
+}
+
+/* Lot 73: a <source> in an open <picture>: the first usable one wins */
+static void picture_source(const char* in, int s, int e, wf_html_stats_t* st) {
+    static char type[64], media[160];
+    if (g_pic_url[0]) return;
+    if (get_attr(in, s, e, "type", type, (int)sizeof(type)) <= 0) type[0] = 0;
+    if (get_attr(in, s, e, "media", media, (int)sizeof(media)) <= 0) media[0] = 0;
+    if (!wf_image_type_ok(type) || !wf_media_match(media, g_vw)) { st->sources_skipped++; return; }
+    if (srcset_of(in, s, e, g_pic_url, (int)sizeof(g_pic_url)) <= 0) st->sources_skipped++;
+}
+
+static int amp_decode(char* out, int n);
+static int img_source(const char* in, int s, int e, char* out, int cap, wf_html_stats_t* st) {
+    static const char* const names[] = {"src", "data-src", "data-lazy-src", 0};
     int k;
+    if (g_pic && g_pic_url[0]) {
+        for (k = 0; g_pic_url[k] && k < cap - 1; k++) out[k] = g_pic_url[k];
+        out[k] = 0;
+        st->images_srcset++;
+        goto decoded;
+    }
+    if (srcset_of(in, s, e, out, cap) > 0) { st->images_srcset++; goto decoded; }
     for (k = 0; names[k]; k++) {
-        int n = get_attr(in, s, e, names[k], out, cap), i;
+        int n = get_attr(in, s, e, names[k], out, cap);
         if (n <= 0) continue;
-        if (k == 3) {   /* srcset: first URL, up to a space or comma */
-            for (i = 0; out[i] && !is_sp(out[i]) && out[i] != ','; i++) {}
-            out[i] = 0;
-            n = i;
-        }
-        if (n >= 5 && lc(out[0]) == 'd' && lc(out[1]) == 'a' && lc(out[2]) == 't' && lc(out[3]) == 'a' && out[4] == ':')
-            continue;
-        {   /* &amp; in query strings */
-            int r = 0, w = 0;
-            while (r < n) {
-                if (out[r] == '&') {
-                    int used = 0;
-                    uint32_t cp = wf_entity_decode(out + r, n - r, &used);
-                    if (used && cp > 0 && cp < 0x80u) { out[w++] = (char)cp; r += used; continue; }
-                }
-                out[w++] = out[r++];
-            }
-            out[w] = 0;
-            n = w;
-        }
-        if (n > 0) return n;
+        if (n >= 5 && is_data_url(out)) continue;
+        return amp_decode(out, n);
     }
     out[0] = 0;
     return 0;
+decoded:
+    return amp_decode(out, str_n(out));
+}
+
+/* &amp; in query strings */
+static int amp_decode(char* out, int n) {
+    int r = 0, w = 0;
+    while (r < n) {
+        if (out[r] == '&') {
+            int used = 0;
+            uint32_t cp = wf_entity_decode(out + r, n - r, &used);
+            if (used && cp > 0 && cp < 0x80u) { out[w++] = (char)cp; r += used; continue; }
+        }
+        out[w++] = out[r++];
+    }
+    out[w] = 0;
+    return w;
 }
 
 /* Lot 72: <img> for the GUI: absolute src, size attributes, alt text.
@@ -416,7 +455,7 @@ static void put_img(ob_t* b, const char* in, int j, int e, const wf_url_t* base,
     static wf_url_t u;
     int w = attr_px(in, j, e, "width"), h = attr_px(in, j, e, "height"), k;
     if ((w && w <= 2) || (h && h <= 2)) { st->images_dropped++; return; }
-    if (img_source(in, j, e, src, (int)sizeof(src)) <= 0 || !base || !href_web(src) || wf_url_resolve(base, src, &u) != 0 ||
+    if (img_source(in, j, e, src, (int)sizeof(src), st) <= 0 || !base || !href_web(src) || wf_url_resolve(base, src, &u) != 0 ||
         st->images >= WF_HTML_IMG_MAX) {
         st->images_dropped++;
         return;
@@ -483,6 +522,8 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
     if (!st) st = &dummy;
     for (k = 0; k < (int)sizeof(*st); k++) ((char*)st)[k] = 0;
     st->in_bytes = n;
+    g_pic = 0;
+    g_pic_url[0] = 0;
     g_forms = forms;
     if (forms) wf_form_reset(forms);
     g_cs = g_cs_set;
@@ -570,6 +611,17 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
                 chrome_block(in, j, e)) {
                 st->blocks_dropped++;
                 i = skip_block(in, n, e + 1, name);
+                continue;
+            }
+            if (g_images && seq(name, "picture")) {      /* Lot 73 */
+                g_pic = !close;
+                g_pic_url[0] = 0;
+                i = e < n ? e + 1 : n;
+                continue;
+            }
+            if (g_images && !close && g_pic && seq(name, "source")) {
+                picture_source(in, j, e, st);
+                i = e < n ? e + 1 : n;
                 continue;
             }
             if (g_images && !close && seq(name, "img")) {

@@ -41,13 +41,15 @@ static void test_l64_layer_and_shorthand_cases(void) {
     l63_bgi("<body style='margin:0'><div style='width:8px;height:2px;background:url(/images/mire-ga16.png) 1px no-repeat 2px'></div></body>");
     TEST_ASSERT_EQUAL(1, l61_diag_count("background refused"));   /* a split position */
     TEST_ASSERT_EQUAL(0, (int)g_doc.nitems);
-    /* an inline fragment has no padding box: content-box origin is its corner */
+    /* content-box origin is the fragment's text corner; since lot 73 the
+     * inline padding and border take room before it (was x 0) */
     l63_bgi("<body style='margin:0'><p style='margin:0'><span style='border:2px solid #000;padding:3px;background:url(/images/mire-ga16.png) "
             "no-repeat;background-size:6px 4px;background-origin:content-box'>abc</span></p></body>");
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
-    l61_rect_at(0, 0, 1, 4, 0x000000);
-    l61_rect_at(5, 0, 1, 4, 0xC8C8C8);
-    l61_text_at("abc", 0, 1);
+    l61_rect_at(5, 0, 1, 4, 0x000000);
+    l61_rect_at(10, 0, 1, 4, 0xC8C8C8);
+    l61_rect_at(0, -3, 2, 16, 0x000000);   /* lot 73: its left border */
+    l61_text_at("abc", 5, 1);
 }
 
 static void test_l64_column_cases(void) {

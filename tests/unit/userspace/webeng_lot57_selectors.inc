@@ -1026,14 +1026,15 @@ static void test_l57_attr_specificity(void) {
 }
 
 static void test_l57_bad_selector_66(void) {
+    /* Lot 73: :hover parses and never matches on a static page */
     lot52_render("<style>body{margin:0}div{height:10px}div:hover{color:red;width:32px}</style><body><div id=a>A</div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->color);
     TEST_ASSERT_EQUAL(320, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(10, lot52_node("a")->h);
     TEST_ASSERT_NOT_NULL(find_text("A"));
     TEST_ASSERT_EQUAL(0, find_text("A")->color);
-    TEST_ASSERT_TRUE(lot52_has_diag("css selector unsupported"));
-    TEST_ASSERT_EQUAL(2, g_doc.nrules);
+    TEST_ASSERT_FALSE(lot52_has_diag("css selector unsupported"));
+    TEST_ASSERT_EQUAL(3, g_doc.nrules);
 }
 
 static void test_l57_bad_selector_67(void) {
@@ -1048,14 +1049,15 @@ static void test_l57_bad_selector_67(void) {
 }
 
 static void test_l57_bad_selector_68(void) {
+    /* Lot 73: :not() is supported: div:not(.x) matches a div without x */
     lot52_render("<style>body{margin:0}div{height:10px}div:not(.x){color:red;width:32px}</style><body><div id=a>A</div></body>", 320);
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->color);
-    TEST_ASSERT_EQUAL(320, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(0xFF0000, lot52_node("a")->color);
+    TEST_ASSERT_EQUAL(32, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(10, lot52_node("a")->h);
     TEST_ASSERT_NOT_NULL(find_text("A"));
-    TEST_ASSERT_EQUAL(0, find_text("A")->color);
-    TEST_ASSERT_TRUE(lot52_has_diag("css selector unsupported"));
-    TEST_ASSERT_EQUAL(2, g_doc.nrules);
+    TEST_ASSERT_EQUAL(0xFF0000, find_text("A")->color);
+    TEST_ASSERT_FALSE(lot52_has_diag("css selector unsupported"));
+    TEST_ASSERT_EQUAL(3, g_doc.nrules);
 }
 
 static void test_l57_bad_selector_69(void) {

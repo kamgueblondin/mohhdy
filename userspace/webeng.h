@@ -33,7 +33,9 @@
  * limit, the image and layout workspaces are sized by it. */
 #define WE_MAX_NODES 160
 #define WE_MAX_ITEMS OS_FB_WEB_ITEMS
-#define WE_MAX_RULES 48
+#define WE_MAX_RULES 64
+#define WE_VARS_MAX 12   /* lot 73: custom properties per element */
+#define WE_HINTS_MAX 8   /* lot 73: presentational attributes per element */
 #define WE_POOL 32768
 #define WE_TEXT_SOURCE_MAX 512
 #define WE_CSS_MAX 2048
@@ -61,6 +63,12 @@ int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px);
 #define WE_GRID_AREAS_MAX 8
 #define WE_GRID_NAME_MAX 16
 #define WE_GRID_LINE_ALIASES 2
+/* Lot 73: we_node_t.form_type of a form control */
+enum {
+    WE_FORM_NONE = 0, WE_FORM_TEXT, WE_FORM_PASSWORD, WE_FORM_CHECKBOX, WE_FORM_RADIO,
+    WE_FORM_SUBMIT, WE_FORM_RESET, WE_FORM_BUTTON, WE_FORM_HIDDEN
+};
+
 typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME_MAX]; } we_grid_names_t;
 /* Lot 61: an edge is auto, a line number, a name with an occurrence
  * (nth, negative counts from the end) or a span. A named span counts
@@ -200,6 +208,7 @@ typedef struct {
     uint8_t grid_cols;         /* 1..8 when display:grid, else 0 */
     uint8_t flex_wrap, float_side, grid_rows, relative;
     uint8_t list_style;
+    uint8_t list_inside;        /* lot 73: list-style-position inside (inherited) */
     uint16_t lsi_off, lsi_len;
     uint8_t own_edges;          /* lot 64: per-side borders painted on a box outside a collapsed table */
     /* Lot 64: multi-column layout: column-count (0 auto), column-width (-1
@@ -212,6 +221,10 @@ typedef struct {
     /* Lot 64: column-span all (1) on a block child of a multi-column box,
      * and the forced column breaks: bit 0 break-before, bit 1 break-after. */
     uint8_t col_span_all, col_break;
+    /* Lot 73: break-inside avoid / avoid-column (1) keeps a block whole in
+     * the columns; orphans and widows (inherited, 2) are the fewest lines
+     * of a fragmented block at the bottom / top of a column. */
+    uint8_t col_avoid_inside, orphans, widows;
     uint8_t justify_content, align_items, align_self, align_content;
     uint8_t justify_items, justify_self;
     uint8_t width_kind, basis_content, border_box;
@@ -260,6 +273,21 @@ typedef struct {
     /* Lot 64: inherited writing-mode (WE_WM_*), direction (1 rtl) and
      * text-orientation (1 upright; mixed paints upright too). */
     uint8_t wmode, dir_rtl, upright;
+    uint8_t deco_clone;        /* lot 73: box-decoration-break: clone */
+    /* lot 73: form controls (webeng_forms.inc): WE_FORM_* type, WE_FF_*
+     * flags, size / rows / cols attributes, value and placeholder in the
+     * pool, progress / meter value, min, max, low, high in hundredths */
+    /* Lot 73: custom properties: names and values in pool */
+    /* Lot 73: presentational hints (attribute kind, value in pool) */
+    uint8_t nhints, hint_kind[WE_HINTS_MAX], hint_len[WE_HINTS_MAX];
+    uint8_t caption_bottom;   /* lot 73: caption-side bottom (inherited) */
+    int8_t vshift, vshift_own; /* lot 73: baseline shift down in px: total, own */
+    uint16_t hint_off[WE_HINTS_MAX];
+    uint8_t nvars, var_name_len[WE_VARS_MAX];
+    uint16_t var_name_off[WE_VARS_MAX], var_off[WE_VARS_MAX], var_len[WE_VARS_MAX];
+    uint8_t form_type, form_flags, form_size, form_rows, form_cols, meter_set;
+    uint16_t fval_off, fval_len, fph_off, fph_len;
+    int32_t meter[5];
     /* Lot 64: text-align / text-align-last given as start or end (bits 0-1
      * and 2-3: 1 start, 2 end), resolved against direction after the cascade. */
     uint8_t align_logical;
@@ -329,7 +357,10 @@ typedef struct {
     we_bg_layer_t bgi_more[WE_BG_LAYERS - 1];
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
+    uint8_t small_caps;         /* lot 73: font-variant small-caps, painted uppercase (inherited) */
+    int8_t underline_off;       /* lot 73: text-underline-offset px, 0 auto (inherited) */
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
+    uint8_t line_clamp;         /* lot 73: -webkit-line-clamp / line-clamp lines (0 none) */
     int8_t letter_spacing, word_spacing; /* lot 62: px added per glyph / per space, inherited */
     uint8_t align_last, justify_none;    /* lot 62: text-align-last (0 auto, else 1 + WE_ALIGN_*), text-justify none */
     /* Lot 63: generated content. pseudo_kind marks a ::before/::after box
@@ -366,7 +397,18 @@ typedef struct {
 #define WE_SELECTOR_WORK_MAX 4096
 enum { WE_SEL_DESC, WE_SEL_CHILD, WE_SEL_ADJACENT, WE_SEL_SIBLING };
 enum { WE_PSEUDO_FIRST = 1, WE_PSEUDO_LAST, WE_PSEUDO_ONLY, WE_PSEUDO_EMPTY,
-       WE_PSEUDO_ROOT, WE_PSEUDO_NTH, WE_PSEUDO_NTH_LAST, WE_PSEUDO_TYPE, WE_PSEUDO_TYPE_LAST };
+       WE_PSEUDO_ROOT, WE_PSEUDO_NTH, WE_PSEUDO_NTH_LAST, WE_PSEUDO_TYPE, WE_PSEUDO_TYPE_LAST,
+       WE_PSEUDO_ONLY_TYPE };
+/* Lot 73: :not/:is/:where arguments and state pseudo-classes */
+enum { WE_LOGIC_NOT = 1, WE_LOGIC_IS, WE_LOGIC_WHERE, WE_LOGIC_HAS };
+#define WE_STATE_LINK 1
+#define WE_STATE_NEVER 2
+#define WE_STATE_CHECKED 4
+#define WE_STATE_DISABLED 8
+#define WE_STATE_ENABLED 16
+#define WE_STATE_PLACEHOLDER 32
+#define WE_STATE_INDETERMINATE 64
+#define WE_STATE_OPEN 128
 /* Lot 63: generated content */
 enum { WE_PSEUDO_BEFORE = 1, WE_PSEUDO_AFTER = 2 };
 enum { WE_CONTENT_NONE, WE_CONTENT_LIST, WE_CONTENT_UA_OPEN, WE_CONTENT_UA_CLOSE };
@@ -383,6 +425,8 @@ typedef struct {
     we_selector_attr_t attr[WE_SELECTOR_ATTRS_MAX];
     uint8_t classes, attrs, pseudo, combinator;
     int16_t nth_a, nth_b;
+    uint8_t state, logic_kind[2];       /* lot 73 */
+    uint16_t logic_off[2], logic_len[2]; /* lot 73: arguments in css[] */
 } we_selector_part_t;
 typedef struct {
     we_selector_part_t part[WE_SELECTOR_PARTS_MAX];
@@ -396,6 +440,7 @@ typedef struct {
 typedef struct {
     uint32_t nodes, elements, text_nodes, scripts_skipped;
     uint32_t rules, decls_applied, unknown_props;
+    uint32_t vars_used, media_skipped, table_captions;   /* lot 73 */
     uint32_t boxes, lines, items, items_dropped;
     uint32_t page_w, page_h;
     uint32_t flex_lines, grid_lines, floats, table_rows;
@@ -423,6 +468,8 @@ typedef struct {
     int16_t root;
     /* Lot 61: explicit viewport and the scroll offset fixed boxes follow. */
     int16_t viewport_w, viewport_h, scroll_y;
+    /* Lot 73: the size @media queries see (0: the layout width, 640 x 480) */
+    int16_t media_w, media_h;
     /* Lot 63: node and pool counts before generated content, so a second
      * we_style drops the generated boxes first. */
     uint16_t source_nodes, source_pool;
@@ -460,6 +507,8 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h);
 /* Clamp y to [0, page_h - viewport_h], move fixed boxes, return the offset. */
 int we_scroll(we_doc_t* d, int y);
 int we_render(we_doc_t* d, const char* html, int len, int viewport_w);
+/* Lot 73: the media size of @media (call after we_parse, before we_style) */
+void we_set_media(we_doc_t *d, int w, int h);
 /* US-045 */
 int we_find_id(const we_doc_t* d, const char* id);
 typedef void (*we_out_fn)(void* ctx, const char* s);

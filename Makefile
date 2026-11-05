@@ -1079,6 +1079,7 @@ strict-image-check: $(OS_IMAGE) kernel-netlegacy pack-initrd
 font-check:
 	@python3 scripts/gen_bitmap_font.py --check kernel/gfx_font_hd.h kernel/gfx_font8.h include/os_charset_pages.h
 	@python3 scripts/gen_charset_tables.py --check
+	@python3 scripts/gen_gif_anim_fixtures.py --check
 .PHONY: font-check
 
 # Lot 47 (US-120): /roadmap.txt agrees with the US master phase 9 table and
@@ -1529,6 +1530,10 @@ qemu-lot71: $(OS_IMAGE) pack-initrd disk
 .PHONY: qemu-lot72
 qemu-lot72: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot72.py
+
+.PHONY: qemu-lot73
+qemu-lot73: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot73.py
 
 .PHONY: qemu-web-layout
 qemu-web-layout: $(OS_IMAGE) pack-initrd disk

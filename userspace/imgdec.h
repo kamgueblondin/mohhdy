@@ -17,7 +17,7 @@
 #ifndef IMGDEC_H
 #define IMGDEC_H
 
-enum { IMGDEC_NONE = 0, IMGDEC_PNM = 1, IMGDEC_BMP = 2, IMGDEC_PNG = 3, IMGDEC_JPEG = 4, IMGDEC_GIF = 5, IMGDEC_ICO = 6 };
+enum { IMGDEC_NONE = 0, IMGDEC_PNM = 1, IMGDEC_BMP = 2, IMGDEC_PNG = 3, IMGDEC_JPEG = 4, IMGDEC_GIF = 5, IMGDEC_ICO = 6, IMGDEC_WEBP = 7 };
 enum {
     IMGDEC_OK = 0, IMGDEC_E_FORMAT = -1, IMGDEC_E_TRUNC = -2, IMGDEC_E_UNSUP = -3,
     IMGDEC_E_TOOBIG = -4, IMGDEC_E_INFLATE = -5, IMGDEC_E_CRC = -6
@@ -48,6 +48,7 @@ typedef struct {
     int full_w, full_h;    /* Lot 72: size in the file (w, h are the decoded size) */
     int scale_shift;
     int ico_off, ico_len, ico_png;   /* Lot 72: chosen .ico entry (a PNG entry opens as IMGDEC_PNG) */
+    int webp_off, webp_len, webp_alpha, webp_lossy;   /* Lot 73: VP8L payload, alpha bit, lossy (refused) */
     unsigned ico_need;       /* Lot 72: JPEG decoded at 1/2^shift (imgdec_open_scaled) */        /* Lot 72: GIF frame pixels decoded (less if the stream is cut) */
 } imgdec_t;
 
@@ -62,6 +63,26 @@ int imgdec_open(const unsigned char *buf, int n, unsigned char *scratch, unsigne
  * img->w / img->h are the decoded size, full_w / full_h the file size. */
 unsigned imgdec_scratch_need_scaled(const imgdec_t *img, int shift);
 int imgdec_open_scaled(const unsigned char *buf, int n, unsigned char *scratch, unsigned scratch_max, int shift, imgdec_t *img);
+/* Lot 73: GIF animation. imgdec_anim_begin (after imgdec_probe) clears a
+ * canvas of img->w x img->h RGB at the start of work (white, the page
+ * background) and sets img->data to it; each imgdec_anim_next composes
+ * the next frame onto it (after applying the disposal of the previous
+ * one) and returns 1, then 0 after the last frame (or < 0 when the first
+ * frame cannot be decoded). The loop count of the NETSCAPE2.0 extension
+ * is in a->loop once read (-1: none, 0: forever). work needs
+ * imgdec_anim_need() bytes: canvas, a save copy for disposal 3, LZW. */
+typedef struct {
+    int pos;            /* next block in the file */
+    int frame;          /* frames composed so far */
+    int loop;           /* -1 no loop extension (play once), 0 forever, N more plays */
+    int delay_cs;       /* delay of the frame just composed, 1/100 s as in the file */
+    int disposal;       /* disposal method of the frame just composed */
+    int px, py, pw, ph; /* its rectangle on the screen */
+    int done;           /* trailer, cut or corrupt stream reached */
+} imgdec_anim_t;
+unsigned imgdec_anim_need(const imgdec_t *img);
+int imgdec_anim_begin(const unsigned char *buf, int n, imgdec_t *img, imgdec_anim_t *a, unsigned char *work, unsigned work_max);
+int imgdec_anim_next(const unsigned char *buf, int n, imgdec_t *img, imgdec_anim_t *a, unsigned char *work, unsigned work_max);
 /* one pixel of an opened image */
 void imgdec_pixel(const imgdec_t *img, int x, int y, unsigned char rgb[3]);
 /* nearest-neighbour render into rgb (max_w x max_h, row-major RGB).
