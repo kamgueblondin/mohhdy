@@ -42,8 +42,17 @@ static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int
     if (w_eq(an, "name")) { if (pool_put(d, av, vk, &n->fname_off) == 0) n->fname_len = (uint16_t)vk; return 1; }
     if (w_eq(an, "readonly")) { n->form_flags2 |= WE_FF2_READONLY; return 1; }
     if (w_eq(an, "required")) { n->form_flags2 |= WE_FF2_REQUIRED; return 1; }
+    if (w_eq(an, "pattern")) {
+        if (pool_put(d, av, vk, &n->fpat_off) == 0) { n->fpat_len = (uint16_t)vk; n->form_flags2 |= WE_FF2_PATTERN; }
+        return 1;
+    }
     if (w_eq(an, "novalidate") || w_eq(an, "formnovalid")   /* formnovalidate, cut to 11 bytes */) { n->form_flags2 |= WE_FF2_NOVALIDATE; return 1; }
     if (w_eq(an, "autofocus")) { n->form_flags2 |= WE_FF2_AUTOFOCUS; return 1; }
+    if (w_eq(an, "formmethod")) {
+        if (value_is(av, vk, "dialog")) n->form_flags2 |= WE_FF2_DIALOG;
+        else if (value_is(av, vk, "post")) n->form_flags2 |= WE_FF2_POST;
+        return 1;
+    }
     if (w_eq(an, "tabindex")) {
         int k = 0, v = 0, neg = vk > 0 && av[0] == '-';
         for (k = neg; k < vk; k++) {
@@ -85,7 +94,11 @@ static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int
     }
     if (w_eq(n->tag, "form")) {
         if (w_eq(an, "action")) { if (pool_put(d, av, vk, &n->fval_off) == 0) n->fval_len = (uint16_t)vk; return 1; }
-        if (w_eq(an, "method")) { if (value_is(av, vk, "post")) n->form_flags2 |= WE_FF2_POST; return 1; }
+        if (w_eq(an, "method")) {
+            if (value_is(av, vk, "post")) n->form_flags2 |= WE_FF2_POST;
+            else if (value_is(av, vk, "dialog")) n->form_flags2 |= WE_FF2_DIALOG;
+            return 1;
+        }
         if (w_eq(an, "enctype")) { if (value_is(av, vk, "multipart/form-data")) n->form_flags2 |= WE_FF2_MULTIPART; return 1; }
         return 1;
     }
@@ -98,7 +111,7 @@ static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int
 
 static int finput_kind(const we_node_t *n) {
     return w_eq(n->tag, "input") || w_eq(n->tag, "select") || w_eq(n->tag, "textarea") ||
-           w_eq(n->tag, "button") || w_eq(n->tag, "details");
+           w_eq(n->tag, "button") || w_eq(n->tag, "details") || w_eq(n->tag, "dialog");
 }
 
 static int finput_node(const we_doc_t *d, int ctl) {
@@ -259,7 +272,7 @@ static void finput_capture(const we_doc_t *d, int i, we_fstate_t *s) {
     int k, count;
     w_zero(s, sizeof(*s));
     s->set = 1;
-    if (w_eq(n->tag, "details")) { s->checked = (n->form_flags & WE_FF_OPEN) ? 1 : 0; return; }
+    if (w_eq(n->tag, "details") || w_eq(n->tag, "dialog")) { s->checked = (n->form_flags & WE_FF_OPEN) ? 1 : 0; return; }
     if (w_eq(n->tag, "select")) {
         (void)finput_option(d, i, -1, &count);
         for (k = 0; k < count && k < 32; k++) {
@@ -322,7 +335,7 @@ static void finput_prepare(we_doc_t *d) {
         if (d->forms->focus == n->form_ord - 1) n->form_flags2 |= WE_FF2_FOCUS;
         s = &d->forms->c[n->form_ord - 1];
         if (!s->set) continue;
-        if (w_eq(n->tag, "details")) {
+        if (w_eq(n->tag, "details") || w_eq(n->tag, "dialog")) {
             n->form_flags = (uint8_t)(s->checked ? n->form_flags | WE_FF_OPEN : n->form_flags & ~WE_FF_OPEN);
         } else if (w_eq(n->tag, "select")) {
             int k, cnt, o;
@@ -408,6 +421,105 @@ static int finput_cur(const we_doc_t *d, int i, char *out, int max) {
  * unchecked or no option chosen; type=email without '@' around text;
  * lot 74: shorter than minlength after an edit, a number that is not
  * one or is out of min / max / step, a url without a scheme) */
+
+/* Lot 74: HTML pattern= as an anchored match; a small subset of JS regex:
+ * literals, ., *, +, ?, character classes [abc] [^a], escapes \d \D \s \S
+ * \w \W and \ of a meta, no groups and no | . Empty pattern matches "". */
+static int finput_pat_escape(unsigned char c, const char **pp, const char *end) {
+    if (*pp >= end) return -1;
+    c = (unsigned char)**pp; (*pp)++;
+    if (c == 'd') return 256;      /* digit */
+    if (c == 'D') return 257;
+    if (c == 's') return 258;      /* space */
+    if (c == 'S') return 259;
+    if (c == 'w') return 260;      /* word */
+    if (c == 'W') return 261;
+    return c;
+}
+static int finput_pat_class(unsigned char ch, const char *cls, int n, int neg) {
+    int i, hit = 0;
+    for (i = 0; i < n; i++) {
+        if (cls[i] == '\\' && i + 1 < n) {
+            const char *p = cls + i + 1; int k = finput_pat_escape(0, &p, cls + n);
+            i = (int)(p - cls) - 1;
+            if (k >= 256) {
+                int ok = 0;
+                if (k == 256) ok = ch >= '0' && ch <= '9';
+                else if (k == 257) ok = !(ch >= '0' && ch <= '9');
+                else if (k == 258) ok = ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r';
+                else if (k == 259) ok = !(ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r');
+                else if (k == 260) ok = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_';
+                else ok = !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_');
+                if (ok) hit = 1;
+            } else if (ch == (unsigned char)k) hit = 1;
+        } else if (i + 2 < n && cls[i + 1] == '-') {
+            unsigned char a = (unsigned char)cls[i], b = (unsigned char)cls[i + 2];
+            if (ch >= a && ch <= b) hit = 1;
+            i += 2;
+        } else if (ch == (unsigned char)cls[i]) hit = 1;
+    }
+    return neg ? !hit : hit;
+}
+static int finput_pat_atom(unsigned char ch, int kind, const char *cls, int clen) {
+    if (kind == -1) return 1;                 /* . */
+    if (kind >= 0 && kind < 256) return ch == (unsigned char)kind;
+    if (kind == 256) return ch >= '0' && ch <= '9';
+    if (kind == 257) return !(ch >= '0' && ch <= '9');
+    if (kind == 258) return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r';
+    if (kind == 259) return !(ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r');
+    if (kind == 260) return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_';
+    if (kind == 261) return !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_');
+    if (kind == 300) return finput_pat_class(ch, cls, clen, 0);
+    if (kind == 301) return finput_pat_class(ch, cls, clen, 1);
+    return 0;
+}
+/* recursive match of pattern[pi..] against text[ti..]; budget stops deep backtrack */
+static int finput_pat_match(const char *pat, int plen, int pi, const char *text, int tlen, int ti, int *budget) {
+    while (pi < plen) {
+        int kind, clen = 0, quant = 0, next;
+        const char *cls = 0;
+        if (--*budget < 0) return 0;
+        if (pat[pi] == '\\') {
+            const char *p = pat + pi + 1; kind = finput_pat_escape(0, &p, pat + plen); pi = (int)(p - pat);
+        } else if (pat[pi] == '.') { kind = -1; pi++; }
+        else if (pat[pi] == '[') {
+            int neg = 0, a = ++pi;
+            if (pi < plen && pat[pi] == '^') { neg = 1; a = ++pi; }
+            while (pi < plen && pat[pi] != ']') {
+                if (pat[pi] == '\\' && pi + 1 < plen) pi += 2; else pi++;
+            }
+            cls = pat + a; clen = pi - a; kind = neg ? 301 : 300;
+            if (pi < plen) pi++;
+        } else { kind = (unsigned char)pat[pi++]; }
+        if (pi < plen && (pat[pi] == '*' || pat[pi] == '+' || pat[pi] == '?')) quant = pat[pi++];
+        if (quant == 0) {
+            if (ti >= tlen || !finput_pat_atom((unsigned char)text[ti], kind, cls, clen)) return 0;
+            ti++; continue;
+        }
+        if (quant == '?') {
+            if (ti < tlen && finput_pat_atom((unsigned char)text[ti], kind, cls, clen) &&
+                finput_pat_match(pat, plen, pi, text, tlen, ti + 1, budget)) return 1;
+            continue;
+        }
+        /* * and +: greedy with backtrack */
+        {
+            int n = 0, min = quant == '+' ? 1 : 0, maxn = tlen - ti + 1, k;
+            while (n < maxn - 1 && ti + n < tlen && finput_pat_atom((unsigned char)text[ti + n], kind, cls, clen)) n++;
+            for (k = n; k >= min; k--)
+                if (finput_pat_match(pat, plen, pi, text, tlen, ti + k, budget)) return 1;
+            return 0;
+        }
+        (void)next;
+    }
+    return ti == tlen;
+}
+static int finput_pattern_bad(const we_doc_t *d, const we_node_t *n, const char *v, int len) {
+    int budget = 4096;
+    if (!(n->form_flags2 & WE_FF2_PATTERN) || !n->fpat_len) return 0;
+    if (len == 0) return 0;   /* empty value: required alone refuses */
+    return !finput_pat_match(d->pool + n->fpat_off, n->fpat_len, 0, v, len, 0, &budget);
+}
+
 static int finput_invalid(const we_doc_t *d, int i) {
     const we_node_t *n = &d->nodes[i];
     char v[WE_FSTATE_VAL];
@@ -422,6 +534,7 @@ static int finput_invalid(const we_doc_t *d, int i) {
     if (n->form_minlen && len > 0 && len < n->form_minlen && d->forms && d->forms->c[n->form_ord - 1].set) return 1;
     if ((n->form_flags2 & WE_FF2_NUMBER) && len > 0 && finput_number_bad(n, v, len)) return 1;
     if ((n->form_flags2 & WE_FF2_URL) && len > 0 && finput_url_bad(v, len)) return 1;
+    if ((n->form_flags2 & WE_FF2_PATTERN) && len > 0 && finput_pattern_bad(d, n, v, len)) return 1;
     if ((n->form_flags2 & WE_FF2_EMAIL) && len > 0) {
         for (k = 0; k < len; k++) if (v[k] == '@') { if (at >= 0) return 1; at = k; }
         if (at <= 0 || at == len - 1) return 1;
@@ -440,8 +553,21 @@ static int finput_first_invalid(const we_doc_t *d, int f) {
 /* a submission of form f by control sub (-1: implicit): checks, then
  * records it for we_form_request */
 static int finput_submit(we_doc_t *d, int f, int sub) {
-    int bad;
+    int bad, p;
     if (f < 0) return WE_FACT_NONE;
+    /* Lot 74: method=dialog on the form or the submitter closes the
+     * enclosing dialog instead of building a request. */
+    if ((d->nodes[f].form_flags2 & WE_FF2_DIALOG) ||
+        (sub >= 0 && (d->nodes[sub].form_flags2 & WE_FF2_DIALOG))) {
+        for (p = d->nodes[f].parent; p >= 0; p = d->nodes[p].parent)
+            if (w_eq(d->nodes[p].tag, "dialog") && d->nodes[p].form_ord) {
+                we_fstate_t *s = finput_state(d, p);
+                s->checked = 0;
+                d->forms->toggles++;
+                return WE_FACT_CHANGED;
+            }
+        return WE_FACT_NONE;
+    }
     if (!(d->nodes[f].form_flags2 & WE_FF2_NOVALIDATE) && !(sub >= 0 && (d->nodes[sub].form_flags2 & WE_FF2_NOVALIDATE))) {
         bad = finput_first_invalid(d, f);
         if (bad >= 0) {
@@ -492,7 +618,7 @@ static int finput_activate(we_doc_t *d, int i, int opt) {
     we_node_t *n = &d->nodes[i];
     we_fstate_t *s;
     int rc = finput_set_focus(d, n->form_ord - 1), cnt;
-    if (w_eq(n->tag, "details")) {
+    if (w_eq(n->tag, "details") || w_eq(n->tag, "dialog")) {
         s = finput_state(d, i);
         s->checked = (uint8_t)!s->checked;
         d->forms->toggles++;
@@ -839,7 +965,7 @@ int we_form_request(const we_doc_t *d, we_form_req_t *req) {
         const we_node_t *n = &d->nodes[i];
         int vl;
         if (!n->form_ord || !n->fname_len || finput_owner(d, i) != f || finput_disabled(d, i)) continue;
-        if (w_eq(n->tag, "details")) continue;
+        if (w_eq(n->tag, "details") || w_eq(n->tag, "dialog")) continue;
         if (finput_submit_kind(n) || n->form_type == WE_FORM_RESET || n->form_type == WE_FORM_BUTTON) {
             if (i != sub) continue;
             vl = (n->form_flags & WE_FF_VALUE) ? (n->fval_len < (int)sizeof(v) - 1 ? n->fval_len : (int)sizeof(v) - 1) : 0;

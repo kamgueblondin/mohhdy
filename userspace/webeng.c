@@ -794,6 +794,9 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth, int layer) {
                     if (lr == -1) { diag(d, "css layer table full", body_a); lr = layer; }
                     parse_css_range(d, body_a, body_b, depth + 1, lr);
                 }
+            } else if (cssq_is(s + name_a, name_b - name_a, "font-face")) {
+                /* Lot 74: no downloadable fonts; the block is read and refused. */
+                diag(d, "font face refused", body_a);
             } else diag(d, "css at-rule skipped", i);
             continue;
         }
@@ -4261,6 +4264,11 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (value_is(v, vl, "collapse")) n->border_collapse = 1;
         else if (value_is(v, vl, "separate")) n->border_collapse = 0;
         else diag(d, "border collapse refused", -1);
+    } else if (w_eq(prop, "table-layout")) {
+        /* Lot 74: fixed uses the first row (and col) for column widths. */
+        if (value_is(v, vl, "fixed")) n->table_fixed = 1;
+        else if (value_is(v, vl, "auto")) n->table_fixed = 0;
+        else diag(d, "table layout refused", -1);
     } else if (w_eq(prop, "border-spacing")) {
         int a[4], lens[4], count = tokens(v, vl, a, lens), t;
         int hx = 0, hy = 0, ok = count == 1 || count == 2;
@@ -4695,6 +4703,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->auto_col_floor = n->auto_row_floor = n->auto_col_cap = n->auto_row_cap = -1;
         n->relative = n->absolute = n->flex_reverse = n->margin_auto = n->border_collapse = 0;
         n->fixed = n->sticky = 0;
+        n->table_fixed = 0; n->box_scroll_y = 0;
         n->border_style = n->collapse_cell = 0;
         border_edges_reset(n);
         n->item_order = 0;
@@ -10005,34 +10014,47 @@ static int table_tracks(we_doc_t *d, int idx, int width, int depth, int *widths)
     for (col = 0; col < WE_TRACKS_MAX; col++) requested[col] = 0;
     table_col_widths(d, idx, width, requested);
     table_gaps(d, idx, rows, nr, depth);
-    for (r = 0; r < nr; r++) {
-        for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
-            we_node_t *cell = &d->nodes[c];
-            int want, column;
-            if (cell->display != WE_DISP_CELL || cell->absolute || table_slot[depth].col[c] < 0) continue;
-            column = table_slot[depth].col[c];
-            want = preferred_outer(cell, width, d->nodes[idx].width_kind == WE_SIZE_MIN_CONTENT ? cell->min_content :
-                                    d->nodes[idx].width_kind ? cell->max_content : 0);
-            if (cell->colspan == 1 && (d->nodes[idx].width_kind || cell->width >= 0 || cell->width_pct > 0 || cell->min_width >= 0 || cell->min_pct > 0))
-                if (want > requested[column]) requested[column] = want;
+    /* Lot 74: table-layout:fixed takes column widths from <col> and the
+     * first row only; later cell contents do not grow a column. */
+    {
+        int r_end = d->nodes[idx].table_fixed ? (nr > 0 ? 1 : 0) : nr;
+        for (r = 0; r < r_end; r++) {
+            for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
+                we_node_t *cell = &d->nodes[c];
+                int want, column;
+                if (cell->display != WE_DISP_CELL || cell->absolute || table_slot[depth].col[c] < 0) continue;
+                column = table_slot[depth].col[c];
+                if (d->nodes[idx].table_fixed) {
+                    /* fixed: a cell width, else equal share of the table */
+                    if (cell->width >= 0) want = cell->width + node_border_extra(cell);
+                    else if (cell->width_pct > 0) want = width * cell->width_pct / 100;
+                    else want = 0;
+                    if (cell->colspan == 1 && want > requested[column]) requested[column] = want;
+                    continue;
+                }
+                want = preferred_outer(cell, width, d->nodes[idx].width_kind == WE_SIZE_MIN_CONTENT ? cell->min_content :
+                                        d->nodes[idx].width_kind ? cell->max_content : 0);
+                if (cell->colspan == 1 && (d->nodes[idx].width_kind || cell->width >= 0 || cell->width_pct > 0 || cell->min_width >= 0 || cell->min_pct > 0))
+                    if (want > requested[column]) requested[column] = want;
+            }
         }
-    }
-    for (r = 0; r < nr; r++) {
-        for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
-            const we_node_t *cell = &d->nodes[c];
-            int span, column, current = 0, wanted, k, deficit;
-            if (cell->display != WE_DISP_CELL || cell->absolute || table_slot[depth].col[c] < 0) continue;
-            span = cell->colspan < 1 ? 1 : cell->colspan;
-            column = table_slot[depth].col[c];
-            if (span > 1 && (d->nodes[idx].width_kind || cell->width >= 0 || cell->width_pct || cell->min_width >= 0 || cell->min_pct)) {
-                wanted = preferred_outer(cell, width, d->nodes[idx].width_kind == WE_SIZE_MIN_CONTENT ? cell->min_content :
-                                         d->nodes[idx].width_kind ? cell->max_content : 0);
-                for (k = 0; k < span; k++) current += requested[column + k];
-                deficit = wanted > current ? wanted - current : 0;
-                for (k = 0; k < span; k++) {
-                    int take = deficit / (span - k) + (deficit % (span - k) != 0);
-                    requested[column + k] += take;
-                    deficit -= take;
+        if (!d->nodes[idx].table_fixed) for (r = 0; r < nr; r++) {
+            for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
+                const we_node_t *cell = &d->nodes[c];
+                int span, column, current = 0, wanted, k, deficit;
+                if (cell->display != WE_DISP_CELL || cell->absolute || table_slot[depth].col[c] < 0) continue;
+                span = cell->colspan < 1 ? 1 : cell->colspan;
+                column = table_slot[depth].col[c];
+                if (span > 1 && (d->nodes[idx].width_kind || cell->width >= 0 || cell->width_pct || cell->min_width >= 0 || cell->min_pct)) {
+                    wanted = preferred_outer(cell, width, d->nodes[idx].width_kind == WE_SIZE_MIN_CONTENT ? cell->min_content :
+                                             d->nodes[idx].width_kind ? cell->max_content : 0);
+                    for (k = 0; k < span; k++) current += requested[column + k];
+                    deficit = wanted > current ? wanted - current : 0;
+                    for (k = 0; k < span; k++) {
+                        int take = deficit / (span - k) + (deficit % (span - k) != 0);
+                        requested[column + k] += take;
+                        deficit -= take;
+                    }
                 }
             }
         }

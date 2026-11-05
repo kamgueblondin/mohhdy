@@ -345,6 +345,7 @@ typedef struct {
     uint16_t form_flags2;
     uint8_t form_minlen;      /* lot 74: minlength (0: none) */
     int8_t tabindex;          /* lot 74: with WE_FF2_TABINDEX, -1..127 */
+    /* fpat_*: see below with sticky */
     /* Lot 64: text-align / text-align-last given as start or end (bits 0-1
      * and 2-3: 1 start, 2 end), resolved against direction after the cascade. */
     uint8_t align_logical;
@@ -361,6 +362,9 @@ typedef struct {
     uint8_t fixed;             /* lot 61: position:fixed (absolute + viewport) */
     uint8_t sticky;            /* lot 74: position:sticky (relative + the scroll shift) */
     int16_t sticky_dy;         /* lot 74: the current shift of a sticky box */
+    uint8_t table_fixed;       /* lot 74: table-layout:fixed */
+    uint16_t fpat_off, fpat_len; /* lot 74: pattern= in the pool */
+    int16_t box_scroll_y;      /* lot 74: overflow box scroll offset */
     uint8_t collapse_w;        /* lot 61: shared cell border width, layout time */
     /* Lot 61 border edges, top right bottom left. edge_w -1 and style 0
      * mean "use border / border_style". Only collapsed tables read them. */

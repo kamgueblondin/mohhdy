@@ -31,6 +31,8 @@ static void finput_range_bounds(const we_node_t *n, int *min, int *max);
 #define WE_FF2_URL 2048       /* lot 74: type=url */
 #define WE_FF2_AUTOFOCUS 4096
 #define WE_FF2_TABINDEX 8192
+#define WE_FF2_PATTERN 16384  /* lot 74: pattern= present */
+#define WE_FF2_DIALOG 32768  /* lot 74: dialog open toggle */
 #define WE_FF_CHECKED 1
 #define WE_FF_SELECTED 2
 #define WE_FF_DISABLED 4
@@ -44,7 +46,7 @@ static void finput_range_bounds(const we_node_t *n, int *min, int *max);
 #define WE_FORM_TEXT_MAX 48
 
 static int forms_tag(const char *t) {
-    static const char *const tags[] = { "input", "button", "select", "option", "textarea", "progress", "meter", "details",
+    static const char *const tags[] = { "input", "button", "select", "option", "textarea", "progress", "meter", "details", "dialog",
                                          "form", "label", "fieldset", 0 };   /* lot 74: form, label, fieldset */
     int k;
     for (k = 0; tags[k]; k++) if (w_eq(t, tags[k])) return 1;
@@ -374,6 +376,11 @@ static void forms_ua(we_doc_t *d, we_node_t *n) {
         return;
     }
     if (p && (w_eq(p->tag, "progress") || w_eq(p->tag, "meter"))) { n->display = WE_DISP_NONE; return; }   /* fallback content */
+    if (w_eq(n->tag, "dialog")) {
+        /* Lot 74: a dialog without open is not shown; open makes a block. */
+        n->display = (n->form_flags & WE_FF_OPEN) ? WE_DISP_BLOCK : WE_DISP_NONE;
+        return;
+    }
     if (w_eq(n->tag, "details") || w_eq(n->tag, "summary")) { n->display = WE_DISP_BLOCK; return; }
     if (w_eq(n->tag, "fieldset")) {
         n->display = WE_DISP_BLOCK;
