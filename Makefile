@@ -1079,6 +1079,7 @@ strict-image-check: $(OS_IMAGE) kernel-netlegacy pack-initrd
 font-check:
 	@python3 scripts/gen_bitmap_font.py --check kernel/gfx_font_hd.h kernel/gfx_font8.h include/os_charset_pages.h
 	@python3 scripts/gen_charset_tables.py --check
+	@python3 scripts/gen_gif_anim_fixtures.py --check
 .PHONY: font-check
 
 # Lot 47 (US-120): /roadmap.txt agrees with the US master phase 9 table and

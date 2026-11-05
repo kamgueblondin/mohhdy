@@ -1437,12 +1437,17 @@ static void yield_gui(void) {}
 #endif
 
 /* Lot 72: the atlas of the fetched page goes to the compositor when its
- * generation changes; a local page or a closed browser clears it. */
+ * generation changes; a local page or a closed browser clears it.
+ * Lot 73: the animated images advance first (a new frame bumps the
+ * generation), so the next scene shows it. */
 static uint32_t g_webimg_gen;
 static int g_webimg_sent;
 static void webimg_sync(void) {
     const os_fb_webimg_t *a = 0;
-    if (g_web_active && g_wops && g_wops->atlas && osui_gui_web_is_url(g_web_file)) a = g_wops->atlas();
+    if (g_web_active && g_wops && g_wops->atlas && osui_gui_web_is_url(g_web_file)) {
+        if (g_wops->anim_tick) (void)g_wops->anim_tick();
+        a = g_wops->atlas();
+    }
     if (a) {
         if (g_webimg_sent && g_webimg_gen == a->gen) return;
         sys_vga_webimg(a);

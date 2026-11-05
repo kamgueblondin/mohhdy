@@ -2,8 +2,13 @@
  * Freestanding, no libc, no allocation, bounded loops.
  * GIF87a and GIF89a: logical screen, global and local color tables,
  * graphic control extension (transparent index), LZW codes 2..12 bits,
- * interlaced or sequential rows. Only the first image (frame) is decoded;
- * later frames are counted (img->frames) and skipped. Transparent pixels
+ * interlaced or sequential rows. imgdec_open decodes the first image
+ * (frame); later frames are counted (img->frames) and skipped.
+ * Lot 73: animation (imgdec_anim_begin / imgdec_anim_next): every frame is
+ * composed onto a full-screen canvas in order, with its delay, its
+ * disposal method (0/1 keep, 2 restore to background, 3 restore to the
+ * previous picture) and the loop count of the NETSCAPE2.0 / ANIMEXTS1.0
+ * application extension. Transparent pixels
  * and the part of the screen the frame does not cover are white (the
  * page background of the web pane and the viewer).
  * Output: 8-bit RGB in the caller scratch, then the LZW tables
@@ -44,11 +49,36 @@ typedef struct {
     int data_pos;             /* first sub-block of the image data */
 } gif_frame_t;
 
-/* Reads extensions and descriptors up to the first image. Records the
- * transparent index of the graphic control extension that applies. */
-static int gif_find_frame(gif_rd_t *r, imgdec_t *img, gif_frame_t *f, int *transparent) {
+typedef struct {
+    int transparent;          /* index or -1 */
+    int delay;                /* 1/100 s */
+    int disposal;             /* 0..7 (3 bits of the packed field) */
+} gif_gce_t;
+
+/* NETSCAPE2.0 / ANIMEXTS1.0 loop sub-block at r (after the 11-byte
+ * application identifier); -1 when absent. */
+static int gif_loop_block(gif_rd_t *r) {
+    if (r->pos + 4 <= r->n && r->b[r->pos] == 3 && r->b[r->pos + 1] == 1)
+        return r->b[r->pos + 2] | (r->b[r->pos + 3] << 8);
+    return -1;
+}
+
+static int gif_app_is_loop(const unsigned char *id) {
+    static const char a[] = "NETSCAPE2.0", b2[] = "ANIMEXTS1.0";
+    int k, ea = 1, eb = 1;
+    for (k = 0; k < 11; k++) { if (id[k] != (unsigned char)a[k]) ea = 0; if (id[k] != (unsigned char)b2[k]) eb = 0; }
+    return ea || eb;
+}
+
+/* Reads extensions and descriptors up to the next image. Records the
+ * graphic control extension that applies (transparent index, delay,
+ * disposal) and, when loop is given, the application loop count.
+ * IMGDEC_E_FORMAT at the trailer. */
+static int gif_find_frame_ext(gif_rd_t *r, gif_frame_t *f, gif_gce_t *g, int *loop) {
     int guard;
-    *transparent = -1;
+    g->transparent = -1;
+    g->delay = 0;
+    g->disposal = 0;
     for (guard = 0; guard < 4096; guard++) {
         int c = gif_u8(r);
         if (c < 0) return IMGDEC_E_TRUNC;
@@ -60,8 +90,17 @@ static int gif_find_frame(gif_rd_t *r, imgdec_t *img, gif_frame_t *f, int *trans
                 int len = gif_u8(r), flags;
                 if (len < 4 || r->pos + len > r->n) return IMGDEC_E_TRUNC;
                 flags = r->b[r->pos];
-                *transparent = (flags & 1) ? r->b[r->pos + 3] : -1;
+                g->transparent = (flags & 1) ? r->b[r->pos + 3] : -1;
+                g->delay = r->b[r->pos + 1] | (r->b[r->pos + 2] << 8);
+                g->disposal = (flags >> 2) & 7;
                 r->pos += len;
+            } else if (label == 0xFF) {
+                int len = gif_u8(r);
+                if (len < 0 || r->pos + len > r->n) return IMGDEC_E_TRUNC;
+                if (len == 11 && gif_app_is_loop(r->b + r->pos)) {
+                    r->pos += len;
+                    if (loop) { int v = gif_loop_block(r); if (v >= 0) *loop = v; }
+                } else r->pos += len;
             }
             if (gif_skip_blocks(r)) return IMGDEC_E_TRUNC;
             continue;
@@ -83,10 +122,17 @@ static int gif_find_frame(gif_rd_t *r, imgdec_t *img, gif_frame_t *f, int *trans
         if (f->min_code < 0) return IMGDEC_E_TRUNC;
         if (f->min_code < 2 || f->min_code > 8) return IMGDEC_E_FORMAT;
         f->data_pos = r->pos;
-        (void)img;
         return IMGDEC_OK;
     }
     return IMGDEC_E_FORMAT;
+}
+
+static int gif_find_frame(gif_rd_t *r, imgdec_t *img, gif_frame_t *f, int *transparent) {
+    gif_gce_t g;
+    int rc = gif_find_frame_ext(r, f, &g, 0);
+    (void)img;
+    *transparent = g.transparent;
+    return rc;
 }
 
 static int probe_gif(const unsigned char *b, int n, imgdec_t *img) {
@@ -158,55 +204,58 @@ static int gif_interlace_row(int k, int h) {
     return 1 + k * 2;
 }
 
-static int open_gif(const unsigned char *b, int n, unsigned char *scratch, unsigned smax, imgdec_t *img) {
-    gif_rd_t r;
-    gif_frame_t f;
-    int tr, rc, k, ncolors;
-    unsigned px_bytes, i;
+/* LZW tables of one frame decode (in the caller work area). */
+typedef struct {
     unsigned short *prefix;
-    unsigned char *suffix, *stack, *first;
-    const unsigned char *pal;
-    int clear, eoi, next, width, prev;
-    unsigned acc = 0;
-    int nbits = 0, sub_left = 0, written = 0, total, done = 0, term_seen = 0;
+    unsigned char *suffix, *first, *stack;
+} gif_lzw_t;
+
+static void gif_lzw_at(unsigned char *at, gif_lzw_t *t) {
+    t->prefix = (unsigned short *)(void *)at;
+    t->suffix = (unsigned char *)(t->prefix + GIF_LZW_MAX);
+    t->first = t->suffix + GIF_LZW_MAX;
+    t->stack = t->first + GIF_LZW_MAX;   /* a code expands to at most GIF_LZW_MAX bytes */
+}
+
+/* Decodes the image data of frame f onto canvas (img->w x img->h RGB):
+ * pixels of the transparent index and outside the screen are left as
+ * they are. r->pos ends after the frame data (terminator included) when
+ * *term_seen. Returns the frame pixels decoded. */
+static int gif_decode_frame(gif_rd_t *r, const imgdec_t *img, const gif_frame_t *f, int tr,
+                            unsigned char *canvas, const gif_lzw_t *t, int *term_seen) {
+    const unsigned char *b = r->b, *pal;
     unsigned char pal_local[256][3];
-    if (!scratch || gif_scratch_need(img) > smax) return IMGDEC_E_TOOBIG;
-    r.b = b; r.n = n; r.pos = 13 + img->npal * 3;
-    rc = gif_find_frame(&r, img, &f, &tr);
-    if (rc) return rc;
-    px_bytes = (unsigned)img->w * (unsigned)img->h * 3U;
-    for (i = 0; i < px_bytes; i++) scratch[i] = 255;
-    prefix = (unsigned short *)(void *)(scratch + ((px_bytes + 3U) & ~3U));
-    if ((unsigned char *)prefix + GIF_TABLE_BYTES > scratch + smax) return IMGDEC_E_TOOBIG;
-    suffix = (unsigned char *)(prefix + GIF_LZW_MAX);
-    first = suffix + GIF_LZW_MAX;
-    stack = first + GIF_LZW_MAX;   /* a code expands to at most GIF_LZW_MAX bytes */
-    if (f.lct_size) {
-        for (k = 0; k < f.lct_size; k++) { pal_local[k][0] = b[f.lct + 3 * k]; pal_local[k][1] = b[f.lct + 3 * k + 1]; pal_local[k][2] = b[f.lct + 3 * k + 2]; }
+    unsigned short *prefix = t->prefix;
+    unsigned char *suffix = t->suffix, *first = t->first, *stack = t->stack;
+    int k, ncolors, clear, eoi, next, width, prev, nbits = 0, sub_left = 0, written = 0, total, done = 0;
+    unsigned acc = 0;
+    *term_seen = 0;
+    if (f->lct_size) {
+        for (k = 0; k < f->lct_size; k++) { pal_local[k][0] = b[f->lct + 3 * k]; pal_local[k][1] = b[f->lct + 3 * k + 1]; pal_local[k][2] = b[f->lct + 3 * k + 2]; }
         pal = &pal_local[0][0];
-        ncolors = f.lct_size;
+        ncolors = f->lct_size;
     } else {
         pal = &img->pal[0][0];
         ncolors = img->npal;
     }
-    if (ncolors == 0) return IMGDEC_E_FORMAT;
-    clear = 1 << f.min_code;
+    if (ncolors == 0) return -1;
+    clear = 1 << f->min_code;
     eoi = clear + 1;
     next = clear + 2;
-    width = f.min_code + 1;
+    width = f->min_code + 1;
     prev = -1;
-    total = f.w * f.h;
+    total = f->w * f->h;
     for (k = 0; k < clear; k++) { prefix[k] = 0xFFFF; suffix[k] = (unsigned char)k; first[k] = (unsigned char)k; }
-    r.pos = f.data_pos;
+    r->pos = f->data_pos;
     while (!done && written < total) {
         int code, cur, len;
         while (nbits < width) {
             int c;
             if (sub_left == 0) {
-                sub_left = gif_u8(&r);
-                if (sub_left <= 0) { done = 1; term_seen = sub_left == 0; break; }
+                sub_left = gif_u8(r);
+                if (sub_left <= 0) { done = 1; *term_seen = sub_left == 0; break; }
             }
-            c = gif_u8(&r);
+            c = gif_u8(r);
             if (c < 0) { done = 1; break; }
             sub_left--;
             acc |= (unsigned)c << nbits;
@@ -216,7 +265,7 @@ static int open_gif(const unsigned char *b, int n, unsigned char *scratch, unsig
         code = (int)(acc & ((1U << width) - 1U));
         acc >>= width;
         nbits -= width;
-        if (code == clear) { next = clear + 2; width = f.min_code + 1; prev = -1; continue; }
+        if (code == clear) { next = clear + 2; width = f->min_code + 1; prev = -1; continue; }
         if (code == eoi) break;
         if (prev < 0) {
             if (code >= clear) break;                   /* corrupt: first code after clear */
@@ -249,28 +298,134 @@ static int open_gif(const unsigned char *b, int n, unsigned char *scratch, unsig
             }
             if (c2 != 0xFFFF) break;
             while (len > 0 && written < total) {
-                int idx = st[--len], x = written % f.w, ky = written / f.w;
-                int y = f.interlace ? gif_interlace_row(ky, f.h) : ky;
-                int sx = f.left + x, sy = f.top + y;
+                int idx = st[--len], x = written % f->w, ky = written / f->w;
+                int y = f->interlace ? gif_interlace_row(ky, f->h) : ky;
+                int sx = f->left + x, sy = f->top + y;
                 written++;
                 if (idx == tr || sx >= img->w || sy >= img->h) continue;
                 if (idx >= ncolors) idx = 0;
                 {
-                    unsigned char *p = scratch + ((unsigned)sy * (unsigned)img->w + (unsigned)sx) * 3U;
+                    unsigned char *p = canvas + ((unsigned)sy * (unsigned)img->w + (unsigned)sx) * 3U;
                     p[0] = pal[idx * 3]; p[1] = pal[idx * 3 + 1]; p[2] = pal[idx * 3 + 2];
                 }
             }
         }
     }
-    img->gif_pixels = written;
-    /* skip the rest of the frame data and count later frames */
-    img->frames = 1;
-    if (!term_seen && r.pos + sub_left <= r.n) {
-        r.pos += sub_left;
-        term_seen = gif_skip_blocks(&r) == 0;
+    /* skip the rest of the frame data */
+    if (!*term_seen && !done && r->pos + sub_left <= r->n) {
+        r->pos += sub_left;
+        *term_seen = gif_skip_blocks(r) == 0;
     }
+    return written;
+}
+
+static int open_gif(const unsigned char *b, int n, unsigned char *scratch, unsigned smax, imgdec_t *img) {
+    gif_rd_t r;
+    gif_frame_t f;
+    gif_lzw_t t;
+    int tr, rc, written, term_seen;
+    unsigned px_bytes, i;
+    if (!scratch || gif_scratch_need(img) > smax) return IMGDEC_E_TOOBIG;
+    r.b = b; r.n = n; r.pos = 13 + img->npal * 3;
+    rc = gif_find_frame(&r, img, &f, &tr);
+    if (rc) return rc;
+    px_bytes = (unsigned)img->w * (unsigned)img->h * 3U;
+    for (i = 0; i < px_bytes; i++) scratch[i] = 255;
+    if (scratch + ((px_bytes + 3U) & ~3U) + GIF_TABLE_BYTES > scratch + smax) return IMGDEC_E_TOOBIG;
+    gif_lzw_at(scratch + ((px_bytes + 3U) & ~3U), &t);
+    written = gif_decode_frame(&r, img, &f, tr, scratch, &t, &term_seen);
+    if (written < 0) return IMGDEC_E_FORMAT;
+    img->gif_pixels = written;
+    /* count later frames */
+    img->frames = 1;
     if (term_seen) img->frames = gif_count_frames(&r);
     img->data = scratch;
     img->stride = img->w * 3;
     return written > 0 ? IMGDEC_OK : IMGDEC_E_TRUNC;
+}
+
+/* ---------------------------------------------------------------- Lot 73: animation */
+
+static unsigned gif_anim_need(const imgdec_t *img) {
+    unsigned px = (unsigned)img->w * (unsigned)img->h * 3U;
+    return ((px + 3U) & ~3U) * 2U + GIF_TABLE_BYTES;
+}
+
+unsigned imgdec_anim_need(const imgdec_t *img) {
+    if (!img || img->fmt != IMGDEC_GIF) return 0;
+    return gif_anim_need(img);
+}
+
+int imgdec_anim_begin(const unsigned char *b, int n, imgdec_t *img, imgdec_anim_t *a, unsigned char *work, unsigned max) {
+    unsigned px, i;
+    if (!b || !img || !a || img->fmt != IMGDEC_GIF) return IMGDEC_E_FORMAT;
+    if (!work || gif_anim_need(img) > max) return IMGDEC_E_TOOBIG;
+    px = (unsigned)img->w * (unsigned)img->h * 3U;
+    for (i = 0; i < px; i++) work[i] = 255;
+    a->pos = 13 + img->npal * 3;
+    a->frame = 0;
+    a->loop = -1;
+    a->delay_cs = 0;
+    a->disposal = 0;
+    a->px = a->py = a->pw = a->ph = 0;
+    a->done = 0;
+    img->data = work;
+    img->stride = img->w * 3;
+    (void)n;
+    return IMGDEC_OK;
+}
+
+/* rectangle of the frame clipped to the screen: 0 when empty */
+static int gif_clip(const imgdec_t *img, int x, int y, int w, int h, int *x1, int *y1) {
+    *x1 = x + w > img->w ? img->w : x + w;
+    *y1 = y + h > img->h ? img->h : y + h;
+    return x < *x1 && y < *y1;
+}
+
+int imgdec_anim_next(const unsigned char *b, int n, imgdec_t *img, imgdec_anim_t *a, unsigned char *work, unsigned max) {
+    gif_rd_t r;
+    gif_frame_t f;
+    gif_gce_t g;
+    gif_lzw_t t;
+    unsigned px, half;
+    unsigned char *canvas = work, *save;
+    int rc, written, term_seen, x, y, x1, y1;
+    if (!b || !img || !a || !work || gif_anim_need(img) > max) return IMGDEC_E_TOOBIG;
+    if (a->done) return 0;
+    px = (unsigned)img->w * (unsigned)img->h * 3U;
+    half = (px + 3U) & ~3U;
+    save = work + half;
+    gif_lzw_at(work + 2U * half, &t);
+    r.b = b; r.n = n; r.pos = a->pos;
+    rc = gif_find_frame_ext(&r, &f, &g, &a->loop);
+    if (rc == IMGDEC_E_FORMAT || rc == IMGDEC_E_TRUNC) { a->done = 1; return a->frame > 0 ? 0 : rc; }
+    if (rc) { a->done = 1; return rc; }
+    /* disposal of the frame shown until now (only once a next frame
+     * exists: at the end of the file the last picture stays) */
+    if (a->frame > 0 && (a->disposal == 2 || a->disposal == 3) && gif_clip(img, a->px, a->py, a->pw, a->ph, &x1, &y1)) {
+        for (y = a->py; y < y1; y++)
+            for (x = a->px; x < x1; x++) {
+                unsigned o = ((unsigned)y * (unsigned)img->w + (unsigned)x) * 3U;
+                if (a->disposal == 2) { canvas[o] = 255; canvas[o + 1] = 255; canvas[o + 2] = 255; }
+                else { canvas[o] = save[o]; canvas[o + 1] = save[o + 1]; canvas[o + 2] = save[o + 2]; }
+            }
+    }
+    /* disposal 3: keep what the frame covers to restore it afterwards */
+    if (g.disposal == 3 && gif_clip(img, f.left, f.top, f.w, f.h, &x1, &y1))
+        for (y = f.top; y < y1; y++)
+            for (x = f.left; x < x1; x++) {
+                unsigned o = ((unsigned)y * (unsigned)img->w + (unsigned)x) * 3U;
+                save[o] = canvas[o]; save[o + 1] = canvas[o + 1]; save[o + 2] = canvas[o + 2];
+            }
+    written = gif_decode_frame(&r, img, &f, g.transparent, canvas, &t, &term_seen);
+    if (written <= 0) { a->done = 1; return a->frame > 0 ? 0 : IMGDEC_E_TRUNC; }
+    a->delay_cs = g.delay;
+    a->disposal = g.disposal;
+    a->px = f.left; a->py = f.top; a->pw = f.w; a->ph = f.h;
+    a->frame++;
+    a->pos = r.pos;
+    if (!term_seen) a->done = 1;        /* cut stream: this frame is the last */
+    img->data = canvas;
+    img->stride = img->w * 3;
+    return 1;
 }
