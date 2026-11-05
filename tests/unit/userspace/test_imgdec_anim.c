@@ -224,6 +224,65 @@ static void test_open_counts_frames_and_loop_ext(void) {
     TEST_ASSERT_EQUAL_MEMORY(gif_anim_a_canvas[0], g_work, 8 * 6 * 3);
 }
 
+/* Patched copies of anim_a: the ANIMEXTS1.0 identifier, a loop count
+ * above 255 (two bytes, little endian) and a reserved disposal (6: kept
+ * as is, the 3 bits reported, not read as 2). */
+static unsigned char g_patch[sizeof(gif_anim_a)];
+
+static int find_bytes(const unsigned char* b, int n, const char* s, int len) {
+    int i;
+    for (i = 0; i + len <= n; i++) if (memcmp(b + i, s, (size_t)len) == 0) return i;
+    return -1;
+}
+
+static void test_anim_loop_ids_and_reserved_disposal(void) {
+    imgdec_t img;
+    imgdec_anim_t a;
+    int at = find_bytes(gif_anim_a, (int)sizeof(gif_anim_a), "NETSCAPE2.0", 11), k, gce, seen = 0;
+    TEST_ASSERT_TRUE(at > 0);
+    memcpy(g_patch, gif_anim_a, sizeof(g_patch));
+    memcpy(g_patch + at, "ANIMEXTS1.0", 11);
+    TEST_ASSERT_EQUAL(IMGDEC_OK, play(g_patch, (int)sizeof(g_patch), &img, &a));
+    TEST_ASSERT_EQUAL(1, imgdec_anim_next(g_patch, (int)sizeof(g_patch), &img, &a, g_work, sizeof(g_work)));
+    TEST_ASSERT_EQUAL(3, a.loop);
+    /* another identifier is no loop extension */
+    memcpy(g_patch + at, "NETSCAPE2.1", 11);
+    TEST_ASSERT_EQUAL(IMGDEC_OK, play(g_patch, (int)sizeof(g_patch), &img, &a));
+    TEST_ASSERT_EQUAL(1, imgdec_anim_next(g_patch, (int)sizeof(g_patch), &img, &a, g_work, sizeof(g_work)));
+    TEST_ASSERT_EQUAL(-1, a.loop);
+    /* loop 259 = 0x0103 */
+    memcpy(g_patch, gif_anim_a, sizeof(g_patch));
+    TEST_ASSERT_EQUAL(3, g_patch[at + 11]);
+    TEST_ASSERT_EQUAL(1, g_patch[at + 12]);
+    g_patch[at + 13] = 3; g_patch[at + 14] = 1;
+    TEST_ASSERT_EQUAL(IMGDEC_OK, play(g_patch, (int)sizeof(g_patch), &img, &a));
+    TEST_ASSERT_EQUAL(1, imgdec_anim_next(g_patch, (int)sizeof(g_patch), &img, &a, g_work, sizeof(g_work)));
+    TEST_ASSERT_EQUAL(259, a.loop);
+    /* frame 2 (disposal 2, transparent flag) becomes disposal 6 */
+    memcpy(g_patch, gif_anim_a, sizeof(g_patch));
+    for (gce = 0, k = 0; k + 3 < (int)sizeof(g_patch); k++)
+        if (g_patch[k] == 0x21 && g_patch[k + 1] == 0xF9 && g_patch[k + 2] == 4 && ++gce == 2) {
+            TEST_ASSERT_EQUAL(0x09, g_patch[k + 3]);
+            g_patch[k + 3] = (unsigned char)((6 << 2) | 1);
+            seen = 1;
+            break;
+        }
+    TEST_ASSERT_TRUE(seen);
+    TEST_ASSERT_EQUAL(IMGDEC_OK, play(g_patch, (int)sizeof(g_patch), &img, &a));
+    TEST_ASSERT_EQUAL(1, imgdec_anim_next(g_patch, (int)sizeof(g_patch), &img, &a, g_work, sizeof(g_work)));
+    TEST_ASSERT_EQUAL(1, imgdec_anim_next(g_patch, (int)sizeof(g_patch), &img, &a, g_work, sizeof(g_work)));
+    TEST_ASSERT_EQUAL(6, a.disposal);
+    TEST_ASSERT_EQUAL_MEMORY(gif_anim_a_canvas[1], g_work, GIF_ANIM_A_W * GIF_ANIM_A_H * 3);
+    /* frame 3: the green rectangle of frame 2 is kept (not cleared to white) */
+    TEST_ASSERT_EQUAL(1, imgdec_anim_next(g_patch, (int)sizeof(g_patch), &img, &a, g_work, sizeof(g_work)));
+    {
+        unsigned o = (1U * GIF_ANIM_A_W + 2U) * 3U;
+        TEST_ASSERT_EQUAL(10, g_work[o]);
+        TEST_ASSERT_EQUAL(200, g_work[o + 1]);
+        TEST_ASSERT_EQUAL(255, gif_anim_a_canvas[2][o]);   /* with disposal 2 it is white */
+    }
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_anim_need_and_begin);
@@ -234,6 +293,7 @@ int main(void) {
     RUN_TEST(test_anim_cut_and_corrupt);
     RUN_TEST(test_anim_page_fixture);
     RUN_TEST(test_open_counts_frames_and_loop_ext);
+    RUN_TEST(test_anim_loop_ids_and_reserved_disposal);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

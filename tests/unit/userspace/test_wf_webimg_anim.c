@@ -17,7 +17,9 @@ static wf_webimg_t g_wi;
 static char g_out[32768], g_txt[1024];
 
 typedef struct { const char* url; const unsigned char* data; int len; } fake_t;
+static unsigned char g_delays[sizeof(gif_anim_a)];   /* anim_a with delays 1 and 2 (filled by the test) */
 static fake_t g_files[] = {
+    {"https://ex.org/d.gif", g_delays, sizeof(g_delays)},
     {"https://ex.org/page.gif", gif_anim_page, sizeof(gif_anim_page)},
     {"https://ex.org/twice.gif", gif_anim_twice, sizeof(gif_anim_twice)},
     {"https://ex.org/a.gif", gif_anim_a, sizeof(gif_anim_a)},
@@ -252,6 +254,25 @@ static void test_still_gif_and_other_formats_not_animated(void) {
     TEST_ASSERT_EQUAL(0, wf_webimg_tick(&g_wi, 1000));
 }
 
+/* Delays of 1 cs play at the minimum (as 0), 2 cs stay 2 cs. */
+static void test_delay_one_is_minimum(void) {
+    wf_webimg_stats_t st;
+    int k, gce = 0;
+    memcpy(g_delays, gif_anim_a, sizeof(g_delays));
+    for (k = 0; k + 5 < (int)sizeof(g_delays); k++)
+        if (g_delays[k] == 0x21 && g_delays[k + 1] == 0xF9 && g_delays[k + 2] == 4) {
+            gce++;
+            if (gce == 3) { TEST_ASSERT_EQUAL(0, g_delays[k + 4]); g_delays[k + 4] = 1; }
+            if (gce == 4) { TEST_ASSERT_EQUAL(5, g_delays[k + 4]); g_delays[k + 4] = 2; }
+        }
+    TEST_ASSERT_EQUAL(4, gce);
+    reset();
+    section("<img src=\"https://ex.org/d.gif\">", &st);
+    TEST_ASSERT_EQUAL(4, st.anim_frames);
+    TEST_ASSERT_EQUAL(WF_WEBIMG_ANIM_MIN_DELAY, g_wi.anim[0].delay[2]);
+    TEST_ASSERT_EQUAL(2, g_wi.anim[0].delay[3]);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_forever_three_frames);
@@ -262,6 +283,7 @@ int main(void) {
     RUN_TEST(test_reset_and_compaction_drop_animations);
     RUN_TEST(test_tick_wrap_and_no_burst);
     RUN_TEST(test_still_gif_and_other_formats_not_animated);
+    RUN_TEST(test_delay_one_is_minimum);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

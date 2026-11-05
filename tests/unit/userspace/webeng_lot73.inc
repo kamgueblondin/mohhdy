@@ -114,6 +114,21 @@ static void test_l73_forced_break_and_refusals(void) {
     lot52_render(L64_BODY L73_COLS "<p style='margin:0'>x1</p><p style='margin:0;break-before:column'>aa bb cc dd ee ff gg hh</p></div></body>", 320);
     l61_text_at("x1", 0, 1);
     l61_text_at("aa bb", 55, 1);
+    /* the node of a fragmented block follows its first fragment when that
+     * fragment moves (column 2 of 3 after the forced break) */
+    lot52_render(L64_BODY "<div id=m style='width:100px;column-count:3;column-gap:5px'><p style='margin:0'>x1</p>"
+                 "<p id=p style='margin:0;break-before:column'>b1 b2 b3 b4 b5 b6 b7 b8</p></div></body>", 320);
+    l61_text_at("b1", 35, 1);
+    l61_text_at("b5", 70, 1);
+    l64_box("p", 35, 0, 30, 80);
+    /* break-after goes with the last fragment: the next block opens column 3 */
+    lot52_render(L64_BODY "<div id=m style='width:100px;column-count:3;column-gap:5px'>"
+                 "<p id=p style='margin:0;break-after:column'>b1 b2 b3 b4 b5</p><p id=z style='margin:0'>z1</p></div></body>", 320);
+    l61_text_at("b4", 35, 1);
+    l61_text_at("b5", 35, 11);
+    l61_text_at("z1", 70, 1);           /* without the break: 35, 21 under b5 */
+    l64_box("z", 70, 0, 30, 10);
+    l64_box("m", 0, 0, 100, 30);
     /* bad values are refused and the defaults stay */
     lot52_render(L64_BODY "<div id=m style='width:100px;column-count:2;column-gap:10px;orphans:0;widows:x;break-inside:page'>"
                  "<p style='margin:0'>a1 a2 a3 a4 a5 a6 a7 a8 a9 b1</p></div></body>", 320);
