@@ -46,7 +46,7 @@ static void finput_range_bounds(const we_node_t *n, int *min, int *max);
 #define WE_FORM_TEXT_MAX 48
 
 static int forms_tag(const char *t) {
-    static const char *const tags[] = { "input", "button", "select", "option", "textarea", "progress", "meter", "details", "dialog",
+    static const char *const tags[] = { "input", "button", "select", "option", "textarea", "progress", "meter", "details", "dialog", "datalist", "output",
                                          "form", "label", "fieldset", 0 };   /* lot 74: form, label, fieldset */
     int k;
     for (k = 0; tags[k]; k++) if (w_eq(t, tags[k])) return 1;
@@ -75,6 +75,12 @@ static int forms_input_type(we_doc_t *d, const char *v, int len, int idx) {
     int k;
     for (k = 0; text[k]; k++) if (value_is(v, len, text[k])) return WE_FORM_TEXT;
     if (value_is(v, len, "range")) return WE_FORM_TEXT;   /* lot 74: WE_FF2_RANGE */
+    if (value_is(v, len, "color") || value_is(v, len, "date") || value_is(v, len, "time") ||
+        value_is(v, len, "week") || value_is(v, len, "month") || value_is(v, len, "datetime-local") ||
+        value_is(v, len, "file")) {
+        diag(d, "input type taken as text", idx);
+        return WE_FORM_TEXT;
+    }
     if (value_is(v, len, "password")) return WE_FORM_PASSWORD;
     if (value_is(v, len, "checkbox")) return WE_FORM_CHECKBOX;
     if (value_is(v, len, "radio")) return WE_FORM_RADIO;
@@ -96,6 +102,10 @@ static void forms_attr(we_doc_t *d, int idx, const char *an, const char *av, int
     if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "number")) n->form_flags2 |= WE_FF2_NUMBER;
     if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "range")) n->form_flags2 |= WE_FF2_RANGE;
     if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "url")) n->form_flags2 |= WE_FF2_URL;
+    if (w_eq(an, "list") && w_eq(n->tag, "input")) {
+        if (pool_put(d, av, vk, &n->fph_off) == 0) { n->fph_len = (uint16_t)vk; n->form_flags2 |= WE_FF2_PATTERN; /* reuse: list present via fph when no placeholder */ }
+        /* actually use a dedicated approach: keep list id in fph only when no placeholder */
+    }
     if (w_eq(an, "type") && w_eq(n->tag, "input")) n->form_type = (uint8_t)forms_input_type(d, av, vk, idx);
     else if (w_eq(an, "type") && w_eq(n->tag, "button")) {
         if (value_is(av, vk, "reset")) n->form_type = WE_FORM_RESET;

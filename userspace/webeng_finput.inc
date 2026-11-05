@@ -492,6 +492,17 @@ static int finput_pat_match(const char *pat, int plen, int pi, const char *text,
             if (pi < plen) pi++;
         } else { kind = (unsigned char)pat[pi++]; }
         if (pi < plen && (pat[pi] == '*' || pat[pi] == '+' || pat[pi] == '?')) quant = pat[pi++];
+        else if (pi < plen && pat[pi] == '{') {
+            int a = 0, b = -1, j = ++pi;
+            while (j < plen && pat[j] >= '0' && pat[j] <= '9') a = a * 10 + pat[j++] - '0';
+            if (j < plen && pat[j] == ',') {
+                j++; b = 0;
+                if (j < plen && pat[j] >= '0' && pat[j] <= '9') {
+                    b = 0; while (j < plen && pat[j] >= '0' && pat[j] <= '9') b = b * 10 + pat[j++] - '0';
+                } else b = 255;
+            } else b = a;
+            if (j < plen && pat[j] == '}') { pi = j + 1; quant = 4000 + a * 256 + (b & 255); }
+        }
         if (quant == 0) {
             if (ti >= tlen || !finput_pat_atom((unsigned char)text[ti], kind, cls, clen)) return 0;
             ti++; continue;
@@ -501,10 +512,13 @@ static int finput_pat_match(const char *pat, int plen, int pi, const char *text,
                 finput_pat_match(pat, plen, pi, text, tlen, ti + 1, budget)) return 1;
             continue;
         }
-        /* * and +: greedy with backtrack */
+        /* *, +, and {n,m}: greedy with backtrack */
         {
-            int n = 0, min = quant == '+' ? 1 : 0, maxn = tlen - ti + 1, k;
-            while (n < maxn - 1 && ti + n < tlen && finput_pat_atom((unsigned char)text[ti + n], kind, cls, clen)) n++;
+            int n = 0, min, maxn = tlen - ti + 1, k, maxc;
+            if (quant == '*') { min = 0; maxc = maxn; }
+            else if (quant == '+') { min = 1; maxc = maxn; }
+            else { min = (quant - 4000) / 256; maxc = (quant - 4000) & 255; if (maxc < min) maxc = min; }
+            while (n < maxn - 1 && n < maxc && ti + n < tlen && finput_pat_atom((unsigned char)text[ti + n], kind, cls, clen)) n++;
             for (k = n; k >= min; k--)
                 if (finput_pat_match(pat, plen, pi, text, tlen, ti + k, budget)) return 1;
             return 0;

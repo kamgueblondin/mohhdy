@@ -4619,8 +4619,8 @@ static void apply_decls(we_doc_t* d, we_node_t* n, const char* s, int len, int i
 }
 
 static const char* const k_block[] = { "html", "body", "div", "p", "h1", "h2", "h3", "h4", "ul", "ol", "li",
-    "section", "header", "footer", "nav", "article", "main", "pre", "blockquote", "hr", "form", "table", "tr", "aside", "iframe", "dialog", 0 };
-static const char* const k_hidden[] = { "head", "style", "script", "meta", "link", "template", 0 };
+    "section", "header", "footer", "nav", "article", "main", "pre", "blockquote", "hr", "form", "table", "tr", "aside", "iframe", "dialog", "output", 0 };
+static const char* const k_hidden[] = { "head", "style", "script", "meta", "link", "template", "datalist", 0 };
 
 static void ua_defaults(we_node_t* n) {
     int i;
