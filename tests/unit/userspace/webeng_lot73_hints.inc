@@ -104,9 +104,59 @@ static void test_l73_hints_limits(void) {
     TEST_ASSERT_EQUAL(1, lot52_node("p")->nhints);
 }
 
+
+/* Lot 73: captions, row group order, col widths */
+static void test_l73_table_caption_and_groups(void) {
+    lot52_render("<body style='margin:0'><table id=t style='width:200px'><caption id=c>Cap</caption><tfoot><tr><td>F</td></tr></tfoot>"
+                 "<tbody><tr><td>B</td></tr></tbody><thead><tr><td>H</td></tr></thead>"
+                 "<caption id=l style='caption-side:bottom'>Low</caption></table></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("Cap", 88, 1);                           /* centred above */
+    l61_text_at("H", 0, 11);                             /* thead first */
+    l61_text_at("B", 0, 21);
+    l61_text_at("F", 0, 31);                             /* tfoot last */
+    l61_text_at("Low", 88, 41);
+    TEST_ASSERT_EQUAL(50, lot52_node("t")->h);
+    TEST_ASSERT_EQUAL(2, (int)g_doc.perf.table_captions);
+    TEST_ASSERT_EQUAL(1, lot52_node("l")->caption_bottom);
+    /* only the first thead / tfoot move; caption-side inherits; align */
+    lot52_render("<body style='margin:0'><table style='width:100px;caption-side:bottom'><tfoot><tr><td>F1</td></tr></tfoot>"
+                 "<tfoot><tr><td>F2</td></tr></tfoot><thead><tr><td>H1</td></tr></thead><thead><tr><td>H2</td></tr></thead>"
+                 "<caption>Bot</caption><caption align=top style='text-align:left'>Top</caption><caption style='caption-side:x'>X</caption>"
+                 "<caption align=left>Y</caption></table></body>", 320);
+    l61_text_at("Top", 0, 1);
+    l61_text_at("H1", 0, 11);
+    l61_text_at("F2", 0, 21);
+    l61_text_at("H2", 0, 31);
+    l61_text_at("F1", 0, 41);
+    l61_text_at("Bot", 38, 51);
+    l61_text_at("X", 46, 61);
+    l61_text_at("Y", 0, 71);
+    TEST_ASSERT_EQUAL(1, l61_diag_count("caption side refused"));
+    TEST_ASSERT_EQUAL(0, l61_diag_count("table child refused"));
+}
+
+static void test_l73_table_col_widths(void) {
+    lot52_render("<body style='margin:0'><table style='width:300px'><col width=40><colgroup span=2 style='width:100px'></colgroup>"
+                 "<tr><td>a</td><td>b</td><td>c</td><td>d</td></tr></table></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("a", 0, 1);
+    l61_text_at("b", 40, 1);
+    l61_text_at("c", 140, 1);
+    l61_text_at("d", 240, 1);
+    lot52_render("<body style='margin:0'><table style='width:300px'><colgroup style='width:90px'><col style='width:20%'>"
+                 "<col style='display:none;width:200px'><col span=2></colgroup><col style='width:30px'>"
+                 "<tr><td>a</td><td>b</td><td>c</td><td>d</td></tr></table></body>", 320);
+    l61_text_at("a", 0, 1);                              /* 20% of 300 */
+    l61_text_at("b", 60, 1);                             /* the colgroup width is not its cols' */
+    l61_text_at("d", 270, 1);                            /* the col after the group: column 4 */
+}
+
 static void lot73_hints_run(void) {
     RUN_TEST(test_l73_hints_table);
     RUN_TEST(test_l73_hints_refused_and_css_wins);
     RUN_TEST(test_l73_hints_inline_and_images);
     RUN_TEST(test_l73_hints_limits);
+    RUN_TEST(test_l73_table_caption_and_groups);
+    RUN_TEST(test_l73_table_col_widths);
 }

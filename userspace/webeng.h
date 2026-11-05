@@ -280,6 +280,7 @@ typedef struct {
     /* Lot 73: custom properties: names and values in pool */
     /* Lot 73: presentational hints (attribute kind, value in pool) */
     uint8_t nhints, hint_kind[WE_HINTS_MAX], hint_len[WE_HINTS_MAX];
+    uint8_t caption_bottom;   /* lot 73: caption-side bottom (inherited) */
     uint16_t hint_off[WE_HINTS_MAX];
     uint8_t nvars, var_name_len[WE_VARS_MAX];
     uint16_t var_name_off[WE_VARS_MAX], var_off[WE_VARS_MAX], var_len[WE_VARS_MAX];
@@ -435,7 +436,7 @@ typedef struct {
 typedef struct {
     uint32_t nodes, elements, text_nodes, scripts_skipped;
     uint32_t rules, decls_applied, unknown_props;
-    uint32_t vars_used, media_skipped;   /* lot 73 */
+    uint32_t vars_used, media_skipped, table_captions;   /* lot 73 */
     uint32_t boxes, lines, items, items_dropped;
     uint32_t page_w, page_h;
     uint32_t flex_lines, grid_lines, floats, table_rows;

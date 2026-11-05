@@ -26,7 +26,9 @@
  *   nowrap (td, th): white-space nowrap;
  *   hspace / vspace (img, object, embed): margins;
  *   hidden (any element): display none.
- * <center> is a block with text-align center, <font> an inline. */
+ * <center> is a block with text-align center, <font> an inline; the UA
+ * style of <caption> (block, centred) is set here too, align=top|bottom
+ * on a caption is caption-side. */
 
 enum { H_WIDTH = 1, H_HEIGHT, H_ALIGN, H_VALIGN, H_BGCOLOR, H_COLOR, H_SIZE, H_BORDER, H_CELLPADDING,
        H_CELLSPACING, H_NOWRAP, H_HSPACE, H_VSPACE, H_HIDDEN };
@@ -163,6 +165,7 @@ static void hints_apply(we_doc_t *d, we_node_t *n) {
     int k, len, table;
     const char *v;
     if (w_eq(n->tag, "center")) { n->display = WE_DISP_BLOCK; hints_decl(d, n, "text-align", "center"); }
+    if (w_eq(n->tag, "caption")) { n->display = WE_DISP_BLOCK; hints_decl(d, n, "text-align", "center"); }   /* UA */
     for (k = 0; k < n->nhints; k++) {
         v = d->pool + n->hint_off[k];
         len = n->hint_len[k];
@@ -185,6 +188,8 @@ static void hints_apply(we_doc_t *d, we_node_t *n) {
                 if (value_is(v, len, "left") || value_is(v, len, "right")) hints_decl(d, n, "float", value_is(v, len, "left") ? "left" : "right");
                 else if (value_is(v, len, "absmiddle") || value_is(v, len, "center")) hints_decl(d, n, "vertical-align", "middle");
                 else hints_valign(d, n, v, len);
+            } else if (w_eq(n->tag, "caption") && (value_is(v, len, "top") || value_is(v, len, "bottom"))) {
+                hints_decl(d, n, "caption-side", value_is(v, len, "top") ? "top" : "bottom");
             } else {
                 if (value_is(v, len, "middle") || value_is(v, len, "center")) hints_decl(d, n, "text-align", "center");
                 else if (value_is(v, len, "left") || value_is(v, len, "right") || value_is(v, len, "justify")) {

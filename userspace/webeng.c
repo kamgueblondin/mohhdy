@@ -4140,6 +4140,11 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "fixed")) { n->absolute = n->fixed = 1; n->relative = 0; }
         else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = n->fixed = 0; }
         else diag(d, "position refused", -1);
+    } else if (w_eq(prop, "caption-side")) {
+        /* lot 73 */
+        if (value_is(v, vl, "top") || value_is(v, vl, "block-start")) n->caption_bottom = 0;
+        else if (value_is(v, vl, "bottom") || value_is(v, vl, "block-end")) n->caption_bottom = 1;
+        else diag(d, "caption side refused", -1);
     } else if (w_eq(prop, "border-collapse")) {
         if (value_is(v, vl, "collapse")) n->border_collapse = 1;
         else if (value_is(v, vl, "separate")) n->border_collapse = 0;
@@ -4625,6 +4630,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->quotes_kind = p ? p->quotes_kind : WE_QUOTES_AUTO;
         n->quotes_off = p ? p->quotes_off : 0; n->quotes_len = p ? p->quotes_len : 0;
         n->content_kind = WE_CONTENT_NONE;
+        n->caption_bottom = p ? p->caption_bottom : 0;
         cssq_inherit_vars(p, n);
         if (n->is_text) { n->display = WE_DISP_INLINE; forms_text_style(d, n); return; }
         if (i == 0) { n->display = WE_DISP_BLOCK; return; }
@@ -9593,19 +9599,70 @@ static int table_column_tag(const we_node_t *n) {
     return w_eq(n->tag, "col") ? 1 : w_eq(n->tag, "colgroup") ? 2 : 0;
 }
 
+/* Lot 73: rows in visual order: the first thead, then the body rows and
+ * groups in source order, then the first tfoot (CSS 2 17.2). A caption
+ * is no row (laid out by table_captions). */
 static int collect_table_rows(we_doc_t *d, int idx, int *rows, int report) {
-    int c, count = 0;
+    int c, count = 0, pass, head = -1, foot = -1;
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
         const we_node_t *n = &d->nodes[c];
         if (n->display == WE_DISP_NONE) continue;
-        if (n->display == WE_DISP_ROW) rows[count++] = c;
-        else if (w_eq(n->tag, "tbody") || w_eq(n->tag, "thead") || w_eq(n->tag, "tfoot")) {
-            int r;
-            for (r = n->first; r >= 0; r = d->nodes[r].next)
-                if (d->nodes[r].display == WE_DISP_ROW) rows[count++] = r;
-        } else if (report && !table_column_tag(n)) diag(d, "table child refused", c);
+        if (head < 0 && w_eq(n->tag, "thead")) head = c;
+        if (foot < 0 && w_eq(n->tag, "tfoot")) foot = c;
     }
+    for (pass = 0; pass < 3; pass++)
+        for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
+            const we_node_t *n = &d->nodes[c];
+            if (n->display == WE_DISP_NONE || (c == head ? 0 : c == foot ? 2 : 1) != pass) continue;
+            if (n->display == WE_DISP_ROW) rows[count++] = c;
+            else if (w_eq(n->tag, "tbody") || w_eq(n->tag, "thead") || w_eq(n->tag, "tfoot")) {
+                int r;
+                for (r = n->first; r >= 0; r = d->nodes[r].next)
+                    if (d->nodes[r].display == WE_DISP_ROW) rows[count++] = r;
+            } else if (report && !table_column_tag(n) && !w_eq(n->tag, "caption")) diag(d, "table child refused", c);
+        }
     return count;
+}
+
+/* Lot 73: a col or colgroup width is the least width of its columns */
+static int table_col_width(const we_node_t *g, int col, int width, int *requested) {
+    int span = g->colspan < 1 ? 1 : g->colspan, k, want = -1;
+    if (g->width >= 0 || g->width_pct > 0) want = specified_width(g, width, 0);
+    for (k = 0; k < span && col < WE_TRACKS_MAX; k++, col++)
+        if (want > requested[col]) requested[col] = want;
+    return col;
+}
+
+static void table_col_widths(const we_doc_t *d, int idx, int width, int *requested) {
+    int c, col = 0;
+    for (c = d->nodes[idx].first; c >= 0 && col < WE_TRACKS_MAX; c = d->nodes[c].next) {
+        const we_node_t *g = &d->nodes[c];
+        if (g->display == WE_DISP_NONE) continue;
+        if (w_eq(g->tag, "col")) col = table_col_width(g, col, width, requested);
+        else if (w_eq(g->tag, "colgroup")) {
+            int kid, cols = 0;
+            for (kid = g->first; kid >= 0; kid = d->nodes[kid].next)
+                if (w_eq(d->nodes[kid].tag, "col") && d->nodes[kid].display != WE_DISP_NONE) {
+                    col = table_col_width(&d->nodes[kid], col, width, requested);
+                    cols++;
+                }
+            if (!cols) col = table_col_width(g, col, width, requested);
+        }
+    }
+}
+
+/* Lot 73: the captions on one side (caption-side), as blocks of the
+ * table width; returns their height */
+static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth);
+static int table_captions(we_doc_t *d, int idx, int x, int y, int width, int depth, int bottom) {
+    int c, h = 0;
+    for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
+        const we_node_t *n = &d->nodes[c];
+        if (n->display == WE_DISP_NONE || !w_eq(n->tag, "caption") || n->caption_bottom != bottom) continue;
+        h += layout_block(d, c, x, y + h, width, depth + 1);
+        d->perf.table_captions++;
+    }
+    return h;
 }
 
 /* Occupancy is one bit per column. A rowspan cell blocks those columns on
@@ -9806,6 +9863,7 @@ static int table_tracks(we_doc_t *d, int idx, int width, int depth, int *widths)
     cols = table_assign(d, idx, rows, nr, depth, 1);
     if (cols < 0) return 0;
     for (col = 0; col < WE_TRACKS_MAX; col++) requested[col] = 0;
+    table_col_widths(d, idx, width, requested);
     table_gaps(d, idx, rows, nr, depth);
     for (r = 0; r < nr; r++) {
         for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
@@ -10344,6 +10402,7 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
     int r, c, cy = y;
     if (!nr) return 0;
     table_row_heights(d, idx, depth, widths, nr);
+    cy += table_captions(d, idx, x, cy, width, depth, 0);
     for (r = 0; r < nr; r++) {
         we_node_t *row = &d->nodes[rows[r]];
         int high = slot->height[r], bg_slot = -1, row_base = WE_NO_BASELINE, row_aligned = 0;
@@ -10389,6 +10448,7 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
         cy = limit_coord(cy + high + (r + 1 < nr ? slot->gap_y[r + 1] : 0));
         d->perf.table_rows++;
     }
+    cy += table_captions(d, idx, x, cy, width, depth, 1);
     if (d->nodes[idx].border_collapse) collapse_paint(d, idx, rows, nr, widths, x, depth);
     return cy - y;
 }
