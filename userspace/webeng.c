@@ -4028,6 +4028,11 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             n->small_caps = 1;
             diag(d, "small-caps painted uppercase", -1);
         } else diag(d, "font-variant refused", -1);
+    } else if (w_eq(prop, "box-decoration-break") || w_eq(prop, "-webkit-box-decoration-break")) {
+        /* Lot 73: how an inline box split over lines paints its edges */
+        if (value_is(v, vl, "slice")) n->deco_clone = 0;
+        else if (value_is(v, vl, "clone")) n->deco_clone = 1;
+        else diag(d, "box-decoration-break refused", -1);
     } else if (w_eq(prop, "text-underline-offset")) {
         /* Lot 73: auto or 0..16 px below the default place */
         int rc = parse_len(v, vl, &px, &pct);
@@ -5012,7 +5017,8 @@ typedef struct {
     struct { int x, y, w, h; uint8_t side; } floats[WE_FLOATS_MAX];
     int cur_w;
     int nwords;
-    struct { const char* s; int len; int node; int space_before; } w[WE_LINE_WORDS];
+    struct { const char* s; int len; int node; uint8_t space_before, lead, trail, edges; } w[WE_LINE_WORDS];   /* lot 73: edges 1 opens, 2 closes its box */
+    int open_px, open_node;   /* lot 73: start edges of inline boxes waiting for their first word */
     int lines;
     int pending_space, measuring;
     int line_h, indent, indent_used, indent_shift, atom_h, pending_x;
@@ -5262,6 +5268,38 @@ static void paint_run(we_doc_t *d, int node, int xs, int y, const char *buf, int
     }
 }
 
+/* lot 73: the background and borders of an inline box around one run of
+ * its text (xs, y, w: the glyphs; h: the line). Its padding and border
+ * widen the run on the side where the box starts (opens) or ends
+ * (closes); with box-decoration-break: clone add_word_piece marks every
+ * fragment as opening and closing. The vertical padding and borders paint outside the
+ * line box and take no room (CSS 2 10.6.1). */
+static void edge_paint(we_doc_t *d, int idx, int style, uint32_t color, int vertical, int off, int from, int w, int len);
+static int box_edge(const we_node_t *n, int side);
+static void edge_of(const we_node_t *n, int side, int *w, int *style, uint32_t *color);
+static int inside(const we_doc_t *d, int node, int root);
+static void inline_box_paint(we_doc_t *d, int box, int xs, int y, int w, int h, int opens, int closes) {
+    const we_node_t *n = &d->nodes[box];
+    int bl = opens ? box_edge(n, 3) : 0, br = closes ? box_edge(n, 1) : 0;
+    int pl = opens ? n->padding[3] : 0, pr = closes ? n->padding[1] : 0;
+    int bt = box_edge(n, 0), bb = box_edge(n, 2);
+    int x0 = xs - pl - bl, x1 = xs + w + pr + br, y0 = y - n->padding[0] - bt, y1 = y + h + n->padding[2] + bb;
+    int k;
+    if (n->has_bg) emit(d, box, OS_FB_WEB_RECT, x0 + bl, y0 + bt, x1 - x0 - bl - br, y1 - y0 - bt - bb, n->bg);
+    for (k = 0; k < 4; k++) {
+        int bw, style;
+        uint32_t color;
+        edge_of(n, k, &bw, &style, &color);
+        if (k == 1 && !br) continue;
+        if (k == 3 && !bl) continue;
+        if (bw <= 0 || style == WE_BS_NONE || style == WE_BS_HIDDEN) continue;
+        if (k == 0) edge_paint(d, box, style, color, 0, y0, x0, bw, x1 - x0);
+        else if (k == 2) edge_paint(d, box, style, color, 0, y1 - bw, x0, bw, x1 - x0);
+        else if (k == 3) edge_paint(d, box, style, color, 1, x0, y0 + bt, bw, y1 - y0 - bt - bb);
+        else edge_paint(d, box, style, color, 1, x1 - bw, y0 + bt, bw, y1 - y0 - bt - bb);
+    }
+}
+
 /* advance=0 paints a segment and keeps the line open for an atomic box. */
 static void flush_line_mode(we_inline_t *f, int force, int advance) {
     int i, x, total = 0, box_h, wrapped = f->wrapped, extra = 0, gaps = 0, gap = 0, align = f->align;
@@ -5278,7 +5316,7 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
         return;
     }
     for (i = 0; i < f->nwords; i++) {
-        total += f->w[i].len * glyph_adv(d, f->w[i].node);
+        total += f->w[i].len * glyph_adv(d, f->w[i].node) + f->w[i].lead + f->w[i].trail;
         if (i && f->w[i].space_before) { total += space_adv(d, f->w[i].node); gaps++; }
     }
     x = f->x0 + f->pending_x;
@@ -5294,10 +5332,11 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
     i = 0;
     while (i < f->nwords) {
         /* merge words of the same node into one TEXT item */
-        int node = f->w[i].node, j = i, len = 0, xs, run_w, before;
+        int node = f->w[i].node, j = i, len = 0, xs, run_w, before, opens, closes, trail;
         char buf[OS_FB_WEB_TEXT_LEN];
         const we_node_t* n;
         if (i && f->w[i].space_before) x += space_adv(d, node) + gap_extra(extra, gaps, gap++);
+        x += f->w[i].lead;
         xs = x;
         while (j < f->nwords && f->w[j].node == node) {
             int k, sp = (j > i && f->w[j].space_before) ? 1 : 0;
@@ -5308,6 +5347,7 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
             for (k = 0; k < f->w[j].len; k++) buf[len++] = f->w[j].s[k];
             j++;
         }
+        opens = f->w[i].edges & 1;
         if (j == i) {
             int k;
             for (k = 0; k < f->w[i].len && k < OS_FB_WEB_TEXT_LEN - 1; k++) buf[k] = f->w[i].s[k];
@@ -5315,6 +5355,7 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
             f->w[i].s += k;
             f->w[i].len -= k;
             f->w[i].space_before = 0;
+            f->w[i].lead = 0; f->w[i].edges &= 2;
             j = f->w[i].len ? i : i + 1;
         }
         buf[len] = 0;
@@ -5322,7 +5363,11 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
                        i == 0 || f->w[i].space_before);
         n = &d->nodes[d->nodes[node].parent >= 0 ? d->nodes[node].parent : node];
         run_w = len * glyph_adv(d, node);
-        if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, run_w, box_h, n->bg);
+        closes = j > i && (f->w[j - 1].edges & 2);   /* lot 73: not while a long word goes on */
+        trail = j > i ? f->w[j - 1].trail : 0;
+        if (n->display == WE_DISP_INLINE && !n->is_text && d->nodes[node].parent >= 0)
+            inline_box_paint(d, d->nodes[node].parent, xs, f->y, run_w, box_h, opens, closes);
+        else if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, run_w, box_h, n->bg);
         if ((n->bgi_len || n->bgi_layers) && n->display == WE_DISP_INLINE && run_w > 0)
             inline_image(d, d->nodes[node].parent >= 0 ? d->nodes[node].parent : node, xs, f->y, run_w, box_h);
         before = (int)d->nitems;
@@ -5339,7 +5384,7 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
                 tn->x = (int16_t)limit_coord(ax); tn->y = (int16_t)limit_coord(ay); tn->w = (int16_t)(bx - ax); tn->h = (int16_t)(by - ay);
             }
         }
-        x = xs + run_w;
+        x = xs + run_w + trail;
         i = j;
     }
     if (!advance) {
@@ -5356,11 +5401,25 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
 static void flush_line(we_inline_t *f, int force) { flush_line_mode(f, force, 1); }
 static void flush_segment(we_inline_t *f) { flush_line_mode(f, 0, 0); }
 
+static int inline_edge(const we_doc_t *d, int idx, int end);
 static void add_word_piece(we_inline_t* f, const char* s, int len, int node, int space) {
-    int ww, word = len * glyph_adv(f->d, node);
+    int ww, word = len * glyph_adv(f->d, node) + f->open_px;
+    /* lot 73: box-decoration-break: clone gives every line fragment of the
+     * word's inline box its start and end edges, so a fit keeps room for
+     * the end edge and a wrapped word starts after the start edge */
+    int box = f->d->nodes[node].parent, clone = box >= 0 && f->d->nodes[box].deco_clone && inline_edge(f->d, box, 0) + inline_edge(f->d, box, 1);
+    int reserve = clone ? inline_edge(f->d, box, 1) : 0;
     flow_region(f, word);
     ww = word + ((f->nwords && space) ? space_adv(f->d, node) : 0);
-    if (!f->d->nodes[node].nowrap && !f->glue && (f->nwords || f->pending_x) && f->cur_w + ww > f->width) { f->wrapped = 1; flush_line(f, 0); flow_region(f, word); ww = word; }
+    if (!f->d->nodes[node].nowrap && !f->glue && (f->nwords || f->pending_x) && f->cur_w + ww + reserve > f->width) {
+        if (clone && f->nwords && f->d->nodes[f->w[f->nwords - 1].node].parent == box && !(f->w[f->nwords - 1].edges & 2)) {
+            f->w[f->nwords - 1].trail = (uint8_t)(f->w[f->nwords - 1].trail + reserve);
+            f->w[f->nwords - 1].edges |= 2;
+        }
+        f->wrapped = 1; flush_line(f, 0);
+        if (clone && !f->open_px) { f->open_px = inline_edge(f->d, box, 0); f->open_node = box; word += f->open_px; }
+        flow_region(f, word); ww = word;
+    }
     if (f->nwords >= WE_LINE_WORDS) {
         if (f->d->nodes[node].nowrap) diag(f->d, "inline word capacity", node);
         f->wrapped = 1;
@@ -5368,7 +5427,12 @@ static void add_word_piece(we_inline_t* f, const char* s, int len, int node, int
         ww = word;
     }
     f->w[f->nwords].s = s; f->w[f->nwords].len = len; f->w[f->nwords].node = node;
-    f->w[f->nwords].space_before = space;
+    f->w[f->nwords].space_before = (uint8_t)(space != 0);
+    /* lot 73: the start edges of the inline boxes opened before this word */
+    f->w[f->nwords].lead = (uint8_t)(f->open_px < 255 ? f->open_px : 255);
+    f->w[f->nwords].trail = 0;
+    f->w[f->nwords].edges = (uint8_t)(f->open_node >= 0 && f->open_node == f->d->nodes[node].parent);
+    f->open_px = 0; f->open_node = -1;
     f->nwords++;
     f->cur_w += ww;
 }
@@ -5509,6 +5573,18 @@ static void add_text_word(we_inline_t *f, const char *s, int len, int node, int 
     }
 }
 
+/* lot 73: margin + border + padding of an inline element on its start
+ * (end 0, left) or end side (1, right); 0 for other boxes */
+static int box_edge(const we_node_t *n, int side);
+static int inline_edge(const we_doc_t *d, int idx, int end) {
+    const we_node_t *n = &d->nodes[idx];
+    int side, v;
+    if (n->is_text || n->display != WE_DISP_INLINE) return 0;
+    side = end ? 1 : 3;   /* words go left to right in rtl too (lot 64) */
+    v = (n->margin[side] > 0 ? n->margin[side] : 0) + box_edge(n, side) + n->padding[side];
+    return v > 0 && v < 128 ? v : 0;
+}
+
 static void inline_node(we_inline_t* f, int idx, int depth) {
     we_doc_t* d = f->d;
     we_node_t* n = &d->nodes[idx];
@@ -5578,7 +5654,20 @@ static void inline_node(we_inline_t* f, int idx, int depth) {
         f->pending_space = 0;
         return;
     }
-    for (c = n->first; c >= 0; c = d->nodes[c].next) inline_node(f, c, depth + 1);
+    {
+        /* lot 73: an inline box's horizontal margin, border and padding
+         * take room before its first word and after its last one */
+        int start = inline_edge(d, idx, 0), end = inline_edge(d, idx, 1);
+        if (start) { f->open_px += start; f->open_node = idx; }
+        for (c = n->first; c >= 0; c = d->nodes[c].next) inline_node(f, c, depth + 1);
+        if (end && f->nwords && inside(d, f->w[f->nwords - 1].node, idx)) {
+            int t = f->w[f->nwords - 1].trail + end;
+            f->w[f->nwords - 1].trail = (uint8_t)(t < 255 ? t : 255);
+            f->w[f->nwords - 1].edges |= 2;   /* painted for the word's own box */
+            f->cur_w += end;
+        }
+        if (f->open_node == idx) { f->open_px -= start; f->open_node = -1; }   /* an empty box */
+    }
 }
 
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth);
@@ -6071,6 +6160,7 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     int c, i, bottom;
     w_zero(f, sizeof(*f));
     f->d = d;
+    f->open_node = -1;
     f->measuring = measuring;
     f->base_x = f->x0 = cx;
     f->base_width = f->width = cwidth;

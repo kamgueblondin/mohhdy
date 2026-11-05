@@ -287,6 +287,100 @@ static void test_l73_underline_offset(void) {
     TEST_ASSERT_EQUAL(3, l61_diag_count("text-decoration refused"));
 }
 
+/* Lot 73: inline box edges and box-decoration-break. An inline element's
+ * horizontal margin, border and padding take room before its first word
+ * and after its last one; its borders and padded background paint per
+ * line fragment. slice (default) paints the start edge on the first
+ * fragment and the end edge on the last; clone gives every fragment both
+ * edges and the room for them. */
+#define L73_SPAN "border:2px solid #ff0000;padding:0 4px;background:#ffff00;margin:0 3px"
+static void test_l73_inline_edges_slice(void) {
+    lot52_render(L64_BODY "<p style='margin:0;width:120px'>x <span style='" L73_SPAN "'>ab cd ef gh ij</span> z</p></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("ab cd ef gh", 25, 1);           /* 8 + 8 + margin 3 + border 2 + padding 4 */
+    l61_rect_at(21, 0, 92, 10, 0xFFFF00);        /* background over the left padding only */
+    l61_rect_at(19, -2, 94, 2, 0xFF0000);        /* top border */
+    l61_rect_at(19, 10, 94, 2, 0xFF0000);        /* bottom border */
+    l61_rect_at(19, 0, 2, 10, 0xFF0000);         /* left border: first fragment */
+    TEST_ASSERT_NULL(l73_rect_at(113, 0));       /* no right border on it */
+    l61_text_at("ij", 0, 11);                    /* the second fragment has no start edge */
+    l61_rect_at(0, 10, 20, 10, 0xFFFF00);
+    l61_rect_at(20, 10, 2, 10, 0xFF0000);        /* right border: last fragment */
+    TEST_ASSERT_NULL(l73_rect_at(-2, 10));
+    l61_text_at("z", 33, 11);                    /* 16 + 4 + 2 + 3 + space */
+}
+
+static void test_l73_inline_edges_clone(void) {
+    lot52_render(L64_BODY "<p style='margin:0;width:120px'>x <span style='" L73_SPAN ";-webkit-box-decoration-break:clone'>ab cd ef gh ij</span> z</p></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("ab cd ef", 25, 1);              /* gh would leave no room for the end edge */
+    l61_rect_at(93, 0, 2, 10, 0xFF0000);         /* first fragment closes */
+    l61_rect_at(21, 0, 72, 10, 0xFFFF00);
+    l61_text_at("gh ij", 9, 11);                 /* the second fragment opens again */
+    l61_rect_at(3, 10, 2, 10, 0xFF0000);
+    l61_rect_at(5, 10, 48, 10, 0xFFFF00);
+    l61_rect_at(53, 10, 2, 10, 0xFF0000);
+    l61_text_at("z", 66, 11);
+    /* a box that fits on one line paints the same */
+    lot52_render(L64_BODY "<p style='margin:0'><span style='" L73_SPAN ";box-decoration-break:clone'>ab</span>c</p></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("ab", 9, 1);
+    l61_rect_at(3, 0, 2, 10, 0xFF0000);
+    l61_rect_at(29, 0, 2, 10, 0xFF0000);
+    l61_text_at("c", 34, 1);
+}
+
+static void test_l73_inline_edges_nesting(void) {
+    /* an empty box takes no room; edges of outer boxes add up; the end
+     * edge of an outer box follows the last word inside it */
+    lot52_render(L64_BODY "<p style='margin:0'>a<span style='padding:0 5px'></span>b <b style='margin-left:6px'>"
+                 "<i style='padding-right:2px'>c</i></b>d <span style='margin-right:4px'><u style='padding-right:1px'>e</u></span>f"
+                 " <span style='padding-left:3px'><span style='padding-left:2px'>g</span></span></p></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("b", 8, 1);
+    l61_text_at("c", 30, 1);
+    l61_text_at("d", 40, 1);
+    l61_text_at("f", 69, 1);                     /* 56 + 8 + 1 + 4 */
+    l61_text_at("g", 90, 1);                     /* 77 + 8 + 3 + 2 */
+    /* rtl lays words left to right too: the start edge is the left one */
+    lot52_render(L64_BODY "<p style='margin:0;width:120px;direction:rtl'>x <span style='border-left:2px solid #ff0000;"
+                 "border-right:1px solid #0000ff;padding:0 4px'>ab cd ef gh ij</span> z</p></body>", 320);
+    l61_text_at("ab cd ef gh", 32, 1);
+    l61_rect_at(26, 0, 2, 10, 0xFF0000);
+    l61_rect_at(103, 10, 1, 10, 0x0000FF);
+    l61_text_at("z", 112, 11);
+}
+
+static void test_l73_inline_edges_long_word_and_wrap(void) {
+    /* a word longer than one text item paints in pieces: the start edge
+     * before the first piece only, the end edge after the last only */
+    lot52_render(L64_BODY "<p style='margin:0'><span style='padding:0 4px;border-left:2px solid #ff0000;border-right:2px solid #0000ff'>"
+                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</span></p></body>", 640);
+    l61_rect_at(0, 0, 2, 10, 0xFF0000);
+    l61_text_at("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 6, 1);
+    l61_text_at("aaa", 382, 1);
+    l61_rect_at(410, 0, 2, 10, 0x0000FF);
+    TEST_ASSERT_NULL(l73_rect_at(382, 0));
+    TEST_ASSERT_NULL(l73_rect_at(376, 0));
+    TEST_ASSERT_EQUAL(4, (int)g_doc.nitems);   /* two borders, two pieces */
+    /* the end edge counts toward the line width */
+    lot52_render(L64_BODY "<p style='margin:0;width:40px'><span style='padding-right:8px'>ab</span> cd</p>"
+                 "<p style='margin:0;width:60px;padding:0 10px;box-decoration-break:clone'>ab cd ef gh</p></body>", 320);
+    l61_text_at("cd", 0, 11);
+    l61_text_at("ef gh", 10, 31);          /* a block's padding is not an inline edge */
+}
+
+static void test_l73_decoration_break_refusals(void) {
+    lot52_render(L64_BODY "<p style='margin:0'><span style='box-decoration-break:clone;box-decoration-break:auto;" L73_SPAN "'>ab cd</span></p>"
+                 "<p style='margin:0;width:40px'><span style='box-decoration-break:clone;box-decoration-break:slice;" L73_SPAN "'>ab cd</span></p></body>", 320);
+    TEST_ASSERT_EQUAL(1, l61_diag_count("box-decoration-break refused"));
+    l61_rect_at(53, 0, 2, 10, 0xFF0000);         /* auto refused: clone stays (one line) */
+    l61_text_at("ab", 9, 11);
+    l61_text_at("cd", 0, 21);                    /* slice: no start edge on the second line */
+    l61_rect_at(20, 20, 2, 10, 0xFF0000);
+    TEST_ASSERT_NULL(l73_rect_at(25, 10));       /* nor an end edge on the first */
+}
+
 static void lot73_run(void) {
     RUN_TEST(test_l73_paragraph_split_between_columns);
     RUN_TEST(test_l73_orphans_and_widows);
@@ -301,4 +395,9 @@ static void lot73_run(void) {
     RUN_TEST(test_l73_list_inside_rtl_and_refusals);
     RUN_TEST(test_l73_small_caps);
     RUN_TEST(test_l73_underline_offset);
+    RUN_TEST(test_l73_inline_edges_slice);
+    RUN_TEST(test_l73_inline_edges_clone);
+    RUN_TEST(test_l73_inline_edges_nesting);
+    RUN_TEST(test_l73_inline_edges_long_word_and_wrap);
+    RUN_TEST(test_l73_decoration_break_refusals);
 }

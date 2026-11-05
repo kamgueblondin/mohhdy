@@ -265,6 +265,7 @@ typedef struct {
     /* Lot 64: inherited writing-mode (WE_WM_*), direction (1 rtl) and
      * text-orientation (1 upright; mixed paints upright too). */
     uint8_t wmode, dir_rtl, upright;
+    uint8_t deco_clone;        /* lot 73: box-decoration-break: clone */
     /* Lot 64: text-align / text-align-last given as start or end (bits 0-1
      * and 2-3: 1 start, 2 end), resolved against direction after the cascade. */
     uint8_t align_logical;
