@@ -63,21 +63,47 @@ static inline void os_aes_ct_planes(uint32_t q[8]) {
     q[7] = s0; q[6] = s1; q[5] = s2; q[4] = s3; q[3] = s4; q[2] = s5; q[1] = s6; q[0] = s7;
 }
 
-/* n bytes (n <= 32) through the S-box in one bitsliced pass. */
+/* 8x8 bit-matrix transpose (Hacker's Delight 7-3): bit i of byte j
+ * becomes bit j of byte i. Three masked swaps, no branch, no table. */
+static inline uint64_t os_aes_ct_t8(uint64_t x) {
+    uint64_t t;
+    t = (x ^ (x >> 7)) & 0x00AA00AA00AA00AAULL; x = x ^ t ^ (t << 7);
+    t = (x ^ (x >> 14)) & 0x0000CCCC0000CCCCULL; x = x ^ t ^ (t << 14);
+    t = (x ^ (x >> 28)) & 0x00000000F0F0F0F0ULL; x = x ^ t ^ (t << 28);
+    return x;
+}
+
+/* n bytes (n <= 16) through the S-box in one bitsliced pass. The planes
+ * come from two 8x8 transposes (bytes 0-7 in bits 0-7 of each plane,
+ * bytes 8-15 in bits 8-15); the same transposes bring the bytes back. */
 static inline void os_aes_ct_subn(uint8_t* s, int n) {
+    uint8_t buf[16];
     uint32_t q[8];
-    int i, j;
-    for (i = 0; i < 8; i++) {
-        uint32_t p = 0;
-        for (j = 0; j < n; j++) p |= (uint32_t)((s[j] >> i) & 1U) << j;
-        q[i] = p;
+    uint64_t lo = 0, hi = 0;
+    int i;
+    for (i = 0; i < 16; i++) buf[i] = 0;
+    for (i = 0; i < n; i++) buf[i] = s[i];
+    for (i = 7; i >= 0; i--) {
+        lo = (lo << 8) | buf[i];
+        hi = (hi << 8) | buf[i + 8];
     }
+    lo = os_aes_ct_t8(lo);
+    hi = os_aes_ct_t8(hi);
+    for (i = 0; i < 8; i++)
+        q[i] = (uint32_t)((lo >> (8 * i)) & 0xFFU) | ((uint32_t)((hi >> (8 * i)) & 0xFFU) << 8);
     os_aes_ct_planes(q);
-    for (j = 0; j < n; j++) {
-        uint32_t b = 0;
-        for (i = 0; i < 8; i++) b |= ((q[i] >> j) & 1U) << i;
-        s[j] = (uint8_t)b;
+    lo = 0; hi = 0;
+    for (i = 7; i >= 0; i--) {
+        lo = (lo << 8) | (q[i] & 0xFFU);
+        hi = (hi << 8) | ((q[i] >> 8) & 0xFFU);
     }
+    lo = os_aes_ct_t8(lo);
+    hi = os_aes_ct_t8(hi);
+    for (i = 0; i < 8; i++) {
+        buf[i] = (uint8_t)(lo >> (8 * i));
+        buf[i + 8] = (uint8_t)(hi >> (8 * i));
+    }
+    for (i = 0; i < n; i++) s[i] = buf[i];
 }
 
 static inline void os_aes_ct_sub16(uint8_t s[16]) { os_aes_ct_subn(s, 16); }
