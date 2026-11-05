@@ -236,6 +236,42 @@ static void test_l73_list_inside_rtl_and_refusals(void) {
     l61_text_at("a", 30, 1);
 }
 
+/* Lot 73: font-variant small-caps (capitals of the same size, one diag)
+ * and text-underline-offset (inherited, 0..16 px, auto). */
+static const os_fb_web_item_t *l73_rect_at(int x, int y) {
+    unsigned i;
+    for (i = 0; i < g_doc.nitems; i++)
+        if (g_doc.items[i].kind == OS_FB_WEB_RECT && g_doc.items[i].x == x && g_doc.items[i].y == y) return &g_doc.items[i];
+    return 0;
+}
+
+static void test_l73_small_caps(void) {
+    lot52_render(L64_BODY "<p style='margin:0;font-variant:small-caps'>Ab <span style='font-variant:normal'>cd</span> "
+                 "<span style='text-transform:lowercase'>EF</span></p><p style='margin:0;font-variant-caps:all-small-caps'>gh</p></body>", 320);
+    l61_text_at("AB", 0, 1);
+    l61_text_at("cd", 24, 1);
+    l61_text_at("ef", 48, 1);           /* an explicit transform wins */
+    l61_text_at("GH", 0, 11);
+    TEST_ASSERT_EQUAL(2, l61_diag_count("small-caps painted uppercase"));
+    lot52_render(L64_BODY "<p style='font-variant:oldstyle-nums'>a</p></body>", 320);
+    TEST_ASSERT_TRUE(lot52_has_diag("font-variant refused"));
+    TEST_ASSERT_NOT_NULL(find_text("a"));
+}
+
+static void test_l73_underline_offset(void) {
+    lot52_render(L64_BODY "<p style='margin:0'><u style='text-underline-offset:3px'>cd</u> <u>e</u>"
+                 "<span style='text-underline-offset:16px'> <u>f</u> <u style='text-underline-offset:auto'>g</u></span></p></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    TEST_ASSERT_NOT_NULL(l73_rect_at(0, 12));       /* 1 + 8 + 3 */
+    TEST_ASSERT_NULL(l73_rect_at(0, 9));
+    TEST_ASSERT_NOT_NULL(l73_rect_at(24, 9));       /* default */
+    TEST_ASSERT_NOT_NULL(l73_rect_at(40, 25));      /* inherited 16 */
+    TEST_ASSERT_NOT_NULL(l73_rect_at(56, 9));       /* auto resets */
+    lot52_render(L64_BODY "<p style='text-underline-offset:17px'><u>a</u></p><p style='text-underline-offset:-1px'><u>b</u></p>"
+                 "<p style='text-underline-offset:10%'><u>c</u></p></body>", 320);
+    TEST_ASSERT_EQUAL(3, l61_diag_count("text-decoration refused"));
+}
+
 static void lot73_run(void) {
     RUN_TEST(test_l73_paragraph_split_between_columns);
     RUN_TEST(test_l73_orphans_and_widows);
@@ -248,4 +284,6 @@ static void lot73_run(void) {
     RUN_TEST(test_l73_line_clamp_refusals_and_flow_root);
     RUN_TEST(test_l73_list_inside);
     RUN_TEST(test_l73_list_inside_rtl_and_refusals);
+    RUN_TEST(test_l73_small_caps);
+    RUN_TEST(test_l73_underline_offset);
 }

@@ -4020,6 +4020,20 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "lowercase")) n->text_transform = WE_TT_LOWER;
         else if (value_is(v, vl, "capitalize")) n->text_transform = WE_TT_CAPITALIZE;
         else diag(d, "text-transform refused", -1);
+    } else if (w_eq(prop, "font-variant") || w_eq(prop, "font-variant-caps")) {
+        /* Lot 73: one font face at fixed widths: small-caps letters are
+         * painted as capitals of the same size (diag once per value) */
+        if (value_is(v, vl, "normal")) n->small_caps = 0;
+        else if (value_is(v, vl, "small-caps") || value_is(v, vl, "all-small-caps")) {
+            n->small_caps = 1;
+            diag(d, "small-caps painted uppercase", -1);
+        } else diag(d, "font-variant refused", -1);
+    } else if (w_eq(prop, "text-underline-offset")) {
+        /* Lot 73: auto or 0..16 px below the default place */
+        int rc = parse_len(v, vl, &px, &pct);
+        if (value_is(v, vl, "auto")) n->underline_off = 0;
+        else if (rc == 0 && !pct && px >= 0 && px <= 16) n->underline_off = (int8_t)px;
+        else diag(d, "text-decoration refused", -1);
     } else if (w_eq(prop, "background-clip") || w_eq(prop, "background-origin")) {
         int box = box_keyword(v, vl);
         if (box < 0) diag(d, "background box refused", -1);
@@ -4510,6 +4524,8 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         bgi_reset(n);
         w_zero(n->rad_x, sizeof(n->rad_x)); w_zero(n->rad_y, sizeof(n->rad_y)); n->rad_pct = 0;
         n->text_transform = p ? p->text_transform : WE_TT_NONE;
+        n->small_caps = p ? p->small_caps : 0;
+        n->underline_off = p ? p->underline_off : 0;
         n->letter_spacing = p ? p->letter_spacing : 0;
         n->word_spacing = p ? p->word_spacing : 0;
         n->align_last = p ? p->align_last : 0;
@@ -5162,7 +5178,7 @@ static void paint_decorations(we_doc_t *d, int text, int x, int y, int w) {
             uint32_t color = n->deco_color_set ? n->deco_color : n->color;
             if (!(n->deco_line & kind) || (done & kind)) continue;
             done |= kind;
-            at = kind == WE_DECO_UNDER ? y + 8 : kind == WE_DECO_OVER ? y - t : y + 4 - t / 2;
+            at = kind == WE_DECO_UNDER ? y + 8 + d->nodes[text].underline_off : kind == WE_DECO_OVER ? y - t : y + 4 - t / 2;
             if (style == WE_BS_WAVY) { wavy_decoration = 1; style = WE_BS_SOLID; }
             if (style == 4) {   /* double: two lines, the gap equal to the thickness */
                 edge_paint(d, text, WE_BS_SOLID, color, 0, kind == WE_DECO_OVER ? at - 2 * t : at, x, t, w);
@@ -5302,7 +5318,8 @@ static void flush_line_mode(we_inline_t *f, int force, int advance) {
             j = f->w[i].len ? i : i + 1;
         }
         buf[len] = 0;
-        text_transform(buf, len, d->nodes[node].text_transform, i == 0 || f->w[i].space_before);
+        text_transform(buf, len, d->nodes[node].text_transform == WE_TT_NONE && d->nodes[node].small_caps ? WE_TT_UPPER : d->nodes[node].text_transform,
+                       i == 0 || f->w[i].space_before);
         n = &d->nodes[d->nodes[node].parent >= 0 ? d->nodes[node].parent : node];
         run_w = len * glyph_adv(d, node);
         if (n->has_bg && n->display == WE_DISP_INLINE) emit(d, node, OS_FB_WEB_RECT, xs, f->y, run_w, box_h, n->bg);

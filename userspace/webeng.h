@@ -334,6 +334,8 @@ typedef struct {
     we_bg_layer_t bgi_more[WE_BG_LAYERS - 1];
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
+    uint8_t small_caps;         /* lot 73: font-variant small-caps, painted uppercase (inherited) */
+    int8_t underline_off;       /* lot 73: text-underline-offset px, 0 auto (inherited) */
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
     uint8_t line_clamp;         /* lot 73: -webkit-line-clamp / line-clamp lines (0 none) */
     int8_t letter_spacing, word_spacing; /* lot 62: px added per glyph / per space, inherited */
