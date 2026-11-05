@@ -198,12 +198,20 @@ static int web_viewport_w(void) {
 }
 
 static int (*g_wops_atlas_dims)(void *ctx, int slot, int *w, int *h);
+/* Lot 74: live state of the page's form controls (webeng_finput.inc),
+ * cleared on every new page; the source length for a render after a
+ * click or a key */
+static we_forms_t g_web_forms;
+static int g_web_forms_ready, g_web_src_n;
 static int osui_web_pipeline(const char *src, int n) {
     int defined = 0, expanded = 0, kept = 0, dropped = 0, vdef = 0, unres = 0, m, rc, k;
     webrt_viewport_t vp;
     static char css1[WE_CSS_MAX], css2[WE_CSS_MAX];
     g_web_components = g_web_media_kept = g_web_media_dropped = g_web_vars = g_web_vars_unresolved = 0;
     g_web_sanitized = 0;
+    if (!g_web_forms_ready) { we_forms_init(&g_web_forms); g_web_forms_ready = 1; }
+    we_set_forms(&g_web, &g_web_forms);
+    if (src == g_web_src) g_web_src_n = n;
     /* Lot 7 (US-039): sanitizer first (script, iframe, object, embed, on*,
      * javascript: URLs, unsafe CSS), then the rest of the pipeline. */
     m = webrt_sanitize_page(src, g_web_san, OSUI_WEB_SRC_MAX, &g_web_sanitized);
@@ -380,6 +388,8 @@ static int web_go(const char *file, int push, char *out, int out_max) {
     char status[320];
     int k;
     g_web_errpage = 0;
+    we_forms_init(&g_web_forms);   /* lot 74: a new page, new controls */
+    g_web_forms_ready = 1;
     if (osui_gui_web_load(file, status, (int)sizeof(status)) != 0) {
         if (out) { scat(out, out_max, status); scat(out, out_max, "\n"); }
         if (g_web_errpage) {
@@ -449,6 +459,7 @@ static int web_submit(int n, char *out, int out_max) {
         return -1;
     }
     g_web_final[0] = 0;
+    we_forms_init(&g_web_forms);
     len = g_wops->submit(n, g_web_src, OSUI_WEB_SRC_MAX, g_web_final, (int)sizeof(g_web_final), status, (int)sizeof(status));
     if (len < 0) { app_out(out, out_max, status[0] ? status : "osui web form error=failed", 0); return -1; }
     g_web_src[len < OSUI_WEB_SRC_MAX ? len : OSUI_WEB_SRC_MAX - 1] = 0;
@@ -471,6 +482,93 @@ static int web_submit(int n, char *out, int out_max) {
 }
 
 static void web_open_line(const char *line, char *out, int out_max);
+static void web_form_result(int fr, char *out, int out_max);
+static int web_form_render(void);
+static void gui_cat_i(char *d, int max, int v) {
+    if (v < 0) { scat(d, max, "-"); v = -v; }
+    gui_cat_u(d, max, (unsigned)v);
+}
+
+/* Lot 74: "web-fclick X Y", "web-fkey KEY" (a byte, or tab, stab, enter,
+ * esc, bs, up, down), "web-ftype TEXT", "web-fstate": the forms of the
+ * rendered page from the console, the same code as the desktop. */
+static int web_form_command(const char *line, char *out, int out_max) {
+    const char *a;
+    if (sncmp(line, "web-fclick ", 11) == 0) {
+        int x = 0, y = 0, fr, neg;
+        a = line + 11;
+        neg = *a == '-'; if (neg) a++;
+        while (*a >= '0' && *a <= '9' && x < 100000) x = x * 10 + (*a++ - '0');
+        if (neg) x = -x;
+        while (*a == ' ') a++;
+        neg = *a == '-'; if (neg) a++;
+        while (*a >= '0' && *a <= '9' && y < 100000) y = y * 10 + (*a++ - '0');
+        if (neg) y = -y;
+        fr = we_form_click(&g_web, x, y + g_web_scroll);
+        if (fr < 0) { app_out(out, out_max, "osui web form2 none", 0); return 1; }
+        web_form_result(fr, out, out_max);
+        return 1;
+    }
+    if (sncmp(line, "web-fkey ", 9) == 0) {
+        static const char *const names[] = { "tab", "stab", "enter", "esc", "bs", "up", "down", "space", 0 };
+        static const int keys[] = { WE_KEY_TAB, WE_KEY_SHIFT_TAB, WE_KEY_ENTER, WE_KEY_ESC, WE_KEY_BACKSPACE, WE_KEY_UP, WE_KEY_DOWN, ' ' };
+        int k, key = -1, fr;
+        a = line + 9;
+        for (k = 0; names[k]; k++) if (scmp(a, names[k]) == 0) key = keys[k];
+        if (key < 0 && a[0] && !a[1]) key = (unsigned char)a[0];
+        if (key < 0) { app_out(out, out_max, "osui web form2 error=usage web-fkey KEY", 0); return 1; }
+        fr = we_form_key(&g_web, key);
+        if (fr < 0) { app_out(out, out_max, "osui web form2 none", 0); return 1; }
+        web_form_result(fr, out, out_max);
+        return 1;
+    }
+    if (sncmp(line, "web-ftype ", 10) == 0) {
+        int typed = 0, fr = -1, changed = 0;
+        char m[32];
+        for (a = line + 10; *a; a++) {
+            fr = we_form_key(&g_web, (unsigned char)*a);
+            if (fr == WE_FACT_CHANGED) { typed++; changed = 1; }
+            else break;
+        }
+        if (changed) (void)web_form_render();
+        scpy(m, (int)sizeof(m), " typed ");
+        gui_cat_u(m, (int)sizeof(m), (unsigned)typed);
+        app_out(out, out_max, fr < 0 && !typed ? "osui web form2 error=no_focus" : "osui web form2", fr < 0 && !typed ? 0 : m);
+        return 1;
+    }
+    if (scmp(line, "web-fstate") == 0) {
+        static char m[200];
+        int i, k;
+        scpy(m, (int)sizeof(m), " controls ");
+        gui_cat_u(m, (int)sizeof(m), g_web.nform_ctl);
+        scat(m, (int)sizeof(m), " focus ");
+        gui_cat_i(m, (int)sizeof(m), g_web_forms.focus);
+        app_out(out, out_max, "osui web form2 state", m);
+        for (k = 0; k < (int)g_web.nform_ctl; k++) {
+            char v[WE_FSTATE_VAL];
+            const we_node_t *n = 0;
+            for (i = 1; i < (int)g_web.nnodes; i++) if (g_web.nodes[i].form_ord == k + 1) { n = &g_web.nodes[i]; break; }
+            if (!n) continue;
+            (void)we_form_value(&g_web, k, v, (int)sizeof(v));
+            scpy(m, (int)sizeof(m), "osui web form2 ctl ");
+            gui_cat_u(m, (int)sizeof(m), (unsigned)k);
+            scat(m, (int)sizeof(m), " ");
+            scat(m, (int)sizeof(m), n->tag);
+            scat(m, (int)sizeof(m), " id=");
+            scat(m, (int)sizeof(m), n->id[0] ? n->id : "-");
+            scat(m, (int)sizeof(m), " box ");
+            gui_cat_i(m, (int)sizeof(m), n->x); scat(m, (int)sizeof(m), " ");
+            gui_cat_i(m, (int)sizeof(m), n->y - g_web_scroll); scat(m, (int)sizeof(m), " ");
+            gui_cat_i(m, (int)sizeof(m), n->w); scat(m, (int)sizeof(m), " ");
+            gui_cat_i(m, (int)sizeof(m), n->h);
+            scat(m, (int)sizeof(m), " value=");
+            app_out(out, out_max, m, v);
+        }
+        return 1;
+    }
+    return 0;
+}
+
 int osui_gui_web_command(const char *line, char *out, int out_max) {
     const char *a;
     int n = 0, neg = 0;
@@ -553,6 +651,10 @@ int osui_gui_web_command(const char *line, char *out, int out_max) {
         app_out(out, out_max, "osui web input ok", 0);
         return 1;
     }
+    if (sncmp(line, "web-f", 5) == 0) {
+        int handled = web_form_command(line, out, out_max);
+        if (handled) return 1;
+    }
     if (sncmp(line, "web-submit", 10) == 0 && (line[10] == ' ' || !line[10])) {
         a = line + 10;
         while (*a == ' ') a++;
@@ -597,6 +699,138 @@ static void web_reflow(char *out, int out_max) {
     gui_cat_u(m, (int)sizeof(m), (unsigned)g_web_vw);
     app_out(out, out_max, "osui web reflow", m);
 }
+/* ---------- Lot 74: interactive forms of the rendered page ---------- */
+
+/* the page again with the new form state, at the same scroll offset */
+static int web_form_render(void) {
+    int scroll = g_web_scroll, rc;
+    if (g_web_src_n <= 0) return -1;
+    rc = osui_web_pipeline(g_web_src, g_web_src_n);
+    if (rc == 0) g_web_scroll = we_scroll(&g_web, scroll);
+    return rc;
+}
+
+/* the URL a form sends to: action (already without query for GET, with
+ * "?pairs" appended) against the page; 0, or -1 when it cannot be sent */
+int osui_gui_form_url(const char *base, const char *action, char *dst, int max) {
+    int i, n = 0, cut;
+    if (!action || !dst || max <= 0) return -1;
+    dst[0] = 0;
+    if (osui_gui_web_is_url(action)) { if (slen(action) >= max) return -1; scpy(dst, max, action); return 0; }
+    if (!base || !base[0]) return -1;
+    if (!osui_gui_web_is_url(base)) {
+        /* a local page: a local file, the query is not served */
+        char path[256];
+        for (i = 0; action[i] && action[i] != '?' && i < (int)sizeof(path) - 1; i++) path[i] = action[i];
+        path[i] = 0;
+        if (!path[0]) { if (slen(base) >= max) return -1; scpy(dst, max, base); return 0; }
+        return osui_gui_web_resolve(base, path, dst, max);
+    }
+    if (action[0] == '/' && action[1] == '/') {
+        cut = base[4] == 's' ? 6 : 5;   /* "https:" or "http:" */
+        if (cut + slen(action) >= max) return -1;
+        for (i = 0; i < cut; i++) dst[n++] = base[i];
+        dst[n] = 0;
+        scat(dst, max, action);
+        return 0;
+    }
+    /* end of the origin (after "scheme://host[:port]"), of the path, of the
+     * directory */
+    {
+        int origin = base[4] == 's' ? 8 : 7, path_end, dir_end;
+        while (base[origin] && base[origin] != '/' && base[origin] != '?' && base[origin] != '#') origin++;
+        path_end = origin;
+        while (base[path_end] && base[path_end] != '?' && base[path_end] != '#') path_end++;
+        dir_end = path_end;
+        while (dir_end > origin && base[dir_end - 1] != '/') dir_end--;
+        if (dir_end == origin) dir_end = -1;   /* no path: "/" is added */
+        cut = action[0] == '/' ? origin : action[0] == '?' || !action[0] ? path_end : dir_end;
+        if (cut < 0) {
+            if (origin + 1 + slen(action) >= max) return -1;
+            for (i = 0; i < origin; i++) dst[n++] = base[i];
+            dst[n++] = '/';
+        } else {
+            if (cut + slen(action) >= max) return -1;
+            for (i = 0; i < cut; i++) dst[n++] = base[i];
+        }
+        dst[n] = 0;
+        scat(dst, max, action);
+    }
+    return 0;
+}
+
+/* the answer of a POST, shown like a followed link */
+static int web_form_post(const char *url, const we_form_req_t *q, char *out, int out_max) {
+    static char status[512];
+    int len, k;
+    if (!g_wops || !g_wops->request) { app_out(out, out_max, "osui web form2 error=no_network", 0); return -1; }
+    g_web_final[0] = 0;
+    len = g_wops->request(url, q->body, q->body_len, g_web_src, OSUI_WEB_SRC_MAX, g_web_final, (int)sizeof(g_web_final),
+                          status, (int)sizeof(status));
+    if (len < 0) { app_out(out, out_max, status[0] ? status : "osui web form2 error=failed", 0); return -1; }
+    we_forms_init(&g_web_forms);
+    g_web_src[len < OSUI_WEB_SRC_MAX ? len : OSUI_WEB_SRC_MAX - 1] = 0;
+    if (osui_web_pipeline(g_web_src, len < OSUI_WEB_SRC_MAX ? len : OSUI_WEB_SRC_MAX - 1) != 0) return -1;
+    scpy(g_web_file, (int)sizeof(g_web_file), g_web_final[0] ? g_web_final : url);
+    g_web_active = 1;
+    g_web_mobile = 0;
+    g_web_scroll = 0;
+    if (g_web_hi + 1 >= WEB_HIST) {
+        for (k = 0; k + 1 < WEB_HIST; k++) scpy(g_web_hist[k], 256, g_web_hist[k + 1]);
+        g_web_hi--;
+    }
+    g_web_hi++;
+    scpy(g_web_hist[g_web_hi], 256, g_web_file);
+    g_web_hn = g_web_hi + 1;
+    return 0;
+}
+
+/* a submission the engine asked for: GET follows the URL, POST sends the
+ * body; a local page takes GET only (the query is dropped) */
+static void web_form_send(char *out, int out_max) {
+    static we_form_req_t q;
+    static char url[WE_FREQ_URL + 256], m[WE_FREQ_URL + 300];
+    int rc = we_form_request(&g_web, &q);
+    if (rc != 0) { app_out(out, out_max, rc == -2 ? "osui web form2 error=too_long" : "osui web form2 error=no_form", 0); return; }
+    if (osui_gui_form_url(g_web_file, q.url, url, (int)sizeof(url)) != 0) {
+        app_out(out, out_max, "osui web form2 error=action_refused action=", q.url);
+        return;
+    }
+    scpy(m, (int)sizeof(m), q.post ? "POST " : "GET ");
+    scat(m, (int)sizeof(m), url);
+    if (q.post) { scat(m, (int)sizeof(m), " body "); scat(m, (int)sizeof(m), q.body); }
+    if (q.multipart) scat(m, (int)sizeof(m), " (multipart sent urlencoded)");
+    app_out(out, out_max, "osui web form2 submit ", m);
+    if (q.post) {
+        if (!osui_gui_web_is_url(url)) { app_out(out, out_max, "osui web form2 error=post_local_page", 0); return; }
+        (void)web_form_post(url, &q, out, out_max);
+        return;
+    }
+    (void)web_go(url, 1, out, out_max);
+}
+
+static void web_form_result(int fr, char *out, int out_max) {
+    char m[48];
+    if (fr == WE_FACT_SUBMIT) { web_form_send(out, out_max); return; }
+    if (fr == WE_FACT_CHANGED) (void)web_form_render();
+    scpy(m, (int)sizeof(m), fr == WE_FACT_CHANGED ? " changed focus " : " same focus ");
+    if (g_web_forms.focus < 0) scat(m, (int)sizeof(m), "none");
+    else gui_cat_u(m, (int)sizeof(m), (unsigned)g_web_forms.focus);
+    app_out(out, out_max, "osui web form2", m);
+}
+
+/* a desktop key for the engine (WE_KEY_*), or -1 */
+static int web_form_keymap(int key) {
+    if (key == OS_VGA_KEY_UP) return WE_KEY_UP;
+    if (key == OS_VGA_KEY_DOWN) return WE_KEY_DOWN;
+    if (key == '\n' || key == '\r') return WE_KEY_ENTER;
+    if (key == '\b' || key == 127) return WE_KEY_BACKSPACE;
+    if (key == '\t') return WE_KEY_TAB;
+    if (key == OS_VGA_KEY_ESC) return WE_KEY_ESC;
+    if (key >= 32 && key <= 126) return key;
+    return -1;
+}
+
 static void web_event(const char *p, char *out, int out_max) {
     if (sncmp(p, "view", 4) == 0) {
         /* Lot 68: kernel view size and scale; a new zoom relays the page */
@@ -621,6 +855,11 @@ static void web_event(const char *p, char *out, int out_max) {
         p += 5;
         x = evt_int(&p);
         y = evt_int(&p);
+        {
+            /* Lot 74: a form control of the page takes the click first */
+            int fr = we_form_click(&g_web, x, y);
+            if (fr >= 0) { web_form_result(fr, out, out_max); return; }
+        }
         if (we_link_at(&g_web, x, y, href, (int)sizeof(href)) <= 0) return;
         if (sncmp(href, "mohhdy-form:", 12) == 0) {
             /* Lot 71: a form control: focus the field or submit */
@@ -1845,7 +2084,14 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
          * Lot 9: the mobile pane lets text keys reach the input line.
          * Lot 71: a focused form field takes the keys first (Enter submits,
          * ESC leaves the field); arrows past the end change section. */
-        int fk = (!g_web_mobile && web_nsections() > 0 && g_wops->form_key) ? g_wops->form_key(key) : -1;
+        int fk, wk = g_web_mobile ? -1 : web_form_keymap(key);
+        /* Lot 74: the focused control of the rendered page first; an arrow
+         * a text field does not use still scrolls */
+        if (wk >= 0) {
+            int fr = we_form_key(&g_web, wk);
+            if (fr > 0 || (fr == 0 && key != OS_VGA_KEY_UP && key != OS_VGA_KEY_DOWN)) { web_form_result(fr, out, out_max); return 0; }
+        }
+        fk = (!g_web_mobile && web_nsections() > 0 && g_wops->form_key) ? g_wops->form_key(key) : -1;
         if (fk == 0 || fk == 2) {
             (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
             if (fk == 2) app_out(out, out_max, "osui web form blur", 0);

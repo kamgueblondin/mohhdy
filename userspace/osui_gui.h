@@ -71,6 +71,10 @@ typedef struct {
     /* Lot 73: advances the animated images (wf_webimg_tick); 1 when a
      * frame changed (the atlas generation then differs and is resent) */
     int (*anim_tick)(void);
+    /* Lot 74: a form of the rendered page sent with POST
+     * (application/x-www-form-urlencoded body); the answer like section 0 */
+    int (*request)(const char *url, const char *body, int body_len, char *src, int src_max, char *final_url, int url_max,
+                   char *status, int st_max);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
 /* "web-open URL|FILE", "web-forms", "web-section N|next|prev", "web-input N TEXT", "web-submit [N]",
@@ -81,6 +85,8 @@ int osui_gui_web_command(const char *line, char *out, int out_max);
 typedef int (*osui_search_url_t)(int n, char *url, int max);
 void osui_gui_set_search_url(osui_search_url_t fn);
 int osui_gui_web_is_url(const char *s);
+/* Lot 74: the URL of a form submission (action against the page) */
+int osui_gui_form_url(const char *base, const char *action, char *dst, int max);
 int osui_gui_web_active(void);
 int osui_gui_web_sanitized(void); /* Lot 7 US-039: items removed by the page sanitizer */
 /* Lot 9 (US-077): a display list made elsewhere (the mobile shell) shown
