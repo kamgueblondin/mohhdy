@@ -176,7 +176,8 @@ static void test_l74_has_anchored(void) {
                  "<ul><li id=i>i</li><li class=x>x</li></ul>"
                  "<p><article id=k><b>b</b></article></p><article id=l><p><b>b</b></p></article>"
                  "<aside id=m><i><b>b</b></i></aside><nav>n</nav><aside id=n><b>b</b></aside>"
-                 "<div><div><b>b</b></div><h2 id=o>o</h2></div></body>", 400);
+                 "<div><div><b>b</b></div><h2 id=o>o</h2></div>"
+                 "<div><h2 id=p>p</h2><section><div><b>b</b></div></section></div></body>", 400);
     TEST_ASSERT_EQUAL(1, l73c("b"));
     TEST_ASSERT_EQUAL(0, l73c("j"));          /* no p inside */
     TEST_ASSERT_EQUAL(0, l73c("c"));          /* p is not a child */
@@ -191,6 +192,7 @@ static void test_l74_has_anchored(void) {
     TEST_ASSERT_EQUAL(7, l73c("m"));          /* + nav */
     TEST_ASSERT_EQUAL(7, l73c("n"));          /* > b */
     TEST_ASSERT_EQUAL(0, l73c("o"));          /* the div b is an earlier sibling */
+    TEST_ASSERT_EQUAL(0, l73c("p"));          /* the later div is a nephew */
 }
 
 /* Lot 74: :target and :target-within follow we_set_target */

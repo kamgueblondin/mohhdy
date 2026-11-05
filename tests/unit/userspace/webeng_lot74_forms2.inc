@@ -140,6 +140,19 @@ static void test_l74_range(void) {
     l74_done();
 }
 
+/* step=any: the click position rounds to the nearest hundredth */
+static void test_l74_range_any_round(void) {
+    int x, y;
+    l74_open("<body style='margin:0'><form><input id=r type=range min=0 max=1 step=any value=0></form></body>");
+    x = g_doc.nodes[l74_node("r")].x + g_doc.nodes[l74_node("r")].border + 3;
+    y = g_doc.nodes[l74_node("r")].y + 2;
+    TEST_ASSERT_EQUAL(80, g_doc.nodes[l74_node("r")].w - 2 * g_doc.nodes[l74_node("r")].border);
+    TEST_ASSERT_EQUAL(WE_FACT_CHANGED, we_form_click(&g_doc, x, y));
+    l74_render();
+    TEST_ASSERT_EQUAL_STRING("0.04", l74_val("r"));         /* 3.75 hundredths */
+    l74_done();
+}
+
 static void test_l74_url_and_minlength(void) {
     l74_open(L74_BAD "<form id=f><input id=u type=url name=u><input id=m name=m minlength=3 value=ab>"
              "<textarea id=t name=t minlength=2></textarea><input id=z minlength=x></form>");
@@ -215,6 +228,7 @@ static void lot74_forms2_run(void) {
     RUN_TEST(test_l74_number_keys_and_validity);
     RUN_TEST(test_l74_number_attr_refusals);
     RUN_TEST(test_l74_range);
+    RUN_TEST(test_l74_range_any_round);
     RUN_TEST(test_l74_url_and_minlength);
     RUN_TEST(test_l74_tabindex_and_autofocus);
 }
