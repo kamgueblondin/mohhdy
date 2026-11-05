@@ -635,7 +635,9 @@ static void test_l56_rowspan_past_the_table_is_clamped(void) {
 }
 
 static void test_l56_rowspan_outside_one_to_eight_refuses_the_table(void) {
-    static const char *bad[] = {"0", "9", "-1", "x"};
+    /* lot 74: rowspan="0" (to the end of the row group) is now supported,
+     * see test_l74_rowspan_zero_and_groups */
+    static const char *bad[] = {"9", "-1", "x"};
     unsigned i;
     for (i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
         char html[400];

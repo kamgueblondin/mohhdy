@@ -400,7 +400,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                             if (av[digit] < '0' || av[digit] > '9' || span > WE_TRACKS_MAX) { valid = 0; break; }
                             span = span * 10 + av[digit] - '0';
                         }
-                        if (!valid || span < 1 || span > WE_TRACKS_MAX) {
+                        if (!valid || span < (w_eq(an, "rowspan") ? 0 : 1) || span > WE_TRACKS_MAX) {
                             n->span_refused = 1;
                             diag(d, "table span refused", idx);
                         } else if (!w_eq(an, "rowspan")) n->colspan = (uint8_t)span;
@@ -9794,6 +9794,8 @@ static int table_captions(we_doc_t *d, int idx, int x, int y, int width, int dep
     return h;
 }
 
+static int row_group_of(const we_doc_t *d, int row);
+static int table_group_end(const we_doc_t *d, const int *rows, int r, int nr);
 /* Occupancy is one bit per column. A rowspan cell blocks those columns on
  * the following rows. A span past the last row is clamped. Returns -1 when
  * the table must not be painted. */
@@ -9803,7 +9805,7 @@ static int table_assign(we_doc_t *d, int idx, int *rows, int nr, int depth, int 
     w_zero(slot, sizeof(*slot));
     for (n = 0; n < WE_MAX_NODES; n++) slot->col[n] = -1;
     for (r = 0; r < nr && r < WE_GRID_ROWS_MAX; r++) {
-        int c, next = 0;
+        int c, next = 0, gend = table_group_end(d, rows, r, nr);
         for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
             we_node_t *cell = &d->nodes[c];
             int span, rs, col, rr, mask;
@@ -9817,13 +9819,13 @@ static int table_assign(we_doc_t *d, int idx, int *rows, int nr, int depth, int 
                 return -1;
             }
             span = cell->colspan < 1 ? 1 : cell->colspan;
-            rs = cell->rowspan < 1 ? 1 : cell->rowspan;
+            rs = cell->rowspan ? cell->rowspan : gend - r;   /* 0: to the end of the group */
             if (rs > WE_TRACKS_MAX) rs = WE_TRACKS_MAX;
-            if (r + rs > nr) {
-                if (report && cell->rowspan != (uint8_t)(nr - r)) diag(d, "table rowspan clamped", c);
-                rs = nr - r;
-                if (rs < 1) rs = 1;
+            if (r + rs > gend) {
+                if (report) diag(d, r + rs > nr ? "table rowspan clamped" : "table rowspan clamped to its group", c);
+                rs = gend - r;
             }
+            if (rs < 1) rs = 1;
             while (next < WE_TRACKS_MAX && (slot->occ[r] & (uint8_t)(1u << next))) next++;
             col = next;
             if (col + span > WE_TRACKS_MAX) {
@@ -9864,10 +9866,18 @@ static int table_spacing_y_of(const we_node_t *n) {
     return table_spacing_axis(n, 1);
 }
 
-static int table_rowspan_of(const we_node_t *cell, int row, int nr) {
-    int rs = cell->rowspan < 1 ? 1 : cell->rowspan;
+/* Lot 74: the rows cell c of row r spans, inside its row group (HTML
+ * table model: rowspan=0 runs to the end of the group, a longer span
+ * stops there) */
+static int table_group_end(const we_doc_t *d, const int *rows, int r, int nr) {
+    int gend = r + 1;
+    while (gend < nr && row_group_of(d, rows[gend]) == row_group_of(d, rows[r])) gend++;
+    return gend;
+}
+static int table_rowspan_of(const we_doc_t *d, const int *rows, int c, int r, int nr) {
+    int gend = table_group_end(d, rows, r, nr), rs = d->nodes[c].rowspan ? d->nodes[c].rowspan : gend - r;
     if (rs > WE_TRACKS_MAX) rs = WE_TRACKS_MAX;
-    if (row + rs > nr) rs = nr - row;
+    if (r + rs > gend) rs = gend - r;
     return rs < 1 ? 1 : rs;
 }
 
@@ -10087,7 +10097,7 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
             const we_node_t *cell = &d->nodes[c];
             int h, width;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
-            int spanning = table_rowspan_of(cell, r, nr) != 1;
+            int spanning = table_rowspan_of(d, rows, c, r, nr) != 1;
             if (spanning && cell->valign != WE_VALIGN_BASELINE) continue;
             width = table_span_size(widths, slot->col[c], cell->colspan, slot->gap_x);
             h = measure_area_height(d, c, width, depth + 1);
@@ -10110,7 +10120,7 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
             const we_node_t *cell = &d->nodes[c];
             int rs, sum, h;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
-            rs = table_rowspan_of(cell, r, nr);
+            rs = table_rowspan_of(d, rows, c, r, nr);
             if (rs < 2) continue;
             sum = table_span_size(slot->height, r, rs, slot->gap_y);
             h = measure_area_height(d, c, table_span_size(widths, slot->col[c], cell->colspan, slot->gap_x), depth + 1);
@@ -10342,7 +10352,7 @@ static int collapse_build(const we_doc_t *d, int idx, const int *rows, int nr, i
             int span, rs, rr, kk;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
             span = cell->colspan < 1 ? 1 : cell->colspan;
-            rs = table_rowspan_of(cell, r, nr);
+            rs = table_rowspan_of(d, rows, c, r, nr);
             for (rr = r; rr < r + rs && rr < nr; rr++)
                 for (kk = slot->col[c]; kk < slot->col[c] + span && kk < cols; kk++) collapse_map[rr][kk] = (int16_t)c;
         }
@@ -10506,7 +10516,7 @@ static void collapse_insets(we_doc_t *d, int idx) {
             we_edge_pick_t e;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
             span = cell->colspan < 1 ? 1 : cell->colspan;
-            rs = table_rowspan_of(cell, r, nr);
+            rs = table_rowspan_of(d, rows, c, r, nr);
             for (k = slot->col[c]; k < slot->col[c] + span && k < cols; k++) {
                 collapse_h(d, idx, rows, nr, r, k, &e); if (pick_w(&e) > w[0]) w[0] = pick_w(&e);
                 collapse_h(d, idx, rows, nr, r + rs, k, &e); if (pick_w(&e) > w[2]) w[2] = pick_w(&e);
@@ -10540,8 +10550,27 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
         row->w = (int16_t)width;
         row->h = (int16_t)high;
         if (row->has_bg) {
+            /* Lot 74: the row background covers the cells that start in
+             * the row: not the columns a rowspan from above occupies */
+            int own = 0, foreign, k0 = 0, k;
+            for (c = row->first; c >= 0; c = d->nodes[c].next)
+                if (d->nodes[c].display == WE_DISP_CELL && !d->nodes[c].absolute && slot->col[c] >= 0) {
+                    int sp = d->nodes[c].colspan < 1 ? 1 : d->nodes[c].colspan;
+                    own |= ((1 << sp) - 1) << slot->col[c];
+                }
+            foreign = r < WE_GRID_ROWS_MAX ? slot->occ[r] & ~own : 0;
             bg_slot = (int)d->nitems;
-            if (!emit(d, rows[r], OS_FB_WEB_RECT, x, cy, width, high, row->bg)) bg_slot = -1;
+            if (!foreign) {
+                if (!emit(d, rows[r], OS_FB_WEB_RECT, x, cy, width, high, row->bg)) bg_slot = -1;
+            } else for (k = 0; k <= slot->cols; k++) {
+                if (k < slot->cols && !(foreign & (1 << k))) continue;
+                if (k > k0) {
+                    int x0 = k0 ? x + table_origin(widths, k0, slot->gap_x) : x;
+                    int x1 = k < slot->cols ? x + table_origin(widths, k - 1, slot->gap_x) + widths[k - 1] : x + width;
+                    (void)emit(d, rows[r], OS_FB_WEB_RECT, x0, cy, x1 - x0, high, row->bg);
+                }
+                k0 = k + 1;
+            }
         }
         (void)bg_slot;
         for (c = row->first; c >= 0; c = d->nodes[c].next) {
@@ -10549,7 +10578,7 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
             int span, rs, cell_w, cell_h, cx;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
             span = cell->colspan < 1 ? 1 : cell->colspan;
-            rs = table_rowspan_of(cell, r, nr);
+            rs = table_rowspan_of(d, rows, c, r, nr);
             cell_w = table_span_size(widths, slot->col[c], span, slot->gap_x);
             cx = limit_coord(x + table_origin(widths, slot->col[c], slot->gap_x));
             {
@@ -10557,6 +10586,8 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
                 int stretch = rs > 1 || cell->valign != WE_VALIGN_TOP;
                 if (stretch) {
                     cell_h = rs > 1 ? table_span_size(slot->height, r, rs, slot->gap_y) : high;
+                    if (rs > 1 && row->has_bg && cell_h > high)   /* Lot 74: its row's background below the row */
+                        (void)emit(d, rows[r], OS_FB_WEB_RECT, cx, cy + high, cell_w, cell_h - high, row->bg);
                     layout_area(d, c, cx, cy, cell_w, cell_h, cell_w, depth + 1);
                     if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX)
                         shift_cell(d, c, first_item, slot->ascent[r] - slot->base[c]);

@@ -87,9 +87,88 @@ static void test_l74_layer_refusals(void) {
     TEST_ASSERT_EQUAL(4, l73c("c"));          /* unlayered beats l1 */
 }
 
+/* Lot 74: rowspan inside its row group, rowspan=0, row backgrounds of
+ * spanning cells, collapsed borders around a spanning cell */
+static int l74_rect(int x, int y, int w, int h, unsigned color) {
+    uint32_t k;
+    for (k = 0; k < g_doc.nitems; k++) {
+        const os_fb_web_item_t *it = &g_doc.items[k];
+        if (it->kind == OS_FB_WEB_RECT && it->x == x && it->y == y && it->w == w && it->h == h && it->color == color) return (int)k;
+    }
+    return -1;
+}
+static int l74_rects_in(int x0, int y0, int x1, int y1) {
+    uint32_t k;
+    int n = 0;
+    for (k = 0; k < g_doc.nitems; k++) {
+        const os_fb_web_item_t *it = &g_doc.items[k];
+        if (it->kind == OS_FB_WEB_RECT && it->x >= x0 && it->y >= y0 && it->x + it->w <= x1 && it->y + it->h <= y1) n++;
+    }
+    return n;
+}
+
+static void test_l74_rowspan_zero_and_groups(void) {
+    lot52_render("<body style='margin:0'><table id=t style='border-collapse:collapse'><tbody>"
+                 "<tr><td id=a rowspan=0 style='border:2px solid #0000ff'>A</td><td id=b style='border:2px solid #00ff00'>B</td></tr>"
+                 "<tr><td id=c>C</td></tr><tr><td id=d>D</td></tr></tbody>"
+                 "<tbody><tr><td id=e rowspan=5>E</td><td id=f>F</td></tr><tr><td id=g>G</td></tr></tbody>"
+                 "<tr><td id=h>H</td></tr></table></body>", 400);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->span_refused);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
+    TEST_ASSERT_EQUAL(35, lot52_node("a")->h);        /* rows 1..3, the whole group */
+    TEST_ASSERT_EQUAL(lot52_node("d")->y + lot52_node("d")->h, lot52_node("a")->y + lot52_node("a")->h);
+    TEST_ASSERT_EQUAL(199, lot52_node("c")->x);       /* beside the span */
+    TEST_ASSERT_EQUAL(0, lot52_node("e")->x);         /* the next group starts free */
+    TEST_ASSERT_EQUAL(lot52_node("g")->y + lot52_node("g")->h, lot52_node("e")->y + lot52_node("e")->h);
+    TEST_ASSERT_EQUAL(0, lot52_node("h")->x);         /* not under e: its span stops at its group */
+    TEST_ASSERT_EQUAL(6, g_doc.perf.table_rows);
+    TEST_ASSERT_EQUAL(1, l61_diag_count("table rowspan clamped"));
+    /* collapsed: the span has no line inside, its sides run its height */
+    TEST_ASSERT(l74_rect(0, 0, 2, 35, 0x0000ff) >= 0);
+    TEST_ASSERT(l74_rect(199, 0, 2, 35, 0x0000ff) >= 0);
+    TEST_ASSERT_EQUAL(0, l74_rects_in(2, 2, 199, 33));
+    /* a span that would cross into the next group stops at its end */
+    lot52_render("<body style='margin:0'><table><tbody><tr><td id=a rowspan=2>A</td><td>B</td></tr></tbody>"
+                 "<tbody><tr><td id=c>C</td><td id=d>D</td></tr></tbody></table></body>", 400);
+    TEST_ASSERT_EQUAL(1, l61_diag_count("table rowspan clamped to its group"));
+    TEST_ASSERT_EQUAL(lot52_node("a")->x, lot52_node("c")->x);
+    TEST_ASSERT(lot52_node("d")->x > lot52_node("c")->x);
+    /* rows without a group are one group */
+    lot52_render("<body style='margin:0'><table><tr><td id=a rowspan=0>A</td><td>B</td></tr><tr><td id=c>C</td></tr>"
+                 "<tr><td id=d>D</td></tr></table></body>", 400);
+    TEST_ASSERT_EQUAL(0, l61_diag_count("clamped"));
+    TEST_ASSERT(lot52_node("d")->x > lot52_node("a")->x);
+    TEST_ASSERT_EQUAL(lot52_node("d")->y + lot52_node("d")->h, lot52_node("a")->y + lot52_node("a")->h);
+}
+
+static void test_l74_rowspan_row_background(void) {
+    int top, below, other;
+    lot52_render("<body style='margin:0'><table style='border-collapse:collapse'><tr style='background:#ff0000'>"
+                 "<td id=a rowspan=2>A<br>A2<br>A3<br>A4</td><td id=b>B</td></tr>"
+                 "<tr style='background:#00ff00'><td id=c>C</td></tr></table></body>", 400);
+    TEST_ASSERT_EQUAL(40, lot52_node("a")->h);
+    top = l74_rect(0, 0, 400, 10, 0xff0000);
+    below = l74_rect(0, 10, 200, 30, 0xff0000);          /* the span keeps its row's colour */
+    other = l74_rect(200, 10, 200, 30, 0x00ff00);        /* row 2 only beside the span */
+    TEST_ASSERT(top >= 0);
+    TEST_ASSERT(below > top);
+    TEST_ASSERT(other > below);
+    TEST_ASSERT_EQUAL(-1, l74_rect(0, 10, 400, 30, 0x00ff00));
+    TEST_ASSERT(find_text("A4") != NULL);
+    /* a span in a middle column: row 2 paints both sides of it */
+    lot52_render("<body style='margin:0'><table style='width:300px;border-collapse:collapse'><tr>"
+                 "<td style='width:100px'>x</td><td rowspan=2 style='width:100px'>y</td><td style='width:100px'>z</td></tr>"
+                 "<tr style='background:#00ff00'><td>p</td><td>q</td></tr></table></body>", 400);
+    TEST_ASSERT_EQUAL(2, l74_rects_in(0, 10, 300, 20));
+    TEST_ASSERT(l74_rect(0, 10, 100, 10, 0x00ff00) >= 0);
+    TEST_ASSERT(l74_rect(200, 10, 100, 10, 0x00ff00) >= 0);
+}
+
 static void lot74_css_run(void) {
     RUN_TEST(test_l74_layer_order_statement);
     RUN_TEST(test_l74_layer_important_reversed);
     RUN_TEST(test_l74_layer_nested_and_anonymous);
     RUN_TEST(test_l74_layer_refusals);
+    RUN_TEST(test_l74_rowspan_zero_and_groups);
+    RUN_TEST(test_l74_rowspan_row_background);
 }
