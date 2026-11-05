@@ -57,6 +57,13 @@ static void test_l73_hints_refused_and_css_wins(void) {
     TEST_ASSERT_EQUAL(WE_DISP_NONE, lot52_node("g")->display);
     TEST_ASSERT_NULL(find_text("g"));
     TEST_ASSERT_EQUAL(WE_ALIGN_LEFT, lot52_node("s")->align);     /* no align hint on span */
+    lot52_render("<body style='margin:0'><table id=u border=0><tr id=r height=30 valign=bottom><td>x</td></tr></table>"
+                 "<p id=q valign=bottom>q</p><p id=w align=RIGHT>w</p></body>", 320);
+    TEST_ASSERT_EQUAL(0, lot52_node("u")->border_style);         /* border=0 sets nothing */
+    TEST_ASSERT_EQUAL(WE_VALIGN_TOP, lot52_node("r")->valign);   /* a row passes valign to its cells only */
+    TEST_ASSERT_EQUAL(WE_ALIGN_RIGHT, lot52_node("w")->align);   /* keywords in any case */
+    TEST_ASSERT_EQUAL(30, lot52_node("r")->h);
+    TEST_ASSERT_EQUAL(WE_VALIGN_TOP, lot52_node("q")->valign);   /* no valign hint on p */
 }
 
 static void test_l73_hints_inline_and_images(void) {

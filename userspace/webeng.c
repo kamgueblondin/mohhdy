@@ -822,7 +822,7 @@ static int match_comp(const we_doc_t *d, int idx, const we_selector_part_t *part
     if (part->id[0] && (w_len(n->id) != w_len(part->id) || !sel_equal(n->id, part->id, w_len(n->id), 1))) return 0;
     for (i = 0; i < part->classes; i++) if (!has_class(n->cls, part->cls[i])) return 0;
     for (i = 0; i < part->attrs; i++) if (!match_attribute(d, n, &part->attr[i])) return 0;
-    if (part->state && !cssq_match_state(n, part->state)) return 0;
+    if (part->state && !cssq_match_state(d, n, part->state)) return 0;
     if (part->logic_kind[0] && !cssq_match_logic(d, idx, part)) return 0;
     return match_pseudo(d, idx, part);
 }

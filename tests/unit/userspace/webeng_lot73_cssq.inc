@@ -346,11 +346,42 @@ static void test_l73_media_edges(void) {
     /* selector() takes pseudo-elements; :where adds nothing */
     lot52_render("<style>@supports selector(p::before){#a{color:#000001}}:where(#b){color:#000005}p{color:#000006}"
                  ":disabled{color:#000007}:enabled{color:#000008}</style>" L64_BODY
-                 "<p id=a>a</p><p id=b>b</p><p id=c disabled>c</p><div id=d>d</div></body>", 320);
+                 "<p id=a>a</p><p id=b>b</p><p id=c disabled>c</p><div id=d>d</div><progress id=e disabled value=1></progress></body>", 320);
     TEST_ASSERT_EQUAL(1, l73c("a"));
     TEST_ASSERT_EQUAL(6, l73c("b"));
     TEST_ASSERT_EQUAL(6, l73c("c"));                  /* a p is no form control: neither */
     TEST_ASSERT_EQUAL(0, l73c("d"));
+    TEST_ASSERT_NOT_EQUAL(7, l73c("e"));              /* progress keeps a disabled flag but is no control */
+}
+
+static void test_l73_selector_has_and_form_states(void) {
+    lot52_render("<style>div:has(p){color:#000001}div:has(> span){color:#000002}h1:has(+ p){color:#000003}h2:has(~ i){color:#000004}"
+                 "div:has(:has(p)){color:#000005}input:placeholder-shown{color:#000006}progress:indeterminate{color:#000007}"
+                 "details:open{color:#000008}</style>" L64_BODY
+                 "<div id=a><p>x</p></div><div id=b><i><span>s</span></i></div><div id=c><span>q</span></div><h1 id=d>h</h1><p>p</p>"
+                 "<h2 id=e>e</h2><p>p</p><i>i</i><input id=f placeholder=z><input id=g placeholder=z value=v><progress id=h></progress>"
+                 "<progress id=i value=1></progress><details id=j open><summary>s</summary></details><details id=k></details>"
+                 "<h1 id=l>l</h1><i>n</i><p>after</p><h2 id=m>m</h2></body>", 320);
+    TEST_ASSERT_EQUAL(1, l73c("a"));
+    TEST_ASSERT_EQUAL(0, l73c("b"));                  /* span is a grandchild: > fails */
+    TEST_ASSERT_EQUAL(2, l73c("c"));
+    TEST_ASSERT_EQUAL(3, l73c("d"));
+    TEST_ASSERT_EQUAL(4, l73c("e"));
+    TEST_ASSERT_EQUAL(6, l73c("f"));
+    TEST_ASSERT_EQUAL(0, l73c("g"));                  /* a value hides the placeholder */
+    TEST_ASSERT_EQUAL(7, l73c("h"));
+    TEST_ASSERT_EQUAL(0, l73c("i"));
+    TEST_ASSERT_EQUAL(8, l73c("j"));
+    TEST_ASSERT_EQUAL(0, l73c("k"));
+    TEST_ASSERT_EQUAL(0, l73c("l"));                  /* + is the next element only */
+    TEST_ASSERT_EQUAL(0, l73c("m"));                  /* ~ looks after, not before */
+    TEST_ASSERT_EQUAL(1, l61_diag_count("css selector unsupported"));   /* :has inside :has */
+    /* specificity of the most specific argument; a bad argument drops the rule */
+    lot52_render("<style>div:has(#x, p){color:#000001}div#a{color:#000002}div:has(p, ::before){color:#000003}"
+                 "div:has(){color:#000004}</style>" L64_BODY "<div id=a><p id=x>x</p></div><div id=b><p>y</p></div></body>", 320);
+    TEST_ASSERT_EQUAL(2, l73c("a"));                  /* div:has(#x, p) = div#a = 4097: the later one wins */
+    TEST_ASSERT_EQUAL(1, l73c("b"));
+    TEST_ASSERT_EQUAL(2, l61_diag_count("css selector unsupported"));
 }
 
 static void lot73_cssq_run(void) {
@@ -364,6 +395,7 @@ static void lot73_cssq_run(void) {
     RUN_TEST(test_l73_selector_not_is_where);
     RUN_TEST(test_l73_selector_states);
     RUN_TEST(test_l73_selector_of_type);
+    RUN_TEST(test_l73_selector_has_and_form_states);
     RUN_TEST(test_l73_custom_properties);
     RUN_TEST(test_l73_custom_properties_resolution);
     RUN_TEST(test_l73_custom_properties_limits);

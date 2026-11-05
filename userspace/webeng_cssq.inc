@@ -21,7 +21,12 @@
  *   modelled, one diag); other at-rules are skipped as before.
  * - :not(), :is(), :matches(), :-webkit-any() and :where() take selector
  *   lists (combinators allowed, nesting up to 3); :is and :not count the
- *   most specific argument, :where nothing. :link and :any-link (a or
+ *   most specific argument, :where nothing. :has() takes relative
+ *   selectors (descendant, > child, + next sibling, ~ later sibling; not
+ *   nested in :has; the whole chain of an argument may match outside the
+ *   element, a simplification), its specificity is its most specific
+ *   argument. :placeholder-shown, :indeterminate (progress without
+ *   value) and :open (details) read the form state. :link and :any-link (a or
  *   area with href), :checked, :disabled, :enabled, :first-of-type,
  *   :last-of-type, :only-of-type; :visited, :hover, :focus, :active,
  *   :focus-within, :focus-visible and :target never match (static page).
@@ -404,11 +409,22 @@ static int cssq_logic_kind(const char *pseudo) {
     if (w_eq(pseudo, "not")) return WE_LOGIC_NOT;
     if (w_eq(pseudo, "is") || w_eq(pseudo, "matches") || w_eq(pseudo, "-webkit-any")) return WE_LOGIC_IS;
     if (w_eq(pseudo, "where")) return WE_LOGIC_WHERE;
+    if (w_eq(pseudo, "has")) return WE_LOGIC_HAS;
     return 0;
 }
 
 static int cssq_sel_depth;
 static const char *cssq_sel_base;
+static int cssq_in_has;
+
+/* :has() arguments are relative: a leading >, + or ~ (else descendant) */
+static int cssq_rel(const char *s, int *a, int end) {
+    int i = *a, rel = 0;
+    while (i < end && w_space(s[i])) i++;
+    if (i < end && (s[i] == '>' || s[i] == '+' || s[i] == '~')) rel = s[i++];
+    *a = i;
+    return rel;
+}
 
 /* the arguments of a logical pseudo-class: the highest specificity of
  * the valid alternatives, -1 when :not has a bad one or none is valid */
@@ -424,12 +440,15 @@ static int cssq_list_spec(const char *s, int n, int kind) {
         else if (ch == '(' || ch == '[') level++;
         else if (ch == ')' || ch == ']') level--;
         else if (ch == ',' && !level) {
-            int ok;
+            int ok, sa = a;
+            if (kind == WE_LOGIC_HAS) cssq_rel(s, &sa, i);
             cssq_sel_depth++;
-            ok = parse_sel(s + a, i - a, r) == 0 && !r->pseudo_el;
+            cssq_in_has += kind == WE_LOGIC_HAS;
+            ok = parse_sel(s + sa, i - sa, r) == 0 && !r->pseudo_el;
+            cssq_in_has -= kind == WE_LOGIC_HAS;
             cssq_sel_depth--;
             if (ok) { if (r->spec > best) best = r->spec; }
-            else if (kind == WE_LOGIC_NOT) return -1;
+            else if (kind == WE_LOGIC_NOT || kind == WE_LOGIC_HAS) return -1;
             a = i + 1;
         }
     }
@@ -440,7 +459,7 @@ static int cssq_list_spec(const char *s, int n, int kind) {
 static int cssq_sel_logic(const char *s, int len, int *at, we_selector_part_t *part, const char *pseudo, uint16_t *spec) {
     int kind = cssq_logic_kind(pseudo), i = *at, begin, level = 1, slot, best;
     if (!kind) return 1;
-    if (!cssq_sel_base || i == len || s[i] != '(') return -1;
+    if (!cssq_sel_base || i == len || s[i] != '(' || (kind == WE_LOGIC_HAS && cssq_in_has)) return -1;
     begin = ++i;
     while (i < len && level) { if (s[i] == '(') level++; else if (s[i] == ')') level--; if (level) i++; }
     if (i == len) return -1;
@@ -460,7 +479,28 @@ static int cssq_sel_logic(const char *s, int len, int *at, we_selector_part_t *p
 static int match_chain(const we_doc_t *d, int idx, const we_rule_t *r, int part, int *budget);
 static int cssq_match_depth;
 
-static int cssq_match_list(const we_doc_t *d, int idx, int off, int n) {
+static int inside(const we_doc_t *d, int node, int root);
+
+/* :has(): an element after idx in the relation rel that matches r */
+static int cssq_has_match(const we_doc_t *d, int idx, const we_rule_t *r, int rel, int *budget) {
+    int e;
+    if (rel == '+' || rel == '~') {
+        for (e = d->nodes[idx].next; e >= 0; e = d->nodes[e].next) {
+            if (d->nodes[e].is_text) continue;
+            if (match_chain(d, e, r, r->ncomp - 1, budget)) return 1;
+            if (rel == '+') break;
+        }
+        return 0;
+    }
+    for (e = idx + 1; e < (int)d->nnodes && *budget > 0; e++) {
+        if (d->nodes[e].is_text || d->nodes[e].pseudo_kind || !inside(d, e, idx)) continue;
+        if (rel == '>' && d->nodes[e].parent != idx) continue;
+        if (match_chain(d, e, r, r->ncomp - 1, budget)) return 1;
+    }
+    return 0;
+}
+
+static int cssq_match_list(const we_doc_t *d, int idx, int off, int n, int kind) {
     const char *s = d->css + off;
     int a = 0, i, level = 0, quote = 0, hit = 0;
     we_rule_t *r;
@@ -474,12 +514,14 @@ static int cssq_match_list(const we_doc_t *d, int idx, int off, int n) {
         else if (ch == ')' || ch == ']') level--;
         else if (ch == ',' && !level) {
             const char *base = cssq_sel_base;
-            int ok, budget = WE_SELECTOR_WORK_MAX / 4, depth = cssq_sel_depth;
+            int ok, budget = WE_SELECTOR_WORK_MAX / 4, depth = cssq_sel_depth, sa = a, rel = 0;
+            if (kind == WE_LOGIC_HAS) rel = cssq_rel(s, &sa, i);
             cssq_sel_base = d->css;
             cssq_match_depth++;
             cssq_sel_depth = cssq_match_depth;
-            ok = parse_sel(s + a, i - a, r) == 0 && !r->pseudo_el;
-            if (ok && r->ncomp) hit = match_chain(d, idx, r, r->ncomp - 1, &budget);
+            ok = parse_sel(s + sa, i - sa, r) == 0 && !r->pseudo_el;
+            if (ok && r->ncomp)
+                hit = kind == WE_LOGIC_HAS ? cssq_has_match(d, idx, r, rel, &budget) : match_chain(d, idx, r, r->ncomp - 1, &budget);
             cssq_match_depth--;
             cssq_sel_depth = depth;
             cssq_sel_base = base;
@@ -494,7 +536,7 @@ static int cssq_match_logic(const we_doc_t *d, int idx, const we_selector_part_t
     for (k = 0; k < 2; k++) {
         int hit;
         if (!part->logic_kind[k]) continue;
-        hit = cssq_match_list(d, idx, part->logic_off[k], part->logic_len[k]);
+        hit = cssq_match_list(d, idx, part->logic_off[k], part->logic_len[k], part->logic_kind[k]);
         if (part->logic_kind[k] == WE_LOGIC_NOT ? hit : !hit) return 0;
     }
     return 1;
@@ -508,6 +550,9 @@ static int cssq_state_flag(const char *pseudo) {
     if (w_eq(pseudo, "checked")) return WE_STATE_CHECKED;
     if (w_eq(pseudo, "disabled")) return WE_STATE_DISABLED;
     if (w_eq(pseudo, "enabled")) return WE_STATE_ENABLED;
+    if (w_eq(pseudo, "placeholder-shown")) return WE_STATE_PLACEHOLDER;
+    if (w_eq(pseudo, "indeterminate")) return WE_STATE_INDETERMINATE;
+    if (w_eq(pseudo, "open")) return WE_STATE_OPEN;
     for (k = 0; never[k]; k++) if (w_eq(pseudo, never[k])) return WE_STATE_NEVER;
     return 0;
 }
@@ -517,12 +562,16 @@ static int cssq_form_element(const we_node_t *n) {
            w_eq(n->tag, "option") || w_eq(n->tag, "fieldset");
 }
 
-static int cssq_match_state(const we_node_t *n, int state) {
+static int cssq_match_state(const we_doc_t *d, const we_node_t *n, int state) {
     if ((state & WE_STATE_NEVER)) return 0;
     if ((state & WE_STATE_LINK) && !((w_eq(n->tag, "a") || w_eq(n->tag, "area")) && (n->attr_flags & 4))) return 0;
     if ((state & WE_STATE_CHECKED) && !(n->form_flags & (WE_FF_CHECKED | WE_FF_SELECTED))) return 0;
     if ((state & WE_STATE_DISABLED) && !(cssq_form_element(n) && (n->form_flags & WE_FF_DISABLED))) return 0;
     if ((state & WE_STATE_ENABLED) && !(cssq_form_element(n) && !(n->form_flags & WE_FF_DISABLED))) return 0;
+    /* the placeholder is the grey text child forms_build made */
+    if ((state & WE_STATE_PLACEHOLDER) && !(n->first >= 0 && (d->nodes[n->first].form_flags & WE_FF_PLACEHOLDER))) return 0;
+    if ((state & WE_STATE_INDETERMINATE) && !(w_eq(n->tag, "progress") && !(n->form_flags & WE_FF_VALUE))) return 0;
+    if ((state & WE_STATE_OPEN) && !(w_eq(n->tag, "details") && (n->form_flags & WE_FF_OPEN))) return 0;
     return 1;
 }
 
