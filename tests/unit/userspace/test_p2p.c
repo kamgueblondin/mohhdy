@@ -983,6 +983,27 @@ void test_anomaly_automatic_alerts(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p analyze alerts 2\n"));
 }
 
+/* Lot 73 fix: the delivery acks of our own flood are replies we caused,
+ * not traffic of their sender. Alpha drains beta's 40 frames over several
+ * ticks, so it sends partial DACK batches (more than 8 frames in one
+ * window); beta must not report alpha. Alpha still reports beta. */
+void test_anomaly_acks_of_own_flood_not_an_alert(void) {
+    int i;
+    setup(3, 0);
+    run(3, 8000);
+    for (i = 0; i < 40; i++) {
+        TEST_ASSERT_EQUAL(0, p2p_send_unshaped(&g_n[1], &g_h[1], "alpha", "flood"));
+        if ((i & 3) == 3) run(3, 2);
+    }
+    run(3, 1100);
+    TEST_ASSERT_TRUE(g_n[0].peers[0].used);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[1], "alpha")->flow.ack_frames == 0U);
+    TEST_ASSERT_TRUE(p2p_find(&g_n[0], "beta")->flow.ack_frames > 8U);   /* the case: more than 8 ack frames */
+    TEST_ASSERT_NOT_NULL(strstr(g_out[0], "p2p traffic alert peer beta rate "));
+    TEST_ASSERT_NULL(strstr(g_out[1], "p2p traffic alert"));
+    TEST_ASSERT_EQUAL(0U, p2p_find(&g_n[1], "alpha")->anomalies);
+}
+
 /* Lot 6 (US-070): a cache write through the Raft log reaches every node
  * with the log index as version; an older fill is refused by the fence. */
 void test_cache_through_raft(void) {
@@ -2037,6 +2058,7 @@ int main(void) {
     RUN_TEST(test_cache_versioned_acked_invalidation);
     RUN_TEST(test_cache_fence_pushed_on_reconnect);
     RUN_TEST(test_anomaly_automatic_alerts);
+    RUN_TEST(test_anomaly_acks_of_own_flood_not_an_alert);
     RUN_TEST(test_traffic_baseline_anomaly);
     RUN_TEST(test_anomaly_peer_attribution_and_solicited);
     RUN_TEST(test_cache_through_raft);
