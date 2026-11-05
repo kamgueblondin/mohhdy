@@ -28,7 +28,9 @@ gone), the inside list marker left of its text in the content box, the
 small-caps text in capitals, EDGE 40 px after "pre " (inline border
 and padding take room), the form controls (input value, the chosen
 option only, a checked box, a closed details with only its summary)
-and the paragraph cut between two columns
+VARTEXT 40 px in (var(--ind)), MQHIDE and HASHIDE hidden by @media
+and :has(), MQSHOW shown (print query false), the caption before the
+body cell before the tfoot cell, and the paragraph cut between two columns
 (the END word in the second column). Screenshots (PNG, when Pillow is
 there) go to LOT73_SHOTS (default test_logs/lot73-shots).
 """
@@ -183,7 +185,15 @@ def main():
             for want in ("FORMVAL", "CHOSEN", "x", "SUMMARY"):
                 if want not in texts:
                     raise RuntimeError("forms: want %r in %r" % (want, texts))
-            for gone in ("NOTSHOWN", "HIDDENTXT"):
+            var = [it for it in found if it[2] == "VARTEXT"]
+            if not var or not pre or var[0][0] - pre[0][0] != 40:
+                raise RuntimeError("var(): want VARTEXT 40 px right of the body text: %r %r" % (var, pre))
+            for want in ("MQSHOW", "CAPTION", "BODYCELL", "FOOT"):
+                if want not in texts:
+                    raise RuntimeError("cssq / tables: want %r in %r" % (want, texts))
+            if not texts.index("CAPTION") < texts.index("BODYCELL") < texts.index("FOOT"):
+                raise RuntimeError("tables: want the caption, the body, then the tfoot: %r" % texts)
+            for gone in ("MQHIDE", "HASHIDE", "NOTSHOWN", "HIDDENTXT"):
                 if gone in texts:
                     raise RuntimeError("forms: %r must not be painted: %r" % (gone, texts))
             say("layout: 2 clamped lines with ..., inside marker, SMALL CAPS, inline edges, form controls, closed details, paragraph cut between columns")

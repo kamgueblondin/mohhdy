@@ -131,6 +131,35 @@ syscall, no ABI change; one kernel source change for review (section 7).
   fieldset (groove) and legend; `disabled` greys. UA styles first, then
   author CSS. No input or submission (no event loop for pages); unknown
   input types show as text ("input type taken as text").
+- CSS conditional rules and selectors (`userspace/webeng_cssq.inc`):
+  `@media` (types all / screen / print / speech, not, only, comma lists,
+  and / or / not conditions, width / height with min- / max- and the
+  range forms, orientation, aspect-ratio, resolution, color, monochrome,
+  prefers-color-scheme light, prefers-reduced-motion no-preference,
+  hover, pointer fine; px / em / rem; the media size is the layout width
+  or `we_set_media`, 640 x 480 when unset), `@supports` (a declaration is
+  supported when the engine applies it with no diag on a scratch node,
+  every side effect undone; `selector()`), `@layer` blocks kept in source
+  order (one diag: layer priority not modelled), nesting up to 4 levels.
+  Selectors: `:not()`, `:is()` / `:matches()` / `:-webkit-any()`,
+  `:where()` (specificity rules), `:has()` with relative selectors (a
+  simplification: an argument chain may match outside the element),
+  `:link`, `:any-link`, `:checked`, `:disabled`, `:enabled`,
+  `:placeholder-shown`, `:indeterminate`, `:open`, the `*-of-type`
+  forms; `:hover`, `:focus`, `:visited`... parse and never match.
+  Custom properties `--x` (inherited, 12 per element, resolved where
+  declared, cycles invalid) and `var()` with fallbacks.
+- HTML presentational hints (`userspace/webeng_hints.inc`, HTML 15.3):
+  width, height, align, valign (rows and groups pass it to cells),
+  bgcolor, text, font color / size, border (table outset grey, cells 1px
+  inset), cellpadding, cellspacing, nowrap, hspace, vspace, hidden,
+  `<center>`; author level before every rule. More UA styles: dl, dd,
+  figure, address, menu / dir, mark, sub / sup, abbr[title], xmp.
+- Tables: `<caption>` above or below (`caption-side`, caption
+  align=top|bottom), the first thead first and the first tfoot last, col
+  and colgroup widths as column minimums.
+- `vertical-align: sub | super | <length>` shifts inline text (the line
+  box does not grow).
 
 ## 6. Tests and proofs
 - Unit: `test_aes_ct.c` (8), `test_imgdec_anim.c` (8),
@@ -142,6 +171,14 @@ syscall, no ABI change; one kernel source change for review (section 7).
   Pillow fixtures compared byte for byte with libwebp's decode, plus
   crafted streams for code lengths, distances, the color cache, the
   half predictor, color indexing and chunk padding).
+- `webeng_lot73_cssq.inc` (14) and `webeng_lot73_hints.inc` (7) in
+  `test_webeng.c`.
+- Lot 57 / 58 / 59 / 63 cases that asserted the refusal of `:hover`,
+  `:not(.x)` and `var()` now assert the new behaviour (`:not` matches,
+  `:hover` parses and never matches, an undefined `var()` gives "css
+  variable undefined"); review point.
+- `parse_sel` now clears `pseudo_el` of a reused rule slot (a refused
+  `::before` selector could leave it set).
 - One Lot 64 case (an inline span with padding and border and a
   content-box background origin) moved: since the inline edges take room
   its text and image start 5 px right; its left border is now asserted.
@@ -175,6 +212,10 @@ syscall, no ABI change; one kernel source change for review (section 7).
   badges lay out a few pixels wider, as in browsers.
 - Form controls now paint (they were dropped with their attributes);
   pages with forms grow by the control boxes.
+- Pages with `@media` rules now apply the matching blocks (they were all
+  skipped); presentational attributes now take effect: old table layouts
+  change.
+- `WE_MAX_RULES` 48 -> 64.
 - `we_node_t` grows by 36 bytes (forms, box-decoration-break);
   `we_doc_t` stays under 1 MiB (static assert).
 - Bitsliced AES costs more cycles per block than the table (about 8
