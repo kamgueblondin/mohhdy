@@ -600,7 +600,7 @@ static int parse_sel(const char* s, int len, we_rule_t* r) {
                 /* Lot 73: state pseudo-classes, :not() :is() :where(), *-of-type */
                 if (!element) {
                     int state = cssq_state_flag(pseudo), rc;
-                    if (state) { part->state |= (uint16_t)state; r->spec += 64; simple = 1; continue; }
+                    if (state) { part->state |= (uint32_t)state; r->spec += 64; simple = 1; continue; }
                     rc = cssq_sel_logic(s, len, &i, part, pseudo, &r->spec);
                     if (rc < 0) return -1;
                     if (rc == 0) { simple = 1; continue; }

@@ -1420,8 +1420,73 @@ static void test_lot74_gui_forms(void) {
     memset(g_out, 0, sizeof(g_out));
     osui_gui_web_command("web-fclick 5000 5000", g_out, (int)sizeof(g_out));
     TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 none"));
+    osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));   /* blur, then ESC leaves the page */
     osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, osui_gui_web_active());
     osui_gui_set_web_fetch(0);
+}
+
+/* Lot 74: fragments: :target and the scroll to the element */
+static int t_pages_load(const char *file, char *buf, int max) {
+    const char *r = 0;
+    if (!strcmp(file, "/web/t.html"))
+        r = "<style>:target{color:#ff0000}div:target-within{color:#00ff00}</style><p><a href=\"#s3\">Go3</a> <a href=\"#zz\">Gone</a></p>"
+            "<div style=\"height:600px\">pad</div><div id=w><h2 id=s3>Three</h2></div><div style=\"height:900px\">x</div>";
+    if (!r || (int)strlen(r) > max) return -1;
+    memcpy(buf, r, strlen(r));
+    return (int)strlen(r);
+}
+static void test_lot74_gui_fragment(void) {
+    char e[48], d[64];
+    const we_doc_t *doc;
+    int x, y, t;
+    setup();
+    osui_gui_set_ide_ops(t_pages_load, fake_save, fake_exec);
+    feed_str("web /web/t.html");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web render file=/web/t.html"));
+    doc = osui_gui_web_doc();
+    t = we_find_id(doc, "s3");
+    TEST_ASSERT(t > 0);
+    TEST_ASSERT_EQUAL(0x000000, (int)(doc->nodes[t].color & 0xffffff));
+    TEST_ASSERT(web_item("Go3", &x, &y));
+    snprintf(e, sizeof(e), "web click %d %d", x, y);
+    evt(e);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web link href=#s3"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web target id=s3 scroll "));
+    { const char *q = strstr(g_out, "scroll ") + 7; int v = 0; while (*q >= '0' && *q <= '9') v = v * 10 + (*q++ - '0'); TEST_ASSERT(v >= 600); }
+    doc = osui_gui_web_doc();
+    TEST_ASSERT_EQUAL(0xff0000, (int)(doc->nodes[we_find_id(doc, "s3")].color & 0xffffff));
+    TEST_ASSERT_EQUAL(0x00ff00, (int)(doc->nodes[we_find_id(doc, "w")].color & 0xffffff));
+    TEST_ASSERT_EQUAL(we_find_id(doc, "s3"), we_target_node(doc));
+    /* back: the page without the fragment, no target */
+    evt("web back");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web back file=/web/t.html"));
+    doc = osui_gui_web_doc();
+    TEST_ASSERT_EQUAL(-1, we_target_node(doc));
+    TEST_ASSERT_EQUAL(0x000000, (int)(doc->nodes[we_find_id(doc, "s3")].color & 0xffffff));
+    evt("web fwd");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web target id=s3"));
+    /* an address with a fragment; an unknown id keeps the page at the top */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-open /web/t.html#zz", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web target none id=zz"));
+    TEST_ASSERT_EQUAL(-1, we_target_node(osui_gui_web_doc()));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-open /web/t.html#%73%33", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web target id=s3"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-open /web/t.html#abcdefghijklmnopqrstuvwxyz0123456789", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web target error=too_long"));
+    /* local links keep their fragment */
+    TEST_ASSERT(osui_gui_web_resolve("/web/a.html", "u.html#k", d, (int)sizeof(d)) == 0);
+    TEST_ASSERT_EQUAL_STRING("/web/u.html#k", d);
+    TEST_ASSERT(osui_gui_web_resolve("/web/a.html", "u.html?q#k", d, (int)sizeof(d)) < 0);
+    TEST_ASSERT(osui_gui_web_resolve("/web/a.html", "u.html#k", d, 13) < 0);
+    TEST_ASSERT(osui_gui_web_resolve("/web/a.html", "#top", d, (int)sizeof(d)) < 0);
+    osui_gui_set_ide_ops(0, 0, 0);
+    feed_str("/center");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
 }
 
 int main(void) {
@@ -1459,6 +1524,7 @@ int main(void) {
     RUN_TEST(test_lot73_anim_tick_resends_atlas);
     RUN_TEST(test_lot74_form_url);
     RUN_TEST(test_lot74_gui_forms);
+    RUN_TEST(test_lot74_gui_fragment);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

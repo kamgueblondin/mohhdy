@@ -79,6 +79,7 @@ typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME
  * textarea, button or details in document order. An entry with set = 0
  * shows the markup; a click or a key copies the markup state first. */
 #define WE_FSTATE_MAX 32
+#define WE_TARGET_MAX 32
 #define WE_FSTATE_VAL 64
 typedef struct {
     uint8_t set, checked, sel, len;   /* checked: box, radio, open details; sel: option */
@@ -91,6 +92,7 @@ typedef struct {
     int16_t submit_form;  /* node of the form to submit, -1 none */
     uint16_t edits, toggles, submits, resets, refused;
     we_fstate_t c[WE_FSTATE_MAX];
+    char target[WE_TARGET_MAX];   /* the URL fragment: the :target element id, "" none */
 } we_forms_t;
 /* we_form_click / we_form_key results */
 enum { WE_FACT_NONE = 0, WE_FACT_CHANGED = 1, WE_FACT_SUBMIT = 2 };
@@ -468,6 +470,9 @@ enum { WE_LOGIC_NOT = 1, WE_LOGIC_IS, WE_LOGIC_WHERE, WE_LOGIC_HAS };
 #define WE_STATE_READ_WRITE 8192
 #define WE_STATE_INVALID 16384
 #define WE_STATE_VALID 32768
+/* lot 74: the fragment of the page URL (we_set_target) */
+#define WE_STATE_TARGET 65536
+#define WE_STATE_TARGET_WITHIN 131072
 /* Lot 63: generated content */
 enum { WE_PSEUDO_BEFORE = 1, WE_PSEUDO_AFTER = 2 };
 enum { WE_CONTENT_NONE, WE_CONTENT_LIST, WE_CONTENT_UA_OPEN, WE_CONTENT_UA_CLOSE };
@@ -484,7 +489,7 @@ typedef struct {
     we_selector_attr_t attr[WE_SELECTOR_ATTRS_MAX];
     uint8_t classes, attrs, pseudo, combinator;
     int16_t nth_a, nth_b;
-    uint16_t state;                     /* lot 73, lot 74: WE_STATE_* */
+    uint32_t state;                     /* lot 73, lot 74: WE_STATE_* */
     uint8_t logic_kind[2];              /* lot 73 */
     uint16_t logic_off[2], logic_len[2]; /* lot 73: arguments in css[] */
 } we_selector_part_t;
@@ -600,4 +605,10 @@ int we_form_key(we_doc_t *d, int key);
 int we_form_set_text(we_doc_t *d, int ctl, const char *text);
 int we_form_request(const we_doc_t *d, we_form_req_t *req);
 int we_form_value(const we_doc_t *d, int ctl, char *out, int max);
+/* Lot 74: the fragment of the page URL ("#id" or "id", percent-decoded):
+ * the element with that id matches :target after the next we_style.
+ * 0 set, 1 cleared ("" or 0), -1 no forms state or too long. */
+int we_set_target(we_doc_t *d, const char *frag);
+/* the node of the current target, -1 none */
+int we_target_node(const we_doc_t *d);
 #endif

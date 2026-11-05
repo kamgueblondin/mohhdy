@@ -191,6 +191,53 @@ static void test_l74_has_anchored(void) {
     TEST_ASSERT_EQUAL(7, l73c("n"));          /* > b */
 }
 
+/* Lot 74: :target and :target-within follow we_set_target */
+static void test_l74_target(void) {
+    static we_forms_t f;
+    static const char *page = "<style>:target{color:#000001}section:target-within{color:#000002}p:not(:target){color:#000003}"
+                              "#a:target + p{color:#000004}</style>" L64_BODY
+                              "<section id=s><p id=a>a</p><p id=b>b</p></section><p id=c>c</p></body>";
+    we_forms_init(&f);
+    we_set_forms(&g_doc, 0);
+    TEST_ASSERT_EQUAL(-1, we_set_target(&g_doc, "#a"));     /* no page state */
+    TEST_ASSERT_EQUAL(-1, we_target_node(&g_doc));
+    we_set_forms(&g_doc, &f);
+    lot52_render(page, 320);
+    TEST_ASSERT_EQUAL(3, l73c("a"));
+    TEST_ASSERT_EQUAL(0, l73c("s"));
+    TEST_ASSERT_EQUAL(0, we_set_target(&g_doc, "#a"));
+    TEST_ASSERT_EQUAL_STRING("a", f.target);
+    lot52_render(page, 320);
+    TEST_ASSERT_EQUAL(lot52_node("a") - g_doc.nodes, we_target_node(&g_doc));
+    TEST_ASSERT_EQUAL(1, l73c("a"));
+    TEST_ASSERT_EQUAL(4, l73c("b"));
+    TEST_ASSERT_EQUAL(2, l73c("s"));
+    TEST_ASSERT_EQUAL(3, l73c("c"));
+    /* percent-decoded, without '#'; a section is its own target-within */
+    TEST_ASSERT_EQUAL(0, we_set_target(&g_doc, "%73"));
+    lot52_render(page, 320);
+    TEST_ASSERT_EQUAL(2, l73c("s"));          /* section:target-within is more specific than :target */
+    TEST_ASSERT_EQUAL(3, l73c("a"));
+    /* case-sensitive ids; unknown: nothing matches */
+    TEST_ASSERT_EQUAL(0, we_set_target(&g_doc, "#A"));
+    lot52_render(page, 320);
+    TEST_ASSERT_EQUAL(-1, we_target_node(&g_doc));
+    TEST_ASSERT_EQUAL(3, l73c("a"));
+    /* refusals keep the previous target; "" and 0 clear it */
+    TEST_ASSERT_EQUAL(0, we_set_target(&g_doc, "b"));
+    TEST_ASSERT_EQUAL(-1, we_set_target(&g_doc, "#0123456789012345678901234567890123"));
+    TEST_ASSERT_EQUAL(-1, we_set_target(&g_doc, "#x%00"));
+    TEST_ASSERT_EQUAL_STRING("b", f.target);
+    TEST_ASSERT_EQUAL(0, we_set_target(&g_doc, "#%zz"));     /* not an escape: kept as is */
+    TEST_ASSERT_EQUAL_STRING("%zz", f.target);
+    TEST_ASSERT_EQUAL(1, we_set_target(&g_doc, "#"));
+    TEST_ASSERT_EQUAL_STRING("", f.target);
+    TEST_ASSERT_EQUAL(0, we_set_target(&g_doc, "c"));
+    TEST_ASSERT_EQUAL(1, we_set_target(&g_doc, 0));
+    TEST_ASSERT_EQUAL(-1, we_target_node(&g_doc));
+    we_set_forms(&g_doc, 0);
+}
+
 static void lot74_css_run(void) {
     RUN_TEST(test_l74_layer_order_statement);
     RUN_TEST(test_l74_layer_important_reversed);
@@ -199,4 +246,5 @@ static void lot74_css_run(void) {
     RUN_TEST(test_l74_rowspan_zero_and_groups);
     RUN_TEST(test_l74_rowspan_row_background);
     RUN_TEST(test_l74_has_anchored);
+    RUN_TEST(test_l74_target);
 }

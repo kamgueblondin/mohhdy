@@ -384,9 +384,60 @@ static int evt_int(const char **p);
 static char g_web_hist[WEB_HIST][256];
 static int g_web_hn, g_web_hi = -1;
 
-static int web_go(const char *file, int push, char *out, int out_max) {
-    char status[320];
+static int web_form_render(void);
+static void gui_cat_u(char *d, int max, unsigned v);
+/* Lot 74: the fragment of a page address: :target and the scroll to it */
+static void web_target(const char *frag, char *out, int out_max) {
+    char m[64];
+    int t;
+    if (we_set_target(&g_web, frag) < 0) { app_out(out, out_max, "osui web target error=too_long", 0); return; }
+    (void)web_form_render();
+    t = we_target_node(&g_web);
+    if (t < 0) { app_out(out, out_max, "osui web target none id=", frag); return; }
+    g_web_scroll = we_scroll(&g_web, g_web.nodes[t].y);
+    scpy(m, (int)sizeof(m), g_web.nodes[t].id);
+    scat(m, (int)sizeof(m), " scroll ");
+    gui_cat_u(m, (int)sizeof(m), (unsigned)g_web_scroll);
+    app_out(out, out_max, "osui web target id=", m);
+}
+
+static void web_hist_push(const char *entry) {
     int k;
+    if (g_web_hi + 1 >= WEB_HIST) {
+        for (k = 0; k + 1 < WEB_HIST; k++) scpy(g_web_hist[k], 256, g_web_hist[k + 1]);
+        g_web_hi--;
+    }
+    g_web_hi++;
+    scpy(g_web_hist[g_web_hi], 256, entry);
+    g_web_hn = g_web_hi + 1;           /* a new page drops the forward list */
+}
+
+static int web_go_page(const char *file, int push, char *out, int out_max);
+/* a page address with an optional "#fragment": the same page only
+ * scrolls; the fragment is never sent */
+static int web_go(const char *file, int push, char *out, int out_max) {
+    static char base[256], entry[256];
+    const char *hash = file;
+    int n = 0, rc;
+    while (*hash && *hash != '#') hash++;
+    if (!*hash) return web_go_page(file, push, out, out_max);
+    while (file + n < hash && n < (int)sizeof(base) - 1) { base[n] = file[n]; n++; }
+    base[n] = 0;
+    if (g_web_active && g_web_src_n > 0 && (!base[0] || scmp(base, g_web_file) == 0)) rc = 0;
+    else rc = web_go_page(base, 0, out, out_max);
+    if (rc != 0) return rc;
+    if (push) {
+        scpy(entry, (int)sizeof(entry), g_web_file);
+        scat(entry, (int)sizeof(entry), hash);
+        web_hist_push(entry);
+    }
+    web_target(hash + 1, out, out_max);
+    if (out) scat(out, out_max, "\n");
+    return 0;
+}
+
+static int web_go_page(const char *file, int push, char *out, int out_max) {
+    char status[320];
     g_web_errpage = 0;
     we_forms_init(&g_web_forms);   /* lot 74: a new page, new controls */
     g_web_forms_ready = 1;
@@ -407,15 +458,7 @@ static int web_go(const char *file, int push, char *out, int out_max) {
     g_web_active = 1;
     g_web_mobile = 0;
     g_web_scroll = 0;
-    if (push) {
-        if (g_web_hi + 1 >= WEB_HIST) {
-            for (k = 0; k + 1 < WEB_HIST; k++) scpy(g_web_hist[k], 256, g_web_hist[k + 1]);
-            g_web_hi--;
-        }
-        g_web_hi++;
-        scpy(g_web_hist[g_web_hi], 256, g_web_final[0] ? g_web_final : file);
-        g_web_hn = g_web_hi + 1;           /* a new page drops the forward list */
-    }
+    if (push) web_hist_push(g_web_final[0] ? g_web_final : file);
     if (out) { scat(out, out_max, status); scat(out, out_max, "\n"); }
     return 0;
 }
@@ -680,10 +723,25 @@ int osui_gui_web_resolve(const char *base, const char *href, char *dst, int max)
         scpy(dst, max, href);
         return 0;
     }
-    for (i = 0; href[i]; i++) if (href[i] == ':' || href[i] == '?' || href[i] == '#') return -1;
-    fsops_parent(base && base[0] ? base : "/web/index.html", dir, (int)sizeof(dir));
-    fsops_resolve(dir, href, dst, max);
-    return slen(dst) < 40 ? 0 : -1;
+    {
+        /* Lot 74: "page.html#id" keeps its fragment for the scroll */
+        char path[FSOPS_PATH_MAX];
+        const char *frag = 0;
+        for (i = 0; href[i] && href[i] != '#'; i++) {
+            if (href[i] == ':' || href[i] == '?' || i >= (int)sizeof(path) - 1) return -1;
+            path[i] = href[i];
+        }
+        path[i] = 0;
+        if (href[i] == '#') frag = href + i;
+        fsops_parent(base && base[0] ? base : "/web/index.html", dir, (int)sizeof(dir));
+        fsops_resolve(dir, path, dst, max);
+        if (slen(dst) >= 40) return -1;
+        if (frag) {
+            if (slen(dst) + slen(frag) >= max) return -1;
+            scat(dst, max, frag);
+        }
+        return 0;
+    }
 }
 
 static void gui_cat_u(char *d, int max, unsigned v);
@@ -874,6 +932,12 @@ static void web_event(const char *p, char *out, int out_max) {
                 (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
                 app_out(out, out_max, "osui web form toggle ", href + 12);
             } else app_out(out, out_max, "osui web form error=unknown_field", 0);
+            return;
+        }
+        if (href[0] == '#') {
+            /* Lot 74: a fragment of this page */
+            app_out(out, out_max, "osui web link href=", href);
+            (void)web_go(href, 1, out, out_max);
             return;
         }
         if (osui_gui_web_resolve(g_web_file, href, dst, (int)sizeof(dst)) != 0) {

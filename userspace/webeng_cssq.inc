@@ -29,10 +29,11 @@
  *   specific argument. :placeholder-shown, :indeterminate (progress without
  *   value) and :open (details) read the form state. :link and :any-link (a or
  *   area with href), :checked, :disabled, :enabled, :first-of-type,
- *   :last-of-type, :only-of-type; :visited, :hover, :active and :target
+ *   :last-of-type, :only-of-type; :visited, :hover and :active
  *   never match (static page); lot 74: :focus, :focus-visible,
  *   :focus-within, :required, :optional, :read-only, :read-write,
- *   :valid, :invalid follow the live form state (webeng_finput.inc).
+ *   :valid, :invalid follow the live form state (webeng_finput.inc);
+ *   :target and :target-within the URL fragment (we_set_target).
  * - Custom properties: "--name: value" declarations (case-sensitive
  *   names, inherited, up to WE_VARS_MAX per element) and var(--name) /
  *   var(--name, fallback) in any value, nested. Custom values are resolved
@@ -563,7 +564,7 @@ static int cssq_match_logic(const we_doc_t *d, int idx, const we_selector_part_t
 
 /* state pseudo-classes (flags in part->state) */
 static int cssq_state_flag(const char *pseudo) {
-    static const char *const never[] = { "visited", "hover", "active", "target", 0 };
+    static const char *const never[] = { "visited", "hover", "active", 0 };
     int k;
     if (w_eq(pseudo, "link") || w_eq(pseudo, "any-link")) return WE_STATE_LINK;
     if (w_eq(pseudo, "checked")) return WE_STATE_CHECKED;
@@ -572,6 +573,8 @@ static int cssq_state_flag(const char *pseudo) {
     if (w_eq(pseudo, "placeholder-shown")) return WE_STATE_PLACEHOLDER;
     if (w_eq(pseudo, "indeterminate")) return WE_STATE_INDETERMINATE;
     if (w_eq(pseudo, "open")) return WE_STATE_OPEN;
+    if (w_eq(pseudo, "target")) return WE_STATE_TARGET;               /* lot 74 */
+    if (w_eq(pseudo, "target-within")) return WE_STATE_TARGET_WITHIN;
     /* lot 74: the live form state */
     if (w_eq(pseudo, "focus") || w_eq(pseudo, "focus-visible")) return WE_STATE_FOCUS;
     if (w_eq(pseudo, "focus-within")) return WE_STATE_FOCUS_WITHIN;
@@ -606,6 +609,12 @@ static int cssq_match_live(const we_doc_t *d, const we_node_t *n, int state) {
     if ((state & WE_STATE_READ_ONLY) && editable) return 0;
     if ((state & WE_STATE_INVALID) && !finput_invalid(d, idx)) return 0;
     if ((state & WE_STATE_VALID) && !(input && n->form_ord && !finput_invalid(d, idx))) return 0;
+    if (state & (WE_STATE_TARGET | WE_STATE_TARGET_WITHIN)) {
+        int t = we_target_node(d);
+        if ((state & WE_STATE_TARGET) && t != idx) return 0;
+        while (t >= 0 && t != idx) t = d->nodes[t].parent;
+        if (t < 0) return 0;
+    }
     return 1;
 }
 

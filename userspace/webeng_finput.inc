@@ -678,3 +678,38 @@ int we_form_request(const we_doc_t *d, we_form_req_t *req) {
     req->url[k] = 0;
     return 0;
 }
+
+/* ---------- Lot 74: the URL fragment (:target) ---------- */
+static int finput_hex(int c) {
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+int we_set_target(we_doc_t *d, const char *frag) {
+    char t[WE_TARGET_MAX];
+    int i = 0, n = 0;
+    if (!d || !d->forms) return -1;
+    if (!frag) frag = "";
+    if (frag[0] == '#') i = 1;
+    for (; frag[i]; i++) {
+        int c = (unsigned char)frag[i];
+        if (c == '%' && finput_hex(frag[i + 1]) >= 0 && finput_hex(frag[i + 2]) >= 0) {
+            c = finput_hex(frag[i + 1]) * 16 + finput_hex(frag[i + 2]);
+            i += 2;
+        }
+        if (n + 1 >= WE_TARGET_MAX || c == 0) return -1;
+        t[n++] = (char)c;
+    }
+    t[n] = 0;
+    for (i = 0; i <= n; i++) d->forms->target[i] = t[i];
+    return n ? 0 : 1;
+}
+
+int we_target_node(const we_doc_t *d) {
+    uint32_t i;
+    if (!d || !d->forms || !d->forms->target[0]) return -1;
+    for (i = 1; i < d->nnodes; i++) {
+        const we_node_t *n = &d->nodes[i];
+        if (!n->is_text && !n->pseudo_kind && n->id[0] && w_eq(n->id, d->forms->target)) return (int)i;
+    }
+    return -1;
+}
