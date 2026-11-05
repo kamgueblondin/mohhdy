@@ -17,7 +17,7 @@
 #ifndef IMGDEC_H
 #define IMGDEC_H
 
-enum { IMGDEC_NONE = 0, IMGDEC_PNM = 1, IMGDEC_BMP = 2, IMGDEC_PNG = 3, IMGDEC_JPEG = 4, IMGDEC_GIF = 5, IMGDEC_ICO = 6 };
+enum { IMGDEC_NONE = 0, IMGDEC_PNM = 1, IMGDEC_BMP = 2, IMGDEC_PNG = 3, IMGDEC_JPEG = 4, IMGDEC_GIF = 5, IMGDEC_ICO = 6, IMGDEC_WEBP = 7 };
 enum {
     IMGDEC_OK = 0, IMGDEC_E_FORMAT = -1, IMGDEC_E_TRUNC = -2, IMGDEC_E_UNSUP = -3,
     IMGDEC_E_TOOBIG = -4, IMGDEC_E_INFLATE = -5, IMGDEC_E_CRC = -6
@@ -48,6 +48,7 @@ typedef struct {
     int full_w, full_h;    /* Lot 72: size in the file (w, h are the decoded size) */
     int scale_shift;
     int ico_off, ico_len, ico_png;   /* Lot 72: chosen .ico entry (a PNG entry opens as IMGDEC_PNG) */
+    int webp_off, webp_len, webp_alpha, webp_lossy;   /* Lot 73: VP8L payload, alpha bit, lossy (refused) */
     unsigned ico_need;       /* Lot 72: JPEG decoded at 1/2^shift (imgdec_open_scaled) */        /* Lot 72: GIF frame pixels decoded (less if the stream is cut) */
 } imgdec_t;
 

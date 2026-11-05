@@ -574,7 +574,7 @@ static int view_decode(osui_tool_t *t, const char *buf, int n) {
         t->img_src_w = img.w; t->img_src_h = img.h; t->img_fmt = img.fmt;
         return 0;
     }
-    if (img.fmt == IMGDEC_BMP || img.fmt == IMGDEC_PNG || img.fmt == IMGDEC_JPEG) {
+    if (img.fmt == IMGDEC_BMP || img.fmt == IMGDEC_PNG || img.fmt == IMGDEC_JPEG || img.fmt == IMGDEC_WEBP) {
         /* a real image we cannot show: say why instead of dumping bytes */
         add_line(t, "image non affichable: ", -1, OSUI_APP_A_ERR);
         t_cat(t->lines[t->n - 1], OSUI_TOOL_COLS, imgdec_strerror(rc));

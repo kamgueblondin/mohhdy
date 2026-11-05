@@ -324,11 +324,14 @@ static void test_chat_streams_and_cancels(void) {
 
 /* ---- Lot 73: animated GIF in the viewer ---- */
 #include "imgdec_anim_samples.h"
+#include "imgdec_webp_samples.h"
 static int gif_read(const char *path, char *buf, int max) {
     const unsigned char *g; int n;
     if (!strcmp(path, "/home/a.gif")) { g = gif_anim_a; n = (int)sizeof(gif_anim_a); }
     else if (!strcmp(path, "/home/b.gif")) { g = gif_anim_b; n = (int)sizeof(gif_anim_b); }
     else if (!strcmp(path, "/home/one.gif")) { g = gif_anim_b; n = 48; }   /* cut inside frame 2 */
+    else if (!strcmp(path, "/home/p.webp")) { g = webp_pal4; n = (int)sizeof(webp_pal4); }
+    else if (!strcmp(path, "/home/l.webp")) { g = webp_lossy; n = (int)sizeof(webp_lossy); }
     else return fake_read(path, buf, max);
     if (n > max) n = max;
     memcpy(buf, g, (size_t)n);
@@ -449,6 +452,23 @@ static void test_view_gif_pause_zoom_and_still(void) {
     TEST_ASSERT_EQUAL(0, g_vt.anim_due);
 }
 
+/* Lot 73: WebP lossless shows in pixels; lossy says why it cannot */
+static void test_view_webp(void) {
+    int k;
+    unsigned char ref[WEBP_PAL4_W * WEBP_PAL4_H * 3];
+    memset(&g_vt, 0, sizeof(g_vt));
+    osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/p.webp", &k_gif_src);
+    TEST_ASSERT_EQUAL(1, g_vt.image);
+    TEST_ASSERT_EQUAL(0, g_vt.anim);
+    TEST_ASSERT_NOT_NULL(strstr(g_vt.lines[0], "image 13x7 affichee en pixels 13x7 fmt=webp"));
+    for (k = 0; k < WEBP_PAL4_W * WEBP_PAL4_H; k++) memcpy(ref + k * 3, webp_pal4_rgba + k * 4, 3);
+    TEST_ASSERT_TRUE(view_is(ref, WEBP_PAL4_W, WEBP_PAL4_H));
+    osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/l.webp", &k_gif_src);
+    TEST_ASSERT_EQUAL(0, g_vt.image);
+    TEST_ASSERT_NOT_NULL(strstr(g_vt.lines[0], "image non affichable"));
+    TEST_ASSERT_NOT_NULL(strstr(g_vt.status, "webp refusee"));
+}
+
 static void test_view_gif_clock_wraps(void) {
     memset(&g_vt, 0, sizeof(g_vt));
     osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/a.gif", &k_gif_src);
@@ -476,6 +496,7 @@ int main(void) {
     RUN_TEST(test_view_gif_loop_count_and_replay);
     RUN_TEST(test_view_gif_pause_zoom_and_still);
     RUN_TEST(test_view_gif_clock_wraps);
+    RUN_TEST(test_view_webp);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

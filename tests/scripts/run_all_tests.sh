@@ -184,7 +184,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
-    if [ "$(basename "$test_file")" = "test_imgdec.c" ] || [ "$(basename "$test_file")" = "test_imgdec_anim.c" ]; then
+    if [ "$(basename "$test_file")" = "test_imgdec.c" ] || [ "$(basename "$test_file")" = "test_imgdec_anim.c" ] || [ "$(basename "$test_file")" = "test_imgdec_webp.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/imgdec.c"
         cflags="$cflags -I$BASE_DIR/userspace -I$TEST_DIR/unit/userspace"
     fi

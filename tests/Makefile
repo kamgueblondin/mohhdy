@@ -484,7 +484,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_imgdec: $(UNIT_DIR)/userspace/test_imgde
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_tools: $(UNIT_DIR)/userspace/test_osui_tools.c ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_tools.h ../userspace/osui_panes.c ../userspace/osui_app.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_osui_tools: $(UNIT_DIR)/userspace/test_osui_tools.c $(UNIT_DIR)/userspace/imgdec_webp_samples.h $(UNIT_DIR)/userspace/imgdec_anim_samples.h ../userspace/imgdec_webp.inc ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_tools.h ../userspace/osui_panes.c ../userspace/osui_app.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/osui_tools.c ../userspace/imgdec.c ../userspace/osui_form.c ../userspace/osui_parity.c ../userspace/osui_panes.c ../userspace/osui_app.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
@@ -837,6 +837,11 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_srcset: $(UNIT_DIR)/userspace/test_wf
 
 # Lot 73: GIF animation (imgdec) and animated images in wf_webimg
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_imgdec_anim: $(UNIT_DIR)/userspace/test_imgdec_anim.c $(UNIT_DIR)/userspace/imgdec_anim_samples.h $(UNIT_DIR)/userspace/imgdec_gif_samples.h ../userspace/imgdec.c ../userspace/imgdec_gif.inc ../userspace/imgdec.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
+
+# Lot 73: WebP lossless (VP8L)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_imgdec_webp: $(UNIT_DIR)/userspace/test_imgdec_webp.c $(UNIT_DIR)/userspace/imgdec_webp_samples.h ../userspace/imgdec.c ../userspace/imgdec_webp.inc ../userspace/imgdec.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 
