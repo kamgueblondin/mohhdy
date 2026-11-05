@@ -164,6 +164,33 @@ static void test_l74_rowspan_row_background(void) {
     TEST_ASSERT(l74_rect(200, 10, 100, 10, 0x00ff00) >= 0);
 }
 
+/* Lot 74: :has() arguments anchored at the element */
+static void test_l74_has_anchored(void) {
+    lot52_render("<style>div:has(p span){color:#000001}section:has(> p > b){color:#000002}h1:has(+ p i){color:#000003}"
+                 "h2:has(~ div b){color:#000004}li:has(.x){color:#000005}article:has(p b){color:#000006}"
+                 "aside:has(> b, + nav){color:#000007}</style>" L64_BODY
+                 "<div id=b><p>q<span>s</span></p></div><div id=j><span>s</span></div>"
+                 "<section id=c><div><p><b>x</b></p></div></section><section id=d><p><b>y</b></p></section>"
+                 "<h1 id=e>e</h1><div><p><i>i</i></p></div><h1 id=f>f</h1><p><i>i</i></p>"
+                 "<h2 id=g>g</h2><p>p</p><div><b>b</b></div><div><h2 id=h>h</h2></div><div><b>b</b></div>"
+                 "<ul><li id=i>i</li><li class=x>x</li></ul>"
+                 "<p><article id=k><b>b</b></article></p><article id=l><p><b>b</b></p></article>"
+                 "<aside id=m><i><b>b</b></i></aside><nav>n</nav><aside id=n><b>b</b></aside></body>", 400);
+    TEST_ASSERT_EQUAL(1, l73c("b"));
+    TEST_ASSERT_EQUAL(0, l73c("j"));          /* no p inside */
+    TEST_ASSERT_EQUAL(0, l73c("c"));          /* p is not a child */
+    TEST_ASSERT_EQUAL(2, l73c("d"));
+    TEST_ASSERT_EQUAL(0, l73c("e"));          /* the next sibling is a div */
+    TEST_ASSERT_EQUAL(3, l73c("f"));
+    TEST_ASSERT_EQUAL(4, l73c("g"));
+    TEST_ASSERT_EQUAL(0, l73c("h"));          /* the later div is not its sibling */
+    TEST_ASSERT_EQUAL(0, l73c("i"));          /* a sibling is not inside */
+    TEST_ASSERT_EQUAL(0, l73c("k"));          /* the p is outside the article */
+    TEST_ASSERT_EQUAL(6, l73c("l"));
+    TEST_ASSERT_EQUAL(7, l73c("m"));          /* + nav */
+    TEST_ASSERT_EQUAL(7, l73c("n"));          /* > b */
+}
+
 static void lot74_css_run(void) {
     RUN_TEST(test_l74_layer_order_statement);
     RUN_TEST(test_l74_layer_important_reversed);
@@ -171,4 +198,5 @@ static void lot74_css_run(void) {
     RUN_TEST(test_l74_layer_refusals);
     RUN_TEST(test_l74_rowspan_zero_and_groups);
     RUN_TEST(test_l74_rowspan_row_background);
+    RUN_TEST(test_l74_has_anchored);
 }

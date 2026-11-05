@@ -944,7 +944,7 @@ static int previous_element(const we_doc_t *d, int idx) {
 static int match_chain(const we_doc_t *d, int idx, const we_rule_t *r, int part, int *budget) {
     int candidate, relation;
     if (idx <= 0 || (*budget)-- <= 0 || !match_comp(d, idx, &r->part[part])) return 0;
-    if (!part) return 1;
+    if (!part) return cssq_anchor_ok(d, idx, r);   /* lot 74: :has() arguments */
     relation = r->part[part].combinator;
     candidate = relation == WE_SEL_ADJACENT || relation == WE_SEL_SIBLING ? previous_element(d, idx) : d->nodes[idx].parent;
     while (candidate > 0 && *budget > 0) {

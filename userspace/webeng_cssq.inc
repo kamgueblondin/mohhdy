@@ -17,15 +17,16 @@
  *   with no diag (tried on a scratch node, every side effect undone;
  *   custom properties always); selector(...) when the selector parses
  *   (pseudo-elements included); not, and, or as in @media.
- * - @layer blocks are kept in source order (layer priority is not
- *   modelled, one diag); other at-rules are skipped as before.
+ * - @layer (lot 74): cascade layers ranked in post-order, unlayered last,
+ *   !important reversed (webeng.c parse_css_range, rule_layer_key);
+ *   other at-rules are skipped as before.
  * - :not(), :is(), :matches(), :-webkit-any() and :where() take selector
  *   lists (combinators allowed, nesting up to 3); :is and :not count the
  *   most specific argument, :where nothing. :has() takes relative
  *   selectors (descendant, > child, + next sibling, ~ later sibling; not
- *   nested in :has; the whole chain of an argument may match outside the
- *   element, a simplification), its specificity is its most specific
- *   argument. :placeholder-shown, :indeterminate (progress without
+ *   nested in :has; lot 74: the chain of an argument is anchored at the
+ *   element, no part of it matches outside), its specificity is its most
+ *   specific argument. :placeholder-shown, :indeterminate (progress without
  *   value) and :open (details) read the form state. :link and :any-link (a or
  *   area with href), :checked, :disabled, :enabled, :first-of-type,
  *   :last-of-type, :only-of-type; :visited, :hover, :active and :target
@@ -483,23 +484,39 @@ static int cssq_match_depth;
 
 static int inside(const we_doc_t *d, int node, int root);
 
-/* :has(): an element after idx in the relation rel that matches r */
-static int cssq_has_match(const we_doc_t *d, int idx, const we_rule_t *r, int rel, int *budget) {
+/* Lot 74: a :has() argument is anchored: the first compound of its chain
+ * stands in the relation rel to the :has element (descendant, > child,
+ * + next sibling, ~ later sibling), so no part matches outside it. */
+static const we_rule_t *cssq_anchor_rule;
+static int cssq_anchor, cssq_anchor_rel;
+static int previous_element(const we_doc_t *d, int idx);
+static int cssq_anchor_ok(const we_doc_t *d, int idx, const we_rule_t *r) {
     int e;
-    if (rel == '+' || rel == '~') {
-        for (e = d->nodes[idx].next; e >= 0; e = d->nodes[e].next) {
-            if (d->nodes[e].is_text) continue;
-            if (match_chain(d, e, r, r->ncomp - 1, budget)) return 1;
-            if (rel == '+') break;
-        }
+    if (r != cssq_anchor_rule) return 1;
+    if (cssq_anchor_rel == '>') return d->nodes[idx].parent == cssq_anchor;
+    if (cssq_anchor_rel == '+') return previous_element(d, idx) == cssq_anchor;
+    if (cssq_anchor_rel == '~') {
+        for (e = previous_element(d, idx); e > 0; e = previous_element(d, e)) if (e == cssq_anchor) return 1;
         return 0;
     }
-    for (e = idx + 1; e < (int)d->nnodes && *budget > 0; e++) {
-        if (d->nodes[e].is_text || d->nodes[e].pseudo_kind || !inside(d, e, idx)) continue;
-        if (rel == '>' && d->nodes[e].parent != idx) continue;
-        if (match_chain(d, e, r, r->ncomp - 1, budget)) return 1;
+    return idx != cssq_anchor && inside(d, idx, cssq_anchor);
+}
+
+/* :has(): an element after idx (in its subtree, or for + and ~ in the
+ * subtree of its parent) that matches r anchored at idx */
+static int cssq_has_match(const we_doc_t *d, int idx, const we_rule_t *r, int rel, int *budget) {
+    const we_rule_t *save_rule = cssq_anchor_rule;
+    int save = cssq_anchor, save_rel = cssq_anchor_rel, e, hit = 0;
+    int scope = rel == '+' || rel == '~' ? d->nodes[idx].parent : idx;
+    if (scope < 0) return 0;
+    cssq_anchor_rule = r; cssq_anchor = idx; cssq_anchor_rel = rel;
+    for (e = idx + 1; e < (int)d->nnodes && *budget > 0 && !hit; e++) {
+        if (d->nodes[e].is_text || d->nodes[e].pseudo_kind) continue;
+        if (!inside(d, e, scope)) continue;
+        if (match_chain(d, e, r, r->ncomp - 1, budget)) hit = 1;
     }
-    return 0;
+    cssq_anchor_rule = save_rule; cssq_anchor = save; cssq_anchor_rel = save_rel;
+    return hit;
 }
 
 static int cssq_match_list(const we_doc_t *d, int idx, int off, int n, int kind) {
