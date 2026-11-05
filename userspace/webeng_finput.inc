@@ -534,6 +534,8 @@ static int finput_pattern_bad(const we_doc_t *d, const we_node_t *n, const char 
     return !finput_pat_match(d->pool + n->fpat_off, n->fpat_len, 0, v, len, 0, &budget);
 }
 
+
+static int finput_list_ok(const we_doc_t *d, int input, const char *v, int len);
 static int finput_invalid(const we_doc_t *d, int i) {
     const we_node_t *n = &d->nodes[i];
     char v[WE_FSTATE_VAL];
@@ -549,6 +551,7 @@ static int finput_invalid(const we_doc_t *d, int i) {
     if ((n->form_flags2 & WE_FF2_NUMBER) && len > 0 && finput_number_bad(n, v, len)) return 1;
     if ((n->form_flags2 & WE_FF2_URL) && len > 0 && finput_url_bad(v, len)) return 1;
     if ((n->form_flags2 & WE_FF2_PATTERN) && len > 0 && finput_pattern_bad(d, n, v, len)) return 1;
+    if ((n->form_flags2 & WE_FF2_LIST) && len > 0 && !finput_list_ok(d, i, v, len)) return 1;
     if ((n->form_flags2 & WE_FF2_EMAIL) && len > 0) {
         for (k = 0; k < len; k++) if (v[k] == '@') { if (at >= 0) return 1; at = k; }
         if (at <= 0 || at == len - 1) return 1;
@@ -609,6 +612,36 @@ static int finput_same(const char *a, const char *b, int n) {
     for (k = 0; k < n; k++) if (a[k] != b[k]) return 0;
     return 1;
 }
+
+/* Lot 74: the datalist named by input list=, or -1 */
+static int finput_datalist(const we_doc_t *d, int input) {
+    const we_node_t *n = &d->nodes[input];
+    char id[WE_TARGET_MAX];
+    int dl, k;
+    if (!(n->form_flags2 & WE_FF2_LIST) || !n->flist_len) return -1;
+    k = n->flist_len < WE_TARGET_MAX - 1 ? n->flist_len : WE_TARGET_MAX - 1;
+    w_cpy(id, WE_TARGET_MAX, d->pool + n->flist_off, k);
+    dl = we_find_id(d, id);
+    if (dl < 0 || !w_eq(d->nodes[dl].tag, "datalist")) return -1;
+    return dl;
+}
+
+/* 1 when value matches an option of the list (or the list is empty/missing) */
+static int finput_list_ok(const we_doc_t *d, int input, const char *v, int len) {
+    int dl = finput_datalist(d, input), o, nopt = 0;
+    if (dl < 0) return 1;
+    for (o = d->nodes[dl].first; o >= 0; o = d->nodes[o].next) {
+        const we_node_t *opt = &d->nodes[o];
+        int ol;
+        char ov[WE_FSTATE_VAL];
+        if (!w_eq(opt->tag, "option")) continue;
+        nopt++;
+        ol = finput_option_value(d, o, ov, (int)sizeof(ov));
+        if (ol == len && finput_same(ov, v, len)) return 1;
+    }
+    return nopt == 0;
+}
+
 
 static int finput_toggle_radio(we_doc_t *d, int i) {
     const we_node_t *n = &d->nodes[i];

@@ -347,7 +347,7 @@ typedef struct {
      * WE_FF2_* flags */
     uint16_t fname_off, fname_len;
     uint8_t form_ord, form_maxlen;
-    uint16_t form_flags2;
+    uint32_t form_flags2;   /* lot 74: widened for LIST and more */
     uint8_t form_minlen;      /* lot 74: minlength (0: none) */
     int8_t tabindex;          /* lot 74: with WE_FF2_TABINDEX, -1..127 */
     /* fpat_*: see below with sticky */
@@ -371,6 +371,7 @@ typedef struct {
     uint8_t accent_set, appearance; /* lot 74: accent-color, appearance:none */
     uint32_t accent;
     uint16_t fpat_off, fpat_len; /* lot 74: pattern= in the pool */
+    uint16_t flist_off, flist_len; /* lot 74: list= datalist id */
     int16_t box_scroll_y;      /* lot 74: overflow box scroll offset */
     uint8_t collapse_w;        /* lot 61: shared cell border width, layout time */
     /* Lot 61 border edges, top right bottom left. edge_w -1 and style 0

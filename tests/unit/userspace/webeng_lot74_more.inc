@@ -124,6 +124,17 @@ static void test_l74_accent_appearance(void) {
     l74_done();
 }
 
+static void test_l74_datalist_list(void) {
+    l74_open(L74_BAD "<datalist id=dl><option value=one><option value=two></datalist>"
+             "<form><input id=a list=dl value=nope><input id=b list=dl value=one>"
+             "<input id=go type=submit></form>");
+    TEST_ASSERT_EQUAL(1, l74_bad("a"));
+    TEST_ASSERT_EQUAL(0, l74_bad("b"));
+    TEST_ASSERT_EQUAL(WE_FACT_CHANGED, l74_click("go"));
+    TEST_ASSERT_EQUAL(l74_ctl("a"), g_l74f.focus);
+    l74_done();
+}
+
 static void lot74_more_tests(void) {
     RUN_TEST(test_l74_font_face);
     RUN_TEST(test_l74_table_fixed);
@@ -133,4 +144,6 @@ static void lot74_more_tests(void) {
     RUN_TEST(test_l74_iframe_srcdoc);
     RUN_TEST(test_l74_css_nesting);
     RUN_TEST(test_l74_accent_appearance);
+    RUN_TEST(test_l74_datalist_list);
 }
+

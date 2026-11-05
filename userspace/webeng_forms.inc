@@ -33,6 +33,7 @@ static void finput_range_bounds(const we_node_t *n, int *min, int *max);
 #define WE_FF2_TABINDEX 8192
 #define WE_FF2_PATTERN 16384  /* lot 74: pattern= present */
 #define WE_FF2_DIALOG 32768  /* lot 74: dialog open toggle */
+#define WE_FF2_LIST 65536    /* lot 74: input list= (datalist id) */
 #define WE_FF_CHECKED 1
 #define WE_FF_SELECTED 2
 #define WE_FF_DISABLED 4
@@ -103,8 +104,12 @@ static void forms_attr(we_doc_t *d, int idx, const char *an, const char *av, int
     if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "range")) n->form_flags2 |= WE_FF2_RANGE;
     if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "url")) n->form_flags2 |= WE_FF2_URL;
     if (w_eq(an, "list") && w_eq(n->tag, "input")) {
-        if (pool_put(d, av, vk, &n->fph_off) == 0) { n->fph_len = (uint16_t)vk; n->form_flags2 |= WE_FF2_PATTERN; /* reuse: list present via fph when no placeholder */ }
-        /* actually use a dedicated approach: keep list id in fph only when no placeholder */
+        /* Lot 74: list= names a datalist; id in fpat_* so placeholder keeps fph */
+        if (pool_put(d, av, vk, &n->flist_off) == 0) {
+            n->flist_len = (uint16_t)vk;
+            n->form_flags2 |= WE_FF2_LIST;
+        }
+        return;
     }
     if (w_eq(an, "type") && w_eq(n->tag, "input")) n->form_type = (uint8_t)forms_input_type(d, av, vk, idx);
     else if (w_eq(an, "type") && w_eq(n->tag, "button")) {
@@ -312,7 +317,7 @@ static void forms_box(we_node_t *n, uint32_t bg) {
 static void forms_ua(we_doc_t *d, we_node_t *n);
 /* lot 74: the focused control: its usual UA style, a blue border */
 static void forms_ua_focus(we_doc_t *d, we_node_t *n) {
-    n->form_flags2 &= (uint16_t)~WE_FF2_FOCUS;
+    n->form_flags2 &= ~WE_FF2_FOCUS;
     forms_ua(d, n);
     n->form_flags2 |= WE_FF2_FOCUS;
     if (n->border) n->border_color = (n->accent_set) ? n->accent : WE_FORM_FILL;
