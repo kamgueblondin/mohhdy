@@ -280,6 +280,7 @@ static int find_ci(const char* s, int n, int from, const char* word) {
 
 static void unlink_last(we_doc_t *d, int parent, int old_last);
 #include "webeng_forms.inc"
+#include "webeng_hints.inc"
 
 int we_parse(we_doc_t* d, const char* html, int len) {
     int stack[WE_DEPTH_MAX];
@@ -373,6 +374,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                     }
                     av[vk] = 0;
                     if (truncated) { diag(d, "attribute exceeds limit", idx); continue; }
+                    hints_attr(d, idx, name, an, av, vk);   /* lot 73 */
                     if (w_eq(an, "id")) n->attr_flags |= 1;
                     else if (w_eq(an, "class")) n->attr_flags |= 2;
                     else if (w_eq(an, "href")) n->attr_flags |= 4;
@@ -4634,6 +4636,8 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         if (!pseudo && n->dir_attr) n->dir_rtl = (uint8_t)(n->dir_attr == 2);
         /* lot 64: writing-mode and direction first, so that the logical
          * properties of the same element map to the right sides */
+        /* lot 73: presentational hints: author level, before the rules */
+        if (!pseudo) hints_apply(d, n);
         /* lot 73: custom properties before every other declaration */
         vars_pass = 1;
         cascade_rules(d, match, n, pseudo, 0);

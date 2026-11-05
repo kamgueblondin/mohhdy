@@ -35,6 +35,7 @@
 #define WE_MAX_ITEMS OS_FB_WEB_ITEMS
 #define WE_MAX_RULES 64
 #define WE_VARS_MAX 12   /* lot 73: custom properties per element */
+#define WE_HINTS_MAX 8   /* lot 73: presentational attributes per element */
 #define WE_POOL 32768
 #define WE_TEXT_SOURCE_MAX 512
 #define WE_CSS_MAX 2048
@@ -277,6 +278,9 @@ typedef struct {
      * flags, size / rows / cols attributes, value and placeholder in the
      * pool, progress / meter value, min, max, low, high in hundredths */
     /* Lot 73: custom properties: names and values in pool */
+    /* Lot 73: presentational hints (attribute kind, value in pool) */
+    uint8_t nhints, hint_kind[WE_HINTS_MAX], hint_len[WE_HINTS_MAX];
+    uint16_t hint_off[WE_HINTS_MAX];
     uint8_t nvars, var_name_len[WE_VARS_MAX];
     uint16_t var_name_off[WE_VARS_MAX], var_off[WE_VARS_MAX], var_len[WE_VARS_MAX];
     uint8_t form_type, form_flags, form_size, form_rows, form_cols, meter_set;
