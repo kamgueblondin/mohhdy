@@ -127,10 +127,88 @@ static void test_l73_forced_break_and_refusals(void) {
     TEST_ASSERT_EQUAL(5, lot52_node("q")->widows);
 }
 
+
+/* Lot 73: line clamp. Lines past N are dropped, line N ends with "...",
+ * the box ends at line N and the next block follows it. */
+#define L73_CLAMP(n) "<p id=p style='margin:0;width:80px;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;-webkit-line-clamp:" n "'>aa bb cc dd ee ff gg hh</p><div id=n>after</div></body>"
+
+static void test_l73_line_clamp_two_lines(void) {
+    lot52_render(L64_BODY L73_CLAMP("2"), 320);
+    l61_text_at("aa bb cc", 0, 1);
+    l61_text_at("dd ee...", 0, 11);   /* cut to the 80 px box: dd ee ff... does not fit */
+    TEST_ASSERT_NULL(find_text("gg hh"));
+    TEST_ASSERT_NULL(find_text("dd ee ff"));
+    l64_box("p", 0, 0, 80, 20);
+    l64_box("n", 0, 20, 320, 10);
+    l61_text_at("after", 0, 21);
+    TEST_ASSERT_TRUE(lot52_has_diag("line clamp"));
+    TEST_ASSERT_FALSE(lot52_has_diag("display refused"));
+}
+
+static void test_l73_line_clamp_one_and_room(void) {
+    lot52_render(L64_BODY L73_CLAMP("1"), 320);
+    l61_text_at("aa bb...", 0, 1);
+    TEST_ASSERT_NULL(find_text("dd ee ff"));
+    l64_box("p", 0, 0, 80, 10);
+    l61_text_at("after", 0, 11);
+    /* room left on the last line: the dots are appended */
+    lot52_render(L64_BODY "<p id=p style='margin:0;width:120px;line-clamp:1'>aa bb cc dd eeeeee ff</p></body>", 320);
+    l61_text_at("aa bb cc dd...", 0, 1);   /* 11 chars, 15 fit */
+    TEST_ASSERT_NULL(find_text("eeeeee ff"));
+    /* exactly the room: 12 chars and the dots fill the 15 */
+    lot52_render(L64_BODY "<p id=p style='margin:0;width:120px;line-clamp:1'>aa bb cc ddd eeeeee</p></body>", 320);
+    l61_text_at("aa bb cc ddd...", 0, 1);
+    l64_box("p", 0, 0, 120, 10);
+}
+
+static void test_l73_line_clamp_not_needed_and_nested(void) {
+    /* enough lines: nothing changes, no diag */
+    lot52_render(L64_BODY L73_CLAMP("3"), 320);
+    l61_text_at("gg hh", 0, 21);
+    l64_box("p", 0, 0, 80, 30);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    lot52_render(L64_BODY L73_CLAMP("none"), 320);
+    l64_box("p", 0, 0, 80, 30);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    /* lines of nested blocks count in order */
+    lot52_render(L64_BODY "<div id=p style='width:80px;line-clamp:2'><p style='margin:0'>one</p><p style='margin:0'>two</p>"
+                 "<p style='margin:0'>three</p></div><div id=n>after</div></body>", 320);
+    l61_text_at("one", 0, 1);
+    l61_text_at("two...", 0, 11);
+    TEST_ASSERT_NULL(find_text("three"));
+    l64_box("p", 0, 0, 80, 20);
+    l64_box("n", 0, 20, 320, 10);
+}
+
+static void test_l73_line_clamp_refusals_and_flow_root(void) {
+    static const char *bad[] = { "0", "100", "2px", "-1", "x" };
+    char page[512];
+    int k;
+    for (k = 0; k < 5; k++) {
+        snprintf(page, sizeof(page), "%s<p id=p style='margin:0;width:80px;line-clamp:%s'>aa bb cc dd ee ff gg hh</p></body>", L64_BODY, bad[k]);
+        lot52_render(page, 320);
+        TEST_ASSERT_TRUE(lot52_has_diag("line clamp refused"));
+        l64_box("p", 0, 0, 80, 30);
+    }
+    lot52_render(L64_BODY "<p style='-webkit-box-orient:diagonal'>x</p></body>", 320);
+    TEST_ASSERT_TRUE(lot52_has_diag("box orient refused"));
+    /* flow-root and -webkit-box are blocks, -webkit-inline-box an inline block */
+    lot52_render(L64_BODY "<span id=p style='display:flow-root;width:40px'>a</span><span id=n style='display:-webkit-inline-box;width:40px'>b</span>"
+                 "<span style='display:-webkit-inline-box;width:40px'>c</span></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l64_box("p", 0, 0, 40, 10);
+    l61_text_at("b", 0, 11);
+    l61_text_at("c", 40, 11);
+}
+
 static void lot73_run(void) {
     RUN_TEST(test_l73_paragraph_split_between_columns);
     RUN_TEST(test_l73_orphans_and_widows);
     RUN_TEST(test_l73_kept_whole);
     RUN_TEST(test_l73_margins_and_inline_children);
     RUN_TEST(test_l73_forced_break_and_refusals);
+    RUN_TEST(test_l73_line_clamp_two_lines);
+    RUN_TEST(test_l73_line_clamp_one_and_room);
+    RUN_TEST(test_l73_line_clamp_not_needed_and_nested);
+    RUN_TEST(test_l73_line_clamp_refusals_and_flow_root);
 }

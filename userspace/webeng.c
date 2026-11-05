@@ -3818,7 +3818,21 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "table-row")) n->display = WE_DISP_ROW;
         else if (value_is(v, vl, "table-cell")) n->display = WE_DISP_CELL;
         else if (value_is(v, vl, "inline-block")) n->display = WE_DISP_INLINE_BLOCK;
+        /* Lot 73: flow-root is a block (floats are contained, margins never
+         * collapse here); the legacy -webkit-box of line clamping is a block */
+        else if (value_is(v, vl, "flow-root") || value_is(v, vl, "-webkit-box")) n->display = WE_DISP_BLOCK;
+        else if (value_is(v, vl, "-webkit-inline-box")) n->display = WE_DISP_INLINE_BLOCK;
         else diag(d, "display refused", -1);
+    } else if (w_eq(prop, "-webkit-line-clamp") || w_eq(prop, "line-clamp")) {
+        /* Lot 73: a number of lines (1..99) or none */
+        int k = 0, value = 0;
+        while (k < vl && v[k] >= '0' && v[k] <= '9' && value < 1000) value = value * 10 + (v[k++] - '0');
+        if (value_is(v, vl, "none")) n->line_clamp = 0;
+        else if (k != vl || vl == 0 || value < 1 || value > 99) diag(d, "line clamp refused", -1);
+        else n->line_clamp = (uint8_t)value;
+    } else if (w_eq(prop, "-webkit-box-orient")) {
+        if (!value_is(v, vl, "vertical") && !value_is(v, vl, "horizontal") && !value_is(v, vl, "block-axis") && !value_is(v, vl, "inline-axis"))
+            diag(d, "box orient refused", -1);
     } else if (w_eq(prop, "flex-direction")) {
         if (value_is(v, vl, "row") || value_is(v, vl, "row-reverse")) {
             n->flex_dir = 0;
@@ -4481,7 +4495,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->shadow_count = 0;
         n->deco_line = n->deco_color_set = 0; n->deco_style = WE_BS_SOLID; n->deco_thick = 1;
         n->spacing_pct = 0; n->grad_dir = 0;
-        n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING; n->text_overflow = 0;
+        n->bg_clip = WE_BOX_BORDER; n->bg_origin = WE_BOX_PADDING; n->text_overflow = 0; n->line_clamp = 0;
         bgi_reset(n);
         w_zero(n->rad_x, sizeof(n->rad_x)); w_zero(n->rad_y, sizeof(n->rad_y)); n->rad_pct = 0;
         n->text_transform = p ? p->text_transform : WE_TT_NONE;
@@ -7157,6 +7171,7 @@ static void shadow_fill(we_doc_t *d, int idx, int inset, int slot, int slots, in
 }
 
 static int inside(const we_doc_t *d, int node, int root);
+static void ellipsis_cut(os_fb_web_item_t *it, int keep_px);
 
 /* Lot 64: direction rtl in a flex or grid container. The items are laid
  * out left to right and then mirrored inside the content box with their
@@ -7687,6 +7702,50 @@ static int layout_vertical(we_doc_t *d, int idx, int ox, int oy, int width, int 
     return size;
 }
 
+/* ---------- Lot 73: line clamp ----------
+ * A block with -webkit-line-clamp (or line-clamp) N shows its first N
+ * lines: the items of later lines are dropped, its content height ends
+ * at the bottom of line N, and the last run of line N ends with "..."
+ * (three ASCII dots, cut to fit the content box). Lines are the line
+ * boxes of its whole content in order, nested blocks included. */
+static int line_clamp_apply(we_doc_t *d, int idx, int first, int top, int right, int content_h) {
+    int line_h = flow_line_h(d, idx), lines = 0, limit = d->nodes[idx].line_clamp, cut_top = -1, cut_bottom = 0;
+    int open_top = 0, open_bottom = -1, last = -1, i;
+    for (i = first; i < (int)d->nitems; i++) {
+        const os_fb_web_item_t *it = &d->items[i];
+        int t, b;
+        if (!it->kind || !inside(d, d->item_owner[i], idx) || (it->kind != OS_FB_WEB_TEXT && it->kind != OS_FB_WEB_IMAGE)) continue;
+        t = it->kind == OS_FB_WEB_TEXT ? it->y - 1 : it->y;
+        b = it->kind == OS_FB_WEB_TEXT ? t + line_h : it->y + it->h;
+        if (open_bottom >= 0 && t < open_bottom) { if (b > open_bottom) open_bottom = b; if (t < open_top) open_top = t; continue; }
+        if (++lines > limit) { cut_top = t; break; }
+        open_top = t; open_bottom = b;
+        cut_bottom = b;
+    }
+    if (cut_top < 0) return content_h;
+    for (i = first; i < (int)d->nitems; i++) {
+        os_fb_web_item_t *it = &d->items[i];
+        int t;
+        if (!it->kind || !inside(d, d->item_owner[i], idx) || d->item_owner[i] == idx) continue;
+        t = it->kind == OS_FB_WEB_TEXT ? it->y - 1 : it->y;
+        if (t >= cut_top) { it->kind = 0; it->pad = WE_ITEM_RESERVED; continue; }
+        if (it->kind == OS_FB_WEB_TEXT && t >= open_top && (last < 0 || it->x + it->w > d->items[last].x + d->items[last].w)) last = i;
+    }
+    if (last >= 0) {
+        os_fb_web_item_t *it = &d->items[last];
+        int cw = it->h > 8 ? it->h : WE_CHAR_W, len = w_len(it->text), k;
+        int room = (right - it->x) / cw;
+        if (room > OS_FB_WEB_TEXT_LEN - 1) room = OS_FB_WEB_TEXT_LEN - 1;
+        if (len + 3 <= room) {
+            for (k = 0; k < 3; k++) it->text[len + k] = '.';
+            it->text[len + 3] = 0;
+            it->w = (uint16_t)((len + 3) * cw);
+        } else ellipsis_cut(it, room * cw);
+    }
+    diag(d, "line clamp", idx);
+    return cut_bottom - top;
+}
+
 static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     we_node_t* n = &d->nodes[idx];
     int bx, by, bw, bh, content_x, content_w, content_h, slot, border_slot = -1;
@@ -7752,8 +7811,11 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         int extent, automatic = forced_width[idx] < 0 && width_auto(n);
         content_h = layout_vertical(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], automatic ? -1 : content_w, &extent, depth);
         if (automatic) bw = limit_coord(extent + box_edge(n, 1) + box_edge(n, 3) + n->padding[1] + n->padding[3]);
-    } else
-        content_h = layout_content(d, idx, content_x, by + box_edge(n, 0) + n->padding[0], content_w, depth);
+    } else {
+        int clamp_first = (int)d->nitems, top = by + box_edge(n, 0) + n->padding[0];
+        content_h = layout_content(d, idx, content_x, top, content_w, depth);
+        if (n->line_clamp) content_h = line_clamp_apply(d, idx, clamp_first, top, content_x + content_w, content_h);
+    }
     if (resolved_height[idx] >= 0) content_h = resolved_height[idx];
     else if (n->aspect_num && !w_eq(n->tag, "img")) {
         int ratio = ratio_height(n, bw - node_border_extra(n));

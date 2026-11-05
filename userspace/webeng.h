@@ -334,6 +334,7 @@ typedef struct {
     /* Lot 62: inherited text-transform (WE_TT_*) and text shadows. */
     uint8_t text_transform, tshadow_count;
     uint8_t text_overflow;      /* lot 62: 1 ellipsis (with overflow hidden) */
+    uint8_t line_clamp;         /* lot 73: -webkit-line-clamp / line-clamp lines (0 none) */
     int8_t letter_spacing, word_spacing; /* lot 62: px added per glyph / per space, inherited */
     uint8_t align_last, justify_none;    /* lot 62: text-align-last (0 auto, else 1 + WE_ALIGN_*), text-justify none */
     /* Lot 63: generated content. pseudo_kind marks a ::before/::after box
