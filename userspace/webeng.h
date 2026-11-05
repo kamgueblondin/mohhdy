@@ -359,6 +359,8 @@ typedef struct {
     int8_t z_index;            /* absolute paint order, -8..8 */
     uint8_t z_set, clear_side, valign;
     uint8_t fixed;             /* lot 61: position:fixed (absolute + viewport) */
+    uint8_t sticky;            /* lot 74: position:sticky (relative + the scroll shift) */
+    int16_t sticky_dy;         /* lot 74: the current shift of a sticky box */
     uint8_t collapse_w;        /* lot 61: shared cell border width, layout time */
     /* Lot 61 border edges, top right bottom left. edge_w -1 and style 0
      * mean "use border / border_style". Only collapsed tables read them. */

@@ -4246,10 +4246,11 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (parse_len(v, vl, &px, 0) == 0 && px >= -32 && px <= 32) n->vshift_own = (int8_t)-px;
         else diag(d, "vertical align refused", -1);
     } else if (w_eq(prop, "position")) {
-        if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = n->fixed = 0; }
-        else if (value_is(v, vl, "absolute")) { n->absolute = 1; n->relative = n->fixed = 0; }
-        else if (value_is(v, vl, "fixed")) { n->absolute = n->fixed = 1; n->relative = 0; }
-        else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = n->fixed = 0; }
+        if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = n->fixed = n->sticky = 0; }
+        else if (value_is(v, vl, "absolute")) { n->absolute = 1; n->relative = n->fixed = n->sticky = 0; }
+        else if (value_is(v, vl, "fixed")) { n->absolute = n->fixed = 1; n->relative = n->sticky = 0; }
+        else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = n->fixed = n->sticky = 0; }
+        else if (value_is(v, vl, "sticky") || value_is(v, vl, "-webkit-sticky")) { n->relative = n->sticky = 1; n->absolute = n->fixed = 0; }
         else diag(d, "position refused", -1);
     } else if (w_eq(prop, "caption-side")) {
         /* lot 73 */
@@ -4693,7 +4694,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->auto_col = -1; n->auto_row = WE_TRACK_AUTO;
         n->auto_col_floor = n->auto_row_floor = n->auto_col_cap = n->auto_row_cap = -1;
         n->relative = n->absolute = n->flex_reverse = n->margin_auto = n->border_collapse = 0;
-        n->fixed = 0;
+        n->fixed = n->sticky = 0;
         n->border_style = n->collapse_cell = 0;
         border_edges_reset(n);
         n->item_order = 0;
@@ -6442,7 +6443,7 @@ static void relative_shift(we_doc_t *d, int idx, int first_item, int containing_
     int dx = n->offset_x, dy = n->offset_y;
     int low = containing_x - n->x, high = containing_x + containing_w - n->x - n->w;
     uint32_t i;
-    if (!n->relative) return;
+    if (!n->relative || n->sticky) return;   /* lot 74: sticky moves with the scroll (sticky_apply) */
     dx = n->inset_flags & WE_INSET_LEFT ? math_value(n, WE_LEN_LEFT, containing_w, dx) :
          n->inset_flags & WE_INSET_RIGHT ? -math_value(n, WE_LEN_RIGHT, containing_w, n->offset_r) : 0;
     if (high < low) dx = 0;
@@ -11761,6 +11762,50 @@ static void raise_fixed(we_doc_t *d) {
     for (i = 0; i < count; i++) { d->items[i] = output[i]; d->item_owner[i] = owners[i]; }
 }
 
+/* Lot 74: position:sticky. A sticky box with top (else bottom) stays in
+ * its flow place until the scroll would carry it past top px from the
+ * viewport top (bottom px from its bottom); then it shifts with the
+ * scroll, never out of its parent's content box. The shift moves its
+ * subtree and their items (like a relative offset). */
+static void sticky_move(we_doc_t *d, int idx, int dy) {
+    uint32_t i;
+    if (!dy) return;
+    for (i = (uint32_t)idx; i < d->nnodes; i++)
+        if ((int)i == idx || inside(d, (int)i, idx)) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + dy);
+    for (i = 0; i < d->nitems; i++) {
+        int o = d->item_owner[i];
+        if (o >= 0 && (o == idx || inside(d, o, idx))) d->items[i].y = (int16_t)limit_coord(d->items[i].y + dy);
+    }
+}
+
+static void sticky_apply(we_doc_t *d) {
+    uint32_t i;
+    for (i = 1; i < d->nnodes; i++) {
+        we_node_t *n = &d->nodes[i];
+        const we_node_t *p;
+        int base, want, top, bottom;
+        if (!n->sticky || n->display == WE_DISP_NONE || n->parent < 0) continue;
+        if (!(n->inset_flags & (WE_INSET_TOP | WE_INSET_BOTTOM))) continue;
+        p = &d->nodes[n->parent];
+        base = n->y - n->sticky_dy;
+        top = p->y + p->border + p->padding[0];
+        bottom = p->y + p->h - p->border - p->padding[2];
+        if (n->inset_flags & WE_INSET_TOP) {
+            int t = math_value(n, WE_LEN_TOP, d->viewport_h, n->offset_y);
+            want = d->scroll_y + t - base;
+            if (want > bottom - base - n->h) want = bottom - base - n->h;
+            if (want < 0) want = 0;
+        } else {
+            int b = math_value(n, WE_LEN_BOTTOM, d->viewport_h, n->offset_b);
+            want = d->scroll_y + d->viewport_h - b - (base + n->h);
+            if (want < top - base) want = top - base;
+            if (want > 0) want = 0;
+        }
+        sticky_move(d, (int)i, want - n->sticky_dy);
+        n->sticky_dy = (int16_t)want;
+    }
+}
+
 int we_scroll(we_doc_t* d, int y) {
     int limit, dy, i;
     if (!d) return 0;
@@ -11775,6 +11820,7 @@ int we_scroll(we_doc_t* d, int y) {
     for (i = 0; i < (int)d->nnodes; i++)
         if (fixed_owner(d, i)) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + dy);
     d->scroll_y = (int16_t)y;
+    sticky_apply(d);
     return y;
 }
 
@@ -11797,6 +11843,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     { uint32_t i; int bit; for (i = 0; i < d->nnodes; i++) {
         we_node_t *n = &d->nodes[i];
         n->x = n->y = n->w = n->h = 0;
+        n->sticky_dy = 0;
         for (bit = 0; bit < 8; bit++) if (n->spacing_pct & (1u << bit)) {
             if (bit < 4) n->margin[bit] = 0; else n->padding[bit - 4] = 0;
         }
@@ -11840,6 +11887,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     raise_fixed(d);
     clip_display_list(d);
     composite_items(d);
+    sticky_apply(d);   /* lot 74: at scroll 0 */
     { uint32_t i; for (i = 0; i < d->nitems; i++) d->items[i].pad = 0; }
     /* Lot 69: a TEXT item carries its font scale in pad (quarters, 0 or 4
      * = the 8x8 cell); the kernel draws its glyphs at web zoom * pad / 4. */

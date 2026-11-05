@@ -238,6 +238,63 @@ static void test_l74_target(void) {
     we_set_forms(&g_doc, 0);
 }
 
+/* Lot 74: position:sticky follows the scroll inside its parent */
+static int l74_red_y(void) {
+    uint32_t k;
+    for (k = 0; k < g_doc.nitems; k++)
+        if (g_doc.items[k].kind == OS_FB_WEB_RECT && g_doc.items[k].color == 0xff0000) return g_doc.items[k].y;
+    return -1;
+}
+static void test_l74_sticky(void) {
+    static const char *page = "<body style='margin:0'><div style='height:50px'>top</div>"
+        "<div id=box style='height:400px'><h1 id=s style='position:sticky;top:5px;height:20px;margin:0;background:#ff0000'>S</h1>"
+        "<p id=x style='margin:0'>x</p></div><div style='height:900px'>after</div>"
+        "<div id=b2 style='height:300px'><div style='height:200px'></div><p id=bt style='position:-webkit-sticky;bottom:10px;margin:0;height:10px'>B</p></div>"
+        "<div id=n style='position:sticky;height:10px'>no inset</div></body>";
+    lot52_render(page, 400);
+    TEST_ASSERT_EQUAL(0, we_layout_viewport(&g_doc, 400, 200));
+    TEST_ASSERT_EQUAL(0, l61_diag_count("position refused"));
+    TEST_ASSERT_EQUAL(50, lot52_node("s")->y);
+    TEST_ASSERT_EQUAL(50, l74_red_y());
+    TEST_ASSERT_EQUAL(70, lot52_node("x")->y);          /* the flow keeps its place */
+    TEST_ASSERT_EQUAL(40, we_scroll(&g_doc, 40));
+    TEST_ASSERT_EQUAL(50, lot52_node("s")->y);          /* not reached yet */
+    we_scroll(&g_doc, 100);
+    TEST_ASSERT_EQUAL(105, lot52_node("s")->y);
+    TEST_ASSERT_EQUAL(105, l74_red_y());
+    TEST_ASSERT_EQUAL(70, lot52_node("x")->y);
+    we_scroll(&g_doc, 300);
+    TEST_ASSERT_EQUAL(305, l74_red_y());
+    we_scroll(&g_doc, 500);
+    TEST_ASSERT_EQUAL(430, lot52_node("s")->y);         /* the bottom of its parent */
+    TEST_ASSERT_EQUAL(430, l74_red_y());
+    TEST_ASSERT(find_text("S") != NULL && find_text("S")->y == 431);
+    /* bottom: it rises from its flow place while the viewport bottom is above it */
+    TEST_ASSERT_EQUAL(1550, lot52_node("bt")->y - lot52_node("bt")->sticky_dy);
+    we_scroll(&g_doc, 1100);
+    TEST_ASSERT_EQUAL(1350, lot52_node("bt")->y);       /* the top of its parent */
+    we_scroll(&g_doc, 1300);
+    TEST_ASSERT_EQUAL(1480, lot52_node("bt")->y);       /* 1300 + 200 - 10 - 10 */
+    we_scroll(&g_doc, 1450);
+    TEST_ASSERT_EQUAL(1550, lot52_node("bt")->y);
+    TEST_ASSERT_EQUAL(0, lot52_node("n")->sticky_dy);   /* no inset: no shift */
+    /* back to the top: every shift undone */
+    we_scroll(&g_doc, 0);
+    TEST_ASSERT_EQUAL(50, lot52_node("s")->y);
+    TEST_ASSERT_EQUAL(50, l74_red_y());
+    TEST_ASSERT_EQUAL(1350, lot52_node("bt")->y);       /* far below the viewport: at its parent top */
+    /* a new layout starts unshifted; position:static ends it */
+    we_scroll(&g_doc, 300);
+    TEST_ASSERT_EQUAL(0, we_layout_viewport(&g_doc, 400, 200));
+    TEST_ASSERT_EQUAL(50, lot52_node("s")->y);
+    lot52_render("<style>#s{position:static!important}</style><body style='margin:0'><div style='height:400px'>"
+                 "<h1 id=s style='position:sticky;top:0;height:20px;margin:0'>S</h1></div><div style='height:900px'></div></body>", 400);
+    TEST_ASSERT_EQUAL(0, we_layout_viewport(&g_doc, 400, 200));
+    we_scroll(&g_doc, 100);
+    TEST_ASSERT_EQUAL(0, lot52_node("s")->y);           /* !important static beats the attribute */
+    TEST_ASSERT_EQUAL(0, lot52_node("s")->sticky);
+}
+
 static void lot74_css_run(void) {
     RUN_TEST(test_l74_layer_order_statement);
     RUN_TEST(test_l74_layer_important_reversed);
@@ -247,4 +304,5 @@ static void lot74_css_run(void) {
     RUN_TEST(test_l74_rowspan_row_background);
     RUN_TEST(test_l74_has_anchored);
     RUN_TEST(test_l74_target);
+    RUN_TEST(test_l74_sticky);
 }
