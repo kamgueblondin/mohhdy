@@ -7,6 +7,7 @@
 #include "wf_http.h"
 #include "wf_tls.h"
 #include "wf_cookie.h"
+#include "wf_cache.h"
 
 #define WF_FETCH_MAX_REDIRECTS 5
 
@@ -28,6 +29,8 @@ typedef struct {
     int keepalive;            /* Lot 72: 1 = HTTP keep-alive, the last connection (TLS session
                                * included) is kept and reused for the same scheme/host/port */
     uint16_t tls_suite;       /* Lot 72: 0 = offer every TLS suite, else only this one */
+    wf_cache_t* cache;        /* Lot 73: 0 = no HTTP cache; else plain GETs use it (wf_cache.h) */
+    uint32_t now_s;           /* Lot 73: cache clock, seconds */
 } wf_fetch_env_t;
 
 typedef struct {
@@ -51,6 +54,8 @@ typedef struct {
     int time_checked;
     int reused;               /* Lot 72: hops sent on a kept-alive connection */
     int connections;          /* Lot 72: new TCP (+TLS) connections opened */
+    int cached;               /* Lot 73: 1 served fresh from the cache (no request),
+                               * 2 revalidated (304, cached body), 0 from the network */
     char err[160];
 } wf_fetch_result_t;
 

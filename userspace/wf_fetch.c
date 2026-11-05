@@ -239,6 +239,29 @@ connected:
     return 0;
 }
 
+/* Lot 73: the final answer of a plain GET (no redirect) and the cache:
+ * 304 for a stale entry serves its body, 200 is stored when allowed */
+static void cache_after(const wf_fetch_env_t* env, const char* key, int idx, uint8_t* body, int cap, wf_fetch_result_t* res) {
+    static wf_cache_meta_t m;
+    wf_cache_meta(g_resp.hdr, g_resp.hdr_len, &m);
+    if (res->status == 304 && idx >= 0) {
+        int n = wf_cache_body(env->cache, idx, body, cap);
+        if (n < 0) return;
+        wf_cache_refresh(env->cache, idx, &m, env->now_s);
+        res->status = 200;
+        res->body_len = n;
+        res->truncated = 0;
+        scopy(res->content_type, (int)sizeof(res->content_type), env->cache->e[idx].ctype);
+        res->cached = 2;
+        logf2(env, "cache revalidated ", key);
+        return;
+    }
+    if (res->status == 200 && !res->truncated) {
+        if (wf_cache_store(env->cache, key, &m, res->content_type, body, res->body_len, env->now_s) >= 0)
+            logf2(env, "cache stored ", key);
+    } else if (res->status != 304) (void)wf_cache_drop(env->cache, key);
+}
+
 int wf_fetch(const wf_fetch_env_t* env, const char* url, uint8_t* body, int cap, wf_fetch_result_t* res) {
     return wf_fetch_ex(env, url, 0, body, cap, res);
 }
@@ -246,14 +269,47 @@ int wf_fetch(const wf_fetch_env_t* env, const char* url, uint8_t* body, int cap,
 int wf_fetch_ex(const wf_fetch_env_t* env, const char* url, const wf_fetch_req_t* req0, uint8_t* body, int cap,
                 wf_fetch_result_t* res) {
     static wf_url_t u, next;
-    static wf_fetch_req_t rq;
+    static wf_fetch_req_t rq, vrq;
+    static char key[WF_CACHE_URL], vext[1024];
     const wf_fetch_req_t* req = req0;
-    int max = env->max_redirects, i;
+    int max = env->max_redirects, i, plain, cache_idx;
     uint8_t* z = (uint8_t*)res;
     for (i = 0; i < (int)sizeof(*res); i++) z[i] = 0;
     if (max < 0) max = 0;
     if (max > WF_FETCH_MAX_REDIRECTS) max = WF_FETCH_MAX_REDIRECTS;
     if (wf_url_parse(url, &u) != 0) { scopy(res->err, (int)sizeof(res->err), "bad URL"); return -1; }
+    cache_idx = -1;
+    plain = env->cache && (!req0 || ((!req0->method || seq(req0->method, "GET")) && !req0->body));
+    if (plain) {
+        int state;
+        wf_url_format(&u, key, (int)sizeof(key));
+        state = wf_cache_lookup(env->cache, key, env->now_s, &cache_idx);
+        if (state == WF_CACHE_FRESH) {
+            int n = wf_cache_body(env->cache, cache_idx, body, cap);
+            if (n >= 0) {
+                scopy(res->url, (int)sizeof(res->url), key);
+                scopy(res->content_type, (int)sizeof(res->content_type), env->cache->e[cache_idx].ctype);
+                res->status = 200;
+                res->body_len = n;
+                res->cached = 1;
+                logf2(env, "cache fresh ", key);
+                return 0;
+            }
+        }
+        if (state == WF_CACHE_STALE) {
+            /* the validators go after the caller's extra lines */
+            int el = 0, vl;
+            const char* ex0 = req0 ? req0->extra : 0;
+            if (ex0) while (ex0[el] && el < (int)sizeof(vext) - 1) { vext[el] = ex0[el]; el++; }
+            vext[el] = 0;
+            vl = (ex0 && ex0[el]) ? -1 : wf_cache_validators(env->cache, cache_idx, vext + el, (int)sizeof(vext) - el);
+            if (vl > 0) {
+                if (req0) vrq = *req0; else { vrq.method = 0; vrq.body = 0; vrq.body_len = 0; vrq.ctype = 0; }
+                vrq.extra = vext;
+                req = &vrq;
+            }
+        } else cache_idx = -1;
+    }
     for (i = 0;; i++) {
         wf_url_format(&u, res->url, (int)sizeof(res->url));
         logf2(env, req && req->method ? "POST " : "GET ", res->url);
@@ -269,9 +325,11 @@ int wf_fetch_ex(const wf_fetch_env_t* env, const char* url, const wf_fetch_req_t
                 if (one(env, &u, req, body, cap, res, &stale) != 0) return -1;
             }
         }
-        if (!(res->status == 301 || res->status == 302 || res->status == 303 || res->status == 307 || res->status == 308))
+        if (!(res->status == 301 || res->status == 302 || res->status == 303 || res->status == 307 || res->status == 308) ||
+            !g_resp.location[0]) {
+            if (plain && res->redirects == 0) cache_after(env, key, cache_idx, body, cap, res);
             return 0;
-        if (!g_resp.location[0]) return 0;
+        }
         if (i >= max) {
             scopy(res->err, (int)sizeof(res->err), "too many redirects");
             return -1;
@@ -285,6 +343,7 @@ int wf_fetch_ex(const wf_fetch_env_t* env, const char* url, const wf_fetch_req_t
             return -1;
         }
         logf2(env, "redirect -> ", g_resp.location);
+        if (req == &vrq) req = req0;          /* Lot 73: validators are for the first URL only */
         if (req) {
             /* 301/302/303 after a POST: GET without body; the extra headers
              * (API keys) never follow to another host */

@@ -303,6 +303,15 @@ void wf_guest_set_keepalive(int on) { g_keepalive = on ? 1 : 0; }
 int wf_guest_keepalive(void) { return g_keepalive; }
 void wf_guest_set_tls_suite(uint16_t id) { g_tls_suite = id; }
 uint16_t wf_guest_tls_suite(void) { return g_tls_suite; }
+/* Lot 73: the HTTP cache of plain GETs (on by default), clock in seconds */
+static wf_cache_t g_cache;
+static int g_cache_on = 1, g_cache_ready;
+void wf_guest_set_cache(int on) { g_cache_on = on ? 1 : 0; }
+int wf_guest_cache_on(void) { return g_cache_on; }
+wf_cache_t* wf_guest_cache(void) {
+    if (!g_cache_ready) { wf_cache_init(&g_cache); g_cache_ready = 1; }
+    return &g_cache;
+}
 
 int wf_guest_fetch_ex(const char* url, const wf_fetch_req_t* req, uint8_t* body, int cap, wf_fetch_result_t* res,
                       wf_guest_log_fn log) {
@@ -324,6 +333,8 @@ int wf_guest_fetch_ex(const char* url, const wf_fetch_req_t* req, uint8_t* body,
     e.jar = wf_guest_cookies();   /* Lot 71: shared by fetch, the browser, forms and search */
     e.keepalive = g_keepalive;
     e.tls_suite = g_tls_suite;
+    e.cache = g_cache_on ? wf_guest_cache() : 0;
+    e.now_s = ticks() / 100U;
     if (ifc_get(&g.ifc) != 0) {
         const char* m = "no network interface (no DHCP lease: boot with -netdev user + ne2k_isa)";
         for (i = 0; i < (int)sizeof(res->err) - 1 && m[i]; i++) res->err[i] = m[i];
