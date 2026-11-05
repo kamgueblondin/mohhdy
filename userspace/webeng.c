@@ -282,6 +282,7 @@ static void unlink_last(we_doc_t *d, int parent, int old_last);
 #include "webeng_forms.inc"
 #include "webeng_hints.inc"
 #include "webeng_finput.inc"   /* lot 74 */
+#include "webeng_iframe.inc"
 
 int we_parse(we_doc_t* d, const char* html, int len) {
     int stack[WE_DEPTH_MAX];
@@ -406,7 +407,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                         } else if (!w_eq(an, "rowspan")) n->colspan = (uint8_t)span;
                         else n->rowspan = (uint8_t)span;
                     }
-                    else if (w_eq(an, "src")) {
+                    else if (w_eq(an, "src") && !w_eq(name, "iframe")) {
                         if (pool_put(d, av, vk, &n->src_off) == 0) n->src_len = (uint16_t)vk;
                     }
                     else if (w_eq(an, "href")) { if (pool_put(d, av, vk, &n->href_off) == 0) n->href_len = (uint16_t)vk; }
@@ -415,6 +416,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                         if (list_number(av, vk, &number)) diag(d, "list number refused", idx);
                         else { n->list_value = (int16_t)number; n->list_value_set = 1; }
                     }
+                    else if (w_eq(name, "iframe") && iframe_attr(d, idx, an, av, vk)) {}
                     else if (forms_tag(name) && !w_eq(an, "dir")) forms_attr(d, idx, an, av, vk);
                     else if (w_eq(an, "reversed") && w_eq(name, "ol")) n->list_reversed = 1;
                     else if (w_eq(an, "dir")) {
@@ -472,6 +474,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
         }
         i++;
     }
+    iframe_expand(d);  /* lot 74: before forms_build so controls inside srcdoc exist */
     forms_build(d);   /* lot 73 */
     d->perf.nodes = d->nnodes;
     return 0;
@@ -4605,7 +4608,7 @@ static void apply_decls(we_doc_t* d, we_node_t* n, const char* s, int len, int i
 }
 
 static const char* const k_block[] = { "html", "body", "div", "p", "h1", "h2", "h3", "h4", "ul", "ol", "li",
-    "section", "header", "footer", "nav", "article", "main", "pre", "blockquote", "hr", "form", "table", "tr", "aside", 0 };
+    "section", "header", "footer", "nav", "article", "main", "pre", "blockquote", "hr", "form", "table", "tr", "aside", "iframe", "dialog", 0 };
 static const char* const k_hidden[] = { "head", "style", "script", "meta", "link", "template", 0 };
 
 static void ua_defaults(we_node_t* n) {
@@ -4647,6 +4650,13 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "hr")) { n->height = 2; n->bg = 0x808080; n->has_bg = 1; n->margin[0] = 6; n->margin[2] = 6; }
     if (w_eq(t, "blockquote")) { n->margin[3] = 24; n->margin[1] = 24; }
     if (w_eq(t, "pre")) { n->display = WE_DISP_BLOCK; n->ws_mode = WE_WS_PRE; n->nowrap = 1; }
+    if (w_eq(t, "iframe")) {
+        n->display = WE_DISP_BLOCK;
+        n->border = 1; n->border_style = 1; n->border_color = 0x808080;
+        if (n->width < 0) n->width = 300;
+        if (n->height < 0) { n->height = 150; n->min_height = -1; }
+        n->overflow_axes = 3; n->overflow_hidden = 1; n->overflow_scroll = 2;
+    }
 }
 
 /* Lot 74: the layer step of the cascade, applied first to last: normal

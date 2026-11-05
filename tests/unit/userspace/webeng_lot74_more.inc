@@ -1,4 +1,4 @@
-/* Lot 74: @font-face refusal, table-layout:fixed, pattern=, dialog, scrollbars */
+/* Lot 74: @font-face, table-layout:fixed, pattern=, dialog, scrollbars, iframe srcdoc */
 
 static void test_l74_font_face(void) {
     lot52_render("<style>@font-face{font-family:X;src:url(a.woff)}p{color:#000001}</style>"
@@ -88,10 +88,24 @@ static void test_l74_scrollbar(void) {
     TEST_ASSERT_EQUAL(0, g_doc.nodes[lot52_node("box") - g_doc.nodes].overflow_scroll);
 }
 
+static void test_l74_iframe_srcdoc(void) {
+    lot52_render("<body style='margin:0'><iframe id=f srcdoc='<p id=in style=\"color:#000001\">hi</p>'></iframe>"
+                 "<iframe id=g src='http://x/'></iframe></body>", 400);
+    TEST_ASSERT_TRUE(g_doc.nodes[lot52_node("f") - g_doc.nodes].attr_flags & 64);
+    TEST_ASSERT_EQUAL(1, l73c("in"));
+    TEST_ASSERT_EQUAL(1, l61_diag_count("iframe src refused"));
+    /* nested srcdoc refused */
+    lot52_render("<body><iframe id=f srcdoc='<iframe srcdoc=\"<p id=x>x</p>\"></iframe><p id=y>y</p>'></iframe></body>", 400);
+    TEST_ASSERT_EQUAL(1, l61_diag_count("iframe nested srcdoc refused"));
+    TEST_ASSERT_EQUAL(-1, we_find_id(&g_doc, "x"));
+    TEST_ASSERT_TRUE(we_find_id(&g_doc, "y") > 0);
+}
+
 static void lot74_more_tests(void) {
     RUN_TEST(test_l74_font_face);
     RUN_TEST(test_l74_table_fixed);
     RUN_TEST(test_l74_pattern);
     RUN_TEST(test_l74_dialog);
     RUN_TEST(test_l74_scrollbar);
+    RUN_TEST(test_l74_iframe_srcdoc);
 }
