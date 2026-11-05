@@ -382,6 +382,9 @@ static void test_l73_selector_has_and_form_states(void) {
     TEST_ASSERT_EQUAL(2, l73c("a"));                  /* div:has(#x, p) = div#a = 4097: the later one wins */
     TEST_ASSERT_EQUAL(1, l73c("b"));
     TEST_ASSERT_EQUAL(2, l61_diag_count("css selector unsupported"));
+    /* a state pseudo-class counts as a class: a:link beats a later a */
+    lot52_render("<style>a:link{color:#000001}a{color:#000002}</style>" L64_BODY "<a id=a href=x>t</a></body>", 320);
+    TEST_ASSERT_EQUAL(1, l73c("a"));
 }
 
 static void lot73_cssq_run(void) {
