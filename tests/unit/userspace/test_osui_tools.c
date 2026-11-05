@@ -322,6 +322,144 @@ static void test_chat_streams_and_cancels(void) {
     TEST_ASSERT_EQUAL(OSUI_TOOL_CLOSE, osui_tool_tool(&t, 5, &k_src));
 }
 
+/* ---- Lot 73: animated GIF in the viewer ---- */
+#include "imgdec_anim_samples.h"
+static int gif_read(const char *path, char *buf, int max) {
+    const unsigned char *g; int n;
+    if (!strcmp(path, "/home/a.gif")) { g = gif_anim_a; n = (int)sizeof(gif_anim_a); }
+    else if (!strcmp(path, "/home/b.gif")) { g = gif_anim_b; n = (int)sizeof(gif_anim_b); }
+    else if (!strcmp(path, "/home/one.gif")) { g = gif_anim_b; n = 48; }   /* cut inside frame 2 */
+    else return fake_read(path, buf, max);
+    if (n > max) n = max;
+    memcpy(buf, g, (size_t)n);
+    return n;
+}
+static const osui_tool_src_t k_gif_src = { fake_run, gif_read, fake_ai, fake_model, fake_screen, 0, 0 };
+static osui_tool_t g_vt;
+
+static int view_is(const unsigned char *canvas, int w, int h) {
+    return g_vt.img_w == w && g_vt.img_h == h && memcmp(osui_tool_image_rgb(), canvas, (size_t)(w * h * 3)) == 0;
+}
+
+static void test_view_gif_plays_frames(void) {
+    unsigned gen;
+    memset(&g_vt, 0, sizeof(g_vt));
+    osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/a.gif", &k_gif_src);
+    TEST_ASSERT_EQUAL(1, g_vt.image);
+    TEST_ASSERT_EQUAL(1, g_vt.anim);
+    TEST_ASSERT_NOT_NULL(strstr(g_vt.lines[0], "image 8x6 affichee en pixels 8x6 fmt=gif zoom=fit anim"));
+    TEST_ASSERT_NOT_NULL(strstr(g_vt.status, "espace pause"));
+    TEST_ASSERT_TRUE(view_is(gif_anim_a_canvas[0], 8, 6));
+    gen = g_vt.img_gen;
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 1000));   /* starts the clock: frame 1 lasts 10 */
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 1009));
+    TEST_ASSERT_EQUAL(1, osui_tool_anim_tick(&g_vt, 1010));
+    TEST_ASSERT_EQUAL(gen + 1, g_vt.img_gen);
+    TEST_ASSERT_EQUAL(2, g_vt.anim_frame);
+    TEST_ASSERT_TRUE(view_is(gif_anim_a_canvas[1], 8, 6));
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 1029));   /* frame 2: 20 */
+    TEST_ASSERT_EQUAL(1, osui_tool_anim_tick(&g_vt, 1030));
+    TEST_ASSERT_TRUE(view_is(gif_anim_a_canvas[2], 8, 6));
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 1039));   /* frame 3: 0 plays as 10 */
+    TEST_ASSERT_EQUAL(1, osui_tool_anim_tick(&g_vt, 1040));
+    TEST_ASSERT_TRUE(view_is(gif_anim_a_canvas[3], 8, 6));
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 1044));   /* frame 4: 5 */
+    TEST_ASSERT_EQUAL(1, osui_tool_anim_tick(&g_vt, 1045));   /* loop: back to frame 1 */
+    TEST_ASSERT_EQUAL(1, g_vt.anim_frame);
+    TEST_ASSERT_EQUAL(1, g_vt.anim_plays);
+    TEST_ASSERT_TRUE(view_is(gif_anim_a_canvas[0], 8, 6));
+    TEST_ASSERT_EQUAL(gen + 4, g_vt.img_gen);
+}
+
+static void test_view_gif_loop_count_and_replay(void) {
+    unsigned now = 50;
+    int changes = 0, guard = 0;
+    memset(&g_vt, 0, sizeof(g_vt));
+    osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/a.gif", &k_gif_src);
+    osui_tool_anim_tick(&g_vt, now);
+    /* loop 3: four plays of 4 frames, 15 changes, then the last frame stays */
+    while (!g_vt.anim_done && guard++ < 100) { now += 25; changes += osui_tool_anim_tick(&g_vt, now); }
+    TEST_ASSERT_EQUAL(15, changes);
+    TEST_ASSERT_EQUAL(4, g_vt.anim_plays);
+    TEST_ASSERT_TRUE(view_is(gif_anim_a_canvas[3], 8, 6));
+    TEST_ASSERT_NOT_NULL(strstr(g_vt.status, "animation GIF terminee"));
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, now + 1000));
+    TEST_ASSERT_EQUAL(4, g_vt.anim_plays);           /* a finished play does not read on */
+    /* space replays from frame 1 */
+    TEST_ASSERT_EQUAL(OSUI_TOOL_CHANGED, osui_tool_key(&g_vt, ' ', &k_gif_src));
+    TEST_ASSERT_EQUAL(0, g_vt.anim_done);
+    TEST_ASSERT_EQUAL(0, g_vt.anim_plays);
+    TEST_ASSERT_TRUE(view_is(gif_anim_a_canvas[0], 8, 6));
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 5000));
+    TEST_ASSERT_EQUAL(1, osui_tool_anim_tick(&g_vt, 5010));
+    TEST_ASSERT_TRUE(view_is(gif_anim_a_canvas[1], 8, 6));
+    /* no loop extension: one play */
+    memset(&g_vt, 0, sizeof(g_vt));
+    osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/b.gif", &k_gif_src);
+    TEST_ASSERT_TRUE(view_is(gif_anim_b_canvas[0], 4, 4));
+    osui_tool_anim_tick(&g_vt, 10);
+    TEST_ASSERT_EQUAL(1, osui_tool_anim_tick(&g_vt, 19));       /* delay 9 */
+    TEST_ASSERT_TRUE(view_is(gif_anim_b_canvas[1], 4, 4));
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 28));
+    TEST_ASSERT_EQUAL(1, g_vt.anim_done);
+    TEST_ASSERT_TRUE(view_is(gif_anim_b_canvas[1], 4, 4));
+}
+
+static void test_view_gif_pause_zoom_and_still(void) {
+    unsigned gen;
+    memset(&g_vt, 0, sizeof(g_vt));
+    osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/a.gif", &k_gif_src);
+    osui_tool_anim_tick(&g_vt, 100);
+    TEST_ASSERT_EQUAL(OSUI_TOOL_CHANGED, osui_tool_key(&g_vt, ' ', &k_gif_src));
+    TEST_ASSERT_EQUAL(1, g_vt.anim_paused);
+    TEST_ASSERT_NOT_NULL(strstr(g_vt.status, "pause"));
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 500));
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 700));
+    TEST_ASSERT_EQUAL(1, g_vt.anim_frame);
+    TEST_ASSERT_EQUAL(OSUI_TOOL_CHANGED, osui_tool_key(&g_vt, ' ', &k_gif_src));
+    TEST_ASSERT_EQUAL(0, g_vt.anim_paused);
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 600));     /* the clock starts again */
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 609));
+    TEST_ASSERT_EQUAL(1, osui_tool_anim_tick(&g_vt, 610));
+    /* zoom decodes again: frame 1 at 200 % */
+    TEST_ASSERT_EQUAL(OSUI_TOOL_CHANGED, osui_tool_key(&g_vt, '+', &k_gif_src));
+    TEST_ASSERT_EQUAL(1, g_vt.anim);
+    TEST_ASSERT_EQUAL(1, g_vt.anim_frame);
+    TEST_ASSERT_EQUAL(16, g_vt.img_w);
+    TEST_ASSERT_EQUAL(12, g_vt.img_h);
+    gen = g_vt.img_gen;
+    osui_tool_anim_tick(&g_vt, 700);
+    TEST_ASSERT_EQUAL(1, osui_tool_anim_tick(&g_vt, 710));
+    TEST_ASSERT_EQUAL(gen + 1, g_vt.img_gen);
+    TEST_ASSERT_EQUAL(16, g_vt.img_w);
+    /* a GIF whose second frame is cut shows still */
+    memset(&g_vt, 0, sizeof(g_vt));
+    osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/one.gif", &k_gif_src);
+    TEST_ASSERT_EQUAL(0, g_vt.anim);
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 1));
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 100));
+    TEST_ASSERT_NULL(strstr(g_vt.lines[0], " anim"));
+    TEST_ASSERT_EQUAL(OSUI_TOOL_NONE, osui_tool_key(&g_vt, ' ', &k_gif_src));
+    /* a text file is no animation; a closed viewer does not tick */
+    osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/a.txt", &k_gif_src);
+    TEST_ASSERT_EQUAL(0, g_vt.anim);
+    osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/a.gif", &k_gif_src);
+    g_vt.active = 0;
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 1));
+    TEST_ASSERT_EQUAL(0, g_vt.anim_due);
+}
+
+static void test_view_gif_clock_wraps(void) {
+    memset(&g_vt, 0, sizeof(g_vt));
+    osui_tool_open(&g_vt, OS_FB_APP_VIEW, "/home/a.gif", &k_gif_src);
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 0xFFFFFFF6u));   /* due would be 0 */
+    TEST_ASSERT_EQUAL(1u, g_vt.anim_due);
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 0xFFFFFFFFu));
+    TEST_ASSERT_EQUAL(1, osui_tool_anim_tick(&g_vt, 1));
+    TEST_ASSERT_EQUAL(21u, g_vt.anim_due);
+    TEST_ASSERT_EQUAL(0, osui_tool_anim_tick(&g_vt, 20));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_allowlist);
@@ -334,6 +472,10 @@ int main(void) {
     RUN_TEST(test_p2p_window);
     RUN_TEST(test_pm_run_window);
     RUN_TEST(test_chat_streams_and_cancels);
+    RUN_TEST(test_view_gif_plays_frames);
+    RUN_TEST(test_view_gif_loop_count_and_replay);
+    RUN_TEST(test_view_gif_pause_zoom_and_still);
+    RUN_TEST(test_view_gif_clock_wraps);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

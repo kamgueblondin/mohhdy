@@ -1589,6 +1589,8 @@ void osui_gui_write_snap(char *dst, int max) {
 
 /* Live window content (osui_panes.c), refreshed about once a second. */
 static const osui_pane_src_t *g_pane_src;
+/* Lot 73: the desktop clock (1/100 s) of the viewer animation */
+static unsigned gui_ticks(void) { return (g_pane_src && g_pane_src->ticks) ? g_pane_src->ticks() : 0; }
 static char g_pane_lines[OS_FB_TERM_MAX][OSUI_PANES_LINE];
 static int g_pane_n, g_pane_for = -1;
 static unsigned g_pane_at;

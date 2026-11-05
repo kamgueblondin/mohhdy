@@ -38,12 +38,14 @@ static const char *tool_load(const char *path, int *n) {
 static os_fb_image_t g_img_msg;
 static unsigned g_img_sent_gen;
 static int g_img_sent_slot = -1;
+static unsigned gui_ticks(void);
 static void image_sync(void) {
     osui_tool_t *t = tool_of(OS_FB_APP_VIEW);
     int slot = slot_of(OS_FB_APP_VIEW);
     if (t && t->active && t->image && slot >= 0) {
         int k, n;
         const unsigned char *px = osui_tool_image_rgb();
+        (void)osui_tool_anim_tick(t, gui_ticks());   /* Lot 73: a new GIF frame bumps img_gen */
         if (g_img_sent_slot == slot && g_img_sent_gen == t->img_gen) return;
         g_img_msg.magic = OS_FB_IMG_MAGIC;
         g_img_msg.slot = (uint8_t)slot;

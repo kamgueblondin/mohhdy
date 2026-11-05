@@ -496,9 +496,78 @@ static char g_file[OSUI_TOOL_READ_MAX + 1];
  * the PNG scanlines fit in g_img_scratch (1 MiB, e.g. 512x512 RGBA). */
 #define IMG_SCRATCH (1024U * 1024U + 4096U)
 static unsigned char g_img_scratch[IMG_SCRATCH];
+/* Lot 73: the animation plays from the loaded file (g_file, or the
+ * heap buffer of tool_load, which stays until the next load) with its
+ * canvas in g_img_scratch; a re-decode (zoom) starts it again. */
+static imgdec_t g_anim_img;
+static imgdec_anim_t g_anim;
+static const unsigned char *g_anim_buf;
+static int g_anim_n;
+#define ANIM_MIN_DELAY 10
+
+static int anim_render(osui_tool_t *t) {
+    return imgdec_render(&g_anim_img, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H, t->zoom, t->pan_x, t->pan_y,
+                         &t->img_w, &t->img_h) == IMGDEC_OK ? 0 : -1;
+}
+
+/* first frame composed on a fresh canvas: 1, else 0 */
+static int anim_restart(void) {
+    if (imgdec_probe(g_anim_buf, g_anim_n, &g_anim_img) != IMGDEC_OK) return 0;
+    if (imgdec_anim_begin(g_anim_buf, g_anim_n, &g_anim_img, &g_anim, g_img_scratch, IMG_SCRATCH) != IMGDEC_OK) return 0;
+    return imgdec_anim_next(g_anim_buf, g_anim_n, &g_anim_img, &g_anim, g_img_scratch, IMG_SCRATCH) == 1;
+}
+
+/* a GIF of two frames or more that fits the scratch: its first frame is
+ * shown and t->anim set; 0 when it is still (the plain path shows it) */
+static int view_anim(osui_tool_t *t, const char *buf, int n) {
+    imgdec_t probe;
+    t->anim = 0;
+    if (imgdec_probe((const unsigned char *)buf, n, &probe) != IMGDEC_OK || probe.fmt != IMGDEC_GIF) return 0;
+    if (imgdec_anim_need(&probe) > IMG_SCRATCH) return 0;
+    g_anim_buf = (const unsigned char *)buf; g_anim_n = n;
+    if (!anim_restart()) return 0;
+    if (imgdec_anim_next(g_anim_buf, g_anim_n, &g_anim_img, &g_anim, g_img_scratch, IMG_SCRATCH) != 1) return 0;
+    if (!anim_restart() || anim_render(t) != 0) return 0;
+    t->anim = 1; t->anim_paused = 0; t->anim_done = 0; t->anim_frame = 1; t->anim_plays = 0; t->anim_due = 0;
+    t->img_src_w = g_anim_img.w; t->img_src_h = g_anim_img.h; t->img_fmt = IMGDEC_GIF;
+    return 1;
+}
+
+static int anim_delay(void) { return g_anim.delay_cs < 2 ? ANIM_MIN_DELAY : g_anim.delay_cs; }
+
+static void anim_schedule(osui_tool_t *t, unsigned now) {
+    t->anim_due = now + (unsigned)anim_delay();
+    if (!t->anim_due) t->anim_due = 1;   /* 0 means not started */
+}
+
+int osui_tool_anim_tick(osui_tool_t *t, unsigned now) {
+    int rc;
+    if (!t || !t->active || t->kind != OS_FB_APP_VIEW || !t->image || !t->anim || t->anim_paused || t->anim_done) return 0;
+    if (!t->anim_due) anim_schedule(t, now);   /* the first call starts the clock */
+    if ((int)(now - t->anim_due) < 0) return 0;
+    rc = imgdec_anim_next(g_anim_buf, g_anim_n, &g_anim_img, &g_anim, g_img_scratch, IMG_SCRATCH);
+    if (rc == 1) t->anim_frame++;
+    else {
+        /* end of one play: loop 0 plays forever, N plays N more times */
+        t->anim_plays++;
+        if (rc < 0 || g_anim.loop < 0 || (g_anim.loop > 0 && t->anim_plays > g_anim.loop) || !anim_restart()) {
+            t->anim_done = 1;
+            set_status(t, "animation GIF terminee (espace: rejouer)", 0);
+            return 0;
+        }
+        t->anim_frame = 1;
+    }
+    if (anim_render(t) != 0) { t->anim_done = 1; return 0; }
+    t->img_gen++;
+    anim_schedule(t, now);
+    return 1;
+}
+
 static int view_decode(osui_tool_t *t, const char *buf, int n) {
     static imgdec_t img;
-    int rc = imgdec_open((const unsigned char *)buf, n, g_img_scratch, IMG_SCRATCH, &img);
+    int rc;
+    if (view_anim(t, buf, n)) return 0;
+    rc = imgdec_open((const unsigned char *)buf, n, g_img_scratch, IMG_SCRATCH, &img);
     if (rc == IMGDEC_OK) {
         if (imgdec_render(&img, g_img_rgb, OS_FB_IMG_MAX_W, OS_FB_IMG_MAX_H, t->zoom, t->pan_x, t->pan_y,
                           &t->img_w, &t->img_h) != IMGDEC_OK) return -1;
@@ -536,9 +605,11 @@ static void view_image_lines(osui_tool_t *t) {
     t_cat(cap, (int)sizeof(cap), " zoom=");
     if (t->zoom) { t_cat_u(cap, (int)sizeof(cap), (unsigned)t->zoom); t_cat(cap, (int)sizeof(cap), "%"); }
     else t_cat(cap, (int)sizeof(cap), "fit");
+    if (t->anim) t_cat(cap, (int)sizeof(cap), " anim");
     add_line(t, cap, -1, OSUI_APP_A_DIM);
-    set_status(t, t->img_fmt ? "image en pixels: + - zoom, f ajuster, fleches deplacer"
-                             : "image PNM en pixels (mise a l'echelle dans la fenetre)", 0);
+    set_status(t, t->anim ? "GIF anime: espace pause, + - zoom, f ajuster"
+                          : t->img_fmt ? "image en pixels: + - zoom, f ajuster, fleches deplacer"
+                                       : "image PNM en pixels (mise a l'echelle dans la fenetre)", 0);
 }
 
 static void view_fill(osui_tool_t *t, const osui_tool_src_t *src) {
@@ -546,6 +617,7 @@ static void view_fill(osui_tool_t *t, const osui_tool_src_t *src) {
     static char img[OSUI_APP_ROWS][OSUI_APP_COLS];
     clear_lines(t);
     t->image = 0;
+    t->anim = 0;
     {
         const char *big = (src && src->load) ? src->load(t->arg, &n) : 0;
         if (big && n >= 0) {
@@ -897,7 +969,7 @@ void osui_tool_open(osui_tool_t *t, int kind, const char *arg, const osui_tool_s
     if (!keep) {
         t->n = 0; t->top = 0; t->ilen = 0; t->input[0] = 0; t->gen = 0; t->prompt[0] = 0;
         t->status[0] = 0; t->mode = 0; t->image = 0; t->last[0] = 0; t->psel = 0;
-        t->zoom = 0; t->pan_x = 0; t->pan_y = 0; t->img_fmt = 0;
+        t->zoom = 0; t->pan_x = 0; t->pan_y = 0; t->img_fmt = 0; t->anim = 0;
         t->vrows = 0; t->vcols = 0;   /* a new window starts on the default grid */
         t->has_form = 0;
     }
@@ -1045,6 +1117,15 @@ int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src) {
             if (t->ilen < OSUI_TOOL_INPUT - 1) { t->input[t->ilen++] = (char)key; t->input[t->ilen] = 0; }
             return OSUI_TOOL_CHANGED;
         }
+    } else if (t->kind == OS_FB_APP_VIEW && t->image && t->anim && key == ' ') {
+        /* Lot 73: space pauses / resumes the animation (a finished one replays) */
+        if (t->anim_done) {
+            if (!anim_restart() || anim_render(t) != 0) return OSUI_TOOL_NONE;
+            t->anim_done = 0; t->anim_plays = 0; t->anim_frame = 1; t->anim_paused = 0; t->img_gen++;
+        } else t->anim_paused = !t->anim_paused;
+        t->anim_due = 0;
+        set_status(t, t->anim_paused ? "animation en pause (espace)" : "GIF anime: espace pause, + - zoom, f ajuster", 0);
+        return OSUI_TOOL_CHANGED;
     } else if (t->kind == OS_FB_APP_VIEW && t->image && t->img_fmt
                && (key == '+' || key == '=' || key == '-' || key == 'f' || key == '0'
                    || key == K_LEFT || key == K_RIGHT || key == K_UP || key == K_DOWN)) {
