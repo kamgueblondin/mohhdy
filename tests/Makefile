@@ -817,6 +817,10 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_p256: $(UNIT_DIR)/userspace/test_wf_p
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_CRYPTO_SRCS) $(FRAMEWORK_SOURCES)
 
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_aes_ct: $(UNIT_DIR)/userspace/test_aes_ct.c ../include/os_aes_ct.h ../userspace/wf_aead.c ../kernel/aes_gcm.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/wf_aead.c ../kernel/aes_gcm.c $(FRAMEWORK_SOURCES)
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_aead: $(UNIT_DIR)/userspace/test_wf_aead.c ../userspace/wf_aead.c ../userspace/wf_aead.h $(UNIT_DIR)/userspace/wf_aead_vectors.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/wf_aead.c $(FRAMEWORK_SOURCES)

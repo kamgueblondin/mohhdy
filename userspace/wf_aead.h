@@ -2,9 +2,10 @@
  *   WF_AEAD_AES128_GCM, WF_AEAD_AES256_GCM (NIST SP 800-38D, 96-bit nonce)
  *   WF_AEAD_CHACHA20_POLY1305 (RFC 8439)
  * One context per direction, no allocation. GHASH, ChaCha20 and Poly1305
- * are written without secret-dependent branches or table lookups; the AES
- * rounds use the classic S-box table (lookups indexed by secret bytes, so
- * not hardened against cache-timing on shared hardware - documented). */
+ * are written without secret-dependent branches or table lookups. Lot 73:
+ * the AES S-box (rounds and key schedule) is the bitsliced constant-time
+ * circuit of include/os_aes_ct.h, so AES has no secret-indexed table
+ * either (cache-timing hardened). */
 #ifndef WF_AEAD_H
 #define WF_AEAD_H
 #include <stdint.h>

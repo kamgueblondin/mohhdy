@@ -216,6 +216,11 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/osui_ide.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
+    # Lot 73: constant-time AES S-box shared by kernel AES-GCM and wf_aead
+    if [ "$(basename "$test_file")" = "test_aes_ct.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/wf_aead.c $BASE_DIR/kernel/aes_gcm.c"
+        cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include"
+    fi
     # Lot 67: Ring 3 web stack (wf_*), shares kernel SHA-256 / AES-GCM / X25519
     case "$(basename "$test_file")" in
         test_wf_crypto.c|test_wf_x509.c|test_wf_http.c|test_wf_text.c|test_wf_form.c|test_wf_section.c|test_wf_p256.c|test_wf_aead.c|test_wf_webimg.c)
