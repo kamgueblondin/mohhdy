@@ -21,6 +21,8 @@ typedef struct {
     char title[96];
     int images;           /* Lot 72: <img> kept (wf_html_set_images) */
     int images_dropped;   /* no usable src, data: URL, tracking pixel, over WF_HTML_IMG_MAX */
+    int images_srcset;    /* Lot 73: URL chosen from srcset or a <picture> <source> */
+    int sources_skipped;  /* Lot 73: <source> of a type not decoded or a media not matching */
     char icon[WF_URL_HOST_MAX + WF_URL_PATH_MAX + 16];   /* Lot 72: <link rel=icon>, absolute, or "" */
 } wf_html_stats_t;
 #define WF_HTML_IMG_MAX 48
@@ -42,6 +44,12 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
  * pixels are dropped) and the favicon link is reported in stats.icon.
  * Off by default (console text and earlier callers unchanged). */
 void wf_html_set_images(int on);
+/* Lot 73: responsive images (wf_srcset.h). The URL of an <img> is, in
+ * order: the srcset of the first <source> of its <picture> whose type is
+ * decoded and whose media matches, its own srcset (with sizes), then src,
+ * data-src, data-lazy-src. vw is the viewport in CSS px (default 640),
+ * dpr100 the device pixel ratio times 100 (default 100). */
+void wf_html_set_viewport(int vw, int dpr100);
 /* Charset announced by the server (Content-Type), WF_CS_*, or
  * WF_CS_NONE: then a <meta> charset in the page decides (HTML rule: the
  * transport charset wins). Applies to the next reduce. */
