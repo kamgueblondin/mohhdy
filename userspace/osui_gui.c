@@ -533,7 +533,7 @@ static void gui_cat_i(char *d, int max, int v) {
 }
 
 /* Lot 74: "web-fclick X Y", "web-fkey KEY" (a byte, or tab, stab, enter,
- * esc, bs, up, down), "web-ftype TEXT", "web-fstate": the forms of the
+ * esc, bs, up, down, space, left, right), "web-ftype TEXT", "web-fstate": the forms of the
  * rendered page from the console, the same code as the desktop. */
 static int web_form_command(const char *line, char *out, int out_max) {
     const char *a;
@@ -553,8 +553,9 @@ static int web_form_command(const char *line, char *out, int out_max) {
         return 1;
     }
     if (sncmp(line, "web-fkey ", 9) == 0) {
-        static const char *const names[] = { "tab", "stab", "enter", "esc", "bs", "up", "down", "space", 0 };
-        static const int keys[] = { WE_KEY_TAB, WE_KEY_SHIFT_TAB, WE_KEY_ENTER, WE_KEY_ESC, WE_KEY_BACKSPACE, WE_KEY_UP, WE_KEY_DOWN, ' ' };
+        static const char *const names[] = { "tab", "stab", "enter", "esc", "bs", "up", "down", "space", "left", "right", 0 };
+        static const int keys[] = { WE_KEY_TAB, WE_KEY_SHIFT_TAB, WE_KEY_ENTER, WE_KEY_ESC, WE_KEY_BACKSPACE, WE_KEY_UP, WE_KEY_DOWN, ' ',
+                                    WE_KEY_LEFT, WE_KEY_RIGHT };
         int k, key = -1, fr;
         a = line + 9;
         for (k = 0; names[k]; k++) if (scmp(a, names[k]) == 0) key = keys[k];
@@ -881,6 +882,8 @@ static void web_form_result(int fr, char *out, int out_max) {
 static int web_form_keymap(int key) {
     if (key == OS_VGA_KEY_UP) return WE_KEY_UP;
     if (key == OS_VGA_KEY_DOWN) return WE_KEY_DOWN;
+    if (key == OS_VGA_KEY_LEFT) return WE_KEY_LEFT;
+    if (key == OS_VGA_KEY_RIGHT) return WE_KEY_RIGHT;
     if (key == '\n' || key == '\r') return WE_KEY_ENTER;
     if (key == '\b' || key == 127) return WE_KEY_BACKSPACE;
     if (key == '\t') return WE_KEY_TAB;
@@ -2153,7 +2156,7 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
          * a text field does not use still scrolls */
         if (wk >= 0) {
             int fr = we_form_key(&g_web, wk);
-            if (fr > 0 || (fr == 0 && key != OS_VGA_KEY_UP && key != OS_VGA_KEY_DOWN)) { web_form_result(fr, out, out_max); return 0; }
+            if (fr > 0 || (fr == 0 && key != OS_VGA_KEY_UP && key != OS_VGA_KEY_DOWN && key != OS_VGA_KEY_LEFT && key != OS_VGA_KEY_RIGHT)) { web_form_result(fr, out, out_max); return 0; }
         }
         fk = (!g_web_mobile && web_nsections() > 0 && g_wops->form_key) ? g_wops->form_key(key) : -1;
         if (fk == 0 || fk == 2) {

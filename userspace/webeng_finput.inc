@@ -43,6 +43,35 @@ static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int
     if (w_eq(an, "readonly")) { n->form_flags2 |= WE_FF2_READONLY; return 1; }
     if (w_eq(an, "required")) { n->form_flags2 |= WE_FF2_REQUIRED; return 1; }
     if (w_eq(an, "novalidate") || w_eq(an, "formnovalid")   /* formnovalidate, cut to 11 bytes */) { n->form_flags2 |= WE_FF2_NOVALIDATE; return 1; }
+    if (w_eq(an, "autofocus")) { n->form_flags2 |= WE_FF2_AUTOFOCUS; return 1; }
+    if (w_eq(an, "tabindex")) {
+        int k = 0, v = 0, neg = vk > 0 && av[0] == '-';
+        for (k = neg; k < vk; k++) {
+            if (av[k] < '0' || av[k] > '9') { diag(d, "form tabindex refused", idx); return 1; }
+            if (v < 1000) v = v * 10 + av[k] - '0';
+        }
+        if (vk == neg) { diag(d, "form tabindex refused", idx); return 1; }
+        n->tabindex = (int8_t)(neg ? -1 : v > 127 ? 127 : v);
+        n->form_flags2 |= WE_FF2_TABINDEX;
+        return 1;
+    }
+    if (w_eq(an, "step")) {
+        int v;
+        if (value_is(av, vk, "any")) { n->meter_set |= 32; return 1; }
+        if (forms_fixed(av, vk, &v) == 0 && v > 0) { n->meter[3] = v; n->meter_set |= 8; }
+        else diag(d, "form number refused", idx);
+        return 1;
+    }
+    if (w_eq(an, "minlength")) {
+        int k, v = 0;
+        for (k = 0; k < vk; k++) {
+            if (av[k] < '0' || av[k] > '9' || v > 255) { diag(d, "form size refused", idx); return 1; }
+            v = v * 10 + av[k] - '0';
+        }
+        if (vk == 0 || v > 255) { diag(d, "form size refused", idx); return 1; }
+        n->form_minlen = (uint8_t)v;
+        return 1;
+    }
     if (w_eq(an, "maxlength")) {
         int k, v = 0;
         for (k = 0; k < vk; k++) {
@@ -81,7 +110,87 @@ static int finput_node(const we_doc_t *d, int ctl) {
 
 static int finput_textlike(const we_node_t *n) {
     return w_eq(n->tag, "textarea") ||
-           (w_eq(n->tag, "input") && (n->form_type == WE_FORM_TEXT || n->form_type == WE_FORM_PASSWORD || !n->form_type));
+           (w_eq(n->tag, "input") && !(n->form_flags2 & WE_FF2_RANGE) &&
+            (n->form_type == WE_FORM_TEXT || n->form_type == WE_FORM_PASSWORD || !n->form_type));
+}
+
+/* ---------- Lot 74: number and range (hundredths, forms_fixed) ---------- */
+
+static int finput_is_range(const we_node_t *n) {
+    return w_eq(n->tag, "input") && (n->form_flags2 & WE_FF2_RANGE);
+}
+
+/* range: min 0 and max 100 by default, a max under min is min */
+static void finput_range_bounds(const we_node_t *n, int *min, int *max) {
+    *min = (n->meter_set & 2) ? n->meter[1] : 0;
+    *max = (n->meter_set & 4) ? n->meter[2] : 10000;
+    if (*max < *min) *max = *min;
+}
+
+/* the step in hundredths, 0 for step=any */
+static int finput_step(const we_node_t *n) {
+    if (n->meter_set & 32) return 0;
+    return (n->meter_set & 8) ? n->meter[3] : 100;
+}
+
+/* a value in hundredths as text: "12", "-3.5", "0.25" */
+static int finput_fmt(int v, char *out, int max) {
+    char t[16];
+    int n = 0, k = 0, ip, fp, neg = v < 0;
+    if (neg) v = -v;
+    ip = v / 100; fp = v % 100;
+    if (neg) t[n++] = '-';
+    { char r[8]; int m = 0; do { r[m++] = (char)('0' + ip % 10); ip /= 10; } while (ip && m < 7); while (m) t[n++] = r[--m]; }
+    if (fp) { t[n++] = '.'; t[n++] = (char)('0' + fp / 10); if (fp % 10) t[n++] = (char)('0' + fp % 10); }
+    if (n >= max) return -1;
+    for (k = 0; k < n; k++) out[k] = t[k];
+    out[n] = 0;
+    return n;
+}
+
+/* v clamped to [min, max] and on the step from min (the nearest, ties up;
+ * a step past max goes one back) */
+static int finput_snap(int v, int min, int max, int step) {
+    if (v < min) v = min;
+    if (v > max) v = max;
+    if (step > 0) {
+        int k = (v - min + step / 2) / step;
+        v = min + k * step;
+        if (v > max) v = min + (k - 1) * step;
+    }
+    return v;
+}
+
+/* the value of range i: its state or markup value when it is a number,
+ * else the middle; always in bounds and on the step */
+static int finput_range_value(const we_doc_t *d, int i) {
+    const we_node_t *n = &d->nodes[i];
+    const we_fstate_t *s = d->forms && n->form_ord ? &d->forms->c[n->form_ord - 1] : 0;
+    int min, max, v;
+    finput_range_bounds(n, &min, &max);
+    if (s && s->set && s->len && forms_fixed(s->val, s->len, &v) == 0) {}
+    else if ((!s || !s->set) && (n->form_flags & WE_FF_VALUE) && forms_fixed(d->pool + n->fval_off, n->fval_len, &v) == 0) {}
+    else v = min + (max - min) / 2;
+    return finput_snap(v, min, max, finput_step(n));
+}
+
+/* a number field: 1 when the text is not a number or is out of range
+ * or off the step (from min, else 0) */
+static int finput_number_bad(const we_node_t *n, const char *v, int len) {
+    int x, step = finput_step(n), base = (n->meter_set & 2) ? n->meter[1] : 0;
+    if (forms_fixed(v, len, &x) != 0) return 1;
+    if ((n->meter_set & 2) && x < n->meter[1]) return 1;
+    if ((n->meter_set & 4) && x > n->meter[2]) return 1;
+    if (step > 0 && ((x - base) % step) != 0) return 1;
+    return 0;
+}
+
+/* a url field: a scheme ("letter (letter | digit | + - .)* :") and more */
+static int finput_url_bad(const char *v, int len) {
+    int k = 1;
+    if (len < 3 || !((v[0] >= 'a' && v[0] <= 'z') || (v[0] >= 'A' && v[0] <= 'Z'))) return 1;
+    while (k < len && (w_namec(v[k]) || v[k] == '+' || v[k] == '.') && v[k] != '_') k++;
+    return k >= len - 1 || v[k] != ':';
 }
 
 static int finput_submit_kind(const we_node_t *n) {
@@ -196,6 +305,16 @@ static void finput_prepare(we_doc_t *d) {
     }
     d->nform_ctl = (uint16_t)(ord < WE_FSTATE_MAX ? ord : WE_FSTATE_MAX);
     if (!d->forms) return;
+    if (!d->forms->autofocused) {
+        /* lot 74: the first autofocus control takes the focus once */
+        d->forms->autofocused = 1;
+        for (i = 1; i < count && d->forms->focus < 0; i++) {
+            const we_node_t *n = &d->nodes[i];
+            if (n->form_ord && (n->form_flags2 & WE_FF2_AUTOFOCUS) && !finput_disabled(d, i) &&
+                !(w_eq(n->tag, "input") && n->form_type == WE_FORM_HIDDEN))
+                d->forms->focus = (int16_t)(n->form_ord - 1);
+        }
+    }
     for (i = 1; i < count; i++) {
         we_node_t *n = &d->nodes[i];
         const we_fstate_t *s;
@@ -274,6 +393,7 @@ static int finput_cur(const we_doc_t *d, int i, char *out, int max) {
         if (o < 0) { out[0] = 0; return 0; }
         return finput_option_value(d, o, out, max);
     }
+    if (finput_is_range(n)) { k = finput_fmt(finput_range_value(d, i), out, max); return k < 0 ? 0 : k; }
     if (n->form_type == WE_FORM_CHECKBOX || n->form_type == WE_FORM_RADIO) {
         if (!(n->form_flags & WE_FF_CHECKED)) { out[0] = 0; return 0; }
         if (!(n->form_flags & WE_FF_VALUE)) { w_cpy(out, max, "on", 2); return 2; }
@@ -285,7 +405,9 @@ static int finput_cur(const we_doc_t *d, int i, char *out, int max) {
 }
 
 /* constraint validation of one control: 1 invalid (required and empty,
- * unchecked or no option chosen; type=email without '@' around text) */
+ * unchecked or no option chosen; type=email without '@' around text;
+ * lot 74: shorter than minlength after an edit, a number that is not
+ * one or is out of min / max / step, a url without a scheme) */
 static int finput_invalid(const we_doc_t *d, int i) {
     const we_node_t *n = &d->nodes[i];
     char v[WE_FSTATE_VAL];
@@ -295,7 +417,11 @@ static int finput_invalid(const we_doc_t *d, int i) {
     if (w_eq(n->tag, "input") && (n->form_type == WE_FORM_HIDDEN || n->form_type == WE_FORM_SUBMIT ||
                                   n->form_type == WE_FORM_RESET || n->form_type == WE_FORM_BUTTON)) return 0;
     len = finput_cur(d, i, v, (int)sizeof(v));
-    if ((n->form_flags2 & WE_FF2_REQUIRED) && len == 0) return 1;
+    if ((n->form_flags2 & WE_FF2_REQUIRED) && len == 0 && !finput_is_range(n)) return 1;
+    /* lot 74: tooShort after an edit, number, url */
+    if (n->form_minlen && len > 0 && len < n->form_minlen && d->forms && d->forms->c[n->form_ord - 1].set) return 1;
+    if ((n->form_flags2 & WE_FF2_NUMBER) && len > 0 && finput_number_bad(n, v, len)) return 1;
+    if ((n->form_flags2 & WE_FF2_URL) && len > 0 && finput_url_bad(v, len)) return 1;
     if ((n->form_flags2 & WE_FF2_EMAIL) && len > 0) {
         for (k = 0; k < len; k++) if (v[k] == '@') { if (at >= 0) return 1; at = k; }
         if (at <= 0 || at == len - 1) return 1;
@@ -499,17 +625,52 @@ int we_form_click(we_doc_t *d, int x, int y) {
     i = finput_hit(d, x, y, &opt);
     if (i < 0) return -1;
     if (finput_disabled(d, i)) { d->forms->refused++; return WE_FACT_NONE; }
+    if (finput_is_range(&d->nodes[i]) && !(d->nodes[i].form_flags2 & WE_FF2_READONLY)) {
+        /* lot 74: the click position on the track sets the value */
+        const we_node_t *n = &d->nodes[i];
+        int min, max, w = n->w - 2 * n->border, at = x - n->x - n->border, v, rc;
+        char t[16];
+        we_fstate_t *s;
+        finput_range_bounds(n, &min, &max);
+        if (w < 1) w = 1;
+        if (at < 0) at = 0;
+        if (at > w) at = w;
+        v = finput_snap(min + (int)(((long)(max - min) * at + w / 2) / w), min, max, finput_step(n));
+        rc = finput_set_focus(d, n->form_ord - 1);
+        if (v == finput_range_value(d, i)) return rc;
+        s = finput_state(d, i);
+        if (finput_fmt(v, t, (int)sizeof(t)) < 0) return rc;
+        w_cpy(s->val, WE_FSTATE_VAL, t, w_len(t));
+        s->len = (uint8_t)w_len(t);
+        d->forms->edits++;
+        return WE_FACT_CHANGED;
+    }
     return finput_activate(d, i, opt);
 }
 
 /* next (dir 1) or previous (-1) focusable control after ctl */
+/* lot 74: the sequential order: tabindex 1..127 first (ascending, then
+ * tree order), then tabindex 0 or none; tabindex -1 is left out */
+static int finput_tab_key(const we_doc_t *d, int ctl) {
+    int i = finput_node(d, ctl), t;
+    if (i < 0) return -1;
+    t = (d->nodes[i].form_flags2 & WE_FF2_TABINDEX) ? d->nodes[i].tabindex : 0;
+    if (t < 0) return -1;
+    return (t > 0 ? t : 128) * WE_FSTATE_MAX + ctl;
+}
 static int finput_next(const we_doc_t *d, int ctl, int dir) {
-    int k, total = d->nform_ctl, base = ctl >= 0 ? ctl : (dir > 0 ? -1 : total);
-    for (k = 1; k <= total; k++) {
-        int c = ((base + dir * k) % total + total) % total, i = finput_node(d, c);
-        if (i >= 0 && finput_focusable(d, i)) return c;
+    int c, best = -1, best_key = 0, wrap = -1, wrap_key = 0;
+    int cur = ctl >= 0 ? finput_tab_key(d, ctl) : -1;
+    if (ctl >= 0 && cur < 0) cur = 128 * WE_FSTATE_MAX + ctl;   /* a click on tabindex -1 */
+    for (c = 0; c < d->nform_ctl; c++) {
+        int i = finput_node(d, c), key = finput_tab_key(d, c);
+        if (c == ctl || key < 0 || i < 0 || !finput_focusable(d, i)) continue;
+        if (ctl < 0 || (dir > 0 ? key > cur : key < cur)) {
+            if (best < 0 || (dir > 0 ? key < best_key : key > best_key)) { best = c; best_key = key; }
+        }
+        if (wrap < 0 || (dir > 0 ? key < wrap_key : key > wrap_key)) { wrap = c; wrap_key = key; }
     }
-    return -1;
+    return best >= 0 ? best : wrap;
 }
 
 int we_form_key(we_doc_t *d, int key) {
@@ -526,9 +687,49 @@ int we_form_key(we_doc_t *d, int key) {
     if (key == WE_KEY_ESC) return finput_set_focus(d, -1);
     n = &d->nodes[i];
     if (finput_disabled(d, i)) return WE_FACT_NONE;
+    if (finput_is_range(n) || ((n->form_flags2 & WE_FF2_NUMBER) && (key == WE_KEY_UP || key == WE_KEY_DOWN))) {
+        /* lot 74: a step up or down (range also left / right) */
+        int up = key == WE_KEY_UP || key == WE_KEY_RIGHT, step = finput_step(n), v, nv;
+        char t[16];
+        if (!(key == WE_KEY_UP || key == WE_KEY_DOWN || key == WE_KEY_LEFT || key == WE_KEY_RIGHT)) {
+            if (key == WE_KEY_ENTER) { f = finput_owner(d, i); return finput_submit(d, f, finput_default_button(d, f)); }
+            return WE_FACT_NONE;
+        }
+        if (n->form_flags2 & WE_FF2_READONLY) { d->forms->refused++; return WE_FACT_NONE; }
+        if (!step) step = 100;
+        if (finput_is_range(n)) {
+            int min, max;
+            finput_range_bounds(n, &min, &max);
+            v = finput_range_value(d, i);
+            nv = finput_snap(v + (up ? step : -step), min, max, finput_step(n));
+            if (up ? nv <= v : nv >= v) return WE_FACT_NONE;
+        } else {
+            char cur[WE_FSTATE_VAL];
+            int len = finput_cur(d, i, cur, (int)sizeof(cur)), base = (n->meter_set & 2) ? n->meter[1] : 0;
+            if (len == 0 || forms_fixed(cur, len, &v) != 0) v = (n->meter_set & 2) ? n->meter[1] : up ? step : -step;
+            else {
+                /* off the step: the next value on it in that direction */
+                int off = finput_step(n) ? ((v - base) % step + step) % step : 0;   /* step=any: no grid */
+                if (off) v -= off, v += up ? step : 0;
+                else v += up ? step : -step;
+            }
+            if ((n->meter_set & 2) && v < n->meter[1]) v = n->meter[1];
+            if ((n->meter_set & 4) && v > n->meter[2]) v = n->meter[2];
+            if (v < -999999 || v > 999999) return WE_FACT_NONE;
+            nv = v;
+        }
+        s = finput_state(d, i);
+        if (finput_fmt(nv, t, (int)sizeof(t)) < 0) return WE_FACT_NONE;
+        w_cpy(s->val, WE_FSTATE_VAL, t, w_len(t));
+        s->len = (uint8_t)w_len(t);
+        d->forms->edits++;
+        return WE_FACT_CHANGED;
+    }
     if (finput_textlike(n)) {
         int max = n->form_maxlen ? n->form_maxlen : WE_FSTATE_VAL - 1;
         int area = w_eq(n->tag, "textarea");
+        if ((n->form_flags2 & WE_FF2_NUMBER) && key >= 32 && key <= 126 &&
+            !((key >= '0' && key <= '9') || key == '-' || key == '+' || key == '.')) { d->forms->refused++; return WE_FACT_NONE; }
         if (key == WE_KEY_ENTER && !area) return finput_submit(d, finput_owner(d, i), finput_default_button(d, finput_owner(d, i)));
         if (!(key == WE_KEY_BACKSPACE || key == WE_KEY_ENTER || (key >= 32 && key <= 126))) return WE_FACT_NONE;
         if (n->form_flags2 & WE_FF2_READONLY) { d->forms->refused++; return WE_FACT_NONE; }

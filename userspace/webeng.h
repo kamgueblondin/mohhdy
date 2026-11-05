@@ -91,6 +91,7 @@ typedef struct {
     int16_t submitter;    /* control of the requested submission, -1 implicit */
     int16_t submit_form;  /* node of the form to submit, -1 none */
     uint16_t edits, toggles, submits, resets, refused;
+    uint8_t autofocused;  /* the autofocus control was focused once */
     we_fstate_t c[WE_FSTATE_MAX];
     char target[WE_TARGET_MAX];   /* the URL fragment: the :target element id, "" none */
 } we_forms_t;
@@ -104,6 +105,8 @@ enum { WE_FACT_NONE = 0, WE_FACT_CHANGED = 1, WE_FACT_SUBMIT = 2 };
 #define WE_KEY_UP 0x101
 #define WE_KEY_DOWN 0x102
 #define WE_KEY_SHIFT_TAB 0x103
+#define WE_KEY_LEFT 0x104
+#define WE_KEY_RIGHT 0x105
 /* a form submission: application/x-www-form-urlencoded */
 #define WE_FREQ_URL 512
 #define WE_FREQ_BODY 1024
@@ -340,6 +343,8 @@ typedef struct {
     uint16_t fname_off, fname_len;
     uint8_t form_ord, form_maxlen;
     uint16_t form_flags2;
+    uint8_t form_minlen;      /* lot 74: minlength (0: none) */
+    int8_t tabindex;          /* lot 74: with WE_FF2_TABINDEX, -1..127 */
     /* Lot 64: text-align / text-align-last given as start or end (bits 0-1
      * and 2-3: 1 start, 2 end), resolved against direction after the cascade. */
     uint8_t align_logical;

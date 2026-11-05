@@ -20,10 +20,17 @@
 static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int vk);
 static void finput_prepare(we_doc_t *d);
 static void finput_caret(we_doc_t *d);
+static int finput_range_value(const we_doc_t *d, int i);
+static void finput_range_bounds(const we_node_t *n, int *min, int *max);
 #define WE_FF2_FOCUS 4
 #define WE_FF2_STALE 32
 #define WE_FF2_CARET 64
 #define WE_FF2_EMAIL 256
+#define WE_FF2_NUMBER 512     /* lot 74: type=number */
+#define WE_FF2_RANGE 1024     /* lot 74: type=range */
+#define WE_FF2_URL 2048       /* lot 74: type=url */
+#define WE_FF2_AUTOFOCUS 4096
+#define WE_FF2_TABINDEX 8192
 #define WE_FF_CHECKED 1
 #define WE_FF_SELECTED 2
 #define WE_FF_DISABLED 4
@@ -65,6 +72,7 @@ static int forms_input_type(we_doc_t *d, const char *v, int len, int idx) {
     static const char *const text[] = { "text", "search", "email", "url", "tel", "number", 0 };
     int k;
     for (k = 0; text[k]; k++) if (value_is(v, len, text[k])) return WE_FORM_TEXT;
+    if (value_is(v, len, "range")) return WE_FORM_TEXT;   /* lot 74: WE_FF2_RANGE */
     if (value_is(v, len, "password")) return WE_FORM_PASSWORD;
     if (value_is(v, len, "checkbox")) return WE_FORM_CHECKBOX;
     if (value_is(v, len, "radio")) return WE_FORM_RADIO;
@@ -83,6 +91,9 @@ static void forms_attr(we_doc_t *d, int idx, const char *an, const char *av, int
     if (!forms_tag(n->tag)) return;
     if (finput_attr(d, idx, an, av, vk)) return;   /* lot 74 */
     if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "email")) n->form_flags2 |= WE_FF2_EMAIL;
+    if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "number")) n->form_flags2 |= WE_FF2_NUMBER;
+    if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "range")) n->form_flags2 |= WE_FF2_RANGE;
+    if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "url")) n->form_flags2 |= WE_FF2_URL;
     if (w_eq(an, "type") && w_eq(n->tag, "input")) n->form_type = (uint8_t)forms_input_type(d, av, vk, idx);
     else if (w_eq(an, "type") && w_eq(n->tag, "button")) {
         if (value_is(av, vk, "reset")) n->form_type = WE_FORM_RESET;
@@ -179,6 +190,11 @@ static void forms_build(we_doc_t *d) {
             switch (n->form_type) {
             case WE_FORM_TEXT:
             case WE_FORM_PASSWORD:
+                if (n->form_flags2 & WE_FF2_RANGE) {   /* lot 74: a track and its fill */
+                    n->meter[0] = finput_range_value(d, i);
+                    forms_bar(d, i);
+                    break;
+                }
                 if (n->fval_len) {
                     len = n->fval_len < WE_FORM_TEXT_MAX ? n->fval_len : WE_FORM_TEXT_MAX;
                     for (k = 0; k < len; k++) buf[k] = n->form_type == WE_FORM_PASSWORD ? '*' : d->pool[n->fval_off + k];
@@ -234,7 +250,8 @@ static void forms_build(we_doc_t *d) {
  * min is min); -1 for an indeterminate progress (no value) */
 static int forms_fill_pct(const we_node_t *bar) {
     int min = 0, max = 100, v = bar->meter[0];
-    if (w_eq(bar->tag, "progress")) {
+    if (w_eq(bar->tag, "input")) finput_range_bounds(bar, &min, &max);   /* lot 74: range */
+    else if (w_eq(bar->tag, "progress")) {
         if (!(bar->form_flags & WE_FF_VALUE)) return -1;
         if ((bar->meter_set & 4) && bar->meter[2] > 0) max = bar->meter[2];
     } else {
@@ -295,6 +312,11 @@ static void forms_ua(we_doc_t *d, we_node_t *n) {
             n->padding[0] = n->padding[2] = 1; n->padding[1] = n->padding[3] = 6;
             return;
         default:
+            if (n->form_flags2 & WE_FF2_RANGE) {   /* lot 74: the track */
+                forms_box(n, 0xE6E6E6);
+                n->width = 80; n->height = 8; n->min_height = -1;
+                return;
+            }
             forms_box(n, 0xFFFFFF);
             n->padding[0] = n->padding[2] = 1; n->padding[1] = n->padding[3] = 2;
             n->width = (int16_t)((n->form_size ? n->form_size : 20) * WE_CHAR_W);

@@ -309,6 +309,7 @@ static void test_flex_and_grid(void) {
 #include "webeng_lot73_hints.inc"
 #include "webeng_lot74_forms.inc"
 #include "webeng_lot74_css.inc"
+#include "webeng_lot74_forms2.inc"
 
 int main(void) {
     unity_init();
@@ -1873,6 +1874,7 @@ int main(void) {
     lot73_hints_run();
     lot74_forms_run();
     lot74_css_run();
+    lot74_forms2_run();
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
