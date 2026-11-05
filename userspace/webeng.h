@@ -34,6 +34,10 @@
 #define WE_MAX_NODES 160
 #define WE_MAX_ITEMS OS_FB_WEB_ITEMS
 #define WE_MAX_RULES 64
+/* Lot 74: cascade layers (@layer): names of one level, the parent, the
+ * rank (post-order: sublayers before their layer, unlayered last) */
+#define WE_LAYERS_MAX 16
+#define WE_LAYER_NAME 24
 #define WE_VARS_MAX 12   /* lot 73: custom properties per element */
 #define WE_HINTS_MAX 8   /* lot 73: presentational attributes per element */
 #define WE_POOL 32768
@@ -491,6 +495,7 @@ typedef struct {
     uint16_t order;
     uint16_t decl_off, decl_len;
     uint8_t pseudo_el;  /* lot 63: 0 element, else WE_PSEUDO_BEFORE/AFTER */
+    uint8_t layer;      /* lot 74: 0 unlayered, else cascade layer index + 1 */
 } we_rule_t;
 
 typedef struct {
@@ -514,6 +519,9 @@ typedef struct {
     uint8_t css_parsed;
     we_rule_t rules[WE_MAX_RULES];
     uint32_t nrules;
+    char layer_name[WE_LAYERS_MAX][WE_LAYER_NAME];   /* lot 74: "" = anonymous */
+    int8_t layer_parent[WE_LAYERS_MAX];
+    uint8_t layer_rank[WE_LAYERS_MAX], nlayers;
     os_fb_web_item_t items[WE_MAX_ITEMS];
     int16_t item_owner[WE_MAX_ITEMS];
     uint32_t nitems;

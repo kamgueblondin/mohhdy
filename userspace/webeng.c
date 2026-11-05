@@ -665,9 +665,94 @@ static int decl_end(const char *s, int n, int i, char stop) {
     return i;
 }
 
+static int sel_equal(const char *a, const char *b, int len, int insensitive);
+/* Lot 74: cascade layers (names are case-sensitive). A dotted name ("a.b") under the current layer
+ * (cur, -1 at the top) finds or creates each level; anonymous (len 0)
+ * always creates one. Returns the index, -1 when the table is full, -2
+ * for a name that is not one. */
+static int layer_find(we_doc_t *d, int cur, const char *s, int len, int create_anon) {
+    int a = 0;
+    if (len == 0) {
+        if (!create_anon) return cur;
+        if (d->nlayers >= WE_LAYERS_MAX) return -1;
+        d->layer_name[d->nlayers][0] = 0;
+        d->layer_parent[d->nlayers] = (int8_t)cur;
+        return d->nlayers++;
+    }
+    while (a < len) {
+        int b = a, k, found = -1;
+        while (b < len && s[b] != '.') b++;
+        if (b == a || b - a >= WE_LAYER_NAME) return -2;   /* ".a", "a..b", too long */
+        for (k = 0; k < (int)d->nlayers; k++)
+            if (d->layer_parent[k] == cur && w_len(d->layer_name[k]) == b - a && sel_equal(d->layer_name[k], s + a, b - a, 0)) { found = k; break; }
+        if (found < 0) {
+            if (d->nlayers >= WE_LAYERS_MAX) return -1;
+            found = d->nlayers++;
+            for (k = 0; k < b - a; k++) d->layer_name[found][k] = s[a + k];
+            d->layer_name[found][b - a] = 0;
+            d->layer_parent[found] = (int8_t)cur;
+        }
+        cur = found;
+        a = b + 1;
+        if (b + 1 == len) return -2;   /* "a." */
+    }
+    return cur;
+}
+
+/* the layer names of a prelude: one name for a block (or none:
+ * anonymous), a comma list for a statement; -1 when a name is not an
+ * identifier list */
+static int layer_names(we_doc_t *d, int cur, const char *s, int len, int block) {
+    int last = cur, pass;
+    /* pass 0 checks the whole prelude, pass 1 creates: a refused prelude
+     * declares no layer */
+    for (pass = 0; pass < 2; pass++) {
+        int i = 0, count = 0, comma = 0;
+        for (;;) {
+            int a, b;
+            while (i < len && w_space(s[i])) i++;
+            if (i >= len) break;
+            a = i;
+            while (i < len && (w_namec(s[i]) || s[i] == '.')) i++;
+            b = i;
+            while (i < len && w_space(s[i])) i++;
+            if (b == a || (i < len && s[i] != ',')) return -2;
+            if (pass == 0) {
+                int k, seg = 0;
+                if (s[b - 1] == '.') return -2;   /* "a." */
+                for (k = a; k < b; k++) {
+                    if (s[k] != '.') { if (++seg >= WE_LAYER_NAME) return -2; continue; }
+                    if (!seg) return -2;          /* ".a", "a..b" */
+                    seg = 0;
+                }
+            } else {
+                last = layer_find(d, cur, s + a, b - a, 0);
+                if (last < 0) return last;
+            }
+            count++;
+            comma = 0;
+            if (i < len) { i++; comma = 1; if (block) return -2; }
+        }
+        if (comma) return -2;                     /* "a," */
+        if (!count) return block ? layer_find(d, cur, s, 0, 1) : -2;
+    }
+    return last;
+}
+
+static int layer_order(we_doc_t *d, int parent, int rank) {
+    int k;
+    for (k = 0; k < (int)d->nlayers; k++)
+        if (d->layer_parent[k] == parent) {
+            rank = layer_order(d, k, rank);
+            d->layer_rank[k] = (uint8_t)rank++;
+        }
+    return rank;
+}
+
 /* Lot 73: a range of the style text; @media, @supports and @layer
- * blocks are read in place when they apply (webeng_cssq.inc). */
-static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
+ * blocks are read in place when they apply (webeng_cssq.inc).
+ * Lot 74: layer is the current cascade layer (-1: unlayered). */
+static void parse_css_range(we_doc_t* d, int i, int n, int depth, int layer) {
     const char* s = d->css;
     while (i < n) {
         int sel_a, sel_b, dec_a, dec_b, a;
@@ -680,7 +765,14 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
             /* the prelude ends at the block or at ';' */
             i = decl_end(s, n, i, '{');
             { int semi = decl_end(s, n, pre, ';');
-              if (semi < i) { i = semi + 1; diag(d, "css at-rule skipped", i); continue; } }
+              if (semi < i) {
+                  /* Lot 74: "@layer a, b;" sets the order of the layers */
+                  int lr = cssq_is(s + name_a, name_b - name_a, "layer") ? layer_names(d, layer, s + pre, semi - pre, 0) : -2;
+                  if (lr == -1) diag(d, "css layer table full", pre);
+                  i = semi + 1;
+                  if (lr == -2) diag(d, "css at-rule skipped", i);
+                  continue;
+              } }
             if (i >= n) { diag(d, "css at-rule skipped", i); break; }
             body_a = i + 1;
             for (body_b = i; body_b < n; body_b++) {
@@ -690,14 +782,18 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
             }
             i = body_b + 1;
             if (depth < WE_CSS_NEST_MAX && cssq_is(s + name_a, name_b - name_a, "media")) {
-                if (cssq_media(d, s + pre, body_a - 1 - pre)) parse_css_range(d, body_a, body_b, depth + 1);
+                if (cssq_media(d, s + pre, body_a - 1 - pre)) parse_css_range(d, body_a, body_b, depth + 1, layer);
                 else d->perf.media_skipped++;
             } else if (depth < WE_CSS_NEST_MAX && cssq_is(s + name_a, name_b - name_a, "supports")) {
-                if (cssq_supports(d, s + pre, body_a - 1 - pre)) parse_css_range(d, body_a, body_b, depth + 1);
+                if (cssq_supports(d, s + pre, body_a - 1 - pre)) parse_css_range(d, body_a, body_b, depth + 1, layer);
                 else d->perf.media_skipped++;
             } else if (depth < WE_CSS_NEST_MAX && cssq_is(s + name_a, name_b - name_a, "layer")) {
-                diag(d, "css layer order ignored", body_a);
-                parse_css_range(d, body_a, body_b, depth + 1);
+                int lr = layer_names(d, layer, s + pre, body_a - 1 - pre, 1);
+                if (lr == -2) diag(d, "css at-rule skipped", body_a);
+                else {
+                    if (lr == -1) { diag(d, "css layer table full", body_a); lr = layer; }
+                    parse_css_range(d, body_a, body_b, depth + 1, lr);
+                }
             } else diag(d, "css at-rule skipped", i);
             continue;
         }
@@ -733,6 +829,7 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
                 r->decl_off = off;
                 r->decl_len = (uint16_t)(dec_b - dec_a);
                 r->order = (uint16_t)d->nrules;
+                r->layer = (uint8_t)(layer + 1);
                 d->nrules++;
             } else {
                 diag(d, "css selector unsupported", a);
@@ -744,7 +841,8 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
 
 static void parse_css(we_doc_t* d) {
     cssq_sel_base = d->css;
-    parse_css_range(d, 0, (int)d->css_len, 0);
+    parse_css_range(d, 0, (int)d->css_len, 0, -1);
+    (void)layer_order(d, -1, 0);
     d->perf.rules = d->nrules;
 }
 
@@ -4530,6 +4628,14 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "pre")) { n->display = WE_DISP_BLOCK; n->ws_mode = WE_WS_PRE; n->nowrap = 1; }
 }
 
+/* Lot 74: the layer step of the cascade, applied first to last: normal
+ * declarations go from the first layer to unlayered; !important ones
+ * reverse it (unlayered first, the first layer wins). */
+static int rule_layer_key(const we_doc_t *d, uint32_t r, int important) {
+    int l = d->rules[r].layer, k = l ? d->layer_rank[l - 1] + 1 : WE_LAYERS_MAX + 1;
+    return important ? WE_LAYERS_MAX + 1 - k : k;
+}
+
 /* Rules for element idx (pseudo 0) or for its ::before/::after box n. */
 static void cascade_rules(we_doc_t *d, int idx, we_node_t *n, int pseudo, int important) {
     uint8_t used[WE_MAX_RULES];
@@ -4539,8 +4645,10 @@ static void cascade_rules(we_doc_t *d, int idx, we_node_t *n, int pseudo, int im
         int best = -1;
         for (r = 0; r < d->nrules; r++) {
             if (used[r]) continue;
-            if (best < 0 || d->rules[r].spec < d->rules[best].spec ||
-                (d->rules[r].spec == d->rules[best].spec && d->rules[r].order < d->rules[best].order)) best = (int)r;
+            if (best < 0 || rule_layer_key(d, r, important) < rule_layer_key(d, (uint32_t)best, important) ||
+                (rule_layer_key(d, r, important) == rule_layer_key(d, (uint32_t)best, important) &&
+                 (d->rules[r].spec < d->rules[best].spec ||
+                  (d->rules[r].spec == d->rules[best].spec && d->rules[r].order < d->rules[best].order)))) best = (int)r;
         }
         if (best < 0) break;
         used[best] = 1;

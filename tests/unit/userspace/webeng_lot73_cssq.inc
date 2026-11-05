@@ -184,7 +184,8 @@ static void test_l73_layer(void) {
     TEST_ASSERT_EQUAL(1, l73c("a"));
     TEST_ASSERT_EQUAL(3, l73c("b"));
     TEST_ASSERT_EQUAL(4, l73c("c"));
-    TEST_ASSERT_EQUAL(1, l61_diag_count("css layer order ignored"));
+    /* lot 74: the layer order is applied now (was "css layer order ignored") */
+    TEST_ASSERT_EQUAL(0, l61_diag_count("css layer order ignored"));
     TEST_ASSERT_EQUAL(1, l61_diag_count("css at-rule skipped"));
 }
 
