@@ -91,12 +91,14 @@ static void test_l74_range(void) {
     int x, y;
     l74_open(L74_BAD "<body style='margin:0'><form action=/r id=f><input id=r type=range name=r>"
              "<input id=s type=range name=s min=10 max=20 step=5 value=13><input id=t type=range name=t min=5 max=1 value=9>"
-             "<input id=u type=range name=u value=abc step=30></form></body>");
+             "<input id=u type=range name=u value=abc step=30>"
+             "<input id=v type=range name=v min=0 max=10 step=4 value=10></form></body>");
     TEST_ASSERT_EQUAL(0, l61_diag_count("input type taken as text"));
     TEST_ASSERT_EQUAL_STRING("50", l74_val("r"));          /* the middle */
     TEST_ASSERT_EQUAL_STRING("15", l74_val("s"));          /* 13 on the step: 15 */
     TEST_ASSERT_EQUAL_STRING("5", l74_val("t"));           /* max under min: min */
     TEST_ASSERT_EQUAL_STRING("60", l74_val("u"));          /* 50 on the step 30 from 0 */
+    TEST_ASSERT_EQUAL_STRING("8", l74_val("v"));           /* 12 is past max: one step back */
     TEST_ASSERT_EQUAL(80, g_doc.nodes[l74_node("r")].w - 2);
     TEST_ASSERT_EQUAL(40, l74_fill_w("r"));
     TEST_ASSERT_EQUAL(40, l74_fill_w("s"));
@@ -124,13 +126,16 @@ static void test_l74_range(void) {
     TEST_ASSERT_EQUAL(l74_ctl("r"), g_l74f.focus);
     TEST_ASSERT_EQUAL(20, l74_fill_w("r"));
     TEST_ASSERT_EQUAL(WE_FACT_NONE, we_form_click(&g_doc, x, y));   /* same value, same focus */
+    TEST_ASSERT_EQUAL(WE_FACT_CHANGED, we_form_click(&g_doc, x + 3, y));
+    l74_render();
+    TEST_ASSERT_EQUAL_STRING("29", l74_val("r"));          /* 28.75 rounds to 29 */
     x = g_doc.nodes[l74_node("r")].x + 81;
     we_form_click(&g_doc, x, y);
     l74_render();
     TEST_ASSERT_EQUAL_STRING("100", l74_val("r"));
     /* Enter submits; reset gives the markup value back */
     TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l74_key(WE_KEY_ENTER));
-    TEST_ASSERT_EQUAL_STRING("/r?r=100&s=10&t=5&u=60", l74_req(0, &q));
+    TEST_ASSERT_EQUAL_STRING("/r?r=100&s=10&t=5&u=60&v=8", l74_req(0, &q));
     TEST_ASSERT_EQUAL(0, l74_bad("u"));
     l74_done();
 }

@@ -175,7 +175,8 @@ static void test_l74_has_anchored(void) {
                  "<h2 id=g>g</h2><p>p</p><div><b>b</b></div><div><h2 id=h>h</h2></div><div><b>b</b></div>"
                  "<ul><li id=i>i</li><li class=x>x</li></ul>"
                  "<p><article id=k><b>b</b></article></p><article id=l><p><b>b</b></p></article>"
-                 "<aside id=m><i><b>b</b></i></aside><nav>n</nav><aside id=n><b>b</b></aside></body>", 400);
+                 "<aside id=m><i><b>b</b></i></aside><nav>n</nav><aside id=n><b>b</b></aside>"
+                 "<div><div><b>b</b></div><h2 id=o>o</h2></div></body>", 400);
     TEST_ASSERT_EQUAL(1, l73c("b"));
     TEST_ASSERT_EQUAL(0, l73c("j"));          /* no p inside */
     TEST_ASSERT_EQUAL(0, l73c("c"));          /* p is not a child */
@@ -189,14 +190,26 @@ static void test_l74_has_anchored(void) {
     TEST_ASSERT_EQUAL(6, l73c("l"));
     TEST_ASSERT_EQUAL(7, l73c("m"));          /* + nav */
     TEST_ASSERT_EQUAL(7, l73c("n"));          /* > b */
+    TEST_ASSERT_EQUAL(0, l73c("o"));          /* the div b is an earlier sibling */
 }
 
 /* Lot 74: :target and :target-within follow we_set_target */
+/* Lot 74: a refused @layer prelude declares nothing; a nested name is
+ * found under its parent only; a block takes one name */
+static void test_l74_layer_refusals2(void) {
+    lot52_render("<style>@layer x, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; @layer b{#q{color:#000002}} @layer x{#q{color:#000001}}"
+                 "@layer a{} @layer y{#r{color:#000001}} @layer a.y{#r{color:#000002}}"
+                 "@layer c, d{#s{color:#000003}}</style>" L64_BODY "<p id=q>q</p><p id=r>r</p><p id=s>s</p></body>", 320);
+    TEST_ASSERT_EQUAL(1, l73c("q"));
+    TEST_ASSERT_EQUAL(1, l73c("r"));
+    TEST_ASSERT_EQUAL(0, l73c("s"));
+}
+
 static void test_l74_target(void) {
     static we_forms_t f;
     static const char *page = "<style>:target{color:#000001}section:target-within{color:#000002}p:not(:target){color:#000003}"
-                              "#a:target + p{color:#000004}</style>" L64_BODY
-                              "<section id=s><p id=a>a</p><p id=b>b</p></section><p id=c>c</p></body>";
+                              "#a:target + p{color:#000004}div:target{color:#000005}article:target-within{color:#000007}</style>" L64_BODY
+                              "<div id=w><article id=o>o</article><section id=s><p id=a>a</p><p id=b>b</p></section><p id=c>c</p></div></body>";
     we_forms_init(&f);
     we_set_forms(&g_doc, 0);
     TEST_ASSERT_EQUAL(-1, we_set_target(&g_doc, "#a"));     /* no page state */
@@ -213,6 +226,8 @@ static void test_l74_target(void) {
     TEST_ASSERT_EQUAL(4, l73c("b"));
     TEST_ASSERT_EQUAL(2, l73c("s"));
     TEST_ASSERT_EQUAL(3, l73c("c"));
+    TEST_ASSERT_EQUAL(0, l73c("w"));          /* an ancestor is not the target */
+    TEST_ASSERT_EQUAL(0, l73c("o"));          /* no target inside */
     /* percent-decoded, without '#'; a section is its own target-within */
     TEST_ASSERT_EQUAL(0, we_set_target(&g_doc, "%73"));
     lot52_render(page, 320);
@@ -303,6 +318,7 @@ static void lot74_css_run(void) {
     RUN_TEST(test_l74_rowspan_zero_and_groups);
     RUN_TEST(test_l74_rowspan_row_background);
     RUN_TEST(test_l74_has_anchored);
+    RUN_TEST(test_l74_layer_refusals2);
     RUN_TEST(test_l74_target);
     RUN_TEST(test_l74_sticky);
 }

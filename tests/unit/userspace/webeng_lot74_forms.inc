@@ -175,6 +175,17 @@ static void test_l74_toggles_radio_select_textarea(void) {
     l74_done();
 }
 
+/* a reset button resets its own form only */
+static void test_l74_reset_own_form(void) {
+    l74_open("<form><input id=a value=1><input id=ra type=reset></form><form><input id=b value=2></form>");
+    (void)l74_click("a"); l74_type("x");
+    (void)l74_click("b"); l74_type("y");
+    TEST_ASSERT_EQUAL(WE_FACT_CHANGED, l74_click("ra"));
+    TEST_ASSERT_EQUAL_STRING("1", l74_val("a"));
+    TEST_ASSERT_EQUAL_STRING("2y", l74_val("b"));
+    l74_done();
+}
+
 static void test_l74_reset_disabled_readonly_maxlength(void) {
     l74_open(L74_FORM);
     (void)l74_click("q");
@@ -483,6 +494,7 @@ static void lot74_forms_run(void) {
     RUN_TEST(test_l74_text_typing_caret_and_request);
     RUN_TEST(test_l74_toggles_radio_select_textarea);
     RUN_TEST(test_l74_reset_disabled_readonly_maxlength);
+    RUN_TEST(test_l74_reset_own_form);
     RUN_TEST(test_l74_tab_esc_and_space);
     RUN_TEST(test_l74_post_buttons_and_errors);
     RUN_TEST(test_l74_listbox_label_details_fieldset);
