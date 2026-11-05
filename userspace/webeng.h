@@ -281,6 +281,7 @@ typedef struct {
     /* Lot 73: presentational hints (attribute kind, value in pool) */
     uint8_t nhints, hint_kind[WE_HINTS_MAX], hint_len[WE_HINTS_MAX];
     uint8_t caption_bottom;   /* lot 73: caption-side bottom (inherited) */
+    int8_t vshift, vshift_own; /* lot 73: baseline shift down in px: total, own */
     uint16_t hint_off[WE_HINTS_MAX];
     uint8_t nvars, var_name_len[WE_VARS_MAX];
     uint16_t var_name_off[WE_VARS_MAX], var_off[WE_VARS_MAX], var_len[WE_VARS_MAX];

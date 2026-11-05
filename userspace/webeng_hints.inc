@@ -159,6 +159,26 @@ static int hints_font_px(const char *v, int len) {
     return px[val - 1];
 }
 
+/* More of the HTML UA style sheet (HTML 15.3): lists of definitions,
+ * figures, address, menu / dir, mark, sub / sup, abbr with a title. */
+static void hints_ua(we_doc_t *d, we_node_t *n) {
+    static const char *const blocks[] = { "dl", "dt", "dd", "figure", "figcaption", "address", "menu", "dir", "hgroup",
+                                          "search", "listing", "xmp", "plaintext", 0 };
+    const char *t = n->tag;
+    if (!hints_in(t, blocks) && !w_eq(t, "mark") && !w_eq(t, "sub") && !w_eq(t, "sup") && !w_eq(t, "abbr")) return;
+    if (hints_in(t, blocks)) n->display = WE_DISP_BLOCK;
+    if (w_eq(t, "dl")) hints_decl(d, n, "margin", "8px 0");
+    else if (w_eq(t, "dd")) hints_decl(d, n, "margin-left", "40px");
+    else if (w_eq(t, "figure")) hints_decl(d, n, "margin", "8px 40px");
+    else if (w_eq(t, "menu") || w_eq(t, "dir")) { n->list_style = WE_LIST_DISC; hints_decl(d, n, "margin", "8px 0"); hints_decl(d, n, "padding-left", "16px"); }
+    else if (w_eq(t, "listing") || w_eq(t, "xmp") || w_eq(t, "plaintext")) hints_decl(d, n, "white-space", "pre");
+    else if (w_eq(t, "mark")) { hints_decl(d, n, "background-color", "#ffff00"); hints_decl(d, n, "color", "#000000"); }
+    else if (w_eq(t, "sub") || w_eq(t, "sup")) {
+        hints_decl(d, n, "font-size", "smaller");
+        hints_decl(d, n, "vertical-align", w_eq(t, "sub") ? "sub" : "super");
+    } else if (w_eq(t, "abbr") && (n->attr_flags & 32)) hints_decl(d, n, "text-decoration", "underline dotted");
+}
+
 /* style pass: the hints of element n (after the UA styles) */
 static void hints_apply(we_doc_t *d, we_node_t *n) {
     char buf[96];
@@ -166,6 +186,7 @@ static void hints_apply(we_doc_t *d, we_node_t *n) {
     const char *v;
     if (w_eq(n->tag, "center")) { n->display = WE_DISP_BLOCK; hints_decl(d, n, "text-align", "center"); }
     if (w_eq(n->tag, "caption")) { n->display = WE_DISP_BLOCK; hints_decl(d, n, "text-align", "center"); }   /* UA */
+    hints_ua(d, n);
     for (k = 0; k < n->nhints; k++) {
         v = d->pool + n->hint_off[k];
         len = n->hint_len[k];

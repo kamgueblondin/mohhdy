@@ -380,6 +380,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                     else if (w_eq(an, "href")) n->attr_flags |= 4;
                     else if (w_eq(an, "src")) n->attr_flags |= 8;
                     else if (w_eq(an, "alt")) n->attr_flags |= 16;
+                    else if (w_eq(an, "title")) n->attr_flags |= 32;   /* lot 73: abbr[title] */
                     if (w_eq(an, "id")) w_cpy(n->id, 16, av, vk);
                     else if (w_eq(an, "class")) w_cpy(n->cls, 32, av, vk);
                     else if (w_eq(an, "style")) { if (pool_put(d, av, vk, &n->style_off) == 0) n->style_len = (uint16_t)vk; }
@@ -4132,7 +4133,11 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (value_is(v, vl, "top")) n->valign = WE_VALIGN_TOP;
         else if (value_is(v, vl, "middle")) n->valign = WE_VALIGN_MIDDLE;
         else if (value_is(v, vl, "bottom")) n->valign = WE_VALIGN_BOTTOM;
-        else if (value_is(v, vl, "baseline")) n->valign = WE_VALIGN_BASELINE;
+        else if (value_is(v, vl, "baseline")) { n->valign = WE_VALIGN_BASELINE; n->vshift_own = 0; }
+        /* lot 73: baseline shifts of inline boxes (sub, super, a length up) */
+        else if (value_is(v, vl, "sub")) n->vshift_own = (int8_t)((n->font_parent_px + 2) / 5);
+        else if (value_is(v, vl, "super")) n->vshift_own = (int8_t)-((n->font_parent_px + 1) / 3);
+        else if (parse_len(v, vl, &px, 0) == 0 && px >= -32 && px <= 32) n->vshift_own = (int8_t)-px;
         else diag(d, "vertical align refused", -1);
     } else if (w_eq(prop, "position")) {
         if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = n->fixed = 0; }
@@ -4631,6 +4636,8 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->quotes_off = p ? p->quotes_off : 0; n->quotes_len = p ? p->quotes_len : 0;
         n->content_kind = WE_CONTENT_NONE;
         n->caption_bottom = p ? p->caption_bottom : 0;
+        n->vshift_own = 0;
+        n->vshift = p ? p->vshift : 0;
         cssq_inherit_vars(p, n);
         if (n->is_text) { n->display = WE_DISP_INLINE; forms_text_style(d, n); return; }
         if (i == 0) { n->display = WE_DISP_BLOCK; return; }
@@ -4663,6 +4670,11 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         if (n->align_logical >> 2) n->align_last = (uint8_t)(1 + (((n->align_logical >> 2) == 1) != n->dir_rtl ? WE_ALIGN_LEFT : WE_ALIGN_RIGHT));
         if (n->border && n->border_color == (p ? p->color : 0)) n->border_color = n->color;
         if (p && p->display == WE_DISP_NONE) n->display = WE_DISP_NONE;
+        /* lot 73: an inline box adds its shift to its parent's; a block starts at 0 */
+        {
+            int shift = n->display == WE_DISP_INLINE ? n->vshift + n->vshift_own : 0;
+            n->vshift = (int8_t)(shift < -64 ? -64 : shift > 64 ? 64 : shift);
+        }
     }
 }
 
@@ -5319,6 +5331,7 @@ static int gap_extra(int extra, int gaps, int g) {
 
 static void paint_run(we_doc_t *d, int node, int xs, int y, const char *buf, int len) {
     int adv = glyph_adv(d, node), k;
+    y += d->nodes[node].vshift;   /* lot 73: sub, super, vertical-align length */
     if (adv == node_cw(d, node)) {
         os_fb_web_item_t *it;
         text_shadows(d, node, xs, y, buf, len);

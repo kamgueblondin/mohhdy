@@ -1,5 +1,11 @@
 /* Lot 73: HTML presentational hints (webeng_hints.inc). */
 
+static const we_node_t *lot52_node_tag(const char *tag) {
+    unsigned i;
+    for (i = 0; i < g_doc.nnodes; i++) if (strcmp(g_doc.nodes[i].tag, tag) == 0) return &g_doc.nodes[i];
+    return &g_doc.nodes[0];   /* #document: the caller's assertion fails */
+}
+
 static void test_l73_hints_table(void) {
     lot52_render("<body id=bd text=ff0000 bgcolor='#00ff00' style='margin:0'><table id=t border=2 cellpadding=3 cellspacing=4 width=200 "
                  "align=center bgcolor=0000ff><tr id=r valign=bottom><td id=a width=50 nowrap align=right>A</td>"
@@ -152,6 +158,35 @@ static void test_l73_table_col_widths(void) {
     l61_text_at("d", 270, 1);                            /* the col after the group: column 4 */
 }
 
+/* Lot 73: more UA styles, baseline shifts */
+static void test_l73_ua_more_and_shifts(void) {
+    lot52_render("<body style='margin:0'>H<sub>2</sub>O x<sup>2</sup> <span style='vertical-align:4px'>u<b>v</b></span><mark>m</mark>"
+                 "<abbr title=t>ab</abbr><abbr>cd</abbr><dl><dt>T</dt><dd>D</dd></dl><figure>F</figure></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("H", 0, 1);
+    l61_text_at("2", 8, 4);                              /* sub: 16 / 5 down */
+    l61_text_at("O x", 16, 1);
+    TEST_ASSERT_NOT_NULL(l73_item(OS_FB_WEB_TEXT, 40, -4));   /* super: 16 / 3 up */
+    l61_text_at("u", 56, -3);
+    l61_text_at("v", 64, -3);                            /* the child shares the shift */
+    l61_rect_at(72, 0, 8, 10, 0xFFFF00);                 /* mark */
+    TEST_ASSERT_NOT_NULL(l73_item(OS_FB_WEB_RECT, 80, 9));   /* abbr[title]: dotted */
+    TEST_ASSERT_NULL(l73_item(OS_FB_WEB_RECT, 96, 9));
+    l61_text_at("T", 0, 19);
+    l61_text_at("D", 40, 29);
+    l61_text_at("F", 40, 55);
+    lot52_render("<body style='margin:0'><span style='vertical-align:sub'><span style='vertical-align:super'>a</span>"
+                 "<div>b</div></span><span style='vertical-align:40px'>c</span><span style='vertical-align:-2px;vertical-align:baseline'>d</span>"
+                 "<menu><li>m</li></menu><xmp>a  b</xmp></body>", 320);
+    l61_text_at("a", 0, -1);                             /* +3 then -5 */
+    l61_text_at("b", 8, 1);                              /* a block starts again at 0 */
+    TEST_ASSERT_EQUAL(1, l61_diag_count("vertical align refused"));
+    l61_text_at("c", 16, 1);                             /* 40px is out of range: refused */
+    l61_text_at("d", 24, 1);
+    TEST_ASSERT_EQUAL(WE_LIST_DISC, lot52_node_tag("menu")->list_style);
+    TEST_ASSERT_NOT_NULL(find_text("a  b"));
+}
+
 static void lot73_hints_run(void) {
     RUN_TEST(test_l73_hints_table);
     RUN_TEST(test_l73_hints_refused_and_css_wins);
@@ -159,4 +194,5 @@ static void lot73_hints_run(void) {
     RUN_TEST(test_l73_hints_limits);
     RUN_TEST(test_l73_table_caption_and_groups);
     RUN_TEST(test_l73_table_col_widths);
+    RUN_TEST(test_l73_ua_more_and_shifts);
 }
