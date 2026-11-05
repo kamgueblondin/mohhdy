@@ -281,12 +281,16 @@ static int find_ci(const char* s, int n, int from, const char* word) {
 static void unlink_last(we_doc_t *d, int parent, int old_last);
 #include "webeng_forms.inc"
 #include "webeng_hints.inc"
+#include "webeng_finput.inc"   /* lot 74 */
 
 int we_parse(we_doc_t* d, const char* html, int len) {
     int stack[WE_DEPTH_MAX];
     int sp = 0, i = 0, text_start = 0, in_title = 0;
+    we_forms_t *forms;
     if (!d || !html || len < 0) return -1;
+    forms = d->forms;   /* lot 74: the live form state outlives a parse */
     w_zero(d, sizeof(*d));
+    d->forms = forms;
     d->root = (int16_t)new_node(d, -1);
     w_cpy(d->nodes[0].tag, 12, "#document", 9);
     stack[sp++] = 0;
@@ -329,6 +333,10 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                 if (k == 0) { i++; continue; } /* stray '<' becomes text */
                 /* implied end tags */
                 if ((w_eq(name, "p") || w_eq(name, "li")) && sp > 1 && w_eq(d->nodes[stack[sp - 1]].tag, name)) sp--;
+                /* lot 74: an option ends at the next option or optgroup, an
+                 * optgroup at the next optgroup (HTML 13.1.2.4) */
+                if ((w_eq(name, "option") || w_eq(name, "optgroup")) && sp > 1 && w_eq(d->nodes[stack[sp - 1]].tag, "option")) sp--;
+                if (w_eq(name, "optgroup") && sp > 1 && w_eq(d->nodes[stack[sp - 1]].tag, "optgroup")) sp--;
                 if (w_eq(name, "td") || w_eq(name, "th") || w_eq(name, "tr")) {
                     int at;
                     for (at = sp - 1; at > 0; at--) {
@@ -592,7 +600,7 @@ static int parse_sel(const char* s, int len, we_rule_t* r) {
                 /* Lot 73: state pseudo-classes, :not() :is() :where(), *-of-type */
                 if (!element) {
                     int state = cssq_state_flag(pseudo), rc;
-                    if (state) { part->state |= (uint8_t)state; r->spec += 64; simple = 1; continue; }
+                    if (state) { part->state |= (uint16_t)state; r->spec += 64; simple = 1; continue; }
                     rc = cssq_sel_logic(s, len, &i, part, pseudo, &r->spec);
                     if (rc < 0) return -1;
                     if (rc == 0) { simple = 1; continue; }

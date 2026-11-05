@@ -16,6 +16,14 @@
  * one diag "input type taken as text". */
 
 /* WE_FORM_* control types: webeng.h */
+/* lot 74: webeng_finput.inc */
+static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int vk);
+static void finput_prepare(we_doc_t *d);
+static void finput_caret(we_doc_t *d);
+#define WE_FF2_FOCUS 4
+#define WE_FF2_STALE 32
+#define WE_FF2_CARET 64
+#define WE_FF2_EMAIL 256
 #define WE_FF_CHECKED 1
 #define WE_FF_SELECTED 2
 #define WE_FF_DISABLED 4
@@ -29,7 +37,8 @@
 #define WE_FORM_TEXT_MAX 48
 
 static int forms_tag(const char *t) {
-    static const char *const tags[] = { "input", "button", "select", "option", "textarea", "progress", "meter", "details", 0 };
+    static const char *const tags[] = { "input", "button", "select", "option", "textarea", "progress", "meter", "details",
+                                         "form", "label", "fieldset", 0 };   /* lot 74: form, label, fieldset */
     int k;
     for (k = 0; tags[k]; k++) if (w_eq(t, tags[k])) return 1;
     return 0;
@@ -72,6 +81,8 @@ static void forms_attr(we_doc_t *d, int idx, const char *an, const char *av, int
     we_node_t *n = &d->nodes[idx];
     int v;
     if (!forms_tag(n->tag)) return;
+    if (finput_attr(d, idx, an, av, vk)) return;   /* lot 74 */
+    if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "email")) n->form_flags2 |= WE_FF2_EMAIL;
     if (w_eq(an, "type") && w_eq(n->tag, "input")) n->form_type = (uint8_t)forms_input_type(d, av, vk, idx);
     else if (w_eq(an, "type") && w_eq(n->tag, "button")) {
         if (value_is(av, vk, "reset")) n->form_type = WE_FORM_RESET;
@@ -155,7 +166,9 @@ static void forms_bar(we_doc_t *d, int idx) {
 }
 
 static void forms_build(we_doc_t *d) {
-    int i, count = (int)d->nnodes;
+    int i, count;
+    finput_prepare(d);   /* lot 74: ordinals and the live state */
+    count = (int)d->nnodes;
     for (i = 1; i < count; i++) {
         we_node_t *n = &d->nodes[i];
         if (n->is_text) continue;
@@ -213,6 +226,7 @@ static void forms_build(we_doc_t *d) {
             (void)forms_text(d, s, (d->nodes[i].form_flags & WE_FF_OPEN) ? "v " : "> ", 2, 1, 0);
         }
     }
+    finput_caret(d);   /* lot 74 */
 }
 
 /* the bar fill in percent: value / max for progress (max 1 by default),
@@ -254,10 +268,20 @@ static void forms_box(we_node_t *n, uint32_t bg) {
     n->min_height = 10;   /* one line, even when empty */
 }
 
+static void forms_ua(we_doc_t *d, we_node_t *n);
+/* lot 74: the focused control: its usual UA style, a blue border */
+static void forms_ua_focus(we_doc_t *d, we_node_t *n) {
+    n->form_flags2 &= (uint16_t)~WE_FF2_FOCUS;
+    forms_ua(d, n);
+    n->form_flags2 |= WE_FF2_FOCUS;
+    if (n->border) n->border_color = WE_FORM_FILL;
+}
+
 /* UA styles of the form elements (after ua_defaults, before the rules) */
 static void forms_ua(we_doc_t *d, we_node_t *n) {
     const we_node_t *p = n->parent >= 0 ? &d->nodes[n->parent] : 0;
     if (n->form_flags & WE_FF_DISABLED) n->color = 0x6D6D6D;
+    if (n->form_flags2 & WE_FF2_FOCUS) { forms_ua_focus(d, n); return; }   /* lot 74 */
     if (w_eq(n->tag, "input")) {
         switch (n->form_type) {
         case WE_FORM_HIDDEN: n->display = WE_DISP_NONE; return;
@@ -346,6 +370,8 @@ static void forms_ua(we_doc_t *d, we_node_t *n) {
 static void forms_text_style(we_doc_t *d, we_node_t *n) {
     const we_node_t *p = n->parent >= 0 ? &d->nodes[n->parent] : 0;
     if (n->form_flags & WE_FF_PLACEHOLDER) n->color = 0x757575;
+    if (n->form_flags2 & WE_FF2_STALE) { n->display = WE_DISP_NONE; return; }   /* lot 74 */
+    if (n->form_flags2 & WE_FF2_CARET) n->color = WE_FORM_FILL;
     if (p && w_eq(p->tag, "details") && !(p->form_flags & WE_FF_OPEN)) n->display = WE_DISP_NONE;
     if (p && (w_eq(p->tag, "progress") || w_eq(p->tag, "meter"))) n->display = WE_DISP_NONE;
 }

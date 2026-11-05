@@ -70,6 +70,46 @@ enum {
 };
 
 typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME_MAX]; } we_grid_names_t;
+/* Lot 74: live state of the form controls of a page, kept by the caller
+ * across renders (we_set_forms). Control k is the k-th input, select,
+ * textarea, button or details in document order. An entry with set = 0
+ * shows the markup; a click or a key copies the markup state first. */
+#define WE_FSTATE_MAX 32
+#define WE_FSTATE_VAL 64
+typedef struct {
+    uint8_t set, checked, sel, len;   /* checked: box, radio, open details; sel: option */
+    uint32_t selmask;                 /* list box: selected options (first 32) */
+    char val[WE_FSTATE_VAL];          /* text, password, textarea value */
+} we_fstate_t;
+typedef struct {
+    int16_t focus;        /* focused control, -1 none */
+    int16_t submitter;    /* control of the requested submission, -1 implicit */
+    int16_t submit_form;  /* node of the form to submit, -1 none */
+    uint16_t edits, toggles, submits, resets, refused;
+    we_fstate_t c[WE_FSTATE_MAX];
+} we_forms_t;
+/* we_form_click / we_form_key results */
+enum { WE_FACT_NONE = 0, WE_FACT_CHANGED = 1, WE_FACT_SUBMIT = 2 };
+/* keys of we_form_key beside ASCII 32..126 */
+#define WE_KEY_BACKSPACE 8
+#define WE_KEY_TAB 9
+#define WE_KEY_ENTER 13
+#define WE_KEY_ESC 27
+#define WE_KEY_UP 0x101
+#define WE_KEY_DOWN 0x102
+#define WE_KEY_SHIFT_TAB 0x103
+/* a form submission: application/x-www-form-urlencoded */
+#define WE_FREQ_URL 512
+#define WE_FREQ_BODY 1024
+typedef struct {
+    uint8_t post;          /* method=post */
+    uint8_t multipart;     /* enctype=multipart/form-data asked (sent urlencoded) */
+    int16_t form;          /* node of the form */
+    char url[WE_FREQ_URL]; /* GET: action (no query, no fragment) ? body; POST: action */
+    char body[WE_FREQ_BODY];
+    int body_len;
+} we_form_req_t;
+
 /* Lot 61: an edge is auto, a line number, a name with an occurrence
  * (nth, negative counts from the end) or a span. A named span counts
  * lines carrying edge[] from the opposite resolved edge. */
@@ -288,6 +328,12 @@ typedef struct {
     uint8_t form_type, form_flags, form_size, form_rows, form_cols, meter_set;
     uint16_t fval_off, fval_len, fph_off, fph_len;
     int32_t meter[5];
+    /* Lot 74: interactive forms (webeng_finput.inc): name in the pool,
+     * control ordinal + 1 in we_forms_t (0: none), maxlength (0: none),
+     * WE_FF2_* flags */
+    uint16_t fname_off, fname_len;
+    uint8_t form_ord, form_maxlen;
+    uint16_t form_flags2;
     /* Lot 64: text-align / text-align-last given as start or end (bits 0-1
      * and 2-3: 1 start, 2 end), resolved against direction after the cascade. */
     uint8_t align_logical;
@@ -409,6 +455,15 @@ enum { WE_LOGIC_NOT = 1, WE_LOGIC_IS, WE_LOGIC_WHERE, WE_LOGIC_HAS };
 #define WE_STATE_PLACEHOLDER 32
 #define WE_STATE_INDETERMINATE 64
 #define WE_STATE_OPEN 128
+/* Lot 74: live form state (we_forms_t) */
+#define WE_STATE_FOCUS 256
+#define WE_STATE_FOCUS_WITHIN 512
+#define WE_STATE_REQUIRED 1024
+#define WE_STATE_OPTIONAL 2048
+#define WE_STATE_READ_ONLY 4096
+#define WE_STATE_READ_WRITE 8192
+#define WE_STATE_INVALID 16384
+#define WE_STATE_VALID 32768
 /* Lot 63: generated content */
 enum { WE_PSEUDO_BEFORE = 1, WE_PSEUDO_AFTER = 2 };
 enum { WE_CONTENT_NONE, WE_CONTENT_LIST, WE_CONTENT_UA_OPEN, WE_CONTENT_UA_CLOSE };
@@ -425,7 +480,8 @@ typedef struct {
     we_selector_attr_t attr[WE_SELECTOR_ATTRS_MAX];
     uint8_t classes, attrs, pseudo, combinator;
     int16_t nth_a, nth_b;
-    uint8_t state, logic_kind[2];       /* lot 73 */
+    uint16_t state;                     /* lot 73, lot 74: WE_STATE_* */
+    uint8_t logic_kind[2];              /* lot 73 */
     uint16_t logic_off[2], logic_len[2]; /* lot 73: arguments in css[] */
 } we_selector_part_t;
 typedef struct {
@@ -473,6 +529,10 @@ typedef struct {
     /* Lot 63: node and pool counts before generated content, so a second
      * we_style drops the generated boxes first. */
     uint16_t source_nodes, source_pool;
+    /* Lot 74: live form state (0: the controls are painted static) and
+     * the number of controls with an ordinal */
+    we_forms_t *forms;
+    uint16_t nform_ctl;
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 
@@ -518,4 +578,18 @@ void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx);
  * ancestor of the deepest laid-out node there; returns its length, 0 when
  * no link is there. */
 int we_link_at(const we_doc_t* d, int x, int y, char* href, int max);
+
+/* Lot 74: interactive forms (webeng_finput.inc). we_set_forms keeps the
+ * state pointer across we_parse; we_forms_init clears a state (new page).
+ * After a WE_FACT_CHANGED result the caller renders the page again; after
+ * WE_FACT_SUBMIT it calls we_form_request and fetches the answer.
+ * we_form_at: control ordinal under page point (x, y), or -1. */
+void we_forms_init(we_forms_t *f);
+void we_set_forms(we_doc_t *d, we_forms_t *f);
+int we_form_at(const we_doc_t *d, int x, int y);
+int we_form_click(we_doc_t *d, int x, int y);
+int we_form_key(we_doc_t *d, int key);
+int we_form_set_text(we_doc_t *d, int ctl, const char *text);
+int we_form_request(const we_doc_t *d, we_form_req_t *req);
+int we_form_value(const we_doc_t *d, int ctl, char *out, int max);
 #endif
