@@ -109,7 +109,7 @@ static void test_l73_hints_limits(void) {
 static void test_l73_table_caption_and_groups(void) {
     lot52_render("<body style='margin:0'><table id=t style='width:200px'><caption id=c>Cap</caption><tfoot><tr><td>F</td></tr></tfoot>"
                  "<tbody><tr><td>B</td></tr></tbody><thead><tr><td>H</td></tr></thead>"
-                 "<caption id=l style='caption-side:bottom'>Low</caption></table></body>", 320);
+                 "<caption id=l style='caption-side:block-end'>Low</caption></table></body>", 320);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
     l61_text_at("Cap", 88, 1);                           /* centred above */
     l61_text_at("H", 0, 11);                             /* thead first */

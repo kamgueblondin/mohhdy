@@ -14,8 +14,9 @@
  *   480 when unset. Types all and screen match; print, speech and the
  *   others do not.
  * - @supports: (property: value) is supported when the engine applies it
- *   with no diag (tried on a scratch node, every side effect undone);
- *   selector(...) when the selector parses; not, and, or as in @media.
+ *   with no diag (tried on a scratch node, every side effect undone;
+ *   custom properties always); selector(...) when the selector parses
+ *   (pseudo-elements included); not, and, or as in @media.
  * - @layer blocks are kept in source order (layer priority is not
  *   modelled, one diag); other at-rules are skipped as before.
  * - :not(), :is(), :matches(), :-webkit-any() and :where() take selector
@@ -273,7 +274,6 @@ static int cssq_supports_decl(we_doc_t *d, const char *s, int n) {
     if (colon == n) return 0;
     pb = colon; va = colon + 1; vb = n;
     if (!cssq_trim(s, &pa, &pb) || !cssq_trim(s, &va, &vb)) return 0;
-    if (pb - pa > 2 && s[pa] == '-' && s[pa + 1] == '-') return 1;
     w_zero(&g_cssq_scratch, sizeof(g_cssq_scratch));
     g_cssq_scratch.parent = -1; g_cssq_scratch.first = g_cssq_scratch.last = g_cssq_scratch.next = -1;
     g_cssq_scratch.font_px = g_cssq_scratch.font_parent_px = WE_FONT_PX_DEFAULT;
@@ -302,7 +302,7 @@ static int cssq_term(we_doc_t *d, const char *s, int n, int *at, int supports, i
     if (!cssq_trim(s, &a, &b)) return -1;
     if (sel) {
         we_rule_t *rule = &g_cssq_rule[WE_SEL_LOGIC_DEPTH];
-        return parse_sel(s + a, b - a, rule) == 0 && !rule->pseudo_el;
+        return parse_sel(s + a, b - a, rule) == 0;   /* pseudo-elements allowed */
     }
     if (s[a] == '(' || (b - a > 4 && w_ieq_n(s + a, b - a, "not") && (w_space(s[a + 3]) || s[a + 3] == '(')))
         return cssq_cond(d, s + a, b - a, supports, depth + 1);

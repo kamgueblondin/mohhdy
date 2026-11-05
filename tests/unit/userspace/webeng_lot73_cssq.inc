@@ -153,7 +153,7 @@ static void test_l73_supports(void) {
     lot52_render("<style>@supports (display: grid){#a{color:#000001}}@supports (display: bogus){#b{color:#000002}}"
                  "@supports not (frobnicate: 1){#c{color:#000003}}@supports (color: red) and (margin: 1px){#d{color:#000004}}"
                  "@supports (color: nope) or (padding: 2px){#e{color:#000005}}@supports selector(a > b){#f{color:#000006}}"
-                 "@supports selector(a::foo){#g{color:#000007}}@supports (--x: anything){#h{color:#000008}}</style>"
+                 "@supports selector(a:::foo){#g{color:#000007}}@supports (--x: anything){#h{color:#000008}}</style>"
                  L64_BODY L73_IDS, 320);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);                 /* the tries leave no diag */
     TEST_ASSERT_EQUAL(1, l73c("a"));
@@ -326,11 +326,39 @@ static void test_l73_custom_properties_limits(void) {
     TEST_ASSERT_EQUAL(1, l61_diag_count("css variable undefined"));
 }
 
+
+static void test_l73_media_edges(void) {
+    /* em with one decimal; dpi; ranges with < first; mixed directions */
+    l73_render_media("<style>@media (max-width: 20.5em){#a{color:#000001}}@media (max-resolution: 95dpi){#b{color:#000002}}"
+                     "@media (100px < width < 400px){#c{color:#000003}}@media (400px > width < 500px){#d{color:#000004}}"
+                     "@media (((((((width: 325px))))))){#e{color:#000005}}@media print and (min-width: 1px){#f{color:#000006}}"
+                     "@media (x, (width: 325px){#g{color:#000007}}@media print{#h{content:\"}\"}#h{color:#000008}}</style>"
+                     L64_BODY L73_IDS, 325, 0);
+    TEST_ASSERT_EQUAL(1, l73c("a"));                  /* 20.5em = 328px */
+    TEST_ASSERT_EQUAL(0, l73c("b"));                  /* 95dpi < 1dppx */
+    TEST_ASSERT_EQUAL(3, l73c("c"));
+    TEST_ASSERT_EQUAL(0, l73c("d"));                  /* > then <: refused */
+    TEST_ASSERT_EQUAL(0, l73c("e"));                  /* nested deeper than WE_CSS_NEST_MAX */
+    TEST_ASSERT_EQUAL(0, l73c("f"));                  /* a print query stays false with a true condition */
+    TEST_ASSERT_EQUAL(0, l73c("g"));                  /* a comma inside parentheses splits nothing */
+    TEST_ASSERT_EQUAL(0, l73c("h"));                  /* a quoted brace stays inside the skipped block */
+    TEST_ASSERT_EQUAL(3, l61_diag_count("media query refused"));
+    /* selector() takes pseudo-elements; :where adds nothing */
+    lot52_render("<style>@supports selector(p::before){#a{color:#000001}}:where(#b){color:#000005}p{color:#000006}"
+                 ":disabled{color:#000007}:enabled{color:#000008}</style>" L64_BODY
+                 "<p id=a>a</p><p id=b>b</p><p id=c disabled>c</p><div id=d>d</div></body>", 320);
+    TEST_ASSERT_EQUAL(1, l73c("a"));
+    TEST_ASSERT_EQUAL(6, l73c("b"));
+    TEST_ASSERT_EQUAL(6, l73c("c"));                  /* a p is no form control: neither */
+    TEST_ASSERT_EQUAL(0, l73c("d"));
+}
+
 static void lot73_cssq_run(void) {
     RUN_TEST(test_l73_media_width);
     RUN_TEST(test_l73_media_types_and_lists);
     RUN_TEST(test_l73_media_features);
     RUN_TEST(test_l73_media_nesting_and_skips);
+    RUN_TEST(test_l73_media_edges);
     RUN_TEST(test_l73_supports);
     RUN_TEST(test_l73_layer);
     RUN_TEST(test_l73_selector_not_is_where);
