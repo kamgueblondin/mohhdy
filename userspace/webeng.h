@@ -200,6 +200,7 @@ typedef struct {
     uint8_t grid_cols;         /* 1..8 when display:grid, else 0 */
     uint8_t flex_wrap, float_side, grid_rows, relative;
     uint8_t list_style;
+    uint8_t list_inside;        /* lot 73: list-style-position inside (inherited) */
     uint16_t lsi_off, lsi_len;
     uint8_t own_edges;          /* lot 64: per-side borders painted on a box outside a collapsed table */
     /* Lot 64: multi-column layout: column-count (0 auto), column-width (-1

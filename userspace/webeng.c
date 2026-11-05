@@ -3407,6 +3407,7 @@ static int counter_find(const we_gen_t *g, const char *name) {
 
 static int counter_text(int style, int number, char *out);
 static int list_ordinal(const we_doc_t *d, int idx);
+static int marker_inside_w(we_doc_t *d, int idx);
 
 /* quotes: none or 1..2 pairs of strings; at most WE_QUOTE_PAIRS */
 #define WE_QUOTE_PAIRS 2
@@ -4142,11 +4143,15 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (value_is(v, vl, "none")) n->lsi_len = 0;
         else if (url_span(d, v, vl, &n->lsi_off, &n->lsi_len)) diag(d, "list marker refused", -1);
     } else if (w_eq(prop, "list-style")) {
-        int a[4], l[4], c = tokens(v, vl, a, l), k, style = -1, ok = c >= 1, image = -1;
+        int a[4], l[4], c = tokens(v, vl, a, l), k, style = -1, ok = c >= 1, image = -1, position = -1;
         uint16_t off = 0, len = 0;
         for (k = 0; k < c && ok; k++) {
             int kw = list_keyword(v + a[k], l[k]);
-            if (value_is(v + a[k], l[k], "outside")) continue;
+            if (value_is(v + a[k], l[k], "outside") || value_is(v + a[k], l[k], "inside")) {
+                if (position >= 0) ok = 0;
+                position = value_is(v + a[k], l[k], "inside");
+                continue;
+            }
             if (l[k] > 4 && w_ieq_n(v + a[k], 4, "url(")) {      /* lot 64: list-style-image */
                 if (image >= 0 || url_span(d, v + a[k], l[k], &off, &len)) ok = 0;
                 image = k;
@@ -4159,7 +4164,13 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else {
             n->list_style = (uint8_t)(style < 0 ? WE_LIST_DISC : style);
             n->lsi_off = off; n->lsi_len = len;
+            n->list_inside = (uint8_t)(position > 0);
         }
+    } else if (w_eq(prop, "list-style-position")) {
+        /* lot 73: inside puts the marker at the start of the first line */
+        if (value_is(v, vl, "inside")) n->list_inside = 1;
+        else if (value_is(v, vl, "outside")) n->list_inside = 0;
+        else diag(d, "list marker refused", -1);
     } else if (w_eq(prop, "min-width") || w_eq(prop, "max-width")) {
         int is_min = w_eq(prop, "min-width");
         int rc = parse_len(v, vl, &px, &pct);
@@ -4528,6 +4539,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
             n->col_floor[track] = n->row_floor[track] = n->col_cap[track] = n->row_cap[track] = -1;
         } }
         n->list_style = p ? p->list_style : WE_LIST_NONE;
+        n->list_inside = p ? p->list_inside : 0;
         n->lsi_off = p ? p->lsi_off : 0; n->lsi_len = p ? p->lsi_len : 0;
         n->col_count = 0; n->col_width = -1; n->col_fill_auto = 0; n->col_span_all = 0; n->col_break = 0;
         n->col_avoid_inside = 0; n->orphans = p ? p->orphans : 2; n->widows = p ? p->widows : 2;
@@ -6055,7 +6067,7 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->justify_none = d->nodes[idx].justify_none;
     f->start = d->nodes[idx].dir_rtl ? WE_ALIGN_RIGHT : WE_ALIGN_LEFT;
     f->line_h = flow_line_h(d, idx);
-    f->indent = d->nodes[idx].text_indent;
+    f->indent = d->nodes[idx].text_indent + marker_inside_w(d, idx);
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
         we_node_t *n = &d->nodes[c];
         if (n->html_space) f->pending_space = 1;
@@ -7702,6 +7714,30 @@ static int layout_vertical(we_doc_t *d, int idx, int ox, int oy, int width, int 
     return size;
 }
 
+/* The list marker text of li idx: the counter, a full stop after a
+ * number (before it in rtl). Lot 73: shared by the inside position. */
+static int marker_text(we_doc_t *d, int idx, char *marker) {
+    const we_node_t *n = &d->nodes[idx];
+    int len = counter_text(n->list_style, list_ordinal(d, idx), marker);
+    if (n->list_style != WE_LIST_DISC && n->list_style != WE_LIST_SQUARE && n->list_style != WE_LIST_CIRCLE) {
+        /* lot 64: in rtl the marker is right of the box and its full
+         * stop, a neutral after the number, reads first: ".1" */
+        if (n->dir_rtl) { int k; for (k = len; k > 0; k--) marker[k] = marker[k - 1]; marker[0] = '.'; }
+        else marker[len] = '.';
+        marker[++len] = 0;
+    }
+    return len;
+}
+
+/* Lot 73: the first line room an inside marker takes (its text and a
+ * space), 0 for an outside, none or image marker. */
+static int marker_inside_w(we_doc_t *d, int idx) {
+    char marker[24];
+    const we_node_t *n = &d->nodes[idx];
+    if (!n->list_inside || n->lsi_len || n->list_style == WE_LIST_NONE || !w_eq(n->tag, "li")) return 0;
+    return (marker_text(d, idx, marker) + 1) * WE_CHAR_W;
+}
+
 /* ---------- Lot 73: line clamp ----------
  * A block with -webkit-line-clamp (or line-clamp) N shows its first N
  * lines: the items of later lines are dropped, its content height ends
@@ -7888,19 +7924,16 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         /* lot 64: list-style-image painted, the type marker not */
     } else if (w_eq(n->tag, "li") && n->list_style != WE_LIST_NONE) {
         char marker[24];
-        int number = 1, sibling, len;
+        int len = marker_text(d, idx, marker), mx;
         os_fb_web_item_t *it;
-        (void)sibling;
-        number = list_ordinal(d, idx);
-        len = counter_text(n->list_style, number, marker);
-        if (n->list_style != WE_LIST_DISC && n->list_style != WE_LIST_SQUARE && n->list_style != WE_LIST_CIRCLE) {
-            /* lot 64: in rtl the marker is right of the box and its full
-             * stop, a neutral after the number, reads first: ".1" */
-            if (n->dir_rtl) { int k; for (k = len; k > 0; k--) marker[k] = marker[k - 1]; marker[0] = '.'; }
-            else marker[len] = '.';
-            marker[++len] = 0;
-        }
-        it = emit(d, idx, OS_FB_WEB_TEXT, n->dir_rtl ? bx + bw + WE_CHAR_W : bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
+        if (n->list_inside) {
+            /* lot 73: inside the content box, in the room the first line
+             * indent left for it (marker_inside_w) */
+            int left = bx + box_edge(n, 3) + n->padding[3], right = bx + bw - box_edge(n, 1) - n->padding[1];
+            mx = n->dir_rtl ? right - len * WE_CHAR_W : left;
+            it = emit(d, idx, OS_FB_WEB_TEXT, mx, by + box_edge(n, 0) + n->padding[0] + 1, len * WE_CHAR_W, 8, n->color);
+        } else
+            it = emit(d, idx, OS_FB_WEB_TEXT, n->dir_rtl ? bx + bw + WE_CHAR_W : bx - (len + 1) * WE_CHAR_W, by + 1, len * WE_CHAR_W, 8, n->color);
         if (it) w_cpy(it->text, OS_FB_WEB_TEXT_LEN, marker, len);
     }
     place_absolutes(d, idx, bx + box_edge(n, 3), by + box_edge(n, 0), bw - box_edge(n, 1) - box_edge(n, 3),

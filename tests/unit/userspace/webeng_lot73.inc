@@ -201,6 +201,41 @@ static void test_l73_line_clamp_refusals_and_flow_root(void) {
     l61_text_at("c", 40, 11);
 }
 
+/* Lot 73: list-style-position inside. The marker opens the first line in
+ * the content box; the first line is indented by the marker and a space,
+ * the next lines are not. */
+static void test_l73_list_inside(void) {
+    lot52_render(L64_BODY "<ul style='margin:0;padding:0 0 0 30px;width:110px;list-style-position:inside'><li id=a>aa bb cc dd ee</li>"
+                 "<li id=b style='list-style:decimal inside'>x</li></ul></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("*", 30, 1);
+    l61_text_at("aa bb cc dd", 46, 1);
+    l61_text_at("ee", 30, 11);
+    l61_text_at("2.", 30, 21);
+    l61_text_at("x", 54, 21);
+    l64_box("a", 30, 0, 110, 20);
+    /* inherited by the li; outside again restores the gutter marker */
+    lot52_render(L64_BODY "<ul style='margin:0;padding:0 0 0 30px;list-style:inside square'><li>p</li><li style='list-style-position:outside;list-style-type:disc'>q</li></ul></body>", 320);
+    l61_text_at("p", 46, 1);
+    l61_text_at("q", 30, 11);
+    l61_text_at("*", 14, 11);
+    l61_text_at("#", 30, 1);
+}
+
+static void test_l73_list_inside_rtl_and_refusals(void) {
+    lot52_render(L64_BODY "<ol dir=rtl style='margin:0;padding:0 30px 0 0;width:100px;list-style-position:inside'><li id=a>ab</li></ol></body>", 320);
+    l61_text_at(".1", 84, 1);           /* right of the content box: 100 - 16 */
+    l61_text_at("ab", 60, 1);           /* the line ends before the marker room: 100 - 24 - 16 */
+    lot52_render(L64_BODY "<ul style='list-style-position:middle'><li>a</li></ul></body>", 320);
+    TEST_ASSERT_TRUE(lot52_has_diag("list marker refused"));
+    lot52_render(L64_BODY "<ul style='list-style:inside outside disc'><li>a</li></ul></body>", 320);
+    TEST_ASSERT_TRUE(lot52_has_diag("list marker refused"));
+    /* none: no marker and no indent */
+    lot52_render(L64_BODY "<ul style='margin:0;padding:0 0 0 30px;list-style:none inside'><li>a</li></ul></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("a", 30, 1);
+}
+
 static void lot73_run(void) {
     RUN_TEST(test_l73_paragraph_split_between_columns);
     RUN_TEST(test_l73_orphans_and_widows);
@@ -211,4 +246,6 @@ static void lot73_run(void) {
     RUN_TEST(test_l73_line_clamp_one_and_room);
     RUN_TEST(test_l73_line_clamp_not_needed_and_nested);
     RUN_TEST(test_l73_line_clamp_refusals_and_flow_root);
+    RUN_TEST(test_l73_list_inside);
+    RUN_TEST(test_l73_list_inside_rtl_and_refusals);
 }
