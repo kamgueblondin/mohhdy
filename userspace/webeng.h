@@ -80,6 +80,7 @@ typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME
  * shows the markup; a click or a key copies the markup state first. */
 #define WE_FSTATE_MAX 32
 #define WE_TARGET_MAX 32
+#define WE_BOXSCROLL_MAX 8
 #define WE_FSTATE_VAL 64
 typedef struct {
     uint8_t set, checked, sel, len;   /* checked: box, radio, open details; sel: option */
@@ -94,6 +95,9 @@ typedef struct {
     uint8_t autofocused;  /* the autofocus control was focused once */
     we_fstate_t c[WE_FSTATE_MAX];
     char target[WE_TARGET_MAX];   /* the URL fragment: the :target element id, "" none */
+    char scroll_id[WE_BOXSCROLL_MAX][WE_TARGET_MAX];
+    int16_t scroll_y[WE_BOXSCROLL_MAX];
+    uint8_t nscroll;
 } we_forms_t;
 /* we_form_click / we_form_key results */
 enum { WE_FACT_NONE = 0, WE_FACT_CHANGED = 1, WE_FACT_SUBMIT = 2 };
@@ -279,7 +283,8 @@ typedef struct {
     uint8_t width_kind, basis_content, border_box;
     uint8_t min_width_kind, max_width_kind, basis_kind, break_all;
     uint8_t nowrap, break_word, visibility, overflow_hidden;
-    uint8_t overflow_axes;     /* lot 63: bit 0 x, bit 1 y clip (hidden, clip, auto, scroll) */
+    uint8_t overflow_axes;     /* lot 63: bit 0 x, bit 1 y clip */
+    uint8_t overflow_scroll;    /* lot 74: bit 0 x, bit 1 y: auto/scroll (scrollbar) */
     uint8_t grid_col_start, grid_row_start, grid_col_span, grid_row_span;
     we_grid_names_t line_names[2];
     /* Lot 61: one repeat(auto-fill|auto-fit, track) per axis. The template
@@ -590,6 +595,7 @@ int we_layout(we_doc_t* d, int viewport_w);
 int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h);
 /* Clamp y to [0, page_h - viewport_h], move fixed boxes, return the offset. */
 int we_scroll(we_doc_t* d, int y);
+int we_box_scroll_click(we_doc_t *d, int x, int y);
 int we_render(we_doc_t* d, const char* html, int len, int viewport_w);
 /* Lot 73: the media size of @media (call after we_parse, before we_style) */
 void we_set_media(we_doc_t *d, int w, int h);

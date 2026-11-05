@@ -1,4 +1,4 @@
-/* Lot 74: @font-face refusal, table-layout:fixed, pattern=, dialog */
+/* Lot 74: @font-face refusal, table-layout:fixed, pattern=, dialog, scrollbars */
 
 static void test_l74_font_face(void) {
     lot52_render("<style>@font-face{font-family:X;src:url(a.woff)}p{color:#000001}</style>"
@@ -8,7 +8,6 @@ static void test_l74_font_face(void) {
 }
 
 static void test_l74_table_fixed(void) {
-    /* fixed: first row widths win; a later wide cell does not grow col 0 */
     lot52_render("<style>table{table-layout:fixed;width:200px;border-collapse:collapse}"
                  "td{border:1px solid #000}</style>" L64_BODY
                  "<table id=t><tr><td id=a style='width:40px'>a</td><td id=b>b</td></tr>"
@@ -17,7 +16,6 @@ static void test_l74_table_fixed(void) {
     TEST_ASSERT_EQUAL(g_doc.nodes[lot52_node("a") - g_doc.nodes].w,
                       g_doc.nodes[lot52_node("c") - g_doc.nodes].w);
     TEST_ASSERT_TRUE(g_doc.nodes[lot52_node("a") - g_doc.nodes].w < 80);
-    /* auto: the wide cell grows the column */
     lot52_render("<style>table{table-layout:auto;width:200px}"
                  "td{border:1px solid #000}</style>" L64_BODY
                  "<table id=t><tr><td id=a style='width:40px'>a</td><td id=b>b</td></tr>"
@@ -35,10 +33,10 @@ static void test_l74_pattern(void) {
     TEST_ASSERT_EQUAL(1, l74_bad("a"));
     TEST_ASSERT_EQUAL(1, l74_bad("b"));
     TEST_ASSERT_EQUAL(0, l74_bad("c"));
-    TEST_ASSERT_EQUAL(0, l74_bad("d"));          /* empty: required alone */
+    TEST_ASSERT_EQUAL(0, l74_bad("d"));
     (void)l74_click("a"); l74_type("C");
     TEST_ASSERT_EQUAL(0, l74_bad("a"));
-    TEST_ASSERT_EQUAL(WE_FACT_CHANGED, l74_click("go"));  /* b still bad */
+    TEST_ASSERT_EQUAL(WE_FACT_CHANGED, l74_click("go"));
     TEST_ASSERT_EQUAL(l74_ctl("b"), g_l74f.focus);
     (void)l74_click("b");
     while (l74_val("b")[0]) l74_key(WE_KEY_BACKSPACE);
@@ -52,16 +50,13 @@ static void test_l74_dialog(void) {
     l74_open("<dialog id=d><p>hi</p><form method=dialog><button id=ok>ok</button></form></dialog>"
              "<button id=open>open</button>");
     TEST_ASSERT_EQUAL(WE_DISP_NONE, g_doc.nodes[l74_node("d")].display);
-    /* open attribute */
     l74_done();
     l74_open("<dialog id=d open><form method=dialog><button id=ok type=submit>ok</button></form></dialog>");
     TEST_ASSERT_EQUAL(WE_DISP_BLOCK, g_doc.nodes[l74_node("d")].display);
     TEST_ASSERT_EQUAL(WE_FACT_CHANGED, l74_click("ok"));
     l74_render();
-    TEST_ASSERT_EQUAL(0, g_doc.nodes[l74_node("d")].display != WE_DISP_NONE);
     TEST_ASSERT_EQUAL(WE_DISP_NONE, g_doc.nodes[l74_node("d")].display);
     l74_done();
-    /* click the dialog itself toggles */
     l74_open("<dialog id=d open>x</dialog>");
     TEST_ASSERT_EQUAL(WE_FACT_CHANGED, l74_click("d"));
     l74_render();
@@ -69,9 +64,34 @@ static void test_l74_dialog(void) {
     l74_done();
 }
 
+static void test_l74_scrollbar(void) {
+    int x, y, i, bars = 0;
+    l74_open("<style>#box{overflow:scroll;height:40px;width:120px}"
+             "#box p{margin:0;height:20px}</style>"
+             "<div id=box><p id=a>a</p><p id=b>b</p><p id=c>c</p><p id=d>d</p></div>");
+    TEST_ASSERT_TRUE(g_doc.nodes[l74_node("box")].overflow_scroll & 2);
+    for (i = 0; i < (int)g_doc.nitems; i++)
+        if (g_doc.item_owner[i] == l74_node("box") && g_doc.items[i].kind == OS_FB_WEB_RECT &&
+            g_doc.items[i].w == 6) bars++;
+    TEST_ASSERT_TRUE(bars >= 2);
+    x = g_doc.nodes[l74_node("box")].x + g_doc.nodes[l74_node("box")].w - 3;
+    y = g_doc.nodes[l74_node("box")].y + g_doc.nodes[l74_node("box")].h - 4;
+    TEST_ASSERT_EQUAL(2, we_box_scroll_click(&g_doc, x, y));
+    TEST_ASSERT_TRUE(g_l74f.nscroll >= 1);
+    l74_render();
+    TEST_ASSERT_TRUE(g_doc.nodes[l74_node("box")].box_scroll_y > 0);
+    TEST_ASSERT_TRUE(g_doc.nodes[l74_node("a")].y < g_doc.nodes[l74_node("box")].y +
+                    g_doc.nodes[l74_node("box")].border + g_doc.nodes[l74_node("box")].padding[0]);
+    l74_done();
+    lot52_render("<style>#box{overflow:hidden;height:40px;width:120px}</style>"
+                 L64_BODY "<div id=box><p>a</p><p>b</p><p>c</p><p>d</p></div></body>", 200);
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[lot52_node("box") - g_doc.nodes].overflow_scroll);
+}
+
 static void lot74_more_tests(void) {
     RUN_TEST(test_l74_font_face);
     RUN_TEST(test_l74_table_fixed);
     RUN_TEST(test_l74_pattern);
     RUN_TEST(test_l74_dialog);
+    RUN_TEST(test_l74_scrollbar);
 }

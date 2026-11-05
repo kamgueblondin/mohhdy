@@ -3755,21 +3755,33 @@ static int content_declaration(we_doc_t *d, we_node_t *n, const char *prop, cons
 /* Lot 63: overflow keywords; hidden, clip, auto and scroll clip (no
  * scrollbars are painted). A box clips both axes once one axis does, as a
  * visible axis computes to auto next to a non-visible one. */
+/* Lot 63: overflow keywords clip. Lot 74: auto and scroll also set
+ * overflow_scroll so a scrollbar can be painted and the box scrolled. */
 static int overflow_keyword(const char *v, int len) {
     if (value_is(v, len, "visible")) return 0;
-    if (value_is(v, len, "hidden") || value_is(v, len, "clip") || value_is(v, len, "auto") || value_is(v, len, "scroll")) return 1;
+    if (value_is(v, len, "hidden") || value_is(v, len, "clip")) return 1;
+    if (value_is(v, len, "auto") || value_is(v, len, "scroll")) return 2;
     return -1;
 }
 
 static int overflow_declaration(we_node_t *n, const char *prop, const char *v, int vl) {
-    int a[4], l[4], count = tokens(v, vl, a, l), x, y;
+    int a[4], l[4], count = tokens(v, vl, a, l), x, y, sx, sy;
     if (count < 1 || count > (w_eq(prop, "overflow") ? 2 : 1)) return -1;
     x = overflow_keyword(v + a[0], l[0]);
     y = count == 2 ? overflow_keyword(v + a[1], l[1]) : x;
     if (x < 0 || y < 0) return -1;
-    if (w_eq(prop, "overflow-x")) n->overflow_axes = (uint8_t)((n->overflow_axes & 2) | x);
-    else if (w_eq(prop, "overflow-y")) n->overflow_axes = (uint8_t)((n->overflow_axes & 1) | (y << 1));
-    else n->overflow_axes = (uint8_t)(x | (y << 1));
+    sx = x == 2; sy = y == 2;
+    if (x) x = 1; if (y) y = 1;
+    if (w_eq(prop, "overflow-x")) {
+        n->overflow_axes = (uint8_t)((n->overflow_axes & 2) | x);
+        n->overflow_scroll = (uint8_t)((n->overflow_scroll & 2) | sx);
+    } else if (w_eq(prop, "overflow-y")) {
+        n->overflow_axes = (uint8_t)((n->overflow_axes & 1) | (y << 1));
+        n->overflow_scroll = (uint8_t)((n->overflow_scroll & 1) | (sy << 1));
+    } else {
+        n->overflow_axes = (uint8_t)(x | (y << 1));
+        n->overflow_scroll = (uint8_t)(sx | (sy << 1));
+    }
     n->overflow_hidden = (uint8_t)(n->overflow_axes != 0);
     return 0;
 }
@@ -4686,7 +4698,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->gap_set = 0;
         n->height_percent = n->min_height_percent = n->max_height_percent = 0;
         n->height_pct = n->min_height_pct = n->max_height_pct = 0;
-        n->width_kind = n->basis_content = n->border_box = n->overflow_hidden = n->overflow_axes = 0;
+        n->width_kind = n->basis_content = n->border_box = n->overflow_hidden = n->overflow_axes = n->overflow_scroll = 0;
         n->min_width_kind = n->max_width_kind = n->basis_kind = 0;
         n->justify_content = n->align_items = n->align_self = n->align_content = 0;
         n->justify_items = n->justify_self = 0;
@@ -11200,6 +11212,8 @@ static void ellipsis_cut(os_fb_web_item_t *it, int keep_px) {
     it->w = (uint16_t)(fit * cw);
 }
 
+#include "webeng_scroll.inc"
+
 static void ellipsis_items(we_doc_t *d) {
     int i, j;
     for (i = 0; i < (int)d->nitems; i++) {
@@ -11903,6 +11917,8 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     vertical_styles(d, 0);
     drop_reserved(d);
     ellipsis_items(d);
+    { int si; for (si = 1; si < (int)d->nnodes; si++) scroll_apply(d, si); }
+    { int si; for (si = 1; si < (int)d->nnodes; si++) scroll_paint(d, si); }
     paint_outlines(d);
     stack_items(d);
     opacity_items(d);
