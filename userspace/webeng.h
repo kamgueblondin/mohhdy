@@ -212,6 +212,10 @@ typedef struct {
     /* Lot 64: column-span all (1) on a block child of a multi-column box,
      * and the forced column breaks: bit 0 break-before, bit 1 break-after. */
     uint8_t col_span_all, col_break;
+    /* Lot 73: break-inside avoid / avoid-column (1) keeps a block whole in
+     * the columns; orphans and widows (inherited, 2) are the fewest lines
+     * of a fragmented block at the bottom / top of a column. */
+    uint8_t col_avoid_inside, orphans, widows;
     uint8_t justify_content, align_items, align_self, align_content;
     uint8_t justify_items, justify_self;
     uint8_t width_kind, basis_content, border_box;

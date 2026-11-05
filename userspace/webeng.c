@@ -4093,13 +4093,22 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else diag(d, "column span refused", -1);
     } else if (w_eq(prop, "break-before") || w_eq(prop, "break-after")) {
         /* a forced break is kept between columns only; avoid has nothing to
-         * do since a box is never fragmented and units break between boxes */
+         * do between boxes (units break between boxes or lines) */
         int bit = prop[6] == 'b' ? 1 : 2;
         if (value_is(v, vl, "column")) n->col_break |= (uint8_t)bit;
         else if (value_is(v, vl, "auto") || value_is(v, vl, "avoid") || value_is(v, vl, "avoid-column")) n->col_break &= (uint8_t)~bit;
         else diag(d, "break refused", -1);
     } else if (w_eq(prop, "break-inside")) {
-        if (!value_is(v, vl, "auto") && !value_is(v, vl, "avoid") && !value_is(v, vl, "avoid-column")) diag(d, "break refused", -1);
+        /* Lot 73: a block of lines is fragmented between columns unless avoid */
+        if (value_is(v, vl, "avoid") || value_is(v, vl, "avoid-column")) n->col_avoid_inside = 1;
+        else if (value_is(v, vl, "auto")) n->col_avoid_inside = 0;
+        else diag(d, "break refused", -1);
+    } else if (w_eq(prop, "orphans") || w_eq(prop, "widows")) {
+        int k = 0, value = 0;
+        while (k < vl && v[k] >= '0' && v[k] <= '9' && value < 1000) value = value * 10 + (v[k++] - '0');
+        if (k != vl || vl == 0 || value < 1 || value > 99) diag(d, "break refused", -1);
+        else if (prop[0] == 'o') n->orphans = (uint8_t)value;
+        else n->widows = (uint8_t)value;
     } else if (w_eq(prop, "column-rule")) {
         if (parse_column_rule(n, v, vl)) diag(d, "column rule refused", -1);
     } else if (w_eq(prop, "column-rule-style")) {
@@ -4507,6 +4516,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->list_style = p ? p->list_style : WE_LIST_NONE;
         n->lsi_off = p ? p->lsi_off : 0; n->lsi_len = p ? p->lsi_len : 0;
         n->col_count = 0; n->col_width = -1; n->col_fill_auto = 0; n->col_span_all = 0; n->col_break = 0;
+        n->col_avoid_inside = 0; n->orphans = p ? p->orphans : 2; n->widows = p ? p->widows : 2;
         n->rule_w = 3; n->rule_style = 0; n->rule_color_set = 0; n->rule_color = 0;
         n->border_color = n->color;
         n->quotes_kind = p ? p->quotes_kind : WE_QUOTES_AUTO;
@@ -7172,8 +7182,14 @@ static void rtl_mirror(we_doc_t *d, int idx, int first, int x, int width) {
  * A block with column-count or column-width lays its content out at the
  * column width (count from column-width as CSS: as many as fit, capped by
  * column-count and WE_COLUMNS_MAX; the gap is column-gap, normal 8 px),
- * then cuts it into units: each in-flow child box whole (no fragmentation
- * inside a box: break-inside avoid), and each line of the inline content.
+ * then cuts it into units: each in-flow child box whole, and each line of
+ * the inline content. Lot 73: a block child made of lines only (no box of
+ * its own painted: no border, background or shadow; no block descendant)
+ * is fragmented: each of its lines is a unit, the first `orphans' lines
+ * and the last `widows' lines stay together (CSS defaults 2), its top
+ * margin and padding go with its first line and the bottom ones with its
+ * last; break-inside: avoid keeps it whole. Its node (the inspector and
+ * hit-test box) follows its first fragment.
  * The units are packed in order into columns of height h: the smallest h
  * that needs no more than the count (balance), or the definite height with
  * column-fill auto (and as a cap when balancing). Units that do not fit go
@@ -7181,7 +7197,7 @@ static void rtl_mirror(we_doc_t *d, int idx, int first, int x, int width) {
  * its subtree and items to its column. column-rule paints in the middle of
  * each gap between two used columns, over the column height, after the
  * content. Vertical writing modes are refused. */
-typedef struct { int node, top, bottom, line, span, brk; } we_col_unit_t;
+typedef struct { int node, top, bottom, line, span, brk, frag; } we_col_unit_t;
 static we_col_unit_t col_unit[WE_MAX_ITEMS + WE_MAX_NODES];
 static int16_t col_of[WE_MAX_ITEMS + WE_MAX_NODES];
 static uint8_t col_moved[WE_MAX_ITEMS];
@@ -7207,6 +7223,69 @@ static int column_plan(const we_node_t *n, int width, int *gap, int *cw) {
     return count;
 }
 
+/* Lot 73: a block child that may be cut between its lines: only lines
+ * inside (no block box below it), nothing painted for the box itself */
+static int column_fragmentable(const we_doc_t *d, int c, int first) {
+    const we_node_t *k = &d->nodes[c];
+    uint32_t i;
+    int j;
+    if (k->display != WE_DISP_BLOCK || k->col_avoid_inside || k->col_span_all || k->absolute || k->is_text) return 0;
+    for (j = c + 1; j < (int)d->nnodes && inside(d, j, c); j++) {
+        const we_node_t *q = &d->nodes[j];
+        if (q->display == WE_DISP_NONE || q->is_text || q->display == WE_DISP_INLINE || q->display == WE_DISP_INLINE_BLOCK) {
+            continue;          /* an inline-block is one item of a line */
+        }
+        return 0;
+    }
+    for (i = (uint32_t)first; i < d->nitems; i++)
+        if (d->items[i].kind && d->item_owner[i] == c && d->items[i].kind != OS_FB_WEB_TEXT) return 0;
+    return 1;
+}
+
+/* Lot 73: the lines of block child c as units from units[count]; merges
+ * the first orphans and the last widows lines; returns the new count, or
+ * -1 when the block has too few lines to be cut (kept whole) */
+static int column_fragments(we_doc_t *d, int c, int first, int count, int line_h) {
+    const we_node_t *k = &d->nodes[c];
+    uint32_t i;
+    int open = -1, start = count, n, keep_top, keep_bottom, u, out;
+    for (i = (uint32_t)first; i < d->nitems; i++) {
+        const os_fb_web_item_t *it = &d->items[i];
+        int top, bottom;
+        if (!it->kind || !inside(d, d->item_owner[i], c)) continue;
+        top = it->kind == OS_FB_WEB_TEXT ? it->y - 1 : it->y;
+        bottom = it->kind == OS_FB_WEB_TEXT ? top + line_h : it->y + it->h;
+        if (open >= 0 && top < col_unit[open].bottom) {
+            if (top < col_unit[open].top) col_unit[open].top = top;
+            if (bottom > col_unit[open].bottom) col_unit[open].bottom = bottom;
+            continue;
+        }
+        if (count >= (int)(sizeof(col_unit) / sizeof(col_unit[0]))) return -1;
+        open = count++;
+        col_unit[open].node = c; col_unit[open].line = 1; col_unit[open].span = 0;
+        col_unit[open].brk = 0; col_unit[open].frag = 1;
+        col_unit[open].top = top; col_unit[open].bottom = bottom;
+    }
+    n = count - start;
+    keep_top = k->orphans ? k->orphans : 1;
+    keep_bottom = k->widows ? k->widows : 1;
+    if (n < 2 || n < keep_top + keep_bottom) return -1;
+    /* merge [start, start + keep_top) and [count - keep_bottom, count) */
+    out = start + 1;
+    col_unit[start].bottom = col_unit[start + keep_top - 1].bottom;
+    for (u = start + keep_top; u < count - keep_bottom; u++) col_unit[out++] = col_unit[u];
+    col_unit[out] = col_unit[count - keep_bottom];
+    col_unit[out].bottom = col_unit[count - 1].bottom;
+    out++;
+    /* the box edges go with the first and the last fragment */
+    col_unit[start].top = k->y - k->margin[0];
+    col_unit[start].frag = 2;
+    col_unit[start].brk = k->col_break & 1;
+    col_unit[out - 1].bottom = k->y + k->h + k->margin[2];
+    col_unit[out - 1].brk |= k->col_break & 2;
+    return out;
+}
+
 /* the units in order; returns their count */
 static int column_units(we_doc_t *d, int idx, int first) {
     int c, count = 0, line_h = flow_line_h(d, idx);
@@ -7229,10 +7308,15 @@ static int column_units(we_doc_t *d, int idx, int first) {
                 }
                 open = count++;
                 col_unit[open].node = c; col_unit[open].line = 1; col_unit[open].span = col_unit[open].brk = 0;
+                col_unit[open].frag = 0;
                 col_unit[open].top = top; col_unit[open].bottom = bottom;
             }
         } else {
-            col_unit[count].node = c; col_unit[count].line = 0;
+            if (column_fragmentable(d, c, first)) {
+                int got = column_fragments(d, c, first, count, line_h);
+                if (got > 0) { count = got; continue; }
+            }
+            col_unit[count].node = c; col_unit[count].line = 0; col_unit[count].frag = 0;
             col_unit[count].span = k->col_span_all && k->display != WE_DISP_INLINE_BLOCK;
             col_unit[count].brk = k->col_break;
             col_unit[count].top = k->y - k->margin[0];
@@ -7271,7 +7355,7 @@ static void column_shift(we_doc_t *d, int first, const we_col_unit_t *u, int dx,
         it->x = (int16_t)limit_coord(it->x + dx);
         it->y = (int16_t)limit_coord(it->y + dy);
     }
-    if (u->line) return;
+    if (u->line && u->frag != 2) return;     /* Lot 73: a fragmented box follows its first fragment */
     for (k = u->node; k < (int)d->nnodes; k++)
         if (inside(d, k, u->node)) {
             d->nodes[k].x = (int16_t)limit_coord(d->nodes[k].x + dx);
