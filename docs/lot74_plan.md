@@ -47,7 +47,16 @@ no kernel change, no new syscall, no ABI change.
 - Top and bottom sticky boxes kept inside their containing block while
   scrolling (`sticky_apply` from `we_scroll` and at the end of layout).
 
-## 8. Proof
+## 8. Later Lot 74 additions
+- `@font-face` refused with diag `font face refused`.
+- `table-layout:fixed` (first row / col widths).
+- `pattern=` validation (subset regex with `*+?{}` classes and escapes).
+- `dialog` with `open`, click toggle, `method=dialog` / `formmethod=dialog`.
+- `overflow:auto/scroll` vertical scrollbar + `we_box_scroll_click`.
+- `iframe srcdoc` nested fragment (no network `src`).
+- CSS nesting (`&` and descendant), `accent-color`, `appearance:none`.
+
+## 9. Proof
 - Unit tests: `tests/unit/userspace/webeng_lot74_forms.inc`,
   `webeng_lot74_forms2.inc`, `webeng_lot74_css.inc`, GUI tests in
   `test_osui_gui.c`.
@@ -57,7 +66,7 @@ no kernel change, no new syscall, no ABI change.
   empty then sent urlencoded, @layer, :has, rowspan, fragment scroll.
   CI job `lot74-forms`.
 
-## 9. Review points
+## 10. Review points
 - The Lot 73 assertion on the diag `css layer order ignored` now expects 0
   (layers are honoured).
 - `"0"` left the Lot 56 list of bad rowspan values (rowspan=0 is valid).
@@ -65,6 +74,6 @@ no kernel change, no new syscall, no ABI change.
 - Engine POST works on local pages (also with an absolute http action);
   fetched http pages stay in the Lot 71 reader view, whose forms are links.
 
-## 10. First gap
+## 11. First gap
 - Forms on fetched (reader-view) http pages do not use the engine forms;
   no file input, no multipart/form-data.
