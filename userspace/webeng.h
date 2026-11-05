@@ -368,6 +368,8 @@ typedef struct {
     uint8_t sticky;            /* lot 74: position:sticky (relative + the scroll shift) */
     int16_t sticky_dy;         /* lot 74: the current shift of a sticky box */
     uint8_t table_fixed;       /* lot 74: table-layout:fixed */
+    uint8_t accent_set, appearance; /* lot 74: accent-color, appearance:none */
+    uint32_t accent;
     uint16_t fpat_off, fpat_len; /* lot 74: pattern= in the pool */
     int16_t box_scroll_y;      /* lot 74: overflow box scroll offset */
     uint8_t collapse_w;        /* lot 61: shared cell border width, layout time */

@@ -101,6 +101,29 @@ static void test_l74_iframe_srcdoc(void) {
     TEST_ASSERT_TRUE(we_find_id(&g_doc, "y") > 0);
 }
 
+
+static void test_l74_css_nesting(void) {
+    lot52_render("<style>p{color:#000001; & span{color:#000002} &.x{color:#000003} q{color:#000004}}"
+                 "div{color:#000005; & p{color:#000006}}</style>"
+                 L64_BODY "<p id=a>a<span id=b>b</span></p><p id=c class=x>c</p><div id=d><p id=e>e</p></div>"
+                 "<p id=f><q id=g>g</q></p></body>", 400);
+    TEST_ASSERT_EQUAL(1, l73c("a"));
+    TEST_ASSERT_EQUAL(2, l73c("b"));
+    TEST_ASSERT_EQUAL(3, l73c("c"));
+    TEST_ASSERT_EQUAL(4, l73c("g"));
+    TEST_ASSERT_EQUAL(6, l73c("e"));
+}
+
+static void test_l74_accent_appearance(void) {
+    l74_open("<style>input{accent-color:#112233}#n{appearance:none; -webkit-appearance:none}</style>"
+             "<form><input id=c type=checkbox checked><input id=n type=text value=x></form>");
+    TEST_ASSERT_EQUAL(1, g_doc.nodes[l74_node("c")].accent_set);
+    TEST_ASSERT_EQUAL(0x112233, g_doc.nodes[l74_node("c")].accent & 0xffffff);
+    TEST_ASSERT_EQUAL(1, g_doc.nodes[l74_node("n")].appearance);
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[l74_node("n")].border);
+    l74_done();
+}
+
 static void lot74_more_tests(void) {
     RUN_TEST(test_l74_font_face);
     RUN_TEST(test_l74_table_fixed);
@@ -108,4 +131,6 @@ static void lot74_more_tests(void) {
     RUN_TEST(test_l74_dialog);
     RUN_TEST(test_l74_scrollbar);
     RUN_TEST(test_l74_iframe_srcdoc);
+    RUN_TEST(test_l74_css_nesting);
+    RUN_TEST(test_l74_accent_appearance);
 }

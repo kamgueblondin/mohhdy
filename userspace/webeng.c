@@ -752,6 +752,8 @@ static int layer_order(we_doc_t *d, int parent, int rank) {
     return rank;
 }
 
+#include "webeng_nest.inc"
+
 /* Lot 73: a range of the style text; @media, @supports and @layer
  * blocks are read in place when they apply (webeng_cssq.inc).
  * Lot 74: layer is the current cascade layer (-1: unlayered). */
@@ -846,6 +848,7 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth, int layer) {
 }
 
 static void parse_css(we_doc_t* d) {
+    nest_rewrite(d);   /* lot 74: flatten nested rules first */
     cssq_sel_base = d->css;
     parse_css_range(d, 0, (int)d->css_len, 0, -1);
     (void)layer_order(d, -1, 0);
@@ -4270,6 +4273,14 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = n->fixed = n->sticky = 0; }
         else if (value_is(v, vl, "sticky") || value_is(v, vl, "-webkit-sticky")) { n->relative = n->sticky = 1; n->absolute = n->fixed = 0; }
         else diag(d, "position refused", -1);
+    } else if (w_eq(prop, "accent-color")) {
+        /* Lot 74: stored as the border_color of checkbox/radio/range fill hint */
+        uint32_t c;
+        if (parse_color(v, vl, &c) == 0) { n->accent = c; n->accent_set = 1; }
+        else diag(d, "accent color refused", -1);
+    } else if (w_eq(prop, "appearance") || w_eq(prop, "-webkit-appearance")) {
+        if (value_is(v, vl, "none") || value_is(v, vl, "auto")) n->appearance = value_is(v, vl, "none") ? 1 : 0;
+        else diag(d, "appearance refused", -1);
     } else if (w_eq(prop, "caption-side")) {
         /* lot 73 */
         if (value_is(v, vl, "top") || value_is(v, vl, "block-start")) n->caption_bottom = 0;
@@ -4725,7 +4736,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->auto_col_floor = n->auto_row_floor = n->auto_col_cap = n->auto_row_cap = -1;
         n->relative = n->absolute = n->flex_reverse = n->margin_auto = n->border_collapse = 0;
         n->fixed = n->sticky = 0;
-        n->table_fixed = 0; n->box_scroll_y = 0;
+        n->table_fixed = 0; n->box_scroll_y = 0; n->accent_set = n->appearance = 0;
         n->border_style = n->collapse_cell = 0;
         border_edges_reset(n);
         n->item_order = 0;
@@ -4966,6 +4977,7 @@ int we_style(we_doc_t* d) {
     d->source_pool = (uint16_t)d->pool_used;
     for (i = 0; i < count; i++) style_node(d, &d->nodes[i], (int)i, (int)i, 0);
     generate_content(d, (int)count);
+    forms_accent_apply(d);
     for (i = 0; i < d->nnodes; i++) {
         we_node_t* n = &d->nodes[i];
         int side;

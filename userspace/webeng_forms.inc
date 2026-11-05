@@ -275,7 +275,19 @@ static uint32_t forms_meter_color(const we_node_t *m) {
     return 0x4CAF50;
 }
 
+/* Lot 74: re-apply accent-color / appearance after the cascade */
+static void forms_accent_apply(we_doc_t *d) {
+    int i;
+    for (i = 1; i < (int)d->nnodes; i++) {
+        we_node_t *n = &d->nodes[i];
+        if (n->appearance) { n->border = 0; n->has_bg = 0; n->bg = 0; continue; }
+        if (n->accent_set && n->border) n->border_color = n->accent;
+        if (n->accent_set && w_eq(n->tag, "::fill")) n->bg = n->accent;
+    }
+}
+
 static void forms_box(we_node_t *n, uint32_t bg) {
+    /* Lot 74: appearance:none drops the UA chrome (caller still sizes). */
     n->display = WE_DISP_INLINE_BLOCK;
     n->border = 1;
     n->border_style = WE_BS_SOLID;
@@ -293,7 +305,8 @@ static void forms_ua_focus(we_doc_t *d, we_node_t *n) {
     n->form_flags2 &= (uint16_t)~WE_FF2_FOCUS;
     forms_ua(d, n);
     n->form_flags2 |= WE_FF2_FOCUS;
-    if (n->border) n->border_color = WE_FORM_FILL;
+    if (n->border) n->border_color = (n->accent_set) ? n->accent : WE_FORM_FILL;
+    if (n->appearance) { n->border = 0; n->bg = 0; n->has_bg = 0; }
 }
 
 /* UA styles of the form elements (after ua_defaults, before the rules) */
@@ -371,7 +384,7 @@ static void forms_ua(we_doc_t *d, we_node_t *n) {
         n->display = pct > 0 ? WE_DISP_BLOCK : WE_DISP_NONE;
         n->width_pct = (int16_t)pct;
         n->height = 8;
-        n->bg = w_eq(p->tag, "meter") ? forms_meter_color(p) : WE_FORM_FILL;
+        n->bg = w_eq(p->tag, "meter") ? forms_meter_color(p) : (p->accent_set ? p->accent : WE_FORM_FILL);
         n->has_bg = 1;
         return;
     }
