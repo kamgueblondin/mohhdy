@@ -33,7 +33,8 @@
  * limit, the image and layout workspaces are sized by it. */
 #define WE_MAX_NODES 160
 #define WE_MAX_ITEMS OS_FB_WEB_ITEMS
-#define WE_MAX_RULES 48
+#define WE_MAX_RULES 64
+#define WE_VARS_MAX 12   /* lot 73: custom properties per element */
 #define WE_POOL 32768
 #define WE_TEXT_SOURCE_MAX 512
 #define WE_CSS_MAX 2048
@@ -275,6 +276,9 @@ typedef struct {
     /* lot 73: form controls (webeng_forms.inc): WE_FORM_* type, WE_FF_*
      * flags, size / rows / cols attributes, value and placeholder in the
      * pool, progress / meter value, min, max, low, high in hundredths */
+    /* Lot 73: custom properties: names and values in pool */
+    uint8_t nvars, var_name_len[WE_VARS_MAX];
+    uint16_t var_name_off[WE_VARS_MAX], var_off[WE_VARS_MAX], var_len[WE_VARS_MAX];
     uint8_t form_type, form_flags, form_size, form_rows, form_cols, meter_set;
     uint16_t fval_off, fval_len, fph_off, fph_len;
     int32_t meter[5];
@@ -387,7 +391,15 @@ typedef struct {
 #define WE_SELECTOR_WORK_MAX 4096
 enum { WE_SEL_DESC, WE_SEL_CHILD, WE_SEL_ADJACENT, WE_SEL_SIBLING };
 enum { WE_PSEUDO_FIRST = 1, WE_PSEUDO_LAST, WE_PSEUDO_ONLY, WE_PSEUDO_EMPTY,
-       WE_PSEUDO_ROOT, WE_PSEUDO_NTH, WE_PSEUDO_NTH_LAST, WE_PSEUDO_TYPE, WE_PSEUDO_TYPE_LAST };
+       WE_PSEUDO_ROOT, WE_PSEUDO_NTH, WE_PSEUDO_NTH_LAST, WE_PSEUDO_TYPE, WE_PSEUDO_TYPE_LAST,
+       WE_PSEUDO_ONLY_TYPE };
+/* Lot 73: :not/:is/:where arguments and state pseudo-classes */
+enum { WE_LOGIC_NOT = 1, WE_LOGIC_IS, WE_LOGIC_WHERE };
+#define WE_STATE_LINK 1
+#define WE_STATE_NEVER 2
+#define WE_STATE_CHECKED 4
+#define WE_STATE_DISABLED 8
+#define WE_STATE_ENABLED 16
 /* Lot 63: generated content */
 enum { WE_PSEUDO_BEFORE = 1, WE_PSEUDO_AFTER = 2 };
 enum { WE_CONTENT_NONE, WE_CONTENT_LIST, WE_CONTENT_UA_OPEN, WE_CONTENT_UA_CLOSE };
@@ -404,6 +416,8 @@ typedef struct {
     we_selector_attr_t attr[WE_SELECTOR_ATTRS_MAX];
     uint8_t classes, attrs, pseudo, combinator;
     int16_t nth_a, nth_b;
+    uint8_t state, logic_kind[2];       /* lot 73 */
+    uint16_t logic_off[2], logic_len[2]; /* lot 73: arguments in css[] */
 } we_selector_part_t;
 typedef struct {
     we_selector_part_t part[WE_SELECTOR_PARTS_MAX];
@@ -417,6 +431,7 @@ typedef struct {
 typedef struct {
     uint32_t nodes, elements, text_nodes, scripts_skipped;
     uint32_t rules, decls_applied, unknown_props;
+    uint32_t vars_used, media_skipped;   /* lot 73 */
     uint32_t boxes, lines, items, items_dropped;
     uint32_t page_w, page_h;
     uint32_t flex_lines, grid_lines, floats, table_rows;
@@ -444,6 +459,8 @@ typedef struct {
     int16_t root;
     /* Lot 61: explicit viewport and the scroll offset fixed boxes follow. */
     int16_t viewport_w, viewport_h, scroll_y;
+    /* Lot 73: the size @media queries see (0: the layout width, 640 x 480) */
+    int16_t media_w, media_h;
     /* Lot 63: node and pool counts before generated content, so a second
      * we_style drops the generated boxes first. */
     uint16_t source_nodes, source_pool;
@@ -481,6 +498,8 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h);
 /* Clamp y to [0, page_h - viewport_h], move fixed boxes, return the offset. */
 int we_scroll(we_doc_t* d, int y);
 int we_render(we_doc_t* d, const char* html, int len, int viewport_w);
+/* Lot 73: the media size of @media (call after we_parse, before we_style) */
+void we_set_media(we_doc_t *d, int w, int h);
 /* US-045 */
 int we_find_id(const we_doc_t* d, const char* id);
 typedef void (*we_out_fn)(void* ctx, const char* s);

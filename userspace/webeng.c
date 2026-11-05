@@ -553,9 +553,11 @@ static int sel_attribute(const char *s, int len, int *at, we_selector_attr_t *at
     return 0;
 }
 
+#include "webeng_cssq.inc"
+
 static int parse_sel(const char* s, int len, we_rule_t* r) {
     int i = 0, count = 0;
-    w_zero(r->part, sizeof(r->part)); r->ncomp = 0; r->spec = 0;
+    w_zero(r->part, sizeof(r->part)); r->ncomp = 0; r->spec = 0; r->pseudo_el = 0;
     while (i < len && w_space(s[i])) i++;
     while (i < len) {
         we_selector_part_t *part;
@@ -584,6 +586,21 @@ static int parse_sel(const char* s, int len, we_rule_t* r) {
                 int element = i < len && s[i] == ':';
                 if (element) i++;
                 if (sel_ident(s, len, &i, pseudo, sizeof(pseudo), 1)) return -1;
+                /* Lot 73: state pseudo-classes, :not() :is() :where(), *-of-type */
+                if (!element) {
+                    int state = cssq_state_flag(pseudo), rc;
+                    if (state) { part->state |= (uint8_t)state; r->spec += 64; simple = 1; continue; }
+                    rc = cssq_sel_logic(s, len, &i, part, pseudo, &r->spec);
+                    if (rc < 0) return -1;
+                    if (rc == 0) { simple = 1; continue; }
+                    if (w_eq(pseudo, "first-of-type") || w_eq(pseudo, "last-of-type") || w_eq(pseudo, "only-of-type")) {
+                        if (part->pseudo) return -1;
+                        part->pseudo = (uint8_t)(pseudo[0] == 'f' ? WE_PSEUDO_TYPE : pseudo[0] == 'l' ? WE_PSEUDO_TYPE_LAST : WE_PSEUDO_ONLY_TYPE);
+                        part->nth_a = 0; part->nth_b = 1;
+                        r->spec += 64; simple = 1;
+                        continue;
+                    }
+                }
                 /* Lot 63: ::before/::after (and the CSS 2 one-colon form) end the selector */
                 if (w_eq(pseudo, "before") || w_eq(pseudo, "after")) {
                     int rest = i;
@@ -637,17 +654,40 @@ static int decl_end(const char *s, int n, int i, char stop) {
     return i;
 }
 
-static void parse_css(we_doc_t* d) {
+/* Lot 73: a range of the style text; @media, @supports and @layer
+ * blocks are read in place when they apply (webeng_cssq.inc). */
+static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
     const char* s = d->css;
-    int n = (int)d->css_len, i = 0;
     while (i < n) {
         int sel_a, sel_b, dec_a, dec_b, a;
         while (i < n && w_space(s[i])) i++;
         if (i >= n) break;
-        if (s[i] == '@') { /* skip at-rules and their block */
-            int depth = 0;
-            while (i < n) { if (s[i] == '{') depth++; if (s[i] == '}' && --depth <= 0) { i++; break; } if (s[i] == ';' && depth == 0) { i++; break; } i++; }
-            diag(d, "css at-rule skipped", i);
+        if (s[i] == '@') {
+            int name_a = ++i, name_b, pre, level = 0, body_a, body_b;
+            while (i < n && w_namec(s[i])) i++;
+            name_b = i; pre = i;
+            /* the prelude ends at the block or at ';' */
+            i = decl_end(s, n, i, '{');
+            { int semi = decl_end(s, n, pre, ';');
+              if (semi < i) { i = semi + 1; diag(d, "css at-rule skipped", i); continue; } }
+            if (i >= n) { diag(d, "css at-rule skipped", i); break; }
+            body_a = i + 1;
+            for (body_b = i; body_b < n; body_b++) {
+                if (s[body_b] == '"' || s[body_b] == '\'') { int q = s[body_b++]; while (body_b < n && s[body_b] != q) body_b++; continue; }
+                if (s[body_b] == '{') level++;
+                else if (s[body_b] == '}' && --level == 0) break;
+            }
+            i = body_b + 1;
+            if (depth < WE_CSS_NEST_MAX && cssq_is(s + name_a, name_b - name_a, "media")) {
+                if (cssq_media(d, s + pre, body_a - 1 - pre)) parse_css_range(d, body_a, body_b, depth + 1);
+                else d->perf.media_skipped++;
+            } else if (depth < WE_CSS_NEST_MAX && cssq_is(s + name_a, name_b - name_a, "supports")) {
+                if (cssq_supports(d, s + pre, body_a - 1 - pre)) parse_css_range(d, body_a, body_b, depth + 1);
+                else d->perf.media_skipped++;
+            } else if (depth < WE_CSS_NEST_MAX && cssq_is(s + name_a, name_b - name_a, "layer")) {
+                diag(d, "css layer order ignored", body_a);
+                parse_css_range(d, body_a, body_b, depth + 1);
+            } else diag(d, "css at-rule skipped", i);
             continue;
         }
         sel_a = i;
@@ -689,6 +729,11 @@ static void parse_css(we_doc_t* d) {
             a = b + 1;
         }
     }
+}
+
+static void parse_css(we_doc_t* d) {
+    cssq_sel_base = d->css;
+    parse_css_range(d, 0, (int)d->css_len, 0);
     d->perf.rules = d->nrules;
 }
 
@@ -741,7 +786,8 @@ static int match_attribute(const we_doc_t *d, const we_node_t *n, const we_selec
 
 static int match_pseudo(const we_doc_t *d, int idx, const we_selector_part_t *part) {
     const we_node_t *n = &d->nodes[idx];
-    int c, ordinal = 0, total = 0, typed = part->pseudo == WE_PSEUDO_TYPE || part->pseudo == WE_PSEUDO_TYPE_LAST;
+    int c, ordinal = 0, total = 0, typed = part->pseudo == WE_PSEUDO_TYPE || part->pseudo == WE_PSEUDO_TYPE_LAST ||
+                                          part->pseudo == WE_PSEUDO_ONLY_TYPE;
     if (!part->pseudo) return 1;
     if (part->pseudo == WE_PSEUDO_ROOT) return n->parent == 0;
     if (part->pseudo == WE_PSEUDO_EMPTY) {
@@ -759,7 +805,7 @@ static int match_pseudo(const we_doc_t *d, int idx, const we_selector_part_t *pa
     }
     if (part->pseudo == WE_PSEUDO_FIRST) return ordinal == 1;
     if (part->pseudo == WE_PSEUDO_LAST) return ordinal == total;
-    if (part->pseudo == WE_PSEUDO_ONLY) return total == 1;
+    if (part->pseudo == WE_PSEUDO_ONLY || part->pseudo == WE_PSEUDO_ONLY_TYPE) return total == 1;
     if (part->pseudo == WE_PSEUDO_NTH_LAST || part->pseudo == WE_PSEUDO_TYPE_LAST) ordinal = total - ordinal + 1;
     ordinal -= part->nth_b;
     if (!part->nth_a) return ordinal == 0;
@@ -773,6 +819,8 @@ static int match_comp(const we_doc_t *d, int idx, const we_selector_part_t *part
     if (part->id[0] && (w_len(n->id) != w_len(part->id) || !sel_equal(n->id, part->id, w_len(n->id), 1))) return 0;
     for (i = 0; i < part->classes; i++) if (!has_class(n->cls, part->cls[i])) return 0;
     for (i = 0; i < part->attrs; i++) if (!match_attribute(d, n, &part->attr[i])) return 0;
+    if (part->state && !cssq_match_state(n, part->state)) return 0;
+    if (part->logic_kind[0] && !cssq_match_logic(d, idx, part)) return 0;
     return match_pseudo(d, idx, part);
 }
 
@@ -3764,6 +3812,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     w_cpy(prop, sizeof(prop), p, pl);
     for (k = 0; prop[k]; k++) prop[k] = w_low(prop[k]);
     if (mode_pass && !w_eq(prop, "writing-mode") && !w_eq(prop, "direction") && !w_eq(prop, "text-orientation")) return;
+    if (cssq_decl_front(d, n, p, pl, &v, &vl)) return;   /* lot 73: --x and var() */
     { const char *mapped = logical_property(n, prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
     while (vl > 0 && w_space(v[vl - 1])) vl--;
     d->perf.decls_applied++;
@@ -4574,6 +4623,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->quotes_kind = p ? p->quotes_kind : WE_QUOTES_AUTO;
         n->quotes_off = p ? p->quotes_off : 0; n->quotes_len = p ? p->quotes_len : 0;
         n->content_kind = WE_CONTENT_NONE;
+        cssq_inherit_vars(p, n);
         if (n->is_text) { n->display = WE_DISP_INLINE; forms_text_style(d, n); return; }
         if (i == 0) { n->display = WE_DISP_BLOCK; return; }
         if (pseudo) {
@@ -4584,6 +4634,11 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         if (!pseudo && n->dir_attr) n->dir_rtl = (uint8_t)(n->dir_attr == 2);
         /* lot 64: writing-mode and direction first, so that the logical
          * properties of the same element map to the right sides */
+        /* lot 73: custom properties before every other declaration */
+        vars_pass = 1;
+        cascade_rules(d, match, n, pseudo, 0);
+        cascade_rules(d, match, n, pseudo, 1);
+        vars_pass = 0;
         mode_pass = 1;
         cascade_rules(d, match, n, pseudo, 0);
         cascade_rules(d, match, n, pseudo, 1);
@@ -11593,6 +11648,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
 int we_render(we_doc_t* d, const char* html, int len, int viewport_w) {
     int rc = we_parse(d, html, len);
     if (rc != 0) return rc;
+    if (!d->media_w) we_set_media(d, viewport_w, 0);
     rc = we_style(d);
     if (rc != 0) return rc;
     return we_layout(d, viewport_w);

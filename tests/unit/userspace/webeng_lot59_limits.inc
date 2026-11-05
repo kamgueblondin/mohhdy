@@ -1784,7 +1784,7 @@ static void test_l59_limits_atomic_width_13(void) {
     TEST_ASSERT_NOT_NULL(find_text("CDEF"));
     TEST_ASSERT_EQUAL(0, find_text("CDEF")->x);
     TEST_ASSERT_EQUAL(11, find_text("CDEF")->y);
-    TEST_ASSERT_TRUE(lot52_has_diag("intrinsic size refused"));
+    TEST_ASSERT_TRUE(lot52_has_diag("css variable undefined"));   /* lot 73: var() of a missing variable */
 }
 
 static void test_l59_limits_atomic_width_14(void) {
