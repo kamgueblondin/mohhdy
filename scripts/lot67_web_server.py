@@ -28,6 +28,9 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /lot73/anim.html    Lot 73: an animated GIF (red, green, blue frames,
                       50 cs, loop forever) and a two-frame GIF played twice,
                       /lot73/img/NAME (tests/unit/userspace/imgdec_anim_samples.h)
+  /lot73/pic.html     Lot 73: picture / srcset choice and a WebP image
+  /lot73/etag.txt     Lot 73: ETag + no-cache, 304 on If-None-Match
+  /lot73/fresh.txt    Lot 73: Cache-Control max-age=300
   /lot72/cp1251.html  Lot 72: a windows-1251 page (charset in the header)
                 with a GET form whose field holds Cyrillic text: the
                 browser must send it back in windows-1251 (/echo)
@@ -51,7 +54,7 @@ def _c_arrays(path):
 
 
 _IMG = {}
-for _h in ("imgdec_samples.h", "imgdec_gif_samples.h", "imgdec_anim_samples.h"):
+for _h in ("imgdec_samples.h", "imgdec_gif_samples.h", "imgdec_anim_samples.h", "imgdec_webp_samples.h"):
     _IMG.update(_c_arrays(os.path.join(_ROOT, "tests", "unit", "userspace", _h)))
 LOT72_FILES = {
     "mire.png": ("img_mire_png", "image/png"),
@@ -77,7 +80,15 @@ LOT72_PAGE = ("<!doctype html><html><head><meta charset=\"utf-8\"><title>Images 
 LOT73_FILES = {
     "anim3.gif": ("gif_anim_page", "image/gif"),
     "twice.gif": ("gif_anim_twice", "image/gif"),
+    "pal4.webp": ("webp_pal4", "image/webp"),
 }
+# Lot 73 (round 2): picture / srcset choice (never.gif must never be
+# asked for) and a WebP lossless image
+LOT73_PIC = ("<!doctype html><html><head><title>Picture Lot 73</title></head><body>"
+             "<p><picture><source srcset=\"img/never.gif\" type=\"image/avif\">"
+             "<source srcset=\"img/anim3.gif\" type=\"image/gif\"><img src=\"img/never.gif\" alt=\"pic\"></picture> "
+             "<img srcset=\"img/twice.gif 1x, img/never.gif 2x\" src=\"img/never.gif\" alt=\"set\"> "
+             "<img src=\"img/pal4.webp\" alt=\"webp\"></p><p>FIN-PIC</p></body></html>")
 LOT73_PAGE = ("<!doctype html><html><head><meta charset=\"utf-8\"><title>Animation Lot 73</title></head><body>"
               "<h1>GIF anime</h1>"
               "<p><img src=\"img/anim3.gif\" alt=\"anim\"> <img src=\"img/twice.gif\" alt=\"twice\"></p>"
@@ -223,6 +234,37 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p == "/lot73/anim.html":
             self._send(200, LOT73_PAGE.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot73/pic.html":
+            self._send(200, LOT73_PIC.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot73/etag.txt":
+            # revalidated every time (no-cache), 304 while the ETag matches
+            if self.headers.get("If-None-Match") == '"lot73v1"':
+                print("ETAG 304", flush=True)
+                self.send_response(304)
+                self.send_header("ETag", '"lot73v1"')
+                self.end_headers()
+                return True
+            print("ETAG 200", flush=True)
+            body = b"etag body lot73\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("ETag", '"lot73v1"')
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+        if p == "/lot73/fresh.txt":
+            print("FRESH GET", flush=True)
+            body = b"fresh body lot73\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "max-age=300")
+            self.end_headers()
+            self.wfile.write(body)
             return True
         if p.startswith("/lot73/img/"):
             name = p[len("/lot73/img/"):]

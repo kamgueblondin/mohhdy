@@ -278,6 +278,9 @@ static int find_ci(const char* s, int n, int from, const char* word) {
     return -1;
 }
 
+static void unlink_last(we_doc_t *d, int parent, int old_last);
+#include "webeng_forms.inc"
+
 int we_parse(we_doc_t* d, const char* html, int len) {
     int stack[WE_DEPTH_MAX];
     int sp = 0, i = 0, text_start = 0, in_title = 0;
@@ -401,6 +404,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                         if (list_number(av, vk, &number)) diag(d, "list number refused", idx);
                         else { n->list_value = (int16_t)number; n->list_value_set = 1; }
                     }
+                    else if (forms_tag(name) && !w_eq(an, "dir")) forms_attr(d, idx, an, av, vk);
                     else if (w_eq(an, "reversed") && w_eq(name, "ol")) n->list_reversed = 1;
                     else if (w_eq(an, "dir")) {
                         /* lot 64: no bidi, so auto finds no strong rtl text */
@@ -457,6 +461,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
         }
         i++;
     }
+    forms_build(d);   /* lot 73 */
     d->perf.nodes = d->nnodes;
     return 0;
 }
@@ -4569,13 +4574,13 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->quotes_kind = p ? p->quotes_kind : WE_QUOTES_AUTO;
         n->quotes_off = p ? p->quotes_off : 0; n->quotes_len = p ? p->quotes_len : 0;
         n->content_kind = WE_CONTENT_NONE;
-        if (n->is_text) { n->display = WE_DISP_INLINE; return; }
+        if (n->is_text) { n->display = WE_DISP_INLINE; forms_text_style(d, n); return; }
         if (i == 0) { n->display = WE_DISP_BLOCK; return; }
         if (pseudo) {
             /* UA: q::before { content: open-quote } q::after { content: close-quote } */
             n->display = WE_DISP_INLINE;
             if (w_eq(d->nodes[match].tag, "q")) n->content_kind = pseudo == WE_PSEUDO_BEFORE ? WE_CONTENT_UA_OPEN : WE_CONTENT_UA_CLOSE;
-        } else ua_defaults(n);
+        } else { ua_defaults(n); forms_ua(d, n); }
         if (!pseudo && n->dir_attr) n->dir_rtl = (uint8_t)(n->dir_attr == 2);
         /* lot 64: writing-mode and direction first, so that the logical
          * properties of the same element map to the right sides */

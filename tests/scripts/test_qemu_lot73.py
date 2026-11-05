@@ -15,10 +15,20 @@ GUI part: the same page in the web window; screenshots are taken over
 about 3 s and the pure colours of the image area (red, green, blue)
 is counted per shot: red, green and blue are all seen (green and blue
 are frames 2 and 3 of the looping image), so the frames are drawn on the screen without a new page load.
+Picture part: /lot73/pic.html, a picture whose gif source wins over an
+avif one and an img whose 1x srcset candidate wins, plus a WebP lossless
+image: the server sees anim3.gif, twice.gif and pal4.webp, never
+never.gif, and web-images shows 3. HTTP cache part: fetch twice a
+max-age=300 answer (the second is "fetch cache fresh", one GET on the
+server) and an ETag + no-cache answer (the second is "fetch cache
+revalidated" with the body, the server answers 200 then 304).
 Layout part: web-render of the local page /web/lot73.html prints the
 clamped paragraph (2 lines, the second ending with "...", the last word
 gone), the inside list marker left of its text in the content box, the
-small-caps text in capitals and the paragraph cut between two columns
+small-caps text in capitals, EDGE 40 px after "pre " (inline border
+and padding take room), the form controls (input value, the chosen
+option only, a checked box, a closed details with only its summary)
+and the paragraph cut between two columns
 (the END word in the second column). Screenshots (PNG, when Pillow is
 there) go to LOT73_SHOTS (default test_logs/lot73-shots).
 """
@@ -166,7 +176,17 @@ def main():
             end = [it for it in found if it[2].endswith("END")]
             if not first or not end or end[0][0] <= first[0][0] + 100:
                 raise RuntimeError("columns: want END in the second column: %r %r" % (first, end))
-            say("layout: 2 clamped lines with ..., inside marker, SMALL CAPS, paragraph cut between columns")
+            pre = [it for it in found if it[2] == "pre"]
+            edge = [it for it in found if it[2] == "EDGE"]
+            if not pre or not edge or edge[0][0] - pre[0][0] != 24 + 8 + 2 + 6:
+                raise RuntimeError("inline edges: want EDGE 40 px right of pre (space, border 2, padding 6): %r %r" % (pre, edge))
+            for want in ("FORMVAL", "CHOSEN", "x", "SUMMARY"):
+                if want not in texts:
+                    raise RuntimeError("forms: want %r in %r" % (want, texts))
+            for gone in ("NOTSHOWN", "HIDDENTXT"):
+                if gone in texts:
+                    raise RuntimeError("forms: %r must not be painted: %r" % (gone, texts))
+            say("layout: 2 clamped lines with ..., inside marker, SMALL CAPS, inline edges, form controls, closed details, paragraph cut between columns")
             # ---- console: the animated page
             lw.run(mon, proc, "web-images on", "web-images on", 30)
             lw.run(mon, proc, "web-open %s/lot73/anim.html" % u, "osui web page sections", fail=["error"])
@@ -206,6 +226,34 @@ def main():
             if " stopped 1" not in lines[1]:
                 raise RuntimeError("the twice-played GIF is not stopped after 8 ticks: %r" % lines[1])
             say("console: 2 animations, frames advance, the looping one plays on, the loop-1 one stops")
+            # ---- picture / srcset choice and a WebP lossless image
+            lw.run(mon, proc, "web-open %s/lot73/pic.html" % u, "osui web page sections", fail=["error"])
+            for name in ("anim3.gif", "twice.gif", "pal4.webp"):
+                wait_server("IMG %s" % name)
+            out = lw.run(mon, proc, "web-images", "web-images on found", 30)
+            line = out[out.rfind("web-images on found"):].splitlines()[0]
+            say(line)
+            for want in ("found 3 ", "shown 3 "):
+                if want not in line:
+                    raise RuntimeError("picture page: want %r in %r" % (want, line))
+            if "never.gif" in server_text():
+                raise RuntimeError("picture / srcset: a candidate that must lose was fetched")
+            say("picture: the gif source and the 1x candidate fetched, never.gif never; WebP shown")
+            # ---- HTTP cache: max-age served without a request, ETag revalidated with 304
+            lw.run(mon, proc, "http-cache clear", "http-cache on", 30)
+            lw.run(mon, proc, "fetch %s/lot73/fresh.txt" % u, "fetch ok", 60, fail=["fetch error"])
+            out = lw.run(mon, proc, "fetch %s/lot73/fresh.txt" % u, "fetch ok", 60, fail=["fetch error"])
+            if "fetch cache fresh" not in out or server_text().count("FRESH GET") != 1:
+                raise RuntimeError("http cache: the max-age answer was asked again: %r" % out[-600:])
+            lw.run(mon, proc, "fetch %s/lot73/etag.txt" % u, "fetch ok", 60, fail=["fetch error"])
+            out = lw.run(mon, proc, "fetch %s/lot73/etag.txt" % u, "fetch ok", 60, fail=["fetch error"])
+            if "fetch cache revalidated" not in out or "etag body lot73" not in out:
+                raise RuntimeError("http cache: no revalidation: %r" % out[-600:])
+            if server_text().count("ETAG 200") != 1 or server_text().count("ETAG 304") != 1:
+                raise RuntimeError("http cache: want one 200 then one 304 for the ETag")
+            out = lw.run(mon, proc, "http-cache", "http-cache on", 30)
+            say(out[out.rfind("http-cache on"):].splitlines()[0])
+            say("http cache: fresh hit without a request, ETag 304 revalidation")
             # ---- GUI: frames drawn on the screen over time
             g.send_command_until(mon, "gui", "osui gui live", proc, wait_prompt=False)
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)

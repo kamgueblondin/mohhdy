@@ -1,4 +1,4 @@
-# Lot 73 plan and result: animated GIF, constant-time AES, multi-column fragmentation, line clamp, inside list markers, small-caps, underline offset
+# Lot 73 plan and result: animated GIF, constant-time AES, multi-column fragmentation, line clamp, inside list markers, small-caps, underline offset, srcset and picture, HTTP cache, inline box edges and box-decoration-break, GIF in the viewer, WebP lossless, form controls
 
 Branch `cursor/lot73`, base `origin/main` d2ca116 (after PR #229, Lot 72).
 One engine (`userspace/webeng.c`), freestanding i386 C in Ring 3, no new
@@ -82,10 +82,69 @@ syscall, no ABI change; one kernel source change for review (section 7).
 - `text-underline-offset: auto | 0..16px` (inherited) moves the
   underline down.
 
+## 5b. Round 2 features
+- srcset and `<picture>` (`userspace/wf_srcset.c`, `wf_html.c`):
+  x and w descriptors (smallest density >= the device pixel ratio, else
+  the largest; first wins ties; bad candidates skipped), `sizes` with
+  media conditions (min-width / max-width, and, comma lists) in px, vw,
+  em, rem; `<source type>` limited to the decoded formats (png, jpeg,
+  gif, bmp, ico; `image/webp` is refused because most WebP files are
+  lossy); `<source media>`. Viewport 640 px and ratio 1 by default
+  (`wf_html_set_viewport`). Stats `images_srcset`, `sources_skipped`.
+- HTTP cache (`userspace/wf_cache.c`, `wf_fetch.c`): plain GETs only, 16
+  entries, 512 KiB pool (one body at most a quarter), LRU eviction.
+  Cache-Control no-store / no-cache / max-age (quoted too), Pragma
+  no-cache only without Cache-Control, ETag and Last-Modified; an answer
+  with nothing reusable is not stored. A fresh entry is served without a
+  request; a stale one sends If-None-Match / If-Modified-Since (dropped on
+  a redirect); 304 serves the cached body as 200 and refreshes the entry,
+  another status drops it. Shell `http-cache [on|off|clear]`, `fetch`
+  prints "fetch cache fresh" / "fetch cache revalidated".
+- Inline box edges and `box-decoration-break` (webeng.c): the horizontal
+  margin, border and padding of an inline element take room before its
+  first word and after its last; borders and the padded background paint
+  per line fragment (vertical padding and borders paint outside the line
+  box, CSS 2 10.6.1). `slice` (default): start edge on the first
+  fragment, end edge on the last; `clone` (and `-webkit-`): every
+  fragment gets both edges and the room for them. Words go left to right
+  in rtl too (lot 64), so the start edge is the left one.
+- Image viewer: a GIF of two frames or more plays (`osui_tool_anim_tick`
+  from the desktop image sync, 1/100 s clock), delays under 2 cs as 10,
+  NETSCAPE2.0 loop count (none: one play); space pauses, resumes or
+  replays a finished one; zoom restarts it.
+- WebP lossless (`userspace/imgdec_webp.inc`, RFC 9649): RIFF with VP8L
+  alone or inside a still VP8X; predictor (14 modes), cross color,
+  subtract green and color indexing (1/2/4/8 bit packing) transforms,
+  color cache, meta prefix codes, LZ77 with the 120-entry distance map;
+  RGBA out (composed over white on web pages). Lossy VP8 and animated
+  files are refused with their size. Scratch: pixels + 256 KiB tables +
+  sub-images. The viewer and web pages show .webp.
+- Form controls painted static (`userspace/webeng_forms.inc`, included
+  by webeng.c): input text / password (stars) / search / email / url /
+  tel / number with value or grey placeholder and `size`, checkbox and
+  radio ("x", "*" when checked), submit / reset / button, hidden;
+  button; select (the first selected option, else the first, plus " v";
+  `size` > 1 or `multiple`: a list box with the selected rows filled);
+  textarea (rows, cols, pre-wrap, placeholder); progress and meter bars
+  (value, min, max, low, high); details / summary ("> " closed, "v "
+  open, a "Details" summary when missing; closed content hidden);
+  fieldset (groove) and legend; `disabled` greys. UA styles first, then
+  author CSS. No input or submission (no event loop for pages); unknown
+  input types show as text ("input type taken as text").
+
 ## 6. Tests and proofs
 - Unit: `test_aes_ct.c` (8), `test_imgdec_anim.c` (8),
   `test_wf_webimg_anim.c` (8), `test_osui_gui.c` (+1),
   `webeng_lot73.inc` (15, in `test_webeng.c`).
+- Round 2: `test_wf_srcset.c` (8), `test_wf_cache.c` (6),
+  `webeng_lot73.inc` (+10: inline edges, box-decoration-break, forms),
+  `test_osui_tools.c` (+5: viewer GIF, WebP), `test_imgdec_webp.c` (12:
+  Pillow fixtures compared byte for byte with libwebp's decode, plus
+  crafted streams for code lengths, distances, the color cache, the
+  half predictor, color indexing and chunk padding).
+- One Lot 64 case (an inline span with padding and border and a
+  content-box background origin) moved: since the inline edges take room
+  its text and image start 5 px right; its left border is now asserted.
 - One Lot 62 list refusal case (`list-style: inside square`, now valid)
   became `list-style: middle square` (still refused); same count of
   refusals asserted.
@@ -97,7 +156,11 @@ syscall, no ABI change; one kernel source change for review (section 7).
   window see red, green and blue frames (blue is only frame 3 of the
   looping image). `web-render /web/lot73.html`: 2 clamped lines ending
   with "...", the inside marker 16 px left of its text, SMALL CAPS, the
-  paragraph cut between two columns. CI job `lot73-anim`.
+  paragraph cut between two columns, EDGE 40 px after "pre " (inline
+  edges), the form controls and a closed details. Round 2: the picture
+  page (gif source and 1x candidate fetched, never.gif never, WebP
+  shown, 3 images) and the HTTP cache (max-age hit with one GET on the
+  server; ETag revalidation answered 200 then 304). CI job `lot73-anim`.
 - Mutations: every new branch has a mutant killed by a host test (list
   in the delivery notes).
 
@@ -107,6 +170,13 @@ syscall, no ABI change; one kernel source change for review (section 7).
   answers in `test_aes_ct.c`).
 - `osui_web_page_ops_t` gains a last member `anim_tick` (Ring 3 struct
   between the GUI and the shell, not a syscall ABI).
+- Inline elements with horizontal margin, border or padding now take
+  that room (they were ignored silently): pages with padded links or
+  badges lay out a few pixels wider, as in browsers.
+- Form controls now paint (they were dropped with their attributes);
+  pages with forms grow by the control boxes.
+- `we_node_t` grows by 36 bytes (forms, box-decoration-break);
+  `we_doc_t` stays under 1 MiB (static assert).
 - Bitsliced AES costs more cycles per block than the table (about 8
   S-box passes per block instead of 16 lookups, each pass 113 gates on
   32-bit words); TLS throughput in QEMU stays well inside the timeouts.
@@ -115,6 +185,6 @@ syscall, no ABI change; one kernel source change for review (section 7).
 - US-031 partial: animated images and more CSS in the one engine;
   `phase3_complete` stays false. Roadmap statuses unchanged.
 - First remaining gap: no JavaScript, so pages that build their content
-  with scripts stay empty; next in the engine: `box-decoration-break`
-  for fragmented painted boxes, `srcset` / `<picture>` selection, an
-  HTTP cache (ETag, max-age), animation in the image viewer.
+  with scripts stay empty; form controls paint but take no input inside
+  the page (the Lot 71 `web-forms` / `web-input` commands still fill and
+  submit forms); WebP lossy (VP8) and animated WebP are refused.

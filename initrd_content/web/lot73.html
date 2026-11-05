@@ -8,11 +8,16 @@ ul.in{list-style:inside square;padding-left:16px}
 .cols{width:300px;column-count:2;column-gap:20px}</style></head>
 <body>
 <!-- Lot 73: line clamp, inside list markers, small-caps, underline
-     offset and a paragraph cut between two columns. -->
+     offset, inline box edges, static form controls, a closed details
+     and a paragraph cut between two columns. -->
 <h1>Lot 73</h1>
 <p class="clamp">clamp one two three four five six seven eight nine ten eleven twelve LASTWORD</p>
 <ul class="in"><li>inside marker</li></ul>
 <p class="sc">small caps</p>
 <p><u class="off">offset underline</u></p>
+<p>pre <span style="border:2px solid #c00;padding:0 6px">EDGE</span> post</p>
+<form><input value="FORMVAL"> <select><option>NOTSHOWN</option><option selected>CHOSEN</option></select>
+<input type="checkbox" checked> <progress value="1" max="2"></progress></form>
+<details><summary>SUMMARY</summary>HIDDENTXT</details>
 <div class="cols"><p style="margin:0">c1 c2 c3 c4 c5 c6 c7 c8 c9 d1 d2 d3 d4 d5 d6 d7 d8 d9 e1 e2 e3 e4 e5 e6 e7 e8 e9 f1 f2 f3 f4 f5 f6 f7 f8 f9 g1 g2 g3 g4 g5 g6 g7 g8 g9 h1 h2 h3 h4 h5 h6 h7 h8 h9 END</p></div>
 </body></html>

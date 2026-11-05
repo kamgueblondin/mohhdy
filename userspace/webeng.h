@@ -61,6 +61,12 @@ int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px);
 #define WE_GRID_AREAS_MAX 8
 #define WE_GRID_NAME_MAX 16
 #define WE_GRID_LINE_ALIASES 2
+/* Lot 73: we_node_t.form_type of a form control */
+enum {
+    WE_FORM_NONE = 0, WE_FORM_TEXT, WE_FORM_PASSWORD, WE_FORM_CHECKBOX, WE_FORM_RADIO,
+    WE_FORM_SUBMIT, WE_FORM_RESET, WE_FORM_BUTTON, WE_FORM_HIDDEN
+};
+
 typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME_MAX]; } we_grid_names_t;
 /* Lot 61: an edge is auto, a line number, a name with an occurrence
  * (nth, negative counts from the end) or a span. A named span counts
@@ -266,6 +272,12 @@ typedef struct {
      * text-orientation (1 upright; mixed paints upright too). */
     uint8_t wmode, dir_rtl, upright;
     uint8_t deco_clone;        /* lot 73: box-decoration-break: clone */
+    /* lot 73: form controls (webeng_forms.inc): WE_FORM_* type, WE_FF_*
+     * flags, size / rows / cols attributes, value and placeholder in the
+     * pool, progress / meter value, min, max, low, high in hundredths */
+    uint8_t form_type, form_flags, form_size, form_rows, form_cols, meter_set;
+    uint16_t fval_off, fval_len, fph_off, fph_len;
+    int32_t meter[5];
     /* Lot 64: text-align / text-align-last given as start or end (bits 0-1
      * and 2-3: 1 start, 2 end), resolved against direction after the cascade. */
     uint8_t align_logical;

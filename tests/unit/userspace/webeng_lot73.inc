@@ -381,6 +381,141 @@ static void test_l73_decoration_break_refusals(void) {
     TEST_ASSERT_NULL(l73_rect_at(25, 10));       /* nor an end edge on the first */
 }
 
+/* Lot 73: form controls painted static (webeng_forms.inc). */
+static const os_fb_web_item_t *l73_item(int kind, int x, int y) {
+    unsigned i;
+    for (i = 0; i < g_doc.nitems; i++)
+        if (g_doc.items[i].kind == kind && g_doc.items[i].x == x && g_doc.items[i].y == y) return &g_doc.items[i];
+    return 0;
+}
+
+static const we_node_t *l73_node(const char *tag, int nth) {
+    unsigned i;
+    for (i = 0; i < g_doc.nnodes; i++)
+        if (strcmp(g_doc.nodes[i].tag, tag) == 0 && nth-- == 0) return &g_doc.nodes[i];
+    return 0;
+}
+
+static int l73_fill_pct(int nth) {
+    const we_node_t *n = l73_node("::fill", nth);
+    return n ? n->width_pct : -1;
+}
+
+static void test_l73_form_inputs(void) {
+    lot52_render(L64_BODY "<input value='abc' size=5><input placeholder='nom'><input type=password value=abc>"
+                 "<input type=checkbox checked><input type=radio checked><input type=checkbox><button>Go</button></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_rect_at(0, 0, 46, 14, 0xFFFFFF);            /* 5 glyphs + padding 2 + border 1 */
+    l61_text_at("abc", 3, 3);
+    l61_rect_at(46, 0, 166, 14, 0xFFFFFF);          /* size 20 by default */
+    l61_text_at("nom", 49, 3);
+    TEST_ASSERT_EQUAL(0x757575, (int)find_text("nom")->color);   /* placeholder */
+    TEST_ASSERT_EQUAL(0x000000, (int)find_text("abc")->color);
+    l61_text_at("***", 3, 17);                      /* password: one star a byte */
+    l61_rect_at(169, 14, 10, 12, 0xFFFFFF);
+    l61_text_at("x", 170, 16);
+    l61_text_at("*", 186, 16);
+    l61_rect_at(201, 14, 10, 12, 0xFFFFFF);         /* unchecked: an empty box */
+    TEST_ASSERT_NULL(l73_item(OS_FB_WEB_TEXT, 202, 16));
+    l61_rect_at(214, 14, 30, 14, 0xEFEFEF);
+    l61_text_at("Go", 221, 17);
+    TEST_ASSERT_NOT_NULL(l73_item(OS_FB_WEB_BORDER, 214, 14));
+}
+
+static void test_l73_form_buttons_and_types(void) {
+    lot52_render(L64_BODY "<input type=submit><input type=reset value=RAZ><input type=hidden value=h><input type=button>"
+                 "<input type=date value=d><input type=text size=0><button type=reset disabled>B</button></body>", 320);
+    l61_text_at("Submit", 7, 3);
+    l61_text_at("RAZ", 69, 3);
+    TEST_ASSERT_NULL(find_text("h"));
+    l61_rect_at(100, 0, 14, 14, 0xEFEFEF);          /* button without value: padding only */
+    l61_text_at("d", 117, 3);                       /* date: as text */
+    l61_text_at("B", 173, 17);
+    TEST_ASSERT_EQUAL(1, l61_diag_count("input type taken as text"));
+    TEST_ASSERT_EQUAL(1, l61_diag_count("form size refused"));
+    TEST_ASSERT_EQUAL(0x6D6D6D, (int)find_text("B")->color);   /* disabled */
+    l61_rect_at(0, 14, 166, 14, 0xFFFFFF);          /* size refused: 20 glyphs, one empty line */
+    l61_rect_at(166, 14, 22, 14, 0xEFEFEF);
+    TEST_ASSERT_EQUAL(WE_FORM_RESET, l73_node("button", 0)->form_type);
+    TEST_ASSERT_EQUAL(WE_FORM_RESET, l73_node("input", 1)->form_type);
+    TEST_ASSERT_EQUAL(WE_DISP_NONE, l73_node("input", 2)->display);   /* hidden */
+}
+
+static void test_l73_form_select(void) {
+    lot52_render(L64_BODY "<select><option>aa</option><option selected>bb</option></select>"
+                 "<select size=2><option>x</option><option selected>y</option><option>z</option></select>"
+                 "<select><optgroup><option>a</option><option>c</option></optgroup></select></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at("bb", 3, 3);
+    TEST_ASSERT_NULL(find_text("aa"));
+    l61_text_at("v", 27, 3);
+    l61_rect_at(38, 0, 14, 24, 0xFFFFFF);           /* list box: two rows */
+    l61_text_at("x", 41, 3);
+    l61_rect_at(41, 12, 8, 10, 0x3875D7);           /* the selected row */
+    TEST_ASSERT_EQUAL(0xFFFFFF, (int)find_text("y")->color);
+    l61_text_at("a", 55, 3);                         /* inside an optgroup: the first */
+    TEST_ASSERT_NULL(find_text("c"));
+    lot52_render(L64_BODY "<select><option selected>p1</option><option selected>p2</option></select>"
+                 "<textarea placeholder=ph>t</textarea></body>", 320);
+    TEST_ASSERT_NOT_NULL(find_text("p1"));          /* one row: the first selected */
+    TEST_ASSERT_NULL(find_text("p2"));
+    TEST_ASSERT_NULL(find_text("ph"));              /* text wins over the placeholder */
+}
+
+static void test_l73_form_textarea_and_bars(void) {
+    lot52_render(L64_BODY "<textarea rows=2 cols=6>hello world</textarea><textarea placeholder=pp></textarea>"
+                 "<progress value=30 max=60></progress><meter value=0.2 low=0.3>m<b>q</b></meter>"
+                 "<meter min=10 max=20 value=15 high=12></meter><progress>x</progress>"
+                 "<meter value=5 min=8 max=2></meter></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_rect_at(0, 0, 54, 26, 0xFFFFFF);
+    l61_text_at("hello ", 3, 4);
+    l61_text_at("world", 3, 14);                     /* wraps inside its columns */
+    l61_text_at("pp", 57, 4);
+    TEST_ASSERT_EQUAL(0x757575, (int)find_text("pp")->color);
+    l61_rect_at(220, 0, 82, 10, 0xE6E6E6);
+    l61_rect_at(221, 1, 40, 8, 0x3875D7);            /* 30 / 60 */
+    l61_rect_at(1, 27, 16, 8, 0xE6C200);             /* 0.2 of 1, under low */
+    TEST_ASSERT_NULL(find_text("m"));
+    TEST_ASSERT_NULL(find_text("q"));
+    l61_rect_at(83, 27, 40, 8, 0xE6C200);            /* over high */
+    TEST_ASSERT_NULL(find_text("x"));
+    l61_rect_at(164, 26, 82, 10, 0xE6E6E6);
+    TEST_ASSERT_NULL(l73_rect_at(165, 27));          /* indeterminate */
+    l61_rect_at(0, 36, 82, 10, 0xE6E6E6);
+    TEST_ASSERT_NULL(l73_rect_at(1, 37));            /* max under min: empty */
+    lot52_render(L64_BODY "<meter value=0.5></meter><progress value=2 max=-1></progress><meter value=x></meter></body>", 320);
+    l61_rect_at(1, 1, 40, 8, 0x4CAF50);
+    l61_rect_at(83, 1, 80, 8, 0x3875D7);             /* a bad max is 1: full */
+    TEST_ASSERT_EQUAL(1, l61_diag_count("form number refused"));
+    lot52_render(L64_BODY "<meter value=3x></meter><progress value=0.5 max=0></progress>"
+                 "<progress value=3 max=2></progress></body>", 320);
+    TEST_ASSERT_EQUAL(1, l61_diag_count("form number refused"));   /* trailing junk */
+    l61_rect_at(83, 1, 40, 8, 0x3875D7);             /* max 0 is ignored: 0.5 of 1 */
+    TEST_ASSERT_EQUAL(100, l73_fill_pct(2));         /* a value over max is max */
+}
+
+static void test_l73_form_details_fieldset(void) {
+    lot52_render(L64_BODY "<details><summary>S</summary>hidden<p>gone</p></details><details open>shown</details>"
+                 "<fieldset><legend>L</legend>f</fieldset></body>", 320);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+    l61_text_at(">", 0, 1);
+    l61_text_at("S", 16, 1);
+    TEST_ASSERT_NULL(find_text("hidden"));
+    TEST_ASSERT_NULL(find_text("gone"));
+    l61_text_at("v", 0, 11);
+    l61_text_at("Details", 16, 11);                  /* a summary is made */
+    l61_text_at("shown", 0, 21);
+    l61_text_at("L", 16, 37);
+    l61_text_at("f", 14, 47);
+    TEST_ASSERT_NOT_NULL(l73_item(OS_FB_WEB_RECT, 2, 30));   /* groove: two tones */
+    TEST_ASSERT_NOT_NULL(l73_item(OS_FB_WEB_RECT, 3, 31));
+    /* author rules come after the UA styles */
+    lot52_render(L64_BODY "<style>input{width:24px;background:#ffff00;border:0}</style><input value=q></body>", 320);
+    l61_rect_at(0, 0, 28, 12, 0xFFFF00);
+    l61_text_at("q", 2, 2);
+}
+
 static void lot73_run(void) {
     RUN_TEST(test_l73_paragraph_split_between_columns);
     RUN_TEST(test_l73_orphans_and_widows);
@@ -400,4 +535,9 @@ static void lot73_run(void) {
     RUN_TEST(test_l73_inline_edges_nesting);
     RUN_TEST(test_l73_inline_edges_long_word_and_wrap);
     RUN_TEST(test_l73_decoration_break_refusals);
+    RUN_TEST(test_l73_form_inputs);
+    RUN_TEST(test_l73_form_buttons_and_types);
+    RUN_TEST(test_l73_form_select);
+    RUN_TEST(test_l73_form_textarea_and_bars);
+    RUN_TEST(test_l73_form_details_fieldset);
 }
