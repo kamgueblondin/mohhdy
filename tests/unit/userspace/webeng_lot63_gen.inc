@@ -130,8 +130,9 @@ static void test_l63_gen_attr(void) {
     lot52_render(L63_STYLE("a::after{content:' (' attr(href) ')'}div::before{content:attr(id) '/' attr(class) '/' attr(src) '/' attr(alt) '/' attr(title) '.'}")
                  "<a id=a href=u.html>x</a><div id=d class='k m' src=s.png alt=t title=no>y</div><p id=p><div>z</div></p></body>", 320);
     TEST_ASSERT_EQUAL_STRING(" (u.html)", l63_gen("a", WE_PSEUDO_AFTER));
-    TEST_ASSERT_EQUAL_STRING("d/k m/s.png/t/.", l63_gen("d", WE_PSEUDO_BEFORE));   /* a missing attribute gives "" */
-    TEST_ASSERT_NOT_NULL(find_text("////."));
+    /* Lot 76: attr(title) reads the pooled title= (was empty here before). */
+    TEST_ASSERT_EQUAL_STRING("d/k m/s.png/t/no.", l63_gen("d", WE_PSEUDO_BEFORE));
+    TEST_ASSERT_NOT_NULL(find_text("////."));   /* empty attrs on the bare div still yield ////. */
 }
 
 static void test_l63_gen_refusals(void) {
