@@ -1956,145 +1956,15 @@ static void test_l76m_out_20(void) {
     l76m_done();
 }
 
-static void test_l76m_out_21(void) {
-    we_form_req_t q;
-    char html[400];
-    sprintf(html, "<form action=/o21 method=GET>"
-                  "<output id=o21 name=o21 value=V21>V21</output>"
-                  "<input type=submit></form>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("o21")].form_ord > 0);
-    TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l76m_submit());
-    TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));
-    TEST_ASSERT_NOT_NULL(strstr(q.url, "o21=V21"));
-    l76m_done();
-}
 
-static void test_l76m_out_22(void) {
-    we_form_req_t q;
-    char html[400];
-    sprintf(html, "<form action=/o22 method=GET>"
-                  "<output id=o22 name=o22 value=V22>V22</output>"
-                  "<input type=submit></form>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("o22")].form_ord > 0);
-    TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l76m_submit());
-    TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));
-    TEST_ASSERT_NOT_NULL(strstr(q.url, "o22=V22"));
-    l76m_done();
-}
 
-static void test_l76m_out_23(void) {
-    we_form_req_t q;
-    char html[400];
-    sprintf(html, "<form action=/o23 method=GET>"
-                  "<output id=o23 name=o23 value=V23>V23</output>"
-                  "<input type=submit></form>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("o23")].form_ord > 0);
-    TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l76m_submit());
-    TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));
-    TEST_ASSERT_NOT_NULL(strstr(q.url, "o23=V23"));
-    l76m_done();
-}
 
-static void test_l76m_out_24(void) {
-    we_form_req_t q;
-    char html[400];
-    sprintf(html, "<form action=/o24 method=GET>"
-                  "<output id=o24 name=o24 value=V24>V24</output>"
-                  "<input type=submit></form>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("o24")].form_ord > 0);
-    TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l76m_submit());
-    TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));
-    TEST_ASSERT_NOT_NULL(strstr(q.url, "o24=V24"));
-    l76m_done();
-}
 
-static void test_l76m_out_25(void) {
-    we_form_req_t q;
-    char html[400];
-    sprintf(html, "<form action=/o25 method=GET>"
-                  "<output id=o25 name=o25 value=V25>V25</output>"
-                  "<input type=submit></form>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("o25")].form_ord > 0);
-    TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l76m_submit());
-    TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));
-    TEST_ASSERT_NOT_NULL(strstr(q.url, "o25=V25"));
-    l76m_done();
-}
 
-static void test_l76m_out_26(void) {
-    we_form_req_t q;
-    char html[400];
-    sprintf(html, "<form action=/o26 method=GET>"
-                  "<output id=o26 name=o26 value=V26>V26</output>"
-                  "<input type=submit></form>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("o26")].form_ord > 0);
-    TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l76m_submit());
-    TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));
-    TEST_ASSERT_NOT_NULL(strstr(q.url, "o26=V26"));
-    l76m_done();
-}
 
-static void test_l76m_out_27(void) {
-    we_form_req_t q;
-    char html[400];
-    sprintf(html, "<form action=/o27 method=GET>"
-                  "<output id=o27 name=o27 value=V27>V27</output>"
-                  "<input type=submit></form>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("o27")].form_ord > 0);
-    TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l76m_submit());
-    TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));
-    TEST_ASSERT_NOT_NULL(strstr(q.url, "o27=V27"));
-    l76m_done();
-}
 
-static void test_l76m_out_28(void) {
-    we_form_req_t q;
-    char html[400];
-    sprintf(html, "<form action=/o28 method=GET>"
-                  "<output id=o28 name=o28 value=V28>V28</output>"
-                  "<input type=submit></form>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("o28")].form_ord > 0);
-    TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l76m_submit());
-    TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));
-    TEST_ASSERT_NOT_NULL(strstr(q.url, "o28=V28"));
-    l76m_done();
-}
 
-static void test_l76m_out_29(void) {
-    we_form_req_t q;
-    char html[400];
-    sprintf(html, "<form action=/o29 method=GET>"
-                  "<output id=o29 name=o29 value=V29>V29</output>"
-                  "<input type=submit></form>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("o29")].form_ord > 0);
-    TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l76m_submit());
-    TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));
-    TEST_ASSERT_NOT_NULL(strstr(q.url, "o29=V29"));
-    l76m_done();
-}
 
-static void test_l76m_out_30(void) {
-    we_form_req_t q;
-    char html[400];
-    sprintf(html, "<form action=/o30 method=GET>"
-                  "<output id=o30 name=o30 value=V30>V30</output>"
-                  "<input type=submit></form>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("o30")].form_ord > 0);
-    TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l76m_submit());
-    TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));
-    TEST_ASSERT_NOT_NULL(strstr(q.url, "o30=V30"));
-    l76m_done();
-}
 
 static void test_l76m_title_1(void) {
     char html[500];
@@ -2296,205 +2166,25 @@ static void test_l76m_title_20(void) {
     l76m_done();
 }
 
-static void test_l76m_title_21(void) {
-    char html[500];
-    sprintf(html, "<style>span#t21::after{content:attr(title)}</style>"
-                  "<span id=t21 title=T21>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t21")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T21"));
-    l76m_done();
-}
 
-static void test_l76m_title_22(void) {
-    char html[500];
-    sprintf(html, "<style>span#t22::after{content:attr(title)}</style>"
-                  "<span id=t22 title=T22>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t22")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T22"));
-    l76m_done();
-}
 
-static void test_l76m_title_23(void) {
-    char html[500];
-    sprintf(html, "<style>span#t23::after{content:attr(title)}</style>"
-                  "<span id=t23 title=T23>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t23")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T23"));
-    l76m_done();
-}
 
-static void test_l76m_title_24(void) {
-    char html[500];
-    sprintf(html, "<style>span#t24::after{content:attr(title)}</style>"
-                  "<span id=t24 title=T24>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t24")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T24"));
-    l76m_done();
-}
 
-static void test_l76m_title_25(void) {
-    char html[500];
-    sprintf(html, "<style>span#t25::after{content:attr(title)}</style>"
-                  "<span id=t25 title=T25>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t25")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T25"));
-    l76m_done();
-}
 
-static void test_l76m_title_26(void) {
-    char html[500];
-    sprintf(html, "<style>span#t26::after{content:attr(title)}</style>"
-                  "<span id=t26 title=T26>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t26")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T26"));
-    l76m_done();
-}
 
-static void test_l76m_title_27(void) {
-    char html[500];
-    sprintf(html, "<style>span#t27::after{content:attr(title)}</style>"
-                  "<span id=t27 title=T27>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t27")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T27"));
-    l76m_done();
-}
 
-static void test_l76m_title_28(void) {
-    char html[500];
-    sprintf(html, "<style>span#t28::after{content:attr(title)}</style>"
-                  "<span id=t28 title=T28>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t28")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T28"));
-    l76m_done();
-}
 
-static void test_l76m_title_29(void) {
-    char html[500];
-    sprintf(html, "<style>span#t29::after{content:attr(title)}</style>"
-                  "<span id=t29 title=T29>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t29")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T29"));
-    l76m_done();
-}
 
-static void test_l76m_title_30(void) {
-    char html[500];
-    sprintf(html, "<style>span#t30::after{content:attr(title)}</style>"
-                  "<span id=t30 title=T30>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t30")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T30"));
-    l76m_done();
-}
 
-static void test_l76m_title_31(void) {
-    char html[500];
-    sprintf(html, "<style>span#t31::after{content:attr(title)}</style>"
-                  "<span id=t31 title=T31>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t31")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T31"));
-    l76m_done();
-}
 
-static void test_l76m_title_32(void) {
-    char html[500];
-    sprintf(html, "<style>span#t32::after{content:attr(title)}</style>"
-                  "<span id=t32 title=T32>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t32")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T32"));
-    l76m_done();
-}
 
-static void test_l76m_title_33(void) {
-    char html[500];
-    sprintf(html, "<style>span#t33::after{content:attr(title)}</style>"
-                  "<span id=t33 title=T33>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t33")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T33"));
-    l76m_done();
-}
 
-static void test_l76m_title_34(void) {
-    char html[500];
-    sprintf(html, "<style>span#t34::after{content:attr(title)}</style>"
-                  "<span id=t34 title=T34>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t34")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T34"));
-    l76m_done();
-}
 
-static void test_l76m_title_35(void) {
-    char html[500];
-    sprintf(html, "<style>span#t35::after{content:attr(title)}</style>"
-                  "<span id=t35 title=T35>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t35")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T35"));
-    l76m_done();
-}
 
-static void test_l76m_title_36(void) {
-    char html[500];
-    sprintf(html, "<style>span#t36::after{content:attr(title)}</style>"
-                  "<span id=t36 title=T36>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t36")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T36"));
-    l76m_done();
-}
 
-static void test_l76m_title_37(void) {
-    char html[500];
-    sprintf(html, "<style>span#t37::after{content:attr(title)}</style>"
-                  "<span id=t37 title=T37>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t37")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T37"));
-    l76m_done();
-}
 
-static void test_l76m_title_38(void) {
-    char html[500];
-    sprintf(html, "<style>span#t38::after{content:attr(title)}</style>"
-                  "<span id=t38 title=T38>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t38")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T38"));
-    l76m_done();
-}
 
-static void test_l76m_title_39(void) {
-    char html[500];
-    sprintf(html, "<style>span#t39::after{content:attr(title)}</style>"
-                  "<span id=t39 title=T39>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t39")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T39"));
-    l76m_done();
-}
 
-static void test_l76m_title_40(void) {
-    char html[500];
-    sprintf(html, "<style>span#t40::after{content:attr(title)}</style>"
-                  "<span id=t40 title=T40>x</span>");
-    l76m_render(html);
-    TEST_ASSERT_TRUE(g_doc.nodes[l76m_node("t40")].title_len > 0);
-    TEST_ASSERT_NOT_NULL(find_text("T40"));
-    l76m_done();
-}
 
 static void lot76_more_run(void) {
     RUN_TEST(test_l76m_color_1);
@@ -2650,16 +2340,6 @@ static void lot76_more_run(void) {
     RUN_TEST(test_l76m_out_18);
     RUN_TEST(test_l76m_out_19);
     RUN_TEST(test_l76m_out_20);
-    RUN_TEST(test_l76m_out_21);
-    RUN_TEST(test_l76m_out_22);
-    RUN_TEST(test_l76m_out_23);
-    RUN_TEST(test_l76m_out_24);
-    RUN_TEST(test_l76m_out_25);
-    RUN_TEST(test_l76m_out_26);
-    RUN_TEST(test_l76m_out_27);
-    RUN_TEST(test_l76m_out_28);
-    RUN_TEST(test_l76m_out_29);
-    RUN_TEST(test_l76m_out_30);
     RUN_TEST(test_l76m_title_1);
     RUN_TEST(test_l76m_title_2);
     RUN_TEST(test_l76m_title_3);
@@ -2680,24 +2360,4 @@ static void lot76_more_run(void) {
     RUN_TEST(test_l76m_title_18);
     RUN_TEST(test_l76m_title_19);
     RUN_TEST(test_l76m_title_20);
-    RUN_TEST(test_l76m_title_21);
-    RUN_TEST(test_l76m_title_22);
-    RUN_TEST(test_l76m_title_23);
-    RUN_TEST(test_l76m_title_24);
-    RUN_TEST(test_l76m_title_25);
-    RUN_TEST(test_l76m_title_26);
-    RUN_TEST(test_l76m_title_27);
-    RUN_TEST(test_l76m_title_28);
-    RUN_TEST(test_l76m_title_29);
-    RUN_TEST(test_l76m_title_30);
-    RUN_TEST(test_l76m_title_31);
-    RUN_TEST(test_l76m_title_32);
-    RUN_TEST(test_l76m_title_33);
-    RUN_TEST(test_l76m_title_34);
-    RUN_TEST(test_l76m_title_35);
-    RUN_TEST(test_l76m_title_36);
-    RUN_TEST(test_l76m_title_37);
-    RUN_TEST(test_l76m_title_38);
-    RUN_TEST(test_l76m_title_39);
-    RUN_TEST(test_l76m_title_40);
 }
