@@ -150,16 +150,24 @@ def main():
             if "a" in ctl:
                 click(mon, proc, ctl["a"])
                 lw.run(mon, proc, "web-ftype hello", "osui web form2", 30)
-            if "go" in ctl:
-                out = click(mon, proc, ctl["go"], marker="osui web")
-                say("form= GET: %r" % out[-200:])
-                wait_server("q=hello", timeout=60)
+            # Multipart first: GET navigate would leave this page
             if "send" in ctl:
                 out = click(mon, proc, ctl["send"], marker="osui web")
                 say("multipart POST: %r" % out[-200:])
                 wait_server("POST", timeout=60)
-                if "multipart" not in out.lower() and "form2 submit" not in out:
+                if "multipart" not in out.lower() and "form2 submit" not in out and "submit POST" not in out:
                     say("multipart note (may be in body): %r" % out[-300:])
+                # reopen local page for form= GET (POST navigated away)
+                lw.run(mon, proc, "web-open /web/lot75.html", "osui web", 60, fail=["error="])
+                out, ctl = fstate(mon, proc)
+                say("reopened controls: %r" % ctl)
+                if "a" in ctl:
+                    click(mon, proc, ctl["a"])
+                    lw.run(mon, proc, "web-ftype hello", "osui web form2", 30)
+            if "go" in ctl:
+                out = click(mon, proc, ctl["go"], marker="osui web")
+                say("form= GET: %r" % out[-200:])
+                wait_server("q=hello", timeout=60)
 
             say("lot75 qemu ok in %.1fs" % (time.monotonic() - t0))
             return 0
