@@ -82,7 +82,8 @@ int wf_form_add(wf_form_page_t *p, const wf_url_t *base, const char *type, const
     int kind, form = p->current;
     int as_button = 0;
     if (!type || !type[0] || f_ieq(type, "text") || f_ieq(type, "search") || f_ieq(type, "email") || f_ieq(type, "url") ||
-        f_ieq(type, "tel") || f_ieq(type, "number")) kind = WF_FIELD_TEXT;
+        f_ieq(type, "tel") || f_ieq(type, "number") ||
+        f_ieq(type, "color") || f_ieq(type, "date")) kind = WF_FIELD_TEXT;   /* Lot 76: engine types */
     else if (f_ieq(type, "password")) kind = WF_FIELD_PASSWORD;
     else if (f_ieq(type, "textarea")) kind = WF_FIELD_TEXTAREA;
     else if (f_ieq(type, "hidden")) kind = WF_FIELD_HIDDEN;
@@ -93,7 +94,7 @@ int wf_form_add(wf_form_page_t *p, const wf_url_t *base, const char *type, const
     else if (f_ieq(type, "submit") || f_ieq(type, "image") || f_ieq(type, "button-submit")) {
         kind = WF_FIELD_SUBMIT;
         as_button = f_ieq(type, "button-submit");
-    } else return -1;   /* reset, button (no submit), color, range, date...: not kept */
+    } else return -1;   /* reset, button (no submit), range, time...: not kept */
     if (p->nfields >= WF_FORM_FIELDS) { p->dropped++; return -1; }
     if (form < 0) form = implicit_form(p, base);
     if (form < 0) { p->dropped++; return -1; }
