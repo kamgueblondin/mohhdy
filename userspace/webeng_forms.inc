@@ -34,6 +34,7 @@ static void finput_range_bounds(const we_node_t *n, int *min, int *max);
 #define WE_FF2_PATTERN 16384  /* lot 74: pattern= present */
 #define WE_FF2_DIALOG 32768  /* lot 74: dialog open toggle */
 #define WE_FF2_LIST 65536    /* lot 74: input list= (datalist id) */
+#define WE_FF2_ACCEPT 4194304 /* Lot 77: accept= on type=file */
 #define WE_FF_CHECKED 1
 #define WE_FF_SELECTED 2
 #define WE_FF_DISABLED 4
@@ -131,6 +132,13 @@ static void forms_attr(we_doc_t *d, int idx, const char *an, const char *av, int
     else if (w_eq(an, "disabled")) n->form_flags |= WE_FF_DISABLED;
     else if (w_eq(an, "open")) n->form_flags |= WE_FF_OPEN;
     else if (w_eq(an, "multiple")) n->form_flags |= WE_FF_MULTIPLE;
+    else if (w_eq(an, "accept") && w_eq(n->tag, "input")) {
+        /* Lot 77: accept= token list for type=file (checked at set_file). */
+        if (pool_put(d, av, vk, &n->faccept_off) == 0) {
+            n->faccept_len = (uint16_t)vk;
+            n->form_flags2 |= WE_FF2_ACCEPT;
+        }
+    }
     else if (w_eq(an, "size") || w_eq(an, "rows") || w_eq(an, "cols")) {
         int k = 0, ok = vk > 0;
         v = 0;
@@ -250,12 +258,27 @@ static void forms_build(we_doc_t *d) {
                 } else if (n->fph_len) (void)forms_text(d, i, d->pool + n->fph_off, n->fph_len, 0, WE_FF_PLACEHOLDER);
                 else (void)forms_text(d, i, "yyyy-mm-dd", 10, 0, WE_FF_PLACEHOLDER);
                 break;
-            case WE_FORM_FILE:
-                if (n->form_flags & WE_FF_VALUE) {
-                    /* show the basename of the bound path */
-                    int a = 0, b = n->fval_len;
-                    while (a < b && d->pool[n->fval_off + a]) a++;
-                    a = 0;
+            case WE_FORM_FILE: {
+                /* Lot 77: basename of first bound path; "name +N" when multiple. */
+                int a = 0, extra = 0, base_len;
+                if (d->forms && n->form_ord && d->forms->files[n->form_ord - 1].npaths > 0) {
+                    we_ffile_pack_t *fp = &d->forms->files[n->form_ord - 1];
+                    const char *p = fp->paths[0];
+                    int plen = 0, slash = 0;
+                    while (p[plen] && plen < WE_FFILE_PATH) plen++;
+                    for (k = 0; k < plen; k++) if (p[k] == '/') slash = k + 1;
+                    base_len = plen - slash;
+                    if (base_len > WE_FORM_TEXT_MAX) base_len = WE_FORM_TEXT_MAX;
+                    for (k = 0; k < base_len; k++) buf[k] = p[slash + k];
+                    extra = fp->npaths - 1;
+                    if (extra > 0 && base_len + 3 < WE_FORM_TEXT_MAX) {
+                        buf[base_len++] = ' ';
+                        buf[base_len++] = '+';
+                        if (extra >= 10) buf[base_len++] = (char)('0' + (extra / 10) % 10);
+                        buf[base_len++] = (char)('0' + (extra % 10));
+                    }
+                    (void)forms_text(d, i, buf, base_len, 0, 0);
+                } else if (n->form_flags & WE_FF_VALUE) {
                     for (k = 0; k < n->fval_len; k++) if (d->pool[n->fval_off + k] == '/') a = k + 1;
                     len = n->fval_len - a;
                     if (len > WE_FORM_TEXT_MAX) len = WE_FORM_TEXT_MAX;
@@ -264,6 +287,7 @@ static void forms_build(we_doc_t *d) {
                 } else if (n->fph_len) (void)forms_text(d, i, d->pool + n->fph_off, n->fph_len, 0, WE_FF_PLACEHOLDER);
                 else (void)forms_text(d, i, "Browse...", 9, 0, WE_FF_PLACEHOLDER);
                 break;
+            }
             default: break;
             }
         } else if (w_eq(n->tag, "select")) {

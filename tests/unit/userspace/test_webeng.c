@@ -322,6 +322,9 @@ static void test_flex_and_grid(void) {
 #include "webeng_lot76_more.inc"
 #include "webeng_lot76_ext.inc"
 #include "webeng_lot76_sys.inc"
+#include "webeng_lot77_file.inc"
+#include "webeng_lot77_grid.inc"
+#include "webeng_lot77_filemore.inc"
 
 int main(void) {
     unity_init();
@@ -1899,6 +1902,9 @@ int main(void) {
     lot76_more_run();
     lot76_ext_run();
     lot76_sys_run();
+    lot77_file_run();
+    lot77_grid_run();
+    lot77_filemore_run();
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

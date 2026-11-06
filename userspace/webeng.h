@@ -90,6 +90,13 @@ typedef struct {
     uint32_t selmask;                 /* list box: selected options (first 32) */
     char val[WE_FSTATE_VAL];          /* text, password, textarea value */
 } we_fstate_t;
+/* Lot 77: up to WE_FFILE_MAX_N absolute paths per type=file control. */
+#define WE_FFILE_MAX_N 4
+#define WE_FFILE_PATH 56
+typedef struct {
+    uint8_t npaths;                   /* 0..WE_FFILE_MAX_N */
+    char paths[WE_FFILE_MAX_N][WE_FFILE_PATH];
+} we_ffile_pack_t;
 typedef struct {
     int16_t focus;        /* focused control, -1 none */
     int16_t submitter;    /* control of the requested submission, -1 implicit */
@@ -97,6 +104,7 @@ typedef struct {
     uint16_t edits, toggles, submits, resets, refused;
     uint8_t autofocused;  /* the autofocus control was focused once */
     we_fstate_t c[WE_FSTATE_MAX];
+    we_ffile_pack_t files[WE_FSTATE_MAX]; /* Lot 77: type=file path packs */
     char target[WE_TARGET_MAX];   /* the URL fragment: the :target element id, "" none */
     char scroll_id[WE_BOXSCROLL_MAX][WE_TARGET_MAX];
     int16_t scroll_y[WE_BOXSCROLL_MAX];
@@ -386,6 +394,7 @@ typedef struct {
     uint16_t fform_off, fform_len; /* lot 75: form= id association */
     uint16_t fac_off, fac_len;     /* Lot 76: autocomplete= token */
     uint16_t ftarget_off, ftarget_len; /* Lot 76: formtarget= */
+    uint16_t faccept_off, faccept_len; /* Lot 77: accept= on type=file */
     int16_t box_scroll_y;      /* lot 74: overflow box scroll offset */
     /* Lot 75: caret-color, user-select, pointer-events, scroll-margin/padding */
     uint8_t caret_set, user_select, pointer_events, scroll_m_set, scroll_p_set;
@@ -643,6 +652,9 @@ int we_form_key(we_doc_t *d, int key);
 int we_form_set_text(we_doc_t *d, int ctl, const char *text);
 /* Lot 75: bind a local VFS path to a type=file control (absolute path). */
 int we_form_set_file(we_doc_t *d, int ctl, const char *path);
+int we_form_clear_file(we_doc_t *d, int ctl);           /* Lot 77 */
+int we_form_file_count(const we_doc_t *d, int ctl);     /* Lot 77 */
+int we_form_file_at(const we_doc_t *d, int ctl, int i, char *out, int max); /* Lot 77 */
 int we_form_request(const we_doc_t *d, we_form_req_t *req);
 int we_form_value(const we_doc_t *d, int ctl, char *out, int max);
 /* Lot 74: the fragment of the page URL ("#id" or "id", percent-decoded):
