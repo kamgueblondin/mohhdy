@@ -325,6 +325,10 @@ static void test_flex_and_grid(void) {
 #include "webeng_lot77_file.inc"
 #include "webeng_lot77_grid.inc"
 #include "webeng_lot77_filemore.inc"
+#include "webeng_lot78_place.inc"
+#include "webeng_lot78_rows.inc"
+#include "webeng_lot78_align.inc"
+#include "webeng_lot78_more.inc"
 
 int main(void) {
     unity_init();
@@ -1905,6 +1909,10 @@ int main(void) {
     lot77_file_run();
     lot77_grid_run();
     lot77_filemore_run();
+    lot78_place_run();
+    lot78_rows_run();
+    lot78_align_run();
+    lot78_more_run();
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

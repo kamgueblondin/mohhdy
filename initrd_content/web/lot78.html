@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Lot 78</title>
+<style>
+body{margin:8px;font-family:monospace}
+#g{display:grid;width:98px;height:68px;grid-template-columns:30px 30px 30px;grid-template-rows:20px 20px 20px;gap:4px;place-items:stretch}
+#a{grid-column:1 / span 2;grid-row:1 / span 2;background:#ccc}
+#b{grid-column:3;grid-row:1;background:#aaa}
+#c{grid-column:3;grid-row:2;background:#999}
+#d{grid-column:1;grid-row:3;background:#888}
+#e{grid-column:2 / 4;grid-row:3;background:#777}
+#box{display:flex;width:120px;height:24px;place-content:center;margin-top:8px;background:#eee}
+#box span{height:12px}
+</style></head>
+<body>
+<!-- Lot 78: place-* shorthands, grid-template-rows, grid-row span, line placement. -->
+<h1>Lot 78</h1>
+<div id="g"><div id="a"></div><div id="b"></div><div id="c"></div><div id="d"></div><div id="e"></div></div>
+<div id="box"><span id="s">x</span></div>
+</body></html>
