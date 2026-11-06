@@ -71,7 +71,9 @@ int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px);
 enum {
     WE_FORM_NONE = 0, WE_FORM_TEXT, WE_FORM_PASSWORD, WE_FORM_CHECKBOX, WE_FORM_RADIO,
     WE_FORM_SUBMIT, WE_FORM_RESET, WE_FORM_BUTTON, WE_FORM_HIDDEN,
-    WE_FORM_FILE   /* Lot 75: input type=file, multipart only */
+    WE_FORM_FILE,   /* Lot 75: input type=file, multipart only */
+    WE_FORM_COLOR,  /* Lot 76: input type=color (#rrggbb) */
+    WE_FORM_DATE    /* Lot 76: input type=date (YYYY-MM-DD) */
 };
 
 typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME_MAX]; } we_grid_names_t;
@@ -121,12 +123,14 @@ enum { WE_FACT_NONE = 0, WE_FACT_CHANGED = 1, WE_FACT_SUBMIT = 2 };
 typedef struct {
     uint8_t post;          /* method=post */
     uint8_t multipart;     /* 1: body is multipart, ctype set */
+    uint8_t target_blank;  /* Lot 76: formtarget=_blank on the submitter/form */
     int16_t form;          /* node of the form */
     char url[WE_FREQ_URL]; /* GET: action (no query, no fragment) ? body; POST: action */
     char body[WE_FREQ_BODY];
     int body_len;
     char ctype[WE_FREQ_CTYPE];     /* Lot 75: Content-Type (with boundary) */
     char boundary[WE_FREQ_BOUNDARY];
+    char target[16];       /* Lot 76: formtarget name (_self / _blank / custom) */
 } we_form_req_t;
 
 /* Lot 61: an edge is auto, a line number, a name with an occurrence
@@ -258,6 +262,7 @@ typedef struct {
     uint16_t text_off, text_len;   /* text node content in pool */
     uint16_t style_off, style_len; /* inline style attribute in pool */
     uint16_t alt_off, alt_len;     /* img alt */
+    uint16_t title_off, title_len; /* Lot 76: title= (attr(title), abbr) */
     uint16_t href_off, href_len;   /* a href (UX4: desktop browser links) */
     uint16_t src_off, src_len;
     uint8_t span_refused, colspan;
@@ -379,6 +384,8 @@ typedef struct {
     uint16_t fpat_off, fpat_len; /* lot 74: pattern= in the pool */
     uint16_t flist_off, flist_len; /* lot 74: list= datalist id */
     uint16_t fform_off, fform_len; /* lot 75: form= id association */
+    uint16_t fac_off, fac_len;     /* Lot 76: autocomplete= token */
+    uint16_t ftarget_off, ftarget_len; /* Lot 76: formtarget= */
     int16_t box_scroll_y;      /* lot 74: overflow box scroll offset */
     /* Lot 75: caret-color, user-select, pointer-events, scroll-margin/padding */
     uint8_t caret_set, user_select, pointer_events, scroll_m_set, scroll_p_set;

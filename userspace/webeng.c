@@ -392,7 +392,10 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                     else if (w_eq(an, "href")) n->attr_flags |= 4;
                     else if (w_eq(an, "src")) n->attr_flags |= 8;
                     else if (w_eq(an, "alt")) n->attr_flags |= 16;
-                    else if (w_eq(an, "title")) n->attr_flags |= 32;   /* lot 73: abbr[title] */
+                    else if (w_eq(an, "title")) {
+                        n->attr_flags |= 32;   /* lot 73: abbr[title]; Lot 76: pool for attr(title) */
+                        if (pool_put(d, av, vk, &n->title_off) == 0) n->title_len = (uint16_t)vk;
+                    }
                     if (w_eq(an, "id")) w_cpy(n->id, 16, av, vk);
                     else if (w_eq(an, "class")) w_cpy(n->cls, 32, av, vk);
                     else if (w_eq(an, "style")) { if (pool_put(d, av, vk, &n->style_off) == 0) n->style_len = (uint16_t)vk; }
@@ -3689,13 +3692,23 @@ static int gen_content(we_doc_t *d, const char *v, int len, int pseudo, we_gen_t
                 if (elem > 0) {
                     const we_node_t *e = &d->nodes[elem];
                     const char *a = 0;
-                    int l = 0, flag = w_eq(name, "id") ? 1 : w_eq(name, "class") ? 2 : w_eq(name, "href") ? 4 : w_eq(name, "src") ? 8 : w_eq(name, "alt") ? 16 : 0;
-                    if (flag & e->attr_flags) {
+                    int l = 0;
+                    int flag = w_eq(name, "id") ? 1 : w_eq(name, "class") ? 2 : w_eq(name, "href") ? 4 :
+                               w_eq(name, "src") ? 8 : w_eq(name, "alt") ? 16 : w_eq(name, "title") ? 32 : 0;
+                    if (flag && (flag & e->attr_flags)) {
                         if (flag == 1) { a = e->id; l = w_len(a); }
                         else if (flag == 2) { a = e->cls; l = w_len(a); }
                         else if (flag == 4) { a = d->pool + e->href_off; l = e->href_len; }
                         else if (flag == 8) { a = d->pool + e->src_off; l = e->src_len; }
-                        else { a = d->pool + e->alt_off; l = e->alt_len; }
+                        else if (flag == 16) { a = d->pool + e->alt_off; l = e->alt_len; }
+                        else { a = d->pool + e->title_off; l = e->title_len; }
+                    } else if (w_eq(name, "value") && e->fval_len) {
+                        /* Lot 76: form control value= */
+                        a = d->pool + e->fval_off; l = e->fval_len;
+                    } else if (w_eq(name, "placeholder") && e->fph_len) {
+                        a = d->pool + e->fph_off; l = e->fph_len;
+                    } else if (w_eq(name, "name") && e->fname_len) {
+                        a = d->pool + e->fname_off; l = e->fname_len;
                     }
                     while (l-- > 0) gen_put(out, olen, cap, *a++);
                 }

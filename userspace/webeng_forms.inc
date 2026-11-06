@@ -77,8 +77,10 @@ static int forms_input_type(we_doc_t *d, const char *v, int len, int idx) {
     for (k = 0; text[k]; k++) if (value_is(v, len, text[k])) return WE_FORM_TEXT;
     if (value_is(v, len, "range")) return WE_FORM_TEXT;   /* lot 74: WE_FF2_RANGE */
     if (value_is(v, len, "file")) return WE_FORM_FILE;   /* Lot 75 */
-    if (value_is(v, len, "color") || value_is(v, len, "date") || value_is(v, len, "time") ||
-        value_is(v, len, "week") || value_is(v, len, "month") || value_is(v, len, "datetime-local")) {
+    if (value_is(v, len, "color")) return WE_FORM_COLOR; /* Lot 76 */
+    if (value_is(v, len, "date")) return WE_FORM_DATE;   /* Lot 76 */
+    if (value_is(v, len, "time") || value_is(v, len, "week") || value_is(v, len, "month") ||
+        value_is(v, len, "datetime-local")) {
         diag(d, "input type taken as text", idx);
         return WE_FORM_TEXT;
     }
@@ -231,6 +233,23 @@ static void forms_build(we_doc_t *d) {
                 else if (n->form_type == WE_FORM_SUBMIT) (void)forms_text(d, i, "Submit", 6, 0, 0);
                 else if (n->form_type == WE_FORM_RESET) (void)forms_text(d, i, "Reset", 5, 0, 0);
                 break;
+            case WE_FORM_COLOR:
+                /* Lot 76: show #rrggbb (default #000000) as the field text */
+                if (n->fval_len) {
+                    len = n->fval_len < WE_FORM_TEXT_MAX ? n->fval_len : WE_FORM_TEXT_MAX;
+                    for (k = 0; k < len; k++) buf[k] = d->pool[n->fval_off + k];
+                    (void)forms_text(d, i, buf, len, 0, 0);
+                } else (void)forms_text(d, i, "#000000", 7, 0, WE_FF_PLACEHOLDER);
+                break;
+            case WE_FORM_DATE:
+                /* Lot 76: show YYYY-MM-DD or a placeholder */
+                if (n->fval_len) {
+                    len = n->fval_len < WE_FORM_TEXT_MAX ? n->fval_len : WE_FORM_TEXT_MAX;
+                    for (k = 0; k < len; k++) buf[k] = d->pool[n->fval_off + k];
+                    (void)forms_text(d, i, buf, len, 0, 0);
+                } else if (n->fph_len) (void)forms_text(d, i, d->pool + n->fph_off, n->fph_len, 0, WE_FF_PLACEHOLDER);
+                else (void)forms_text(d, i, "yyyy-mm-dd", 10, 0, WE_FF_PLACEHOLDER);
+                break;
             case WE_FORM_FILE:
                 if (n->form_flags & WE_FF_VALUE) {
                     /* show the basename of the bound path */
@@ -271,6 +290,10 @@ static void forms_build(we_doc_t *d) {
             } else s = first;
             d->nodes[s].form_flags |= WE_FF_CHOSEN;    /* the summary that shows */
             (void)forms_text(d, s, (d->nodes[i].form_flags & WE_FF_OPEN) ? "v " : "> ", 2, 1, 0);
+        } else if (w_eq(n->tag, "output")) {
+            /* Lot 76: form-associated readonly display; show value= or keep children */
+            if ((n->form_flags & WE_FF_VALUE) && !n->has_text)
+                (void)forms_text(d, i, d->pool + n->fval_off, n->fval_len, 0, 0);
         }
     }
     finput_caret(d);   /* lot 74 */
@@ -354,6 +377,32 @@ static void forms_ua(we_doc_t *d, we_node_t *n) {
         case WE_FORM_SUBMIT: case WE_FORM_RESET: case WE_FORM_BUTTON:
             forms_box(n, 0xEFEFEF);
             n->padding[0] = n->padding[2] = 1; n->padding[1] = n->padding[3] = 6;
+            return;
+        case WE_FORM_COLOR: {
+            /* Lot 76: a swatch-sized field; bg from a valid #rrggbb value */
+            uint32_t sw = 0x000000;
+            int ok = 0;
+            if (n->fval_len == 7 && d->pool[n->fval_off] == '#') {
+                int h, v = 0;
+                for (h = 1; h < 7; h++) {
+                    char c = d->pool[n->fval_off + h];
+                    int dgt = (c >= '0' && c <= '9') ? c - '0' : (c >= 'a' && c <= 'f') ? c - 'a' + 10 :
+                              (c >= 'A' && c <= 'F') ? c - 'A' + 10 : -1;
+                    if (dgt < 0) { v = -1; break; }
+                    v = (v << 4) | dgt;
+                }
+                if (v >= 0) { sw = (uint32_t)v; ok = 1; }
+            }
+            forms_box(n, ok ? sw : 0xFFFFFF);
+            n->padding[0] = n->padding[2] = 1; n->padding[1] = n->padding[3] = 2;
+            n->width = (int16_t)(8 * WE_CHAR_W);
+            if (ok && ((sw >> 16) + ((sw >> 8) & 0xFF) + (sw & 0xFF)) < 300) n->color = 0xFFFFFF;
+            return;
+        }
+        case WE_FORM_DATE:
+            forms_box(n, 0xFFFFFF);
+            n->padding[0] = n->padding[2] = 1; n->padding[1] = n->padding[3] = 2;
+            n->width = (int16_t)(12 * WE_CHAR_W);
             return;
         default:
             if (n->form_flags2 & WE_FF2_RANGE) {   /* lot 74: the track */
