@@ -35,12 +35,12 @@ static void test_reader_engine_get(void) {
     n = wf_section_render(g_red, m, &g_s, 0, &g_fp, g_sec, (int)sizeof(g_sec));
     TEST_ASSERT_TRUE(n > 0);
     TEST_ASSERT_NULL(strchr(g_sec, '\001'));
-    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<input type=\"hidden\" name=\"h\" value=\"1\">"));
-    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<input type=\"text\" name=\"q\" value=\"hi\""));
+    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<input type=\"hidden\" name=\"h\" id=\"h\" value=\"1\">"));
+    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<input type=\"text\" name=\"q\" id=\"q\" value=\"hi\""));
     TEST_ASSERT_NOT_NULL(strstr(g_sec, "checked>"));
     TEST_ASSERT_NOT_NULL(strstr(g_sec, "<option value=\"b\" selected>"));
-    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<textarea name=\"t\">note</textarea>"));
-    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<button type=\"submit\" name=\"go\" value=\"1\">Go</button>"));
+    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<textarea name=\"t\" id=\"t\">note</textarea>"));
+    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<button type=\"submit\" name=\"go\" id=\"go\" value=\"1\">Go</button>"));
 }
 
 static void test_reader_engine_post(void) {
@@ -94,15 +94,16 @@ static void test_emit_html(void) {
     TEST_ASSERT_TRUE(wf_form_emit_html(&fp, 0, out, (int)sizeof(out)) > 0);
     TEST_ASSERT_NOT_NULL(strstr(out, "type=\"email\""));
     TEST_ASSERT_NOT_NULL(strstr(out, "name=\"e\""));
+    TEST_ASSERT_NOT_NULL(strstr(out, "id=\"e\""));
     TEST_ASSERT_TRUE(wf_form_emit_html(&fp, 1, out, (int)sizeof(out)) > 0);
     TEST_ASSERT_NOT_NULL(strstr(out, "type=\"file\""));
     TEST_ASSERT_NOT_NULL(strstr(out, "name=\"f\""));
+    TEST_ASSERT_NOT_NULL(strstr(out, "id=\"f\""));
 }
 
 int main(void) {
-    RUN_TEST(test_emit_html);
-
     unity_init();
+    RUN_TEST(test_emit_html);
     RUN_TEST(test_reader_engine_get);
     RUN_TEST(test_reader_engine_post);
     RUN_TEST(test_reader_live_value_update);

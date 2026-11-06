@@ -47,9 +47,18 @@ def wait_server(needle, timeout=60):
 
 
 def controls(out):
+    """id -> (k, typ, x, y, w, h, value). Also index keys as '#N'."""
     found = {}
     for m in re.finditer(r"osui web form2 ctl (\d+) (\w+) id=(\S+) box (-?\d+) (-?\d+) (\d+) (\d+) value=([^\r\n]*)", out):
-        found[m.group(3)] = (int(m.group(1)), int(m.group(4)), int(m.group(5)), int(m.group(6)), int(m.group(7)), m.group(8).strip())
+        k = int(m.group(1))
+        typ = m.group(2)
+        iid = m.group(3)
+        box = (k, typ, int(m.group(4)), int(m.group(5)), int(m.group(6)), int(m.group(7)), m.group(8).strip())
+        found["#%d" % k] = box
+        if iid != "-":
+            found[iid] = box
+        elif typ not in found:
+            found[typ] = box
     return found
 
 
@@ -60,7 +69,7 @@ def fstate(mon, proc):
 
 
 def click(mon, proc, ctl, marker="osui web form2"):
-    x, y = ctl[1] + ctl[3] // 2, ctl[2] + ctl[4] // 2
+    x, y = ctl[2] + ctl[4] // 2, ctl[3] + ctl[5] // 2
     return lw.run(mon, proc, "web-fclick %d %d" % (x, y), marker, 30)
 
 
@@ -105,29 +114,27 @@ def main():
             say("fetched form controls: %r" % ctl)
             if not ctl:
                 raise RuntimeError("reader forms: no engine controls after web-open form.html: %r" % out[:500])
-            # pick a text-like control (first)
+            # pick a text-like control (prefer id q / name via id=name emit)
             text_id = None
-            for k, v in ctl.items():
-                if v[0] >= 0 and ("q" in k.lower() or v[5] == "" or True):
-                    text_id = k
+            for prefer in ("q", "user", "#0"):
+                if prefer in ctl and ctl[prefer][1] == "input":
+                    text_id = prefer
                     break
             if text_id is None:
-                text_id = list(ctl.keys())[0]
+                for k, v in ctl.items():
+                    if k.startswith("#") and v[1] == "input" and "submit" not in (v[6] or "").lower():
+                        text_id = k
+                        break
+            if text_id is None:
+                raise RuntimeError("reader forms: no text control in %r" % ctl)
             out = click(mon, proc, ctl[text_id])
             if "osui web form2" not in out:
                 raise RuntimeError("click field: %r" % out[-400:])
             out = lw.run(mon, proc, "web-ftype lot75", "osui web form2", 30)
             if "typed" not in out and "changed" not in out:
                 say("ftype note: %r" % out[-200:])
-            # submit: find a submit control or press Enter
-            sub = None
-            for k, v in ctl.items():
-                if "go" in k.lower() or "send" in k.lower() or "submit" in v[1].lower():
-                    sub = k
-            if sub:
-                out = click(mon, proc, ctl[sub], marker="osui web")
-            else:
-                out = lw.run(mon, proc, "web-fkey enter", "osui web", 60)
+            # Enter submits the focused form (GET /echo?...)
+            out = lw.run(mon, proc, "web-fkey enter", "osui web", 60)
             say("submit out: %r" % out[-300:])
             wait_server("/echo", timeout=90)
             say("server saw echo after reader form submit")

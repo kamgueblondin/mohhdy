@@ -1273,7 +1273,7 @@ static void test_lot73_anim_tick_resends_atlas(void) {
 
 /* Lot 74: forms of the rendered page (webeng_finput.inc) in the GUI */
 int osui_gui_form_url(const char *base, const char *action, char *dst, int max);
-static char g_f_url[600], g_f_body[1100];
+static char g_f_url[600], g_f_body[1100], g_f_ctype[160];
 static int g_f_fetches, g_f_posts;
 static const char *F_PAGE =
     "<html><head><title>Form</title></head><body>"
@@ -1292,10 +1292,11 @@ static int f_fetch(const char *url, char *src, int src_max, char *final_url, int
 }
 static int f_request(const char *url, const char *body, int body_len, const char *ctype, char *src, int src_max, char *final_url, int url_max,
                      char *status, int st_max) {
-    (void)url_max; (void)st_max; (void)ctype;
+    (void)url_max; (void)st_max;
     g_f_posts++;
     snprintf(g_f_url, sizeof(g_f_url), "%s", url);
     snprintf(g_f_body, sizeof(g_f_body), "%.*s", body_len, body);
+    snprintf(g_f_ctype, sizeof(g_f_ctype), "%s", ctype ? ctype : "");
     snprintf(final_url, 256, "%s", url);
     snprintf(status, 64, "osui web fetch ok fake method POST");
     if (strcmp(body, "p=fail") == 0) { snprintf(status, 64, "osui web fetch error=http_500"); return -1; }
@@ -1402,6 +1403,8 @@ static void test_lot74_gui_forms(void) {
     TEST_ASSERT_NOT_NULL(strstr(g_out, "submit POST https://ex.am/dir/post?x=1 body p=v+w%26z"));
     TEST_ASSERT_EQUAL_STRING("https://ex.am/dir/post?x=1", g_f_url);
     TEST_ASSERT_EQUAL_STRING("p=v+w%26z", g_f_body);
+    /* Lot 75: request passes a content type (shell_page_request / ops.request) */
+    TEST_ASSERT_TRUE(g_f_ctype[0] == 0 || strstr(g_f_ctype, "urlencoded") != 0);
     TEST_ASSERT_EQUAL_STRING("Posted", osui_gui_web_doc()->title);
     /* a failing POST keeps the status; no request op: refused */
     osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out));
@@ -1423,6 +1426,42 @@ static void test_lot74_gui_forms(void) {
     osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));   /* blur, then ESC leaves the page */
     osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
     TEST_ASSERT_EQUAL(0, osui_gui_web_active());
+    osui_gui_set_web_fetch(0);
+}
+
+
+/* Lot 75: multipart POST passes ctype through ops.request */
+static const char *F_MP =
+    "<html><head><title>MP</title></head><body>"
+    "<form action=\"/up\" method=\"post\" enctype=\"multipart/form-data\">"
+    "<input id=m name=msg value=hi><button id=go type=submit>Go</button></form></body></html>";
+static int f_fetch_mp(const char *url, char *src, int src_max, char *final_url, int url_max, char *status, int st_max) {
+    (void)url_max; (void)st_max; (void)url;
+    g_f_fetches++;
+    snprintf(final_url, 256, "%s", url);
+    snprintf(status, 64, "osui web fetch ok fake");
+    return snprintf(src, (size_t)src_max, "%s", F_MP);
+}
+static void test_lot75_gui_multipart_ctype(void) {
+    static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request };
+    char ev[64];
+    int x, y;
+    setup();
+    g_f_fetches = g_f_posts = 0;
+    g_f_ctype[0] = 0;
+    osui_gui_set_web_fetch(f_fetch_mp);
+    osui_gui_set_web_page_ops(&ops);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/mp", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT(f_box("go", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, g_f_posts);
+    TEST_ASSERT_NOT_NULL(strstr(g_f_ctype, "multipart/form-data; boundary="));
+    TEST_ASSERT_NOT_NULL(strstr(g_f_body, "name=\"msg\""));
+    TEST_ASSERT_NOT_NULL(strstr(g_f_body, "hi"));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_web_page_ops(0);
     osui_gui_set_web_fetch(0);
 }
 
@@ -1524,6 +1563,7 @@ int main(void) {
     RUN_TEST(test_lot73_anim_tick_resends_atlas);
     RUN_TEST(test_lot74_form_url);
     RUN_TEST(test_lot74_gui_forms);
+    RUN_TEST(test_lot75_gui_multipart_ctype);
     RUN_TEST(test_lot74_gui_fragment);
     unity_print_results();
     unity_cleanup();

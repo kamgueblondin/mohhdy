@@ -464,7 +464,7 @@ int wf_form_emit_html(const wf_form_page_t *p, int field, char *out, int cap) {
         out[o++] = '<'; /* input type=hidden */
         { const char *t = "input"; while (*t) out[o++] = *t++; }
         o = emit_attr(out, cap, o, "type", "hidden");
-        if (f->named) o = emit_attr(out, cap, o, "name", f->name);
+        if (f->named) { o = emit_attr(out, cap, o, "name", f->name); o = emit_attr(out, cap, o, "id", f->name); }
         o = emit_attr(out, cap, o, "value", f->value);
         if (o + 1 < cap) out[o++] = '>';
         out[o] = 0;
@@ -473,7 +473,7 @@ int wf_form_emit_html(const wf_form_page_t *p, int field, char *out, int cap) {
     if (f->type == WF_FIELD_TEXTAREA) {
         const char *t = "<textarea";
         while (*t && o < cap - 1) out[o++] = *t++;
-        if (f->named) o = emit_attr(out, cap, o, "name", f->name);
+        if (f->named) { o = emit_attr(out, cap, o, "name", f->name); o = emit_attr(out, cap, o, "id", f->name); }
         if (f->label[0]) o = emit_attr(out, cap, o, "placeholder", f->label);
         if (f->maxlen > 0 && f->maxlen < WF_FORM_VALUE - 1) {
             char n[8]; int v = f->maxlen, i = 0, j;
@@ -491,7 +491,7 @@ int wf_form_emit_html(const wf_form_page_t *p, int field, char *out, int cap) {
     if (f->type == WF_FIELD_SELECT) {
         const char *t = "<select";
         while (*t && o < cap - 1) out[o++] = *t++;
-        if (f->named) o = emit_attr(out, cap, o, "name", f->name);
+        if (f->named) { o = emit_attr(out, cap, o, "name", f->name); o = emit_attr(out, cap, o, "id", f->name); }
         if (o + 1 < cap) out[o++] = '>';
         for (k = 0; k < f->nopt; k++) {
             const char *ov = wf_form_option_value(p, field, k);
@@ -514,7 +514,7 @@ int wf_form_emit_html(const wf_form_page_t *p, int field, char *out, int cap) {
     if (f->type == WF_FIELD_SUBMIT && (f->flags & WF_FF_AS_BUTTON)) {
         const char *t = "<button type=\"submit\"";
         while (*t && o < cap - 1) out[o++] = *t++;
-        if (f->named) o = emit_attr(out, cap, o, "name", f->name);
+        if (f->named) { o = emit_attr(out, cap, o, "name", f->name); o = emit_attr(out, cap, o, "id", f->name); }
         if (f->value[0]) o = emit_attr(out, cap, o, "value", f->value);
         if (o + 1 < cap) out[o++] = '>';
         o = emit_esc(out, cap - 10, o, f->label[0] ? f->label : (f->value[0] ? f->value : "Submit"));
@@ -528,7 +528,7 @@ int wf_form_emit_html(const wf_form_page_t *p, int field, char *out, int cap) {
         const char *ty = f->itype[0] ? f->itype : "text";
         while (*t && o < cap - 1) out[o++] = *t++;
         o = emit_attr(out, cap, o, "type", ty);
-        if (f->named) o = emit_attr(out, cap, o, "name", f->name);
+        if (f->named) { o = emit_attr(out, cap, o, "name", f->name); o = emit_attr(out, cap, o, "id", f->name); }
         if (f->type == WF_FIELD_CHECKBOX || f->type == WF_FIELD_RADIO) {
             o = emit_attr(out, cap, o, "value", f->value[0] ? f->value : "on");
             if (f->checked) {

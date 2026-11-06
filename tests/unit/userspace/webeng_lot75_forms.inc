@@ -103,6 +103,18 @@ static void test_l75_file_bind_and_multipart(void) {
     TEST_ASSERT_EQUAL(-1, we_form_set_file(&g_doc, ctl, "relative.txt"));
     TEST_ASSERT_EQUAL(0, we_form_set_file(&g_doc, ctl, "/tmp/lot75.txt"));
     l75_reflow();
+    /* Lot 75: FILE paint shows basename (mutation of case WE_FORM_FILE kills this) */
+    {
+        int c, found = 0;
+        for (c = g_doc.nodes[l75_node("f")].first; c >= 0; c = g_doc.nodes[c].next) {
+            if (g_doc.nodes[c].is_text && g_doc.nodes[c].text_len == 9) {
+                const char *tx = g_doc.pool + g_doc.nodes[c].text_off;
+                if (tx[0]=='l' && tx[1]=='o' && tx[2]=='t' && tx[3]=='7' && tx[4]=='5' &&
+                    tx[5]=='.' && tx[6]=='t' && tx[7]=='x' && tx[8]=='t') found = 1;
+            }
+        }
+        TEST_ASSERT_EQUAL(1, found);
+    }
     for (i = 1; i < (int)g_doc.nnodes; i++)
         if (g_doc.nodes[i].form_type == WE_FORM_SUBMIT) break;
     x = g_doc.nodes[i].x + 2; y = g_doc.nodes[i].y + 2;
@@ -163,9 +175,26 @@ static void test_l75_file_without_multipart_skipped(void) {
     l75_done();
 }
 
+/* Lot 75: pointer-events:none on a submit skips form hit testing */
+static void test_l75_form_pointer_events_none(void) {
+    int i, x, y, rc;
+    l75_render("<form method=POST action=/p>"
+               "<input name=a value=1>"
+               "<input id=s type=submit style='pointer-events:none' value=Go></form>");
+    for (i = 1; i < (int)g_doc.nnodes; i++)
+        if (g_doc.nodes[i].form_type == WE_FORM_SUBMIT) break;
+    TEST_ASSERT_TRUE(i < (int)g_doc.nnodes);
+    TEST_ASSERT_EQUAL(1, g_doc.nodes[i].pointer_events);
+    x = g_doc.nodes[i].x + 2; y = g_doc.nodes[i].y + 2;
+    rc = we_form_click(&g_doc, x, y);
+    TEST_ASSERT_TRUE(rc != WE_FACT_SUBMIT);
+    l75_done();
+}
+
 static void lot75_forms_run(void) {
     RUN_TEST(test_l75_multipart_text_only);
     RUN_TEST(test_l75_file_bind_and_multipart);
     RUN_TEST(test_l75_file_size_refused);
     RUN_TEST(test_l75_file_without_multipart_skipped);
+    RUN_TEST(test_l75_form_pointer_events_none);
 }

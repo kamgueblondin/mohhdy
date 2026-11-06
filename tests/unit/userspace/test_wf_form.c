@@ -137,6 +137,23 @@ static void test_submit_post_and_query_replaced(void) {
     TEST_ASSERT_EQUAL(1, g_fp.dropped);
 }
 
+/* Lot 75: urlencoded POST must omit type=file fields even when valued */
+static void test_file_skipped_in_urlencoded(void) {
+    wf_url_t base;
+    wf_form_reset(&g_fp);
+    TEST_ASSERT_EQUAL(0, wf_url_parse("http://127.0.0.1/p", &base));
+    TEST_ASSERT_EQUAL(0, wf_form_begin(&g_fp, &base, "/post", "post", "application/x-www-form-urlencoded"));
+    TEST_ASSERT_EQUAL(0, wf_form_add(&g_fp, &base, "text", "a", "1", 0, 0, 0));
+    TEST_ASSERT_EQUAL(1, wf_form_add(&g_fp, &base, "file", "doc", "/tmp/x", 0, 0, 0));
+    TEST_ASSERT_EQUAL(WF_FIELD_FILE, g_fp.field[1].type);
+    TEST_ASSERT_EQUAL_STRING("/tmp/x", g_fp.field[1].value);
+    wf_form_end(&g_fp);
+    TEST_ASSERT_EQUAL(0, wf_form_submit(&g_fp, 0, -1, &g_sub));
+    TEST_ASSERT_EQUAL_STRING("a=1", g_sub.body);
+    TEST_ASSERT_NULL(strstr(g_sub.body, "doc="));
+    TEST_ASSERT_NULL(strstr(g_sub.body, "tmp"));
+}
+
 static void test_password_display_and_implicit_form(void) {
     wf_url_t base;
     char d[64];
@@ -421,6 +438,7 @@ int main(void) {
     RUN_TEST(test_submit_get);
     RUN_TEST(test_submit_page_charsets);
     RUN_TEST(test_submit_post_and_query_replaced);
+    RUN_TEST(test_file_skipped_in_urlencoded);
     RUN_TEST(test_password_display_and_implicit_form);
     RUN_TEST(test_bounds);
     RUN_TEST(test_href);
