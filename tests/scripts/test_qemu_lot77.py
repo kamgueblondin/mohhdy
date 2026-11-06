@@ -111,7 +111,7 @@ def main():
             # Empty file: form2 value blank; Browse... is paint-only (host tests).
             if ctl["doc"][4] < 8 or ctl["doc"][5] < 8:
                 raise RuntimeError("lot77 file control box too small: %r" % (ctl["doc"],))
-            dump = lw.run(mon, proc, "web-inspect g", "osui web", 30)
+            dump = lw.run(mon, proc, "web-inspect /web/lot77.html g", "web-inspect", 30)
             say("inspect g: %r" % dump[-400:])
             say("lot77 qemu ok in %.1fs" % (time.monotonic() - t0))
             return 0
