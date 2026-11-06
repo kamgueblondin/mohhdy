@@ -4284,6 +4284,61 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "appearance") || w_eq(prop, "-webkit-appearance")) {
         if (value_is(v, vl, "none") || value_is(v, vl, "auto")) n->appearance = value_is(v, vl, "none") ? 1 : 0;
         else diag(d, "appearance refused", -1);
+    } else if (w_eq(prop, "caret-color")) {
+        /* Lot 75: colour of the text caret (stored; painted with WE_FF2_CARET) */
+        uint32_t col;
+        if (value_is(v, vl, "auto") || value_is(v, vl, "currentcolor")) { n->caret_set = 0; }
+        else if (parse_color(v, vl, &col) == 0) { n->caret = col; n->caret_set = 1; }
+        else diag(d, "caret color refused", -1);
+    } else if (w_eq(prop, "user-select") || w_eq(prop, "-webkit-user-select")) {
+        /* Lot 75: 0 auto, 1 none, 2 text, 3 all */
+        if (value_is(v, vl, "auto") || value_is(v, vl, "none") || value_is(v, vl, "text") || value_is(v, vl, "all")) {
+            n->user_select = value_is(v, vl, "none") ? 1 : value_is(v, vl, "text") ? 2 : value_is(v, vl, "all") ? 3 : 0;
+        } else diag(d, "user-select refused", -1);
+    } else if (w_eq(prop, "pointer-events")) {
+        /* Lot 75: 0 auto, 1 none (box ignores hits) */
+        if (value_is(v, vl, "auto") || value_is(v, vl, "none")) n->pointer_events = value_is(v, vl, "none") ? 1 : 0;
+        else diag(d, "pointer-events refused", -1);
+    } else if (w_eq(prop, "scroll-margin") || w_eq(prop, "scroll-margin-top") || w_eq(prop, "scroll-margin-right") ||
+               w_eq(prop, "scroll-margin-bottom") || w_eq(prop, "scroll-margin-left") ||
+               w_eq(prop, "scroll-padding") || w_eq(prop, "scroll-padding-top") || w_eq(prop, "scroll-padding-right") ||
+               w_eq(prop, "scroll-padding-bottom") || w_eq(prop, "scroll-padding-left")) {
+        /* Lot 75: length only (px / em), at most 4 values for the shorthand */
+        int pad = prop[7] == 'p', side = -1, px = 0, k, nval = 0, vals[4];
+        if (w_eq(prop, "scroll-margin-top") || w_eq(prop, "scroll-padding-top")) side = 0;
+        else if (w_eq(prop, "scroll-margin-right") || w_eq(prop, "scroll-padding-right")) side = 1;
+        else if (w_eq(prop, "scroll-margin-bottom") || w_eq(prop, "scroll-padding-bottom")) side = 2;
+        else if (w_eq(prop, "scroll-margin-left") || w_eq(prop, "scroll-padding-left")) side = 3;
+        if (side >= 0) {
+            if (parse_len(v, vl, &px, 0) != 0) { diag(d, pad ? "scroll padding refused" : "scroll margin refused", -1); }
+            else {
+                if (pad) { n->scroll_p[side] = (int16_t)px; n->scroll_p_set = 1; }
+                else { n->scroll_m[side] = (int16_t)px; n->scroll_m_set = 1; }
+            }
+        } else {
+            /* shorthand: 1..4 lengths */
+            int a = 0;
+            while (a < vl && nval < 4) {
+                int b = a, one;
+                while (b < vl && !w_space(v[b])) b++;
+                if (parse_len(v + a, b - a, &one, 0) != 0) { nval = -1; break; }
+                vals[nval++] = one;
+                a = b;
+                while (a < vl && w_space(v[a])) a++;
+            }
+            if (nval <= 0) diag(d, pad ? "scroll padding refused" : "scroll margin refused", -1);
+            else {
+                int t = vals[0], r = nval > 1 ? vals[1] : t, btm = nval > 2 ? vals[2] : t, l = nval > 3 ? vals[3] : r;
+                if (pad) {
+                    n->scroll_p[0] = (int16_t)t; n->scroll_p[1] = (int16_t)r;
+                    n->scroll_p[2] = (int16_t)btm; n->scroll_p[3] = (int16_t)l; n->scroll_p_set = 1;
+                } else {
+                    n->scroll_m[0] = (int16_t)t; n->scroll_m[1] = (int16_t)r;
+                    n->scroll_m[2] = (int16_t)btm; n->scroll_m[3] = (int16_t)l; n->scroll_m_set = 1;
+                }
+            }
+        }
+        (void)k;
     } else if (w_eq(prop, "caption-side")) {
         /* lot 73 */
         if (value_is(v, vl, "top") || value_is(v, vl, "block-start")) n->caption_bottom = 0;
@@ -12076,6 +12131,12 @@ int we_link_at(const we_doc_t* d, int x, int y, char* href, int max) {
         const we_node_t* n = &d->nodes[i];
         int area, left, top, right, bottom, depth = 0, ancestor;
         if (n->visibility) continue;
+        /* Lot 75: pointer-events:none (self or ancestor) skips hit testing */
+        {
+            int a = i;
+            while (a >= 0 && !d->nodes[a].pointer_events) a = d->nodes[a].parent;
+            if (a >= 0) continue;
+        }
         if (!clip_bounds(d, i, &left, &top, &right, &bottom) || x < left || y < top || x >= right || y >= bottom) continue;
         if ((!n->is_text && n->display == WE_DISP_NONE) || n->w <= 0 || n->h <= 0) continue;
         if (x < n->x || y < n->y || x >= n->x + n->w || y >= n->y + n->h) continue;

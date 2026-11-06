@@ -36,6 +36,8 @@
 #define WE_FF2_READONLY 8
 #define WE_FF2_REQUIRED 16
 #define WE_FF2_NOVALIDATE 128 /* form novalidate, submitter formnovalidate */
+#define WE_FF2_FORM_ATTR 131072  /* Lot 75: form= id association */
+#define WE_FF2_FORMACTION 262144 /* Lot 75: formaction= on a submitter */
 
 /* attributes of Lot 74 on input, select, textarea, button, form, label:
  * 1 when taken */
@@ -53,6 +55,26 @@ static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int
     if (w_eq(an, "formmethod")) {
         if (value_is(av, vk, "dialog")) n->form_flags2 |= WE_FF2_DIALOG;
         else if (value_is(av, vk, "post")) n->form_flags2 |= WE_FF2_POST;
+        return 1;
+    }
+    /* Lot 75: associate a control with a form by id (not a descendant) */
+    if (w_eq(an, "form")) {
+        if (vk > 0 && pool_put(d, av, vk, &n->fform_off) == 0) {
+            n->fform_len = (uint16_t)vk;
+            n->form_flags2 |= WE_FF2_FORM_ATTR;
+        }
+        return 1;
+    }
+    /* Lot 75: submitter overrides the form action URL */
+    if (w_eq(an, "formaction")) {
+        if (vk > 0 && pool_put(d, av, vk, &n->flist_off) == 0) {
+            n->flist_len = (uint16_t)vk;
+            n->form_flags2 |= WE_FF2_FORMACTION;
+        } else diag(d, "formaction refused", -1);
+        return 1;
+    }
+    if (w_eq(an, "formenctype")) {
+        if (value_is(av, vk, "multipart/form-data")) n->form_flags2 |= WE_FF2_MULTIPART;
         return 1;
     }
     if (w_eq(an, "tabindex")) {
@@ -213,9 +235,21 @@ static int finput_submit_kind(const we_node_t *n) {
            (w_eq(n->tag, "input") && n->form_type == WE_FORM_SUBMIT);
 }
 
-/* the form a node belongs to (nearest form ancestor), or -1 */
+/* the form a node belongs to: form= id when set, else nearest form ancestor */
 static int finput_owner(const we_doc_t *d, int i) {
-    int p = d->nodes[i].parent;
+    int p, j, k;
+    const we_node_t *n = &d->nodes[i];
+    if (n->form_flags2 & WE_FF2_FORM_ATTR) {
+        for (j = 1; j < (int)d->nnodes; j++) {
+            const we_node_t *f = &d->nodes[j];
+            if (!w_eq(f->tag, "form") || !f->id[0]) continue;
+            if ((int)w_len(f->id) != n->fform_len) continue;
+            for (k = 0; k < n->fform_len && f->id[k] == d->pool[n->fform_off + k]; k++) {}
+            if (k == n->fform_len) return j;
+        }
+        return -1;   /* form= names a missing id: the control is unbound */
+    }
+    p = n->parent;
     while (p >= 0) { if (w_eq(d->nodes[p].tag, "form")) return p; p = d->nodes[p].parent; }
     return -1;
 }
@@ -759,6 +793,12 @@ static int finput_hit(const we_doc_t *d, int x, int y, int *opt) {
         int area, target;
         if (n->w <= 0 || n->h <= 0 || n->display == WE_DISP_NONE || n->visibility) continue;
         if (x < n->x || y < n->y || x >= n->x + n->w || y >= n->y + n->h) continue;
+        /* Lot 75: pointer-events:none skips this box and its targets */
+        {
+            int a = i;
+            while (a >= 0 && !d->nodes[a].pointer_events) a = d->nodes[a].parent;
+            if (a >= 0) continue;
+        }
         target = finput_target(d, i);
         if (target < 0) continue;
         area = n->w * n->h;
@@ -1131,6 +1171,11 @@ int we_form_request(const we_doc_t *d, we_form_req_t *req) {
     req->form = (int16_t)f;
     req->post = (d->nodes[f].form_flags2 & WE_FF2_POST) ? 1 : 0;
     req->multipart = (d->nodes[f].form_flags2 & WE_FF2_MULTIPART) ? 1 : 0;
+    if (sub >= 0) {
+        if (d->nodes[sub].form_flags2 & WE_FF2_POST) req->post = 1;
+        if (d->nodes[sub].form_flags2 & WE_FF2_DIALOG) { /* formmethod=dialog: no request */ }
+        if (d->nodes[sub].form_flags2 & WE_FF2_MULTIPART) req->multipart = 1;
+    }
     /* GET never uses multipart bodies */
     if (!req->post) req->multipart = 0;
     if (req->multipart) {
@@ -1207,12 +1252,21 @@ int we_form_request(const we_doc_t *d, we_form_req_t *req) {
     }
     req->body[o] = 0;
     req->body_len = o;
-    /* the action: GET drops its query and fragment */
-    a = d->nodes[f].fval_len;
-    for (k = 0; k < a && k < WE_FREQ_URL - 1; k++) {
-        char c = d->pool[d->nodes[f].fval_off + k];
-        if (c == '#' || (!req->post && c == '?')) break;
-        req->url[k] = c;
+    /* the action: submitter formaction overrides; GET drops query/fragment */
+    if (sub >= 0 && (d->nodes[sub].form_flags2 & WE_FF2_FORMACTION) && d->nodes[sub].flist_len) {
+        a = d->nodes[sub].flist_len;
+        for (k = 0; k < a && k < WE_FREQ_URL - 1; k++) {
+            char ch = d->pool[d->nodes[sub].flist_off + k];
+            if (ch == '#' || (!req->post && ch == '?')) break;
+            req->url[k] = ch;
+        }
+    } else {
+        a = d->nodes[f].fval_len;
+        for (k = 0; k < a && k < WE_FREQ_URL - 1; k++) {
+            char ch = d->pool[d->nodes[f].fval_off + k];
+            if (ch == '#' || (!req->post && ch == '?')) break;
+            req->url[k] = ch;
+        }
     }
     if (!req->post) {
         if (k + 1 + o >= WE_FREQ_URL) return -2;

@@ -378,7 +378,12 @@ typedef struct {
     uint32_t accent;
     uint16_t fpat_off, fpat_len; /* lot 74: pattern= in the pool */
     uint16_t flist_off, flist_len; /* lot 74: list= datalist id */
+    uint16_t fform_off, fform_len; /* lot 75: form= id association */
     int16_t box_scroll_y;      /* lot 74: overflow box scroll offset */
+    /* Lot 75: caret-color, user-select, pointer-events, scroll-margin/padding */
+    uint8_t caret_set, user_select, pointer_events, scroll_m_set, scroll_p_set;
+    uint32_t caret;
+    int16_t scroll_m[4], scroll_p[4];
     uint8_t collapse_w;        /* lot 61: shared cell border width, layout time */
     /* Lot 61 border edges, top right bottom left. edge_w -1 and style 0
      * mean "use border / border_style". Only collapsed tables read them. */

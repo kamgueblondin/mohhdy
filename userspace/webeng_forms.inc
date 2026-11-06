@@ -442,7 +442,11 @@ static void forms_text_style(we_doc_t *d, we_node_t *n) {
     const we_node_t *p = n->parent >= 0 ? &d->nodes[n->parent] : 0;
     if (n->form_flags & WE_FF_PLACEHOLDER) n->color = 0x757575;
     if (n->form_flags2 & WE_FF2_STALE) { n->display = WE_DISP_NONE; return; }   /* lot 74 */
-    if (n->form_flags2 & WE_FF2_CARET) n->color = WE_FORM_FILL;
+    if (n->form_flags2 & WE_FF2_CARET) {
+        int own = n->parent >= 0 ? n->parent : -1;
+        if (own >= 0 && d->nodes[own].caret_set) n->color = d->nodes[own].caret;
+        else n->color = WE_FORM_FILL;
+    }
     if (p && w_eq(p->tag, "details") && !(p->form_flags & WE_FF_OPEN)) n->display = WE_DISP_NONE;
     if (p && (w_eq(p->tag, "progress") || w_eq(p->tag, "meter"))) n->display = WE_DISP_NONE;
 }
