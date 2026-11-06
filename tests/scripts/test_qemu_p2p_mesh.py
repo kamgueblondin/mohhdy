@@ -144,10 +144,19 @@ def main():
         say("scenario 1 ok: alpha -> beta -> gamma -> delta (%.0fs)" % (time.monotonic() - t0))
 
         # 2. Diamond, then crash beta (US-069).
+        # Scenario 1 cut a-c and b-d (and a-d). Heal restores a-c and b-d; a-d
+        # stays cut for the diamond. Peers only log "down" when p->up was set
+        # (userspace/p2p.c), so the mark used for the crash downs must be taken
+        # AFTER delta sees beta up again. Waiting only for alpha's gamma-up
+        # raced: CI run 42205891754 timed out on delta's "p2p peer beta down"
+        # while the log tail still showed the scenario-1 down and no post-heal up.
         hub.heal_pair(a["mac"], c["mac"])
         hub.heal_pair(b["mac"], d["mac"])
         hub.cut_pair(b["mac"], c["mac"])
-        p3.wait_log(a, "p2p peer gamma up id ", 60, mark["a"])
+        heal_mark = {n["label"]: len(base.log_text(n["log"])) for n in NODES}
+        p3.wait_log(a, "p2p peer gamma up id ", 60, heal_mark["a"])
+        p3.wait_log(d, "p2p peer beta up id ", 60, heal_mark["d"])
+        p3.wait_log(b, "p2p peer delta up id ", 60, heal_mark["b"])
         crash_mark = {n["label"]: len(base.log_text(n["log"])) for n in NODES}
         crashed.add("b")
         b["client"].close()

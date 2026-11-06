@@ -883,6 +883,7 @@ test-all:
 	@python3 tests/scripts/test_python_facade_removed.py
 	@python3 tests/scripts/check_shell_dispatch_returns.py
 	@python3 tests/scripts/check_initrd_capacity.py
+	@python3 tests/scripts/check_p2p_mesh_heal_before_crash.py
 	@sh tests/scripts/test_lot67_web_host.sh
 
 # Host unit tests rebuilt with --coverage, then one gcov line percentage.
