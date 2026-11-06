@@ -102,7 +102,7 @@ static void test_placeholders(void) {
     wf_section_render(g_red, m, &g_s, 0, &fp, g_sec, (int)sizeof(g_sec));
     /* Lot 75: placeholders expand to real engine controls */
     TEST_ASSERT_NOT_NULL(strstr(g_sec, "<form action=\"http://h/s\" method=\"get\">"));
-    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<input type=\"text\" name=\"q\" value=\"\" placeholder=\"Chercher\">"));
+    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<input type=\"text\" name=\"q\" id=\"q\" value=\"\" placeholder=\"Chercher\">"));
     TEST_ASSERT_NOT_NULL(strstr(g_sec, "<input type=\"submit\""));
     TEST_ASSERT_NOT_NULL(strstr(g_sec, "value=\"Go\">"));
     TEST_ASSERT_NULL(strchr(g_sec, '\001'));
