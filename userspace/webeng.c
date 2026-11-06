@@ -4091,6 +4091,38 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (w_eq(prop, "align-self")) n->align_self = (uint8_t)value;
         else if (w_eq(prop, "justify-items")) n->justify_items = (uint8_t)value;
         else n->justify_self = (uint8_t)value;
+    } else if (w_eq(prop, "place-items") || w_eq(prop, "place-content") || w_eq(prop, "place-self")) {
+        /* Lot 78: place-* sets the block axis then the inline axis; one
+         * keyword copies to both. place-content allows distribution. */
+        int a[4], lengths[4], c = tokens(v, vl, a, lengths);
+        int distribution = w_eq(prop, "place-content");
+        int first, second;
+        if (c < 1 || c > 2) { diag(d, "place alignment refused", -1); }
+        else {
+            /* align-* axis allows stretch; justify-content does not. */
+            first = parse_pack(v + a[0], lengths[0], distribution, 1);
+            if (w_eq(prop, "place-items") || w_eq(prop, "place-self")) {
+                if (value_is(v + a[0], lengths[0], "baseline") || value_is(v + a[0], lengths[0], "first baseline"))
+                    first = WE_PACK_BASELINE;
+                if (value_is(v + a[0], lengths[0], "last baseline")) first = WE_PACK_LAST_BASELINE;
+            }
+            if (w_eq(prop, "place-self") && value_is(v + a[0], lengths[0], "auto")) first = 0;
+            if (c == 2) {
+                second = parse_pack(v + a[1], lengths[1], distribution, !distribution);
+                if (w_eq(prop, "place-self") && value_is(v + a[1], lengths[1], "auto")) second = 0;
+            } else second = first;
+            if (first < 0 || second < 0) diag(d, "place alignment refused", -1);
+            else if (w_eq(prop, "place-items")) {
+                n->align_items = (uint8_t)first;
+                n->justify_items = (uint8_t)second;
+            } else if (w_eq(prop, "place-content")) {
+                n->align_content = (uint8_t)first;
+                n->justify_content = (uint8_t)second;
+            } else {
+                n->align_self = (uint8_t)first;
+                n->justify_self = (uint8_t)second;
+            }
+        }
     } else if (w_eq(prop, "row-gap") || w_eq(prop, "column-gap")) {
         int number, percent;
         if (parse_dimension(v, vl, &number, &percent) || percent) diag(d, "axis gap refused", -1);
