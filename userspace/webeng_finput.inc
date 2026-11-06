@@ -53,7 +53,7 @@ static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int
         if (pool_put(d, av, vk, &n->fpat_off) == 0) { n->fpat_len = (uint16_t)vk; n->form_flags2 |= WE_FF2_PATTERN; }
         return 1;
     }
-    if (w_eq(an, "novalidate") || w_eq(an, "formnovalid")   /* formnovalidate, cut to 11 bytes */) { n->form_flags2 |= WE_FF2_NOVALIDATE; return 1; }
+    if (w_eq(an, "novalidate") || w_eq(an, "formnovalidate") || w_eq(an, "formnovalid")) { n->form_flags2 |= WE_FF2_NOVALIDATE; return 1; }
     if (w_eq(an, "autofocus")) { n->form_flags2 |= WE_FF2_AUTOFOCUS; return 1; }
     if (w_eq(an, "formmethod")) {
         if (value_is(av, vk, "dialog")) n->form_flags2 |= WE_FF2_DIALOG;
@@ -92,7 +92,7 @@ static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int
         return 1;
     }
     /* Lot 76: autocomplete=; off sets WE_FF2_AC_OFF */
-    if (w_eq(an, "autocomplete")) {
+    if (w_eq(an, "autocomplete")) {  /* Lot 76: needs 12-char attr names */
         if (vk > 0 && pool_put(d, av, vk, &n->fac_off) == 0) {
             n->fac_len = (uint16_t)vk;
             if (value_is(av, vk, "off") || value_is(av, vk, "false")) n->form_flags2 |= WE_FF2_AC_OFF;

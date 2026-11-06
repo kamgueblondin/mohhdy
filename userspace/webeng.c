@@ -364,11 +364,11 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                 d->perf.elements++;
                 /* attributes */
                 while (j < len && html[j] != '>') {
-                    char an[12], av[256];
+                    char an[20], av[256];   /* Lot 76: 19-char names (autocomplete) */
                     int ak = 0, vk = 0, truncated = 0;
                     if (w_space(html[j])) { j++; continue; }
                     if (html[j] == '/') { self = 1; j++; continue; }
-                    while (j < len && w_namec(html[j]) && ak < 11) an[ak++] = w_low(html[j++]);
+                    while (j < len && w_namec(html[j]) && ak < 19) an[ak++] = w_low(html[j++]);
                     an[ak] = 0;
                     if (ak == 0) { j++; continue; }
                     while (j < len && w_space(html[j])) j++;
