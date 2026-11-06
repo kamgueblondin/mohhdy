@@ -41,6 +41,7 @@
 #define WE_FF2_AC_OFF 524288       /* Lot 76: autocomplete=off */
 #define WE_FF2_FORMTARGET 1048576  /* Lot 76: formtarget= present */
 #define WE_FF2_TARGET_BLANK 2097152 /* Lot 76: formtarget=_blank */
+#define WE_FF2_ACCEPT 4194304       /* Lot 77: accept= on type=file */
 
 /* attributes of Lot 74 on input, select, textarea, button, form, label:
  * 1 when taken */
@@ -804,7 +805,11 @@ static int finput_activate(we_doc_t *d, int i, int opt) {
         int f = finput_owner(d, i), j;
         if (f < 0) return rc;
         for (j = 1; j < (int)d->nnodes; j++)
-            if (d->nodes[j].form_ord && finput_owner(d, j) == f) d->forms->c[d->nodes[j].form_ord - 1].set = 0;
+            if (d->nodes[j].form_ord && finput_owner(d, j) == f) {
+                int ord = d->nodes[j].form_ord - 1;
+                d->forms->c[ord].set = 0;
+                d->forms->files[ord].npaths = 0;   /* Lot 77 */
+            }
         d->forms->resets++;
         return WE_FACT_CHANGED;
     }
@@ -967,7 +972,18 @@ int we_form_key(we_doc_t *d, int key) {
     }
     i = finput_node(d, d->forms->focus);
     if (i < 0) return -1;
-    if (key == WE_KEY_ESC) return finput_set_focus(d, -1);
+    if (key == WE_KEY_ESC) {
+        /* Lot 77: Escape clears a focused type=file control, else blurs. */
+        if (d->forms->focus >= 0) {
+            int fi = finput_node(d, d->forms->focus);
+            if (fi >= 0 && d->nodes[fi].form_type == WE_FORM_FILE &&
+                d->forms->files[d->nodes[fi].form_ord - 1].npaths > 0) {
+                (void)we_form_clear_file(d, d->forms->focus);
+                return WE_FACT_CHANGED;
+            }
+        }
+        return finput_set_focus(d, -1);
+    }
     n = &d->nodes[i];
     if (finput_disabled(d, i)) return WE_FACT_NONE;
     if (finput_is_range(n) || ((n->form_flags2 & WE_FF2_NUMBER) && (key == WE_KEY_UP || key == WE_KEY_DOWN))) {
@@ -1094,23 +1110,151 @@ static int finput_path_ok(const char *path) {
     return n > 0;
 }
 
-int we_form_set_file(we_doc_t *d, int ctl, const char *path) {
-    int i, k;
-    we_fstate_t *s;
+/* Lot 77: accept= matching for a local path (extension / MIME group). */
+static int finput_ext_eq(const char *path, int plen, const char *ext, int elen) {
+    int i;
+    if (elen < 1 || plen < elen) return 0;
+    if (ext[0] == '.') {
+        for (i = 0; i < elen; i++) {
+            char a = path[plen - elen + i], b = ext[i];
+            if (a >= 'A' && a <= 'Z') a = (char)(a - 'A' + 'a');
+            if (b >= 'A' && b <= 'Z') b = (char)(b - 'A' + 'a');
+            if (a != b) return 0;
+        }
+        return 1;
+    }
+    return 0;
+}
+static int finput_path_has_ext(const char *path, int plen, const char *ext) {
+    int elen = 0;
+    while (ext[elen]) elen++;
+    return finput_ext_eq(path, plen, ext, elen);
+}
+static int finput_accept_token_ok(const char *path, int plen, const char *tok, int tlen) {
+    /* .ext */
+    if (tlen >= 2 && tok[0] == '.') return finput_ext_eq(path, plen, tok, tlen);
+    /* MIME type groups: image-star, text-star, audio-star, video-star */
+    if (tlen >= 6 && tok[tlen - 2] == '/' && tok[tlen - 1] == '*') {
+        if (tlen == 7 && tok[0]=='i' && tok[1]=='m' && tok[2]=='a' && tok[3]=='g' && tok[4]=='e')
+            return finput_path_has_ext(path, plen, ".png") || finput_path_has_ext(path, plen, ".jpg")
+                || finput_path_has_ext(path, plen, ".jpeg") || finput_path_has_ext(path, plen, ".gif")
+                || finput_path_has_ext(path, plen, ".webp") || finput_path_has_ext(path, plen, ".bmp");
+        if (tlen == 6 && tok[0]=='t' && tok[1]=='e' && tok[2]=='x' && tok[3]=='t')
+            return finput_path_has_ext(path, plen, ".txt") || finput_path_has_ext(path, plen, ".csv")
+                || finput_path_has_ext(path, plen, ".md") || finput_path_has_ext(path, plen, ".html")
+                || finput_path_has_ext(path, plen, ".htm") || finput_path_has_ext(path, plen, ".css")
+                || finput_path_has_ext(path, plen, ".js");
+        if (tlen == 7 && tok[0]=='a' && tok[1]=='u' && tok[2]=='d' && tok[3]=='i' && tok[4]=='o')
+            return finput_path_has_ext(path, plen, ".mp3") || finput_path_has_ext(path, plen, ".wav")
+                || finput_path_has_ext(path, plen, ".ogg");
+        if (tlen == 7 && tok[0]=='v' && tok[1]=='i' && tok[2]=='d' && tok[3]=='e' && tok[4]=='o')
+            return finput_path_has_ext(path, plen, ".mp4") || finput_path_has_ext(path, plen, ".webm")
+                || finput_path_has_ext(path, plen, ".ogv");
+    }
+    /* exact MIME -> common extension */
+    if (tlen == 9 && tok[0]=='i' && tok[5]=='/' && tok[6]=='p' && tok[7]=='n' && tok[8]=='g')
+        return finput_path_has_ext(path, plen, ".png");
+    if (tlen == 10 && tok[0]=='i' && tok[5]=='/' && tok[6]=='j' && tok[7]=='p' && tok[8]=='e' && tok[9]=='g')
+        return finput_path_has_ext(path, plen, ".jpg") || finput_path_has_ext(path, plen, ".jpeg");
+    if (tlen == 10 && tok[0]=='t' && tok[4]=='/' && tok[5]=='p' && tok[6]=='l')
+        return finput_path_has_ext(path, plen, ".txt");
+    return 0;
+}
+static int finput_accept_ok(const we_doc_t *d, int i, const char *path) {
+    const we_node_t *n = &d->nodes[i];
+    int plen = 0, a, t0, t1;
+    const char *acc;
+    if (!(n->form_flags2 & WE_FF2_ACCEPT) || !n->faccept_len) return 1;
+    while (path[plen]) plen++;
+    acc = d->pool + n->faccept_off;
+    a = 0;
+    while (a < n->faccept_len) {
+        while (a < n->faccept_len && (acc[a] == ' ' || acc[a] == ',' || acc[a] == '\t')) a++;
+        t0 = a;
+        while (a < n->faccept_len && acc[a] != ',' && acc[a] != ' ' && acc[a] != '\t') a++;
+        t1 = a;
+        if (t1 > t0 && finput_accept_token_ok(path, plen, acc + t0, t1 - t0)) return 1;
+        while (a < n->faccept_len && acc[a] != ',') a++;
+        if (a < n->faccept_len && acc[a] == ',') a++;
+    }
+    return 0;
+}
+
+static void finput_file_sync_val(we_doc_t *d, int i) {
+    /* Mirror first path into fstate.val so apply/paint keep working. */
+    we_fstate_t *s = finput_state(d, i);
+    we_ffile_pack_t *fp = &d->forms->files[d->nodes[i].form_ord - 1];
+    int k = 0;
+    if (fp->npaths == 0) { s->len = 0; s->val[0] = 0; return; }
+    while (fp->paths[0][k] && k < WE_FSTATE_VAL - 1 && k < WE_FFILE_PATH) {
+        s->val[k] = fp->paths[0][k];
+        k++;
+    }
+    s->val[k] = 0;
+    s->len = (uint8_t)k;
+}
+
+int we_form_clear_file(we_doc_t *d, int ctl) {
+    int i;
+    we_ffile_pack_t *fp;
     if (!d || !d->forms) return -1;
     i = finput_node(d, ctl);
     if (i < 0 || d->nodes[i].form_type != WE_FORM_FILE || finput_disabled(d, i)) return -1;
+    fp = &d->forms->files[d->nodes[i].form_ord - 1];
+    fp->npaths = 0;
+    fp->paths[0][0] = 0;
+    finput_file_sync_val(d, i);
+    d->forms->edits++;
+    return 0;
+}
+
+int we_form_file_count(const we_doc_t *d, int ctl) {
+    int i;
+    if (!d || !d->forms) return -1;
+    i = finput_node(d, ctl);
+    if (i < 0 || d->nodes[i].form_type != WE_FORM_FILE) return -1;
+    return d->forms->files[d->nodes[i].form_ord - 1].npaths;
+}
+
+int we_form_file_at(const we_doc_t *d, int ctl, int idx, char *out, int max) {
+    int i, k;
+    const we_ffile_pack_t *fp;
+    if (!d || !d->forms || !out || max <= 0) return -1;
+    out[0] = 0;
+    i = finput_node(d, ctl);
+    if (i < 0 || d->nodes[i].form_type != WE_FORM_FILE) return -1;
+    fp = &d->forms->files[d->nodes[i].form_ord - 1];
+    if (idx < 0 || idx >= fp->npaths) return -1;
+    for (k = 0; fp->paths[idx][k] && k < max - 1 && k < WE_FFILE_PATH; k++) out[k] = fp->paths[idx][k];
+    out[k] = 0;
+    return k;
+}
+
+int we_form_set_file(we_doc_t *d, int ctl, const char *path) {
+    int i, k, multi;
+    we_ffile_pack_t *fp;
+    if (!d || !d->forms) return -1;
+    i = finput_node(d, ctl);
+    if (i < 0 || d->nodes[i].form_type != WE_FORM_FILE || finput_disabled(d, i)) return -1;
+    fp = &d->forms->files[d->nodes[i].form_ord - 1];
+    multi = (d->nodes[i].form_flags & WE_FF_MULTIPLE) ? 1 : 0;
     if (!path || !path[0]) {
-        s = finput_state(d, i);
-        s->len = 0; s->val[0] = 0;
-        d->forms->edits++;
-        return 0;
+        return we_form_clear_file(d, ctl);
     }
     if (!finput_path_ok(path)) { d->forms->refused++; return -1; }
-    s = finput_state(d, i);
-    for (k = 0; path[k] && k < WE_FSTATE_VAL - 1; k++) s->val[k] = path[k];
-    s->val[k] = 0;
-    s->len = (uint8_t)k;
+    if (!finput_accept_ok(d, i, path)) { d->forms->refused++; return -1; }
+    (void)finput_state(d, i); /* mark set */
+    if (!multi) {
+        fp->npaths = 1;
+        for (k = 0; path[k] && k < WE_FFILE_PATH - 1; k++) fp->paths[0][k] = path[k];
+        fp->paths[0][k] = 0;
+    } else {
+        if (fp->npaths >= WE_FFILE_MAX_N) { d->forms->refused++; return -1; }
+        for (k = 0; path[k] && k < WE_FFILE_PATH - 1; k++) fp->paths[fp->npaths][k] = path[k];
+        fp->paths[fp->npaths][k] = 0;
+        fp->npaths++;
+    }
+    finput_file_sync_val(d, i);
     d->forms->edits++;
     return 0;
 }
@@ -1300,20 +1444,23 @@ int we_form_request(const we_doc_t *d, we_form_req_t *req) {
             continue;
         }
         if (n->form_type == WE_FORM_FILE) {
-            we_fstate_t tmp;
-            const we_fstate_t *s = &tmp;
+            we_ffile_pack_t *fp;
+            int fi;
             if (!req->multipart) continue;   /* file only in multipart */
-            if (d->forms->c[n->form_ord - 1].set) s = &d->forms->c[n->form_ord - 1];
-            else { finput_capture(d, i, &tmp); }
-            if (!s->len) {
+            fp = &d->forms->files[n->form_ord - 1];
+            if (fp->npaths == 0) {
                 /* empty file control: still send the field with empty filename */
                 rc = finput_mp_field(d, req, &o, n, "", 0, 1);
                 if (rc != 0) return rc == -1 ? -1 : -2;
                 continue;
             }
-            rc = finput_mp_field(d, req, &o, n, s->val, s->len, 1);
-            if (rc == -1) { return -1; }   /* refused: no reader / too big / bad read */
-            if (rc != 0) return -2;
+            for (fi = 0; fi < fp->npaths; fi++) {
+                int plen = 0;
+                while (fp->paths[fi][plen] && plen < WE_FFILE_PATH) plen++;
+                rc = finput_mp_field(d, req, &o, n, fp->paths[fi], plen, 1);
+                if (rc == -1) { return -1; }
+                if (rc != 0) return -2;
+            }
             continue;
         }
         if (w_eq(n->tag, "select") && forms_listbox(n)) {
