@@ -133,7 +133,8 @@ static void test_l73_media_nesting_and_skips(void) {
     TEST_ASSERT_EQUAL(5, l73c("e"));
     TEST_ASSERT_EQUAL(6, l73c("f"));
     TEST_ASSERT_EQUAL(8, l73c("h"));                  /* a quoted brace does not end the block */
-    TEST_ASSERT_EQUAL(2, l61_diag_count("css at-rule skipped"));
+    TEST_ASSERT_EQUAL(1, l61_diag_count("css at-rule skipped"));
+    TEST_ASSERT_EQUAL(1, l61_diag_count("font face refused"));
     TEST_ASSERT_EQUAL(1, (int)g_doc.perf.media_skipped);
     /* nesting stops at WE_CSS_NEST_MAX levels */
     lot52_render("<style>@media all{@media all{@media all{@media all{#a{color:#000001}}}}}"
@@ -184,7 +185,8 @@ static void test_l73_layer(void) {
     TEST_ASSERT_EQUAL(1, l73c("a"));
     TEST_ASSERT_EQUAL(3, l73c("b"));
     TEST_ASSERT_EQUAL(4, l73c("c"));
-    TEST_ASSERT_EQUAL(1, l61_diag_count("css layer order ignored"));
+    /* lot 74: the layer order is applied now (was "css layer order ignored") */
+    TEST_ASSERT_EQUAL(0, l61_diag_count("css layer order ignored"));
     TEST_ASSERT_EQUAL(1, l61_diag_count("css at-rule skipped"));
 }
 

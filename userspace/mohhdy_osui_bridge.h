@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 477
+#define MOHHDY_SHELL_COMMAND_COUNT 481
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -476,8 +476,12 @@ static const char * const mohhdy_shell_commands[] = {
     "web-console",
     "web-csp",
     "web-dom",
+    "web-fclick",
     "web-find",
+    "web-fkey",
     "web-forms",
+    "web-fstate",
+    "web-ftype",
     "web-images",
     "web-input",
     "web-inspect",

@@ -407,6 +407,17 @@ int shell_page_form_set(int n, const char* value) {
     return 0;
 }
 
+/* Lot 74: a form of the rendered page (webeng_finput.inc) sent with POST */
+int shell_page_request(const char* url, const char* body, int body_len, char* src, int src_max, char* final_url, int url_max,
+                       char* status, int st_max) {
+    wf_fetch_req_t rq;
+    if (status && st_max > 0) status[0] = 0;
+    if (!url || !body || body_len < 0) return -1;
+    rq.method = "POST"; rq.body = body; rq.body_len = body_len;
+    rq.ctype = "application/x-www-form-urlencoded"; rq.extra = 0;
+    return page_fetch(url, &rq, src, src_max, final_url, url_max, status, st_max);
+}
+
 /* Submits the form of the focused field (or field n when n >= 0): GET
  * builds the URL, POST sends the urlencoded body. Same output as
  * shell_fetch_page for the new page. */

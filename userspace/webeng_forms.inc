@@ -16,6 +16,24 @@
  * one diag "input type taken as text". */
 
 /* WE_FORM_* control types: webeng.h */
+/* lot 74: webeng_finput.inc */
+static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int vk);
+static void finput_prepare(we_doc_t *d);
+static void finput_caret(we_doc_t *d);
+static int finput_range_value(const we_doc_t *d, int i);
+static void finput_range_bounds(const we_node_t *n, int *min, int *max);
+#define WE_FF2_FOCUS 4
+#define WE_FF2_STALE 32
+#define WE_FF2_CARET 64
+#define WE_FF2_EMAIL 256
+#define WE_FF2_NUMBER 512     /* lot 74: type=number */
+#define WE_FF2_RANGE 1024     /* lot 74: type=range */
+#define WE_FF2_URL 2048       /* lot 74: type=url */
+#define WE_FF2_AUTOFOCUS 4096
+#define WE_FF2_TABINDEX 8192
+#define WE_FF2_PATTERN 16384  /* lot 74: pattern= present */
+#define WE_FF2_DIALOG 32768  /* lot 74: dialog open toggle */
+#define WE_FF2_LIST 65536    /* lot 74: input list= (datalist id) */
 #define WE_FF_CHECKED 1
 #define WE_FF_SELECTED 2
 #define WE_FF_DISABLED 4
@@ -29,7 +47,8 @@
 #define WE_FORM_TEXT_MAX 48
 
 static int forms_tag(const char *t) {
-    static const char *const tags[] = { "input", "button", "select", "option", "textarea", "progress", "meter", "details", 0 };
+    static const char *const tags[] = { "input", "button", "select", "option", "textarea", "progress", "meter", "details", "dialog", "datalist", "output",
+                                         "form", "label", "fieldset", 0 };   /* lot 74: form, label, fieldset */
     int k;
     for (k = 0; tags[k]; k++) if (w_eq(t, tags[k])) return 1;
     return 0;
@@ -56,6 +75,13 @@ static int forms_input_type(we_doc_t *d, const char *v, int len, int idx) {
     static const char *const text[] = { "text", "search", "email", "url", "tel", "number", 0 };
     int k;
     for (k = 0; text[k]; k++) if (value_is(v, len, text[k])) return WE_FORM_TEXT;
+    if (value_is(v, len, "range")) return WE_FORM_TEXT;   /* lot 74: WE_FF2_RANGE */
+    if (value_is(v, len, "color") || value_is(v, len, "date") || value_is(v, len, "time") ||
+        value_is(v, len, "week") || value_is(v, len, "month") || value_is(v, len, "datetime-local") ||
+        value_is(v, len, "file")) {
+        diag(d, "input type taken as text", idx);
+        return WE_FORM_TEXT;
+    }
     if (value_is(v, len, "password")) return WE_FORM_PASSWORD;
     if (value_is(v, len, "checkbox")) return WE_FORM_CHECKBOX;
     if (value_is(v, len, "radio")) return WE_FORM_RADIO;
@@ -72,6 +98,19 @@ static void forms_attr(we_doc_t *d, int idx, const char *an, const char *av, int
     we_node_t *n = &d->nodes[idx];
     int v;
     if (!forms_tag(n->tag)) return;
+    if (finput_attr(d, idx, an, av, vk)) return;   /* lot 74 */
+    if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "email")) n->form_flags2 |= WE_FF2_EMAIL;
+    if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "number")) n->form_flags2 |= WE_FF2_NUMBER;
+    if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "range")) n->form_flags2 |= WE_FF2_RANGE;
+    if (w_eq(an, "type") && w_eq(n->tag, "input") && value_is(av, vk, "url")) n->form_flags2 |= WE_FF2_URL;
+    if (w_eq(an, "list") && w_eq(n->tag, "input")) {
+        /* Lot 74: list= names a datalist; id in fpat_* so placeholder keeps fph */
+        if (pool_put(d, av, vk, &n->flist_off) == 0) {
+            n->flist_len = (uint16_t)vk;
+            n->form_flags2 |= WE_FF2_LIST;
+        }
+        return;
+    }
     if (w_eq(an, "type") && w_eq(n->tag, "input")) n->form_type = (uint8_t)forms_input_type(d, av, vk, idx);
     else if (w_eq(an, "type") && w_eq(n->tag, "button")) {
         if (value_is(av, vk, "reset")) n->form_type = WE_FORM_RESET;
@@ -155,7 +194,9 @@ static void forms_bar(we_doc_t *d, int idx) {
 }
 
 static void forms_build(we_doc_t *d) {
-    int i, count = (int)d->nnodes;
+    int i, count;
+    finput_prepare(d);   /* lot 74: ordinals and the live state */
+    count = (int)d->nnodes;
     for (i = 1; i < count; i++) {
         we_node_t *n = &d->nodes[i];
         if (n->is_text) continue;
@@ -166,6 +207,11 @@ static void forms_build(we_doc_t *d) {
             switch (n->form_type) {
             case WE_FORM_TEXT:
             case WE_FORM_PASSWORD:
+                if (n->form_flags2 & WE_FF2_RANGE) {   /* lot 74: a track and its fill */
+                    n->meter[0] = finput_range_value(d, i);
+                    forms_bar(d, i);
+                    break;
+                }
                 if (n->fval_len) {
                     len = n->fval_len < WE_FORM_TEXT_MAX ? n->fval_len : WE_FORM_TEXT_MAX;
                     for (k = 0; k < len; k++) buf[k] = n->form_type == WE_FORM_PASSWORD ? '*' : d->pool[n->fval_off + k];
@@ -213,6 +259,7 @@ static void forms_build(we_doc_t *d) {
             (void)forms_text(d, s, (d->nodes[i].form_flags & WE_FF_OPEN) ? "v " : "> ", 2, 1, 0);
         }
     }
+    finput_caret(d);   /* lot 74 */
 }
 
 /* the bar fill in percent: value / max for progress (max 1 by default),
@@ -220,7 +267,8 @@ static void forms_build(we_doc_t *d) {
  * min is min); -1 for an indeterminate progress (no value) */
 static int forms_fill_pct(const we_node_t *bar) {
     int min = 0, max = 100, v = bar->meter[0];
-    if (w_eq(bar->tag, "progress")) {
+    if (w_eq(bar->tag, "input")) finput_range_bounds(bar, &min, &max);   /* lot 74: range */
+    else if (w_eq(bar->tag, "progress")) {
         if (!(bar->form_flags & WE_FF_VALUE)) return -1;
         if ((bar->meter_set & 4) && bar->meter[2] > 0) max = bar->meter[2];
     } else {
@@ -242,7 +290,19 @@ static uint32_t forms_meter_color(const we_node_t *m) {
     return 0x4CAF50;
 }
 
+/* Lot 74: re-apply accent-color / appearance after the cascade */
+static void forms_accent_apply(we_doc_t *d) {
+    int i;
+    for (i = 1; i < (int)d->nnodes; i++) {
+        we_node_t *n = &d->nodes[i];
+        if (n->appearance) { n->border = 0; n->has_bg = 0; n->bg = 0; continue; }
+        if (n->accent_set && n->border) n->border_color = n->accent;
+        if (n->accent_set && w_eq(n->tag, "::fill")) n->bg = n->accent;
+    }
+}
+
 static void forms_box(we_node_t *n, uint32_t bg) {
+    /* Lot 74: appearance:none drops the UA chrome (caller still sizes). */
     n->display = WE_DISP_INLINE_BLOCK;
     n->border = 1;
     n->border_style = WE_BS_SOLID;
@@ -254,10 +314,21 @@ static void forms_box(we_node_t *n, uint32_t bg) {
     n->min_height = 10;   /* one line, even when empty */
 }
 
+static void forms_ua(we_doc_t *d, we_node_t *n);
+/* lot 74: the focused control: its usual UA style, a blue border */
+static void forms_ua_focus(we_doc_t *d, we_node_t *n) {
+    n->form_flags2 &= ~WE_FF2_FOCUS;
+    forms_ua(d, n);
+    n->form_flags2 |= WE_FF2_FOCUS;
+    if (n->border) n->border_color = (n->accent_set) ? n->accent : WE_FORM_FILL;
+    if (n->appearance) { n->border = 0; n->bg = 0; n->has_bg = 0; }
+}
+
 /* UA styles of the form elements (after ua_defaults, before the rules) */
 static void forms_ua(we_doc_t *d, we_node_t *n) {
     const we_node_t *p = n->parent >= 0 ? &d->nodes[n->parent] : 0;
     if (n->form_flags & WE_FF_DISABLED) n->color = 0x6D6D6D;
+    if (n->form_flags2 & WE_FF2_FOCUS) { forms_ua_focus(d, n); return; }   /* lot 74 */
     if (w_eq(n->tag, "input")) {
         switch (n->form_type) {
         case WE_FORM_HIDDEN: n->display = WE_DISP_NONE; return;
@@ -271,6 +342,11 @@ static void forms_ua(we_doc_t *d, we_node_t *n) {
             n->padding[0] = n->padding[2] = 1; n->padding[1] = n->padding[3] = 6;
             return;
         default:
+            if (n->form_flags2 & WE_FF2_RANGE) {   /* lot 74: the track */
+                forms_box(n, 0xE6E6E6);
+                n->width = 80; n->height = 8; n->min_height = -1;
+                return;
+            }
             forms_box(n, 0xFFFFFF);
             n->padding[0] = n->padding[2] = 1; n->padding[1] = n->padding[3] = 2;
             n->width = (int16_t)((n->form_size ? n->form_size : 20) * WE_CHAR_W);
@@ -323,11 +399,16 @@ static void forms_ua(we_doc_t *d, we_node_t *n) {
         n->display = pct > 0 ? WE_DISP_BLOCK : WE_DISP_NONE;
         n->width_pct = (int16_t)pct;
         n->height = 8;
-        n->bg = w_eq(p->tag, "meter") ? forms_meter_color(p) : WE_FORM_FILL;
+        n->bg = w_eq(p->tag, "meter") ? forms_meter_color(p) : (p->accent_set ? p->accent : WE_FORM_FILL);
         n->has_bg = 1;
         return;
     }
     if (p && (w_eq(p->tag, "progress") || w_eq(p->tag, "meter"))) { n->display = WE_DISP_NONE; return; }   /* fallback content */
+    if (w_eq(n->tag, "dialog")) {
+        /* Lot 74: a dialog without open is not shown; open makes a block. */
+        n->display = (n->form_flags & WE_FF_OPEN) ? WE_DISP_BLOCK : WE_DISP_NONE;
+        return;
+    }
     if (w_eq(n->tag, "details") || w_eq(n->tag, "summary")) { n->display = WE_DISP_BLOCK; return; }
     if (w_eq(n->tag, "fieldset")) {
         n->display = WE_DISP_BLOCK;
@@ -346,6 +427,8 @@ static void forms_ua(we_doc_t *d, we_node_t *n) {
 static void forms_text_style(we_doc_t *d, we_node_t *n) {
     const we_node_t *p = n->parent >= 0 ? &d->nodes[n->parent] : 0;
     if (n->form_flags & WE_FF_PLACEHOLDER) n->color = 0x757575;
+    if (n->form_flags2 & WE_FF2_STALE) { n->display = WE_DISP_NONE; return; }   /* lot 74 */
+    if (n->form_flags2 & WE_FF2_CARET) n->color = WE_FORM_FILL;
     if (p && w_eq(p->tag, "details") && !(p->form_flags & WE_FF_OPEN)) n->display = WE_DISP_NONE;
     if (p && (w_eq(p->tag, "progress") || w_eq(p->tag, "meter"))) n->display = WE_DISP_NONE;
 }

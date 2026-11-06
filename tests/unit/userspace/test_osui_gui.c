@@ -1271,6 +1271,224 @@ static void test_lot73_anim_tick_resends_atlas(void) {
     osui_gui_set_web_fetch(0);
 }
 
+/* Lot 74: forms of the rendered page (webeng_finput.inc) in the GUI */
+int osui_gui_form_url(const char *base, const char *action, char *dst, int max);
+static char g_f_url[600], g_f_body[1100];
+static int g_f_fetches, g_f_posts;
+static const char *F_PAGE =
+    "<html><head><title>Form</title></head><body>"
+    "<form action=\"/find\" method=\"get\"><input id=q name=q value=\"ab\">"
+    "<input type=checkbox id=c name=c value=on><button id=go type=submit>Go</button></form>"
+    "<form action=\"post?x=1\" method=\"post\"><input id=p name=p value=\"v w\">"
+    "<button id=send type=submit>Send</button></form></body></html>";
+static int f_fetch(const char *url, char *src, int src_max, char *final_url, int url_max, char *status, int st_max) {
+    (void)url_max; (void)st_max;
+    g_f_fetches++;
+    snprintf(g_f_url, sizeof(g_f_url), "%s", url);
+    snprintf(final_url, 256, "%s", url);
+    snprintf(status, 64, "osui web fetch ok fake");
+    if (strchr(url, '?')) return snprintf(src, (size_t)src_max, "<html><head><title>Got</title></head><body>r</body></html>");
+    return snprintf(src, (size_t)src_max, "%s", F_PAGE);
+}
+static int f_request(const char *url, const char *body, int body_len, char *src, int src_max, char *final_url, int url_max,
+                     char *status, int st_max) {
+    (void)url_max; (void)st_max;
+    g_f_posts++;
+    snprintf(g_f_url, sizeof(g_f_url), "%s", url);
+    snprintf(g_f_body, sizeof(g_f_body), "%.*s", body_len, body);
+    snprintf(final_url, 256, "%s", url);
+    snprintf(status, 64, "osui web fetch ok fake method POST");
+    if (strcmp(body, "p=fail") == 0) { snprintf(status, 64, "osui web fetch error=http_500"); return -1; }
+    return snprintf(src, (size_t)src_max, "<html><head><title>Posted</title></head><body>ok</body></html>");
+}
+static int f_box(const char *id, int *x, int *y) {
+    const we_doc_t *d = osui_gui_web_doc();
+    int i;
+    for (i = 1; i < (int)d->nnodes; i++)
+        if (strcmp(d->nodes[i].id, id) == 0) { *x = d->nodes[i].x + 2; *y = d->nodes[i].y + 2; return 1; }
+    return 0;
+}
+static void test_lot74_form_url(void) {
+    char d[300];
+    TEST_ASSERT_EQUAL(0, osui_gui_form_url("https://a.b/x/y.html?q#f", "/find?k=1", d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL_STRING("https://a.b/find?k=1", d);
+    TEST_ASSERT_EQUAL(0, osui_gui_form_url("https://a.b/x/y.html?q#f", "z?k=1", d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL_STRING("https://a.b/x/z?k=1", d);
+    TEST_ASSERT_EQUAL(0, osui_gui_form_url("https://a.b/x/y.html?q#f", "?k=1", d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL_STRING("https://a.b/x/y.html?k=1", d);
+    TEST_ASSERT_EQUAL(0, osui_gui_form_url("http://a.b", "z", d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL_STRING("http://a.b/z", d);
+    TEST_ASSERT_EQUAL(0, osui_gui_form_url("https://a.b/x", "//c.d/e", d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL_STRING("https://c.d/e", d);
+    TEST_ASSERT_EQUAL(0, osui_gui_form_url("https://a.b/x", "http://e.f/g?h", d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL_STRING("http://e.f/g?h", d);
+    TEST_ASSERT_EQUAL(0, osui_gui_form_url("https://a.b:8443/x/", "", d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL_STRING("https://a.b:8443/x/", d);
+    /* a local page: the query is dropped, the path resolved */
+    TEST_ASSERT_EQUAL(0, osui_gui_form_url("/web/a.html", "?q=1", d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL_STRING("/web/a.html", d);
+    TEST_ASSERT_EQUAL(0, osui_gui_form_url("/web/a.html", "b.html?q=1", d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL_STRING("/web/b.html", d);
+    /* refusals: no base, no room */
+    TEST_ASSERT_EQUAL(-1, osui_gui_form_url("", "x", d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL(-1, osui_gui_form_url("https://a.b/", 0, d, (int)sizeof(d)));
+    TEST_ASSERT_EQUAL(-1, osui_gui_form_url("https://a.b/", "/abcdefgh", d, 12));
+    TEST_ASSERT_EQUAL(-1, osui_gui_form_url("https://a.b/", "https://abcdefgh", d, 10));
+}
+static void test_lot74_gui_forms(void) {
+    static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request };
+    char ev[64];
+    int x, y, i;
+    setup();
+    g_f_fetches = g_f_posts = 0;
+    osui_gui_set_web_fetch(f_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL_STRING("Form", osui_gui_web_doc()->title);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 state controls 5 focus -1"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "ctl 0 input id=q box"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "ctl 3 input id=p box"));
+    /* desktop click on the text field: focus, keys go to it */
+    TEST_ASSERT(f_box("q", &x, &y));
+    snprintf(ev, sizeof(ev), "web click %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_event(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 changed focus 0"));
+    osui_gui_set_input("");
+    osui_gui_feed_key('c', g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('\b', g_out, (int)sizeof(g_out));
+    osui_gui_feed_key('d', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("", osui_gui_input());
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "focus 0"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "=abd"));
+    /* console: tab to the checkbox, space toggles it */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey tab", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 changed focus 1"));
+    osui_gui_web_command("web-fkey space", g_out, (int)sizeof(g_out));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey nosuchkey", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "error=usage"));
+    /* Enter on the page: GET through the fetch path, action resolved */
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT(f_box("go", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 submit GET https://ex.am/find?q=abd&c=on"));
+    TEST_ASSERT_EQUAL_STRING("https://ex.am/find?q=abd&c=on", g_f_url);
+    TEST_ASSERT_EQUAL_STRING("Got", osui_gui_web_doc()->title);
+    /* back: a fresh form state; POST sends the body through request */
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out)));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "focus -1"));
+    TEST_ASSERT_NULL(strstr(g_out, "abd"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-ftype zz", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "error=no_focus"));
+    TEST_ASSERT(f_box("p", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-ftype &z", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 typed 2"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey enter", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, g_f_posts);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "submit POST https://ex.am/dir/post?x=1 body p=v+w%26z"));
+    TEST_ASSERT_EQUAL_STRING("https://ex.am/dir/post?x=1", g_f_url);
+    TEST_ASSERT_EQUAL_STRING("p=v+w%26z", g_f_body);
+    TEST_ASSERT_EQUAL_STRING("Posted", osui_gui_web_doc()->title);
+    /* a failing POST keeps the status; no request op: refused */
+    osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    for (i = 0; i < 3; i++) osui_gui_web_command("web-fkey bs", g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-ftype fail", g_out, (int)sizeof(g_out));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey enter", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web fetch error=http_500"));
+    TEST_ASSERT_EQUAL_STRING("Form", osui_gui_web_doc()->title);
+    osui_gui_set_web_page_ops(0);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey enter", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 error=no_network"));
+    /* a click outside any control is not a form action */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fclick 5000 5000", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 none"));
+    osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));   /* blur, then ESC leaves the page */
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, osui_gui_web_active());
+    osui_gui_set_web_fetch(0);
+}
+
+/* Lot 74: fragments: :target and the scroll to the element */
+static int t_pages_load(const char *file, char *buf, int max) {
+    const char *r = 0;
+    if (!strcmp(file, "/web/t.html"))
+        r = "<style>:target{color:#ff0000}div:target-within{color:#00ff00}</style><p><a href=\"#s3\">Go3</a> <a href=\"#zz\">Gone</a></p>"
+            "<div style=\"height:600px\">pad</div><div id=w><h2 id=s3>Three</h2></div><div style=\"height:900px\">x</div>";
+    if (!r || (int)strlen(r) > max) return -1;
+    memcpy(buf, r, strlen(r));
+    return (int)strlen(r);
+}
+static void test_lot74_gui_fragment(void) {
+    char e[48], d[64];
+    const we_doc_t *doc;
+    int x, y, t;
+    setup();
+    osui_gui_set_ide_ops(t_pages_load, fake_save, fake_exec);
+    feed_str("web /web/t.html");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web render file=/web/t.html"));
+    doc = osui_gui_web_doc();
+    t = we_find_id(doc, "s3");
+    TEST_ASSERT(t > 0);
+    TEST_ASSERT_EQUAL(0x000000, (int)(doc->nodes[t].color & 0xffffff));
+    TEST_ASSERT(web_item("Go3", &x, &y));
+    snprintf(e, sizeof(e), "web click %d %d", x, y);
+    evt(e);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web link href=#s3"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web target id=s3 scroll "));
+    { const char *q = strstr(g_out, "scroll ") + 7; int v = 0; while (*q >= '0' && *q <= '9') v = v * 10 + (*q++ - '0'); TEST_ASSERT(v >= 600); }
+    doc = osui_gui_web_doc();
+    TEST_ASSERT_EQUAL(0xff0000, (int)(doc->nodes[we_find_id(doc, "s3")].color & 0xffffff));
+    TEST_ASSERT_EQUAL(0x00ff00, (int)(doc->nodes[we_find_id(doc, "w")].color & 0xffffff));
+    TEST_ASSERT_EQUAL(we_find_id(doc, "s3"), we_target_node(doc));
+    /* back: the page without the fragment, no target */
+    evt("web back");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web back file=/web/t.html"));
+    doc = osui_gui_web_doc();
+    TEST_ASSERT_EQUAL(-1, we_target_node(doc));
+    TEST_ASSERT_EQUAL(0x000000, (int)(doc->nodes[we_find_id(doc, "s3")].color & 0xffffff));
+    evt("web fwd");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web target id=s3"));
+    /* an address with a fragment; an unknown id keeps the page at the top */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-open /web/t.html#zz", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web target none id=zz"));
+    TEST_ASSERT_EQUAL(-1, we_target_node(osui_gui_web_doc()));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-open /web/t.html#%73%33", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web target id=s3"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-open /web/t.html#abcdefghijklmnopqrstuvwxyz0123456789", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web target error=too_long"));
+    /* local links keep their fragment */
+    TEST_ASSERT(osui_gui_web_resolve("/web/a.html", "u.html#k", d, (int)sizeof(d)) == 0);
+    TEST_ASSERT_EQUAL_STRING("/web/u.html#k", d);
+    TEST_ASSERT(osui_gui_web_resolve("/web/a.html", "u.html?q#k", d, (int)sizeof(d)) < 0);
+    TEST_ASSERT(osui_gui_web_resolve("/web/a.html", "u.html#k", d, 13) < 0);
+    TEST_ASSERT(osui_gui_web_resolve("/web/a.html", "#top", d, (int)sizeof(d)) < 0);
+    osui_gui_set_ide_ops(0, 0, 0);
+    feed_str("/center");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_lot12_vfs_and_browser_inspection_views);
@@ -1304,6 +1522,9 @@ int main(void) {
     RUN_TEST(test_gui_web_links_history);
     RUN_TEST(test_lot71_web_sections_and_form);
     RUN_TEST(test_lot73_anim_tick_resends_atlas);
+    RUN_TEST(test_lot74_form_url);
+    RUN_TEST(test_lot74_gui_forms);
+    RUN_TEST(test_lot74_gui_fragment);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

@@ -281,12 +281,17 @@ static int find_ci(const char* s, int n, int from, const char* word) {
 static void unlink_last(we_doc_t *d, int parent, int old_last);
 #include "webeng_forms.inc"
 #include "webeng_hints.inc"
+#include "webeng_finput.inc"   /* lot 74 */
+#include "webeng_iframe.inc"
 
 int we_parse(we_doc_t* d, const char* html, int len) {
     int stack[WE_DEPTH_MAX];
     int sp = 0, i = 0, text_start = 0, in_title = 0;
+    we_forms_t *forms;
     if (!d || !html || len < 0) return -1;
+    forms = d->forms;   /* lot 74: the live form state outlives a parse */
     w_zero(d, sizeof(*d));
+    d->forms = forms;
     d->root = (int16_t)new_node(d, -1);
     w_cpy(d->nodes[0].tag, 12, "#document", 9);
     stack[sp++] = 0;
@@ -329,6 +334,10 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                 if (k == 0) { i++; continue; } /* stray '<' becomes text */
                 /* implied end tags */
                 if ((w_eq(name, "p") || w_eq(name, "li")) && sp > 1 && w_eq(d->nodes[stack[sp - 1]].tag, name)) sp--;
+                /* lot 74: an option ends at the next option or optgroup, an
+                 * optgroup at the next optgroup (HTML 13.1.2.4) */
+                if ((w_eq(name, "option") || w_eq(name, "optgroup")) && sp > 1 && w_eq(d->nodes[stack[sp - 1]].tag, "option")) sp--;
+                if (w_eq(name, "optgroup") && sp > 1 && w_eq(d->nodes[stack[sp - 1]].tag, "optgroup")) sp--;
                 if (w_eq(name, "td") || w_eq(name, "th") || w_eq(name, "tr")) {
                     int at;
                     for (at = sp - 1; at > 0; at--) {
@@ -392,13 +401,13 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                             if (av[digit] < '0' || av[digit] > '9' || span > WE_TRACKS_MAX) { valid = 0; break; }
                             span = span * 10 + av[digit] - '0';
                         }
-                        if (!valid || span < 1 || span > WE_TRACKS_MAX) {
+                        if (!valid || span < (w_eq(an, "rowspan") ? 0 : 1) || span > WE_TRACKS_MAX) {
                             n->span_refused = 1;
                             diag(d, "table span refused", idx);
                         } else if (!w_eq(an, "rowspan")) n->colspan = (uint8_t)span;
                         else n->rowspan = (uint8_t)span;
                     }
-                    else if (w_eq(an, "src")) {
+                    else if (w_eq(an, "src") && !w_eq(name, "iframe")) {
                         if (pool_put(d, av, vk, &n->src_off) == 0) n->src_len = (uint16_t)vk;
                     }
                     else if (w_eq(an, "href")) { if (pool_put(d, av, vk, &n->href_off) == 0) n->href_len = (uint16_t)vk; }
@@ -407,6 +416,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                         if (list_number(av, vk, &number)) diag(d, "list number refused", idx);
                         else { n->list_value = (int16_t)number; n->list_value_set = 1; }
                     }
+                    else if (w_eq(name, "iframe") && iframe_attr(d, idx, an, av, vk)) {}
                     else if (forms_tag(name) && !w_eq(an, "dir")) forms_attr(d, idx, an, av, vk);
                     else if (w_eq(an, "reversed") && w_eq(name, "ol")) n->list_reversed = 1;
                     else if (w_eq(an, "dir")) {
@@ -464,6 +474,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
         }
         i++;
     }
+    iframe_expand(d);  /* lot 74: before forms_build so controls inside srcdoc exist */
     forms_build(d);   /* lot 73 */
     d->perf.nodes = d->nnodes;
     return 0;
@@ -592,7 +603,7 @@ static int parse_sel(const char* s, int len, we_rule_t* r) {
                 /* Lot 73: state pseudo-classes, :not() :is() :where(), *-of-type */
                 if (!element) {
                     int state = cssq_state_flag(pseudo), rc;
-                    if (state) { part->state |= (uint8_t)state; r->spec += 64; simple = 1; continue; }
+                    if (state) { part->state |= (uint32_t)state; r->spec += 64; simple = 1; continue; }
                     rc = cssq_sel_logic(s, len, &i, part, pseudo, &r->spec);
                     if (rc < 0) return -1;
                     if (rc == 0) { simple = 1; continue; }
@@ -657,9 +668,96 @@ static int decl_end(const char *s, int n, int i, char stop) {
     return i;
 }
 
+static int sel_equal(const char *a, const char *b, int len, int insensitive);
+/* Lot 74: cascade layers (names are case-sensitive). A dotted name ("a.b") under the current layer
+ * (cur, -1 at the top) finds or creates each level; anonymous (len 0)
+ * always creates one. Returns the index, -1 when the table is full, -2
+ * for a name that is not one. */
+static int layer_find(we_doc_t *d, int cur, const char *s, int len, int create_anon) {
+    int a = 0;
+    if (len == 0) {
+        if (!create_anon) return cur;
+        if (d->nlayers >= WE_LAYERS_MAX) return -1;
+        d->layer_name[d->nlayers][0] = 0;
+        d->layer_parent[d->nlayers] = (int8_t)cur;
+        return d->nlayers++;
+    }
+    while (a < len) {
+        int b = a, k, found = -1;
+        while (b < len && s[b] != '.') b++;
+        if (b == a || b - a >= WE_LAYER_NAME) return -2;   /* ".a", "a..b", too long */
+        for (k = 0; k < (int)d->nlayers; k++)
+            if (d->layer_parent[k] == cur && w_len(d->layer_name[k]) == b - a && sel_equal(d->layer_name[k], s + a, b - a, 0)) { found = k; break; }
+        if (found < 0) {
+            if (d->nlayers >= WE_LAYERS_MAX) return -1;
+            found = d->nlayers++;
+            for (k = 0; k < b - a; k++) d->layer_name[found][k] = s[a + k];
+            d->layer_name[found][b - a] = 0;
+            d->layer_parent[found] = (int8_t)cur;
+        }
+        cur = found;
+        a = b + 1;
+        if (b + 1 == len) return -2;   /* "a." */
+    }
+    return cur;
+}
+
+/* the layer names of a prelude: one name for a block (or none:
+ * anonymous), a comma list for a statement; -1 when a name is not an
+ * identifier list */
+static int layer_names(we_doc_t *d, int cur, const char *s, int len, int block) {
+    int last = cur, pass;
+    /* pass 0 checks the whole prelude, pass 1 creates: a refused prelude
+     * declares no layer */
+    for (pass = 0; pass < 2; pass++) {
+        int i = 0, count = 0, comma = 0;
+        for (;;) {
+            int a, b;
+            while (i < len && w_space(s[i])) i++;
+            if (i >= len) break;
+            a = i;
+            while (i < len && (w_namec(s[i]) || s[i] == '.')) i++;
+            b = i;
+            while (i < len && w_space(s[i])) i++;
+            if (b == a || (i < len && s[i] != ',')) return -2;
+            if (pass == 0) {
+                int k, seg = 0;
+                if (s[b - 1] == '.') return -2;   /* "a." */
+                for (k = a; k < b; k++) {
+                    if (s[k] != '.') { if (++seg >= WE_LAYER_NAME) return -2; continue; }
+                    if (!seg) return -2;          /* ".a", "a..b" */
+                    seg = 0;
+                }
+            } else {
+                last = layer_find(d, cur, s + a, b - a, 0);
+                if (last < 0) return last;
+            }
+            count++;
+            comma = 0;
+            if (i < len) { i++; comma = 1; if (block) return -2; }
+        }
+        if (comma) return -2;                     /* "a," */
+        if (!count) return block ? layer_find(d, cur, s, 0, 1) : -2;
+    }
+    return last;
+}
+
+static int layer_order(we_doc_t *d, int parent, int rank) {
+    int k;
+    for (k = 0; k < (int)d->nlayers; k++)
+        if (d->layer_parent[k] == parent) {
+            rank = layer_order(d, k, rank);
+            d->layer_rank[k] = (uint8_t)rank++;
+        }
+    return rank;
+}
+
+#include "webeng_nest.inc"
+
 /* Lot 73: a range of the style text; @media, @supports and @layer
- * blocks are read in place when they apply (webeng_cssq.inc). */
-static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
+ * blocks are read in place when they apply (webeng_cssq.inc).
+ * Lot 74: layer is the current cascade layer (-1: unlayered). */
+static void parse_css_range(we_doc_t* d, int i, int n, int depth, int layer) {
     const char* s = d->css;
     while (i < n) {
         int sel_a, sel_b, dec_a, dec_b, a;
@@ -672,7 +770,14 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
             /* the prelude ends at the block or at ';' */
             i = decl_end(s, n, i, '{');
             { int semi = decl_end(s, n, pre, ';');
-              if (semi < i) { i = semi + 1; diag(d, "css at-rule skipped", i); continue; } }
+              if (semi < i) {
+                  /* Lot 74: "@layer a, b;" sets the order of the layers */
+                  int lr = cssq_is(s + name_a, name_b - name_a, "layer") ? layer_names(d, layer, s + pre, semi - pre, 0) : -2;
+                  if (lr == -1) diag(d, "css layer table full", pre);
+                  i = semi + 1;
+                  if (lr == -2) diag(d, "css at-rule skipped", i);
+                  continue;
+              } }
             if (i >= n) { diag(d, "css at-rule skipped", i); break; }
             body_a = i + 1;
             for (body_b = i; body_b < n; body_b++) {
@@ -682,14 +787,21 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
             }
             i = body_b + 1;
             if (depth < WE_CSS_NEST_MAX && cssq_is(s + name_a, name_b - name_a, "media")) {
-                if (cssq_media(d, s + pre, body_a - 1 - pre)) parse_css_range(d, body_a, body_b, depth + 1);
+                if (cssq_media(d, s + pre, body_a - 1 - pre)) parse_css_range(d, body_a, body_b, depth + 1, layer);
                 else d->perf.media_skipped++;
             } else if (depth < WE_CSS_NEST_MAX && cssq_is(s + name_a, name_b - name_a, "supports")) {
-                if (cssq_supports(d, s + pre, body_a - 1 - pre)) parse_css_range(d, body_a, body_b, depth + 1);
+                if (cssq_supports(d, s + pre, body_a - 1 - pre)) parse_css_range(d, body_a, body_b, depth + 1, layer);
                 else d->perf.media_skipped++;
             } else if (depth < WE_CSS_NEST_MAX && cssq_is(s + name_a, name_b - name_a, "layer")) {
-                diag(d, "css layer order ignored", body_a);
-                parse_css_range(d, body_a, body_b, depth + 1);
+                int lr = layer_names(d, layer, s + pre, body_a - 1 - pre, 1);
+                if (lr == -2) diag(d, "css at-rule skipped", body_a);
+                else {
+                    if (lr == -1) { diag(d, "css layer table full", body_a); lr = layer; }
+                    parse_css_range(d, body_a, body_b, depth + 1, lr);
+                }
+            } else if (cssq_is(s + name_a, name_b - name_a, "font-face")) {
+                /* Lot 74: no downloadable fonts; the block is read and refused. */
+                diag(d, "font face refused", body_a);
             } else diag(d, "css at-rule skipped", i);
             continue;
         }
@@ -725,6 +837,7 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
                 r->decl_off = off;
                 r->decl_len = (uint16_t)(dec_b - dec_a);
                 r->order = (uint16_t)d->nrules;
+                r->layer = (uint8_t)(layer + 1);
                 d->nrules++;
             } else {
                 diag(d, "css selector unsupported", a);
@@ -735,8 +848,10 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth) {
 }
 
 static void parse_css(we_doc_t* d) {
+    nest_rewrite(d);   /* lot 74: flatten nested rules first */
     cssq_sel_base = d->css;
-    parse_css_range(d, 0, (int)d->css_len, 0);
+    parse_css_range(d, 0, (int)d->css_len, 0, -1);
+    (void)layer_order(d, -1, 0);
     d->perf.rules = d->nrules;
 }
 
@@ -838,7 +953,7 @@ static int previous_element(const we_doc_t *d, int idx) {
 static int match_chain(const we_doc_t *d, int idx, const we_rule_t *r, int part, int *budget) {
     int candidate, relation;
     if (idx <= 0 || (*budget)-- <= 0 || !match_comp(d, idx, &r->part[part])) return 0;
-    if (!part) return 1;
+    if (!part) return cssq_anchor_ok(d, idx, r);   /* lot 74: :has() arguments */
     relation = r->part[part].combinator;
     candidate = relation == WE_SEL_ADJACENT || relation == WE_SEL_SIBLING ? previous_element(d, idx) : d->nodes[idx].parent;
     while (candidate > 0 && *budget > 0) {
@@ -3646,21 +3761,33 @@ static int content_declaration(we_doc_t *d, we_node_t *n, const char *prop, cons
 /* Lot 63: overflow keywords; hidden, clip, auto and scroll clip (no
  * scrollbars are painted). A box clips both axes once one axis does, as a
  * visible axis computes to auto next to a non-visible one. */
+/* Lot 63: overflow keywords clip. Lot 74: auto and scroll also set
+ * overflow_scroll so a scrollbar can be painted and the box scrolled. */
 static int overflow_keyword(const char *v, int len) {
     if (value_is(v, len, "visible")) return 0;
-    if (value_is(v, len, "hidden") || value_is(v, len, "clip") || value_is(v, len, "auto") || value_is(v, len, "scroll")) return 1;
+    if (value_is(v, len, "hidden") || value_is(v, len, "clip")) return 1;
+    if (value_is(v, len, "auto") || value_is(v, len, "scroll")) return 2;
     return -1;
 }
 
 static int overflow_declaration(we_node_t *n, const char *prop, const char *v, int vl) {
-    int a[4], l[4], count = tokens(v, vl, a, l), x, y;
+    int a[4], l[4], count = tokens(v, vl, a, l), x, y, sx, sy;
     if (count < 1 || count > (w_eq(prop, "overflow") ? 2 : 1)) return -1;
     x = overflow_keyword(v + a[0], l[0]);
     y = count == 2 ? overflow_keyword(v + a[1], l[1]) : x;
     if (x < 0 || y < 0) return -1;
-    if (w_eq(prop, "overflow-x")) n->overflow_axes = (uint8_t)((n->overflow_axes & 2) | x);
-    else if (w_eq(prop, "overflow-y")) n->overflow_axes = (uint8_t)((n->overflow_axes & 1) | (y << 1));
-    else n->overflow_axes = (uint8_t)(x | (y << 1));
+    sx = x == 2; sy = y == 2;
+    if (x) x = 1; if (y) y = 1;
+    if (w_eq(prop, "overflow-x")) {
+        n->overflow_axes = (uint8_t)((n->overflow_axes & 2) | x);
+        n->overflow_scroll = (uint8_t)((n->overflow_scroll & 2) | sx);
+    } else if (w_eq(prop, "overflow-y")) {
+        n->overflow_axes = (uint8_t)((n->overflow_axes & 1) | (y << 1));
+        n->overflow_scroll = (uint8_t)((n->overflow_scroll & 1) | (sy << 1));
+    } else {
+        n->overflow_axes = (uint8_t)(x | (y << 1));
+        n->overflow_scroll = (uint8_t)(sx | (sy << 1));
+    }
     n->overflow_hidden = (uint8_t)(n->overflow_axes != 0);
     return 0;
 }
@@ -4140,11 +4267,20 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (parse_len(v, vl, &px, 0) == 0 && px >= -32 && px <= 32) n->vshift_own = (int8_t)-px;
         else diag(d, "vertical align refused", -1);
     } else if (w_eq(prop, "position")) {
-        if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = n->fixed = 0; }
-        else if (value_is(v, vl, "absolute")) { n->absolute = 1; n->relative = n->fixed = 0; }
-        else if (value_is(v, vl, "fixed")) { n->absolute = n->fixed = 1; n->relative = 0; }
-        else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = n->fixed = 0; }
+        if (value_is(v, vl, "relative")) { n->relative = 1; n->absolute = n->fixed = n->sticky = 0; }
+        else if (value_is(v, vl, "absolute")) { n->absolute = 1; n->relative = n->fixed = n->sticky = 0; }
+        else if (value_is(v, vl, "fixed")) { n->absolute = n->fixed = 1; n->relative = n->sticky = 0; }
+        else if (value_is(v, vl, "static")) { n->relative = 0; n->absolute = n->fixed = n->sticky = 0; }
+        else if (value_is(v, vl, "sticky") || value_is(v, vl, "-webkit-sticky")) { n->relative = n->sticky = 1; n->absolute = n->fixed = 0; }
         else diag(d, "position refused", -1);
+    } else if (w_eq(prop, "accent-color")) {
+        /* Lot 74: stored as the border_color of checkbox/radio/range fill hint */
+        uint32_t c;
+        if (parse_color(v, vl, &c) == 0) { n->accent = c; n->accent_set = 1; }
+        else diag(d, "accent color refused", -1);
+    } else if (w_eq(prop, "appearance") || w_eq(prop, "-webkit-appearance")) {
+        if (value_is(v, vl, "none") || value_is(v, vl, "auto")) n->appearance = value_is(v, vl, "none") ? 1 : 0;
+        else diag(d, "appearance refused", -1);
     } else if (w_eq(prop, "caption-side")) {
         /* lot 73 */
         if (value_is(v, vl, "top") || value_is(v, vl, "block-start")) n->caption_bottom = 0;
@@ -4154,6 +4290,11 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (value_is(v, vl, "collapse")) n->border_collapse = 1;
         else if (value_is(v, vl, "separate")) n->border_collapse = 0;
         else diag(d, "border collapse refused", -1);
+    } else if (w_eq(prop, "table-layout")) {
+        /* Lot 74: fixed uses the first row (and col) for column widths. */
+        if (value_is(v, vl, "fixed")) n->table_fixed = 1;
+        else if (value_is(v, vl, "auto")) n->table_fixed = 0;
+        else diag(d, "table layout refused", -1);
     } else if (w_eq(prop, "border-spacing")) {
         int a[4], lens[4], count = tokens(v, vl, a, lens), t;
         int hx = 0, hy = 0, ok = count == 1 || count == 2;
@@ -4478,8 +4619,8 @@ static void apply_decls(we_doc_t* d, we_node_t* n, const char* s, int len, int i
 }
 
 static const char* const k_block[] = { "html", "body", "div", "p", "h1", "h2", "h3", "h4", "ul", "ol", "li",
-    "section", "header", "footer", "nav", "article", "main", "pre", "blockquote", "hr", "form", "table", "tr", "aside", 0 };
-static const char* const k_hidden[] = { "head", "style", "script", "meta", "link", "template", 0 };
+    "section", "header", "footer", "nav", "article", "main", "pre", "blockquote", "hr", "form", "table", "tr", "aside", "iframe", "dialog", "output", 0 };
+static const char* const k_hidden[] = { "head", "style", "script", "meta", "link", "template", "datalist", 0 };
 
 static void ua_defaults(we_node_t* n) {
     int i;
@@ -4520,6 +4661,21 @@ static void ua_defaults(we_node_t* n) {
     if (w_eq(t, "hr")) { n->height = 2; n->bg = 0x808080; n->has_bg = 1; n->margin[0] = 6; n->margin[2] = 6; }
     if (w_eq(t, "blockquote")) { n->margin[3] = 24; n->margin[1] = 24; }
     if (w_eq(t, "pre")) { n->display = WE_DISP_BLOCK; n->ws_mode = WE_WS_PRE; n->nowrap = 1; }
+    if (w_eq(t, "iframe")) {
+        n->display = WE_DISP_BLOCK;
+        n->border = 1; n->border_style = 1; n->border_color = 0x808080;
+        if (n->width < 0) n->width = 300;
+        if (n->height < 0) { n->height = 150; n->min_height = -1; }
+        n->overflow_axes = 3; n->overflow_hidden = 1; n->overflow_scroll = 2;
+    }
+}
+
+/* Lot 74: the layer step of the cascade, applied first to last: normal
+ * declarations go from the first layer to unlayered; !important ones
+ * reverse it (unlayered first, the first layer wins). */
+static int rule_layer_key(const we_doc_t *d, uint32_t r, int important) {
+    int l = d->rules[r].layer, k = l ? d->layer_rank[l - 1] + 1 : WE_LAYERS_MAX + 1;
+    return important ? WE_LAYERS_MAX + 1 - k : k;
 }
 
 /* Rules for element idx (pseudo 0) or for its ::before/::after box n. */
@@ -4531,8 +4687,10 @@ static void cascade_rules(we_doc_t *d, int idx, we_node_t *n, int pseudo, int im
         int best = -1;
         for (r = 0; r < d->nrules; r++) {
             if (used[r]) continue;
-            if (best < 0 || d->rules[r].spec < d->rules[best].spec ||
-                (d->rules[r].spec == d->rules[best].spec && d->rules[r].order < d->rules[best].order)) best = (int)r;
+            if (best < 0 || rule_layer_key(d, r, important) < rule_layer_key(d, (uint32_t)best, important) ||
+                (rule_layer_key(d, r, important) == rule_layer_key(d, (uint32_t)best, important) &&
+                 (d->rules[r].spec < d->rules[best].spec ||
+                  (d->rules[r].spec == d->rules[best].spec && d->rules[r].order < d->rules[best].order)))) best = (int)r;
         }
         if (best < 0) break;
         used[best] = 1;
@@ -4561,7 +4719,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->gap_set = 0;
         n->height_percent = n->min_height_percent = n->max_height_percent = 0;
         n->height_pct = n->min_height_pct = n->max_height_pct = 0;
-        n->width_kind = n->basis_content = n->border_box = n->overflow_hidden = n->overflow_axes = 0;
+        n->width_kind = n->basis_content = n->border_box = n->overflow_hidden = n->overflow_axes = n->overflow_scroll = 0;
         n->min_width_kind = n->max_width_kind = n->basis_kind = 0;
         n->justify_content = n->align_items = n->align_self = n->align_content = 0;
         n->justify_items = n->justify_self = 0;
@@ -4577,7 +4735,8 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->auto_col = -1; n->auto_row = WE_TRACK_AUTO;
         n->auto_col_floor = n->auto_row_floor = n->auto_col_cap = n->auto_row_cap = -1;
         n->relative = n->absolute = n->flex_reverse = n->margin_auto = n->border_collapse = 0;
-        n->fixed = 0;
+        n->fixed = n->sticky = 0;
+        n->table_fixed = 0; n->box_scroll_y = 0; n->accent_set = n->appearance = 0;
         n->border_style = n->collapse_cell = 0;
         border_edges_reset(n);
         n->item_order = 0;
@@ -4818,6 +4977,7 @@ int we_style(we_doc_t* d) {
     d->source_pool = (uint16_t)d->pool_used;
     for (i = 0; i < count; i++) style_node(d, &d->nodes[i], (int)i, (int)i, 0);
     generate_content(d, (int)count);
+    forms_accent_apply(d);
     for (i = 0; i < d->nnodes; i++) {
         we_node_t* n = &d->nodes[i];
         int side;
@@ -6326,7 +6486,7 @@ static void relative_shift(we_doc_t *d, int idx, int first_item, int containing_
     int dx = n->offset_x, dy = n->offset_y;
     int low = containing_x - n->x, high = containing_x + containing_w - n->x - n->w;
     uint32_t i;
-    if (!n->relative) return;
+    if (!n->relative || n->sticky) return;   /* lot 74: sticky moves with the scroll (sticky_apply) */
     dx = n->inset_flags & WE_INSET_LEFT ? math_value(n, WE_LEN_LEFT, containing_w, dx) :
          n->inset_flags & WE_INSET_RIGHT ? -math_value(n, WE_LEN_RIGHT, containing_w, n->offset_r) : 0;
     if (high < low) dx = 0;
@@ -9678,6 +9838,8 @@ static int table_captions(we_doc_t *d, int idx, int x, int y, int width, int dep
     return h;
 }
 
+static int row_group_of(const we_doc_t *d, int row);
+static int table_group_end(const we_doc_t *d, const int *rows, int r, int nr);
 /* Occupancy is one bit per column. A rowspan cell blocks those columns on
  * the following rows. A span past the last row is clamped. Returns -1 when
  * the table must not be painted. */
@@ -9687,7 +9849,7 @@ static int table_assign(we_doc_t *d, int idx, int *rows, int nr, int depth, int 
     w_zero(slot, sizeof(*slot));
     for (n = 0; n < WE_MAX_NODES; n++) slot->col[n] = -1;
     for (r = 0; r < nr && r < WE_GRID_ROWS_MAX; r++) {
-        int c, next = 0;
+        int c, next = 0, gend = table_group_end(d, rows, r, nr);
         for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
             we_node_t *cell = &d->nodes[c];
             int span, rs, col, rr, mask;
@@ -9701,13 +9863,13 @@ static int table_assign(we_doc_t *d, int idx, int *rows, int nr, int depth, int 
                 return -1;
             }
             span = cell->colspan < 1 ? 1 : cell->colspan;
-            rs = cell->rowspan < 1 ? 1 : cell->rowspan;
+            rs = cell->rowspan ? cell->rowspan : gend - r;   /* 0: to the end of the group */
             if (rs > WE_TRACKS_MAX) rs = WE_TRACKS_MAX;
-            if (r + rs > nr) {
-                if (report && cell->rowspan != (uint8_t)(nr - r)) diag(d, "table rowspan clamped", c);
-                rs = nr - r;
-                if (rs < 1) rs = 1;
+            if (r + rs > gend) {
+                if (report) diag(d, r + rs > nr ? "table rowspan clamped" : "table rowspan clamped to its group", c);
+                rs = gend - r;
             }
+            if (rs < 1) rs = 1;
             while (next < WE_TRACKS_MAX && (slot->occ[r] & (uint8_t)(1u << next))) next++;
             col = next;
             if (col + span > WE_TRACKS_MAX) {
@@ -9748,10 +9910,18 @@ static int table_spacing_y_of(const we_node_t *n) {
     return table_spacing_axis(n, 1);
 }
 
-static int table_rowspan_of(const we_node_t *cell, int row, int nr) {
-    int rs = cell->rowspan < 1 ? 1 : cell->rowspan;
+/* Lot 74: the rows cell c of row r spans, inside its row group (HTML
+ * table model: rowspan=0 runs to the end of the group, a longer span
+ * stops there) */
+static int table_group_end(const we_doc_t *d, const int *rows, int r, int nr) {
+    int gend = r + 1;
+    while (gend < nr && row_group_of(d, rows[gend]) == row_group_of(d, rows[r])) gend++;
+    return gend;
+}
+static int table_rowspan_of(const we_doc_t *d, const int *rows, int c, int r, int nr) {
+    int gend = table_group_end(d, rows, r, nr), rs = d->nodes[c].rowspan ? d->nodes[c].rowspan : gend - r;
     if (rs > WE_TRACKS_MAX) rs = WE_TRACKS_MAX;
-    if (row + rs > nr) rs = nr - row;
+    if (r + rs > gend) rs = gend - r;
     return rs < 1 ? 1 : rs;
 }
 
@@ -9878,34 +10048,47 @@ static int table_tracks(we_doc_t *d, int idx, int width, int depth, int *widths)
     for (col = 0; col < WE_TRACKS_MAX; col++) requested[col] = 0;
     table_col_widths(d, idx, width, requested);
     table_gaps(d, idx, rows, nr, depth);
-    for (r = 0; r < nr; r++) {
-        for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
-            we_node_t *cell = &d->nodes[c];
-            int want, column;
-            if (cell->display != WE_DISP_CELL || cell->absolute || table_slot[depth].col[c] < 0) continue;
-            column = table_slot[depth].col[c];
-            want = preferred_outer(cell, width, d->nodes[idx].width_kind == WE_SIZE_MIN_CONTENT ? cell->min_content :
-                                    d->nodes[idx].width_kind ? cell->max_content : 0);
-            if (cell->colspan == 1 && (d->nodes[idx].width_kind || cell->width >= 0 || cell->width_pct > 0 || cell->min_width >= 0 || cell->min_pct > 0))
-                if (want > requested[column]) requested[column] = want;
+    /* Lot 74: table-layout:fixed takes column widths from <col> and the
+     * first row only; later cell contents do not grow a column. */
+    {
+        int r_end = d->nodes[idx].table_fixed ? (nr > 0 ? 1 : 0) : nr;
+        for (r = 0; r < r_end; r++) {
+            for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
+                we_node_t *cell = &d->nodes[c];
+                int want, column;
+                if (cell->display != WE_DISP_CELL || cell->absolute || table_slot[depth].col[c] < 0) continue;
+                column = table_slot[depth].col[c];
+                if (d->nodes[idx].table_fixed) {
+                    /* fixed: a cell width, else equal share of the table */
+                    if (cell->width >= 0) want = cell->width + node_border_extra(cell);
+                    else if (cell->width_pct > 0) want = width * cell->width_pct / 100;
+                    else want = 0;
+                    if (cell->colspan == 1 && want > requested[column]) requested[column] = want;
+                    continue;
+                }
+                want = preferred_outer(cell, width, d->nodes[idx].width_kind == WE_SIZE_MIN_CONTENT ? cell->min_content :
+                                        d->nodes[idx].width_kind ? cell->max_content : 0);
+                if (cell->colspan == 1 && (d->nodes[idx].width_kind || cell->width >= 0 || cell->width_pct > 0 || cell->min_width >= 0 || cell->min_pct > 0))
+                    if (want > requested[column]) requested[column] = want;
+            }
         }
-    }
-    for (r = 0; r < nr; r++) {
-        for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
-            const we_node_t *cell = &d->nodes[c];
-            int span, column, current = 0, wanted, k, deficit;
-            if (cell->display != WE_DISP_CELL || cell->absolute || table_slot[depth].col[c] < 0) continue;
-            span = cell->colspan < 1 ? 1 : cell->colspan;
-            column = table_slot[depth].col[c];
-            if (span > 1 && (d->nodes[idx].width_kind || cell->width >= 0 || cell->width_pct || cell->min_width >= 0 || cell->min_pct)) {
-                wanted = preferred_outer(cell, width, d->nodes[idx].width_kind == WE_SIZE_MIN_CONTENT ? cell->min_content :
-                                         d->nodes[idx].width_kind ? cell->max_content : 0);
-                for (k = 0; k < span; k++) current += requested[column + k];
-                deficit = wanted > current ? wanted - current : 0;
-                for (k = 0; k < span; k++) {
-                    int take = deficit / (span - k) + (deficit % (span - k) != 0);
-                    requested[column + k] += take;
-                    deficit -= take;
+        if (!d->nodes[idx].table_fixed) for (r = 0; r < nr; r++) {
+            for (c = d->nodes[rows[r]].first; c >= 0; c = d->nodes[c].next) {
+                const we_node_t *cell = &d->nodes[c];
+                int span, column, current = 0, wanted, k, deficit;
+                if (cell->display != WE_DISP_CELL || cell->absolute || table_slot[depth].col[c] < 0) continue;
+                span = cell->colspan < 1 ? 1 : cell->colspan;
+                column = table_slot[depth].col[c];
+                if (span > 1 && (d->nodes[idx].width_kind || cell->width >= 0 || cell->width_pct || cell->min_width >= 0 || cell->min_pct)) {
+                    wanted = preferred_outer(cell, width, d->nodes[idx].width_kind == WE_SIZE_MIN_CONTENT ? cell->min_content :
+                                             d->nodes[idx].width_kind ? cell->max_content : 0);
+                    for (k = 0; k < span; k++) current += requested[column + k];
+                    deficit = wanted > current ? wanted - current : 0;
+                    for (k = 0; k < span; k++) {
+                        int take = deficit / (span - k) + (deficit % (span - k) != 0);
+                        requested[column + k] += take;
+                        deficit -= take;
+                    }
                 }
             }
         }
@@ -9971,7 +10154,7 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
             const we_node_t *cell = &d->nodes[c];
             int h, width;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
-            int spanning = table_rowspan_of(cell, r, nr) != 1;
+            int spanning = table_rowspan_of(d, rows, c, r, nr) != 1;
             if (spanning && cell->valign != WE_VALIGN_BASELINE) continue;
             width = table_span_size(widths, slot->col[c], cell->colspan, slot->gap_x);
             h = measure_area_height(d, c, width, depth + 1);
@@ -9994,7 +10177,7 @@ static int table_row_heights(we_doc_t *d, int idx, int depth, const int *widths,
             const we_node_t *cell = &d->nodes[c];
             int rs, sum, h;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
-            rs = table_rowspan_of(cell, r, nr);
+            rs = table_rowspan_of(d, rows, c, r, nr);
             if (rs < 2) continue;
             sum = table_span_size(slot->height, r, rs, slot->gap_y);
             h = measure_area_height(d, c, table_span_size(widths, slot->col[c], cell->colspan, slot->gap_x), depth + 1);
@@ -10226,7 +10409,7 @@ static int collapse_build(const we_doc_t *d, int idx, const int *rows, int nr, i
             int span, rs, rr, kk;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
             span = cell->colspan < 1 ? 1 : cell->colspan;
-            rs = table_rowspan_of(cell, r, nr);
+            rs = table_rowspan_of(d, rows, c, r, nr);
             for (rr = r; rr < r + rs && rr < nr; rr++)
                 for (kk = slot->col[c]; kk < slot->col[c] + span && kk < cols; kk++) collapse_map[rr][kk] = (int16_t)c;
         }
@@ -10390,7 +10573,7 @@ static void collapse_insets(we_doc_t *d, int idx) {
             we_edge_pick_t e;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
             span = cell->colspan < 1 ? 1 : cell->colspan;
-            rs = table_rowspan_of(cell, r, nr);
+            rs = table_rowspan_of(d, rows, c, r, nr);
             for (k = slot->col[c]; k < slot->col[c] + span && k < cols; k++) {
                 collapse_h(d, idx, rows, nr, r, k, &e); if (pick_w(&e) > w[0]) w[0] = pick_w(&e);
                 collapse_h(d, idx, rows, nr, r + rs, k, &e); if (pick_w(&e) > w[2]) w[2] = pick_w(&e);
@@ -10424,8 +10607,27 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
         row->w = (int16_t)width;
         row->h = (int16_t)high;
         if (row->has_bg) {
+            /* Lot 74: the row background covers the cells that start in
+             * the row: not the columns a rowspan from above occupies */
+            int own = 0, foreign, k0 = 0, k;
+            for (c = row->first; c >= 0; c = d->nodes[c].next)
+                if (d->nodes[c].display == WE_DISP_CELL && !d->nodes[c].absolute && slot->col[c] >= 0) {
+                    int sp = d->nodes[c].colspan < 1 ? 1 : d->nodes[c].colspan;
+                    own |= ((1 << sp) - 1) << slot->col[c];
+                }
+            foreign = r < WE_GRID_ROWS_MAX ? slot->occ[r] & ~own : 0;
             bg_slot = (int)d->nitems;
-            if (!emit(d, rows[r], OS_FB_WEB_RECT, x, cy, width, high, row->bg)) bg_slot = -1;
+            if (!foreign) {
+                if (!emit(d, rows[r], OS_FB_WEB_RECT, x, cy, width, high, row->bg)) bg_slot = -1;
+            } else for (k = 0; k <= slot->cols; k++) {
+                if (k < slot->cols && !(foreign & (1 << k))) continue;
+                if (k > k0) {
+                    int x0 = k0 ? x + table_origin(widths, k0, slot->gap_x) : x;
+                    int x1 = k < slot->cols ? x + table_origin(widths, k - 1, slot->gap_x) + widths[k - 1] : x + width;
+                    (void)emit(d, rows[r], OS_FB_WEB_RECT, x0, cy, x1 - x0, high, row->bg);
+                }
+                k0 = k + 1;
+            }
         }
         (void)bg_slot;
         for (c = row->first; c >= 0; c = d->nodes[c].next) {
@@ -10433,7 +10635,7 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
             int span, rs, cell_w, cell_h, cx;
             if (cell->display != WE_DISP_CELL || cell->absolute || slot->col[c] < 0) continue;
             span = cell->colspan < 1 ? 1 : cell->colspan;
-            rs = table_rowspan_of(cell, r, nr);
+            rs = table_rowspan_of(d, rows, c, r, nr);
             cell_w = table_span_size(widths, slot->col[c], span, slot->gap_x);
             cx = limit_coord(x + table_origin(widths, slot->col[c], slot->gap_x));
             {
@@ -10441,6 +10643,8 @@ static int layout_table(we_doc_t *d, int idx, int x, int y, int width, int depth
                 int stretch = rs > 1 || cell->valign != WE_VALIGN_TOP;
                 if (stretch) {
                     cell_h = rs > 1 ? table_span_size(slot->height, r, rs, slot->gap_y) : high;
+                    if (rs > 1 && row->has_bg && cell_h > high)   /* Lot 74: its row's background below the row */
+                        (void)emit(d, rows[r], OS_FB_WEB_RECT, cx, cy + high, cell_w, cell_h - high, row->bg);
                     layout_area(d, c, cx, cy, cell_w, cell_h, cell_w, depth + 1);
                     if (cell->valign == WE_VALIGN_BASELINE && r < WE_GRID_ROWS_MAX)
                         shift_cell(d, c, first_item, slot->ascent[r] - slot->base[c]);
@@ -11030,6 +11234,8 @@ static void ellipsis_cut(os_fb_web_item_t *it, int keep_px) {
     it->w = (uint16_t)(fit * cw);
 }
 
+#include "webeng_scroll.inc"
+
 static void ellipsis_items(we_doc_t *d) {
     int i, j;
     for (i = 0; i < (int)d->nitems; i++) {
@@ -11614,6 +11820,50 @@ static void raise_fixed(we_doc_t *d) {
     for (i = 0; i < count; i++) { d->items[i] = output[i]; d->item_owner[i] = owners[i]; }
 }
 
+/* Lot 74: position:sticky. A sticky box with top (else bottom) stays in
+ * its flow place until the scroll would carry it past top px from the
+ * viewport top (bottom px from its bottom); then it shifts with the
+ * scroll, never out of its parent's content box. The shift moves its
+ * subtree and their items (like a relative offset). */
+static void sticky_move(we_doc_t *d, int idx, int dy) {
+    uint32_t i;
+    if (!dy) return;
+    for (i = (uint32_t)idx; i < d->nnodes; i++)
+        if ((int)i == idx || inside(d, (int)i, idx)) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + dy);
+    for (i = 0; i < d->nitems; i++) {
+        int o = d->item_owner[i];
+        if (o >= 0 && (o == idx || inside(d, o, idx))) d->items[i].y = (int16_t)limit_coord(d->items[i].y + dy);
+    }
+}
+
+static void sticky_apply(we_doc_t *d) {
+    uint32_t i;
+    for (i = 1; i < d->nnodes; i++) {
+        we_node_t *n = &d->nodes[i];
+        const we_node_t *p;
+        int base, want, top, bottom;
+        if (!n->sticky || n->display == WE_DISP_NONE || n->parent < 0) continue;
+        if (!(n->inset_flags & (WE_INSET_TOP | WE_INSET_BOTTOM))) continue;
+        p = &d->nodes[n->parent];
+        base = n->y - n->sticky_dy;
+        top = p->y + p->border + p->padding[0];
+        bottom = p->y + p->h - p->border - p->padding[2];
+        if (n->inset_flags & WE_INSET_TOP) {
+            int t = math_value(n, WE_LEN_TOP, d->viewport_h, n->offset_y);
+            want = d->scroll_y + t - base;
+            if (want > bottom - base - n->h) want = bottom - base - n->h;
+            if (want < 0) want = 0;
+        } else {
+            int b = math_value(n, WE_LEN_BOTTOM, d->viewport_h, n->offset_b);
+            want = d->scroll_y + d->viewport_h - b - (base + n->h);
+            if (want < top - base) want = top - base;
+            if (want > 0) want = 0;
+        }
+        sticky_move(d, (int)i, want - n->sticky_dy);
+        n->sticky_dy = (int16_t)want;
+    }
+}
+
 int we_scroll(we_doc_t* d, int y) {
     int limit, dy, i;
     if (!d) return 0;
@@ -11628,6 +11878,7 @@ int we_scroll(we_doc_t* d, int y) {
     for (i = 0; i < (int)d->nnodes; i++)
         if (fixed_owner(d, i)) d->nodes[i].y = (int16_t)limit_coord(d->nodes[i].y + dy);
     d->scroll_y = (int16_t)y;
+    sticky_apply(d);
     return y;
 }
 
@@ -11650,6 +11901,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     { uint32_t i; int bit; for (i = 0; i < d->nnodes; i++) {
         we_node_t *n = &d->nodes[i];
         n->x = n->y = n->w = n->h = 0;
+        n->sticky_dy = 0;
         for (bit = 0; bit < 8; bit++) if (n->spacing_pct & (1u << bit)) {
             if (bit < 4) n->margin[bit] = 0; else n->padding[bit - 4] = 0;
         }
@@ -11687,12 +11939,15 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     vertical_styles(d, 0);
     drop_reserved(d);
     ellipsis_items(d);
+    { int si; for (si = 1; si < (int)d->nnodes; si++) scroll_apply(d, si); }
+    { int si; for (si = 1; si < (int)d->nnodes; si++) scroll_paint(d, si); }
     paint_outlines(d);
     stack_items(d);
     opacity_items(d);
     raise_fixed(d);
     clip_display_list(d);
     composite_items(d);
+    sticky_apply(d);   /* lot 74: at scroll 0 */
     { uint32_t i; for (i = 0; i < d->nitems; i++) d->items[i].pad = 0; }
     /* Lot 69: a TEXT item carries its font scale in pad (quarters, 0 or 4
      * = the 8x8 cell); the kernel draws its glyphs at web zoom * pad / 4. */

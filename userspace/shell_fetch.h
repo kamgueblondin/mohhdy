@@ -19,6 +19,9 @@ int shell_page_form_link(const char* href);
 int shell_page_form_key(int key);
 int shell_page_form_set(int n, const char* value);
 int shell_page_forms_list(char* out, int cap);
+/* Lot 74: POST of a form of the rendered page (urlencoded body) */
+int shell_page_request(const char* url, const char* body, int body_len, char* src, int src_max, char* final_url, int url_max,
+                       char* status, int st_max);
 int shell_page_submit(int n, char* src, int src_max, char* final_url, int url_max, char* status, int st_max);
 /* Lot 72: images of the fetched page (wf_webimg): the atlas for the
  * compositor, slot sizes for the engine, on / off ("web-images") and the

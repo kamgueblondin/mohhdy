@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Lot 74</title>
+<style>body{margin:8px}
+@layer base, theme;
+@layer theme{.lw{color:#00aa00}}
+@layer base{body p.lw{color:#aa0000}}
+section:has(> p > b){color:#0000aa}
+:target{color:#aa00aa}
+input:focus{border-color:#ff8800}
+tr.r1{background:#e0e0ff}
+.st{position:sticky;top:0}</style></head>
+<body>
+<!-- Lot 74: interactive forms (focus, typing, checkbox, number steps,
+     GET and POST to the test server), @layer order, :has() anchored,
+     rowspan=0 with the row background, :target and the scroll to it. -->
+<h1 class="st">Lot 74</h1>
+<p class="lw">LAYERWIN</p>
+<section><div><p><b>HASNO</b></p></div></section>
+<section><p><b>HASYES</b></p></section>
+<form id="g" action="http://10.0.2.2:18074/echo" method="get"><input id="q" name="q" size="12"> <input id="c" type="checkbox" name="c"> <input id="n" type="number" name="n" min="1" max="5" value="2"> <button id="go">Go</button></form>
+<form id="p" action="http://10.0.2.2:18074/echo" method="post"><input id="t" name="t" required size="12"> <button id="send">Send</button></form>
+<table><tbody><tr class="r1"><td rowspan="0">SPAN<br>SPAN2<br>SPAN3</td><td>R1</td></tr><tr><td>R2</td></tr></tbody></table>
+<div style="height:900px">pad</div>
+<p id="tgt">TARGET</p>
+<div style="height:300px"></div>
+</body></html>

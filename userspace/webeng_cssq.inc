@@ -17,19 +17,23 @@
  *   with no diag (tried on a scratch node, every side effect undone;
  *   custom properties always); selector(...) when the selector parses
  *   (pseudo-elements included); not, and, or as in @media.
- * - @layer blocks are kept in source order (layer priority is not
- *   modelled, one diag); other at-rules are skipped as before.
+ * - @layer (lot 74): cascade layers ranked in post-order, unlayered last,
+ *   !important reversed (webeng.c parse_css_range, rule_layer_key);
+ *   other at-rules are skipped as before.
  * - :not(), :is(), :matches(), :-webkit-any() and :where() take selector
  *   lists (combinators allowed, nesting up to 3); :is and :not count the
  *   most specific argument, :where nothing. :has() takes relative
  *   selectors (descendant, > child, + next sibling, ~ later sibling; not
- *   nested in :has; the whole chain of an argument may match outside the
- *   element, a simplification), its specificity is its most specific
- *   argument. :placeholder-shown, :indeterminate (progress without
+ *   nested in :has; lot 74: the chain of an argument is anchored at the
+ *   element, no part of it matches outside), its specificity is its most
+ *   specific argument. :placeholder-shown, :indeterminate (progress without
  *   value) and :open (details) read the form state. :link and :any-link (a or
  *   area with href), :checked, :disabled, :enabled, :first-of-type,
- *   :last-of-type, :only-of-type; :visited, :hover, :focus, :active,
- *   :focus-within, :focus-visible and :target never match (static page).
+ *   :last-of-type, :only-of-type; :visited, :hover and :active
+ *   never match (static page); lot 74: :focus, :focus-visible,
+ *   :focus-within, :required, :optional, :read-only, :read-write,
+ *   :valid, :invalid follow the live form state (webeng_finput.inc);
+ *   :target and :target-within the URL fragment (we_set_target).
  * - Custom properties: "--name: value" declarations (case-sensitive
  *   names, inherited, up to WE_VARS_MAX per element) and var(--name) /
  *   var(--name, fallback) in any value, nested. Custom values are resolved
@@ -481,23 +485,39 @@ static int cssq_match_depth;
 
 static int inside(const we_doc_t *d, int node, int root);
 
-/* :has(): an element after idx in the relation rel that matches r */
-static int cssq_has_match(const we_doc_t *d, int idx, const we_rule_t *r, int rel, int *budget) {
+/* Lot 74: a :has() argument is anchored: the first compound of its chain
+ * stands in the relation rel to the :has element (descendant, > child,
+ * + next sibling, ~ later sibling), so no part matches outside it. */
+static const we_rule_t *cssq_anchor_rule;
+static int cssq_anchor, cssq_anchor_rel;
+static int previous_element(const we_doc_t *d, int idx);
+static int cssq_anchor_ok(const we_doc_t *d, int idx, const we_rule_t *r) {
     int e;
-    if (rel == '+' || rel == '~') {
-        for (e = d->nodes[idx].next; e >= 0; e = d->nodes[e].next) {
-            if (d->nodes[e].is_text) continue;
-            if (match_chain(d, e, r, r->ncomp - 1, budget)) return 1;
-            if (rel == '+') break;
-        }
+    if (r != cssq_anchor_rule) return 1;
+    if (cssq_anchor_rel == '>') return d->nodes[idx].parent == cssq_anchor;
+    if (cssq_anchor_rel == '+') return previous_element(d, idx) == cssq_anchor;
+    if (cssq_anchor_rel == '~') {
+        for (e = previous_element(d, idx); e > 0; e = previous_element(d, e)) if (e == cssq_anchor) return 1;
         return 0;
     }
-    for (e = idx + 1; e < (int)d->nnodes && *budget > 0; e++) {
-        if (d->nodes[e].is_text || d->nodes[e].pseudo_kind || !inside(d, e, idx)) continue;
-        if (rel == '>' && d->nodes[e].parent != idx) continue;
-        if (match_chain(d, e, r, r->ncomp - 1, budget)) return 1;
+    return idx != cssq_anchor && inside(d, idx, cssq_anchor);
+}
+
+/* :has(): an element after idx (in its subtree, or for + and ~ in the
+ * subtree of its parent) that matches r anchored at idx */
+static int cssq_has_match(const we_doc_t *d, int idx, const we_rule_t *r, int rel, int *budget) {
+    const we_rule_t *save_rule = cssq_anchor_rule;
+    int save = cssq_anchor, save_rel = cssq_anchor_rel, e, hit = 0;
+    int scope = rel == '+' || rel == '~' ? d->nodes[idx].parent : idx;
+    if (scope < 0) return 0;
+    cssq_anchor_rule = r; cssq_anchor = idx; cssq_anchor_rel = rel;
+    for (e = idx + 1; e < (int)d->nnodes && *budget > 0 && !hit; e++) {
+        if (d->nodes[e].is_text || d->nodes[e].pseudo_kind) continue;
+        if (!inside(d, e, scope)) continue;
+        if (match_chain(d, e, r, r->ncomp - 1, budget)) hit = 1;
     }
-    return 0;
+    cssq_anchor_rule = save_rule; cssq_anchor = save; cssq_anchor_rel = save_rel;
+    return hit;
 }
 
 static int cssq_match_list(const we_doc_t *d, int idx, int off, int n, int kind) {
@@ -544,7 +564,7 @@ static int cssq_match_logic(const we_doc_t *d, int idx, const we_selector_part_t
 
 /* state pseudo-classes (flags in part->state) */
 static int cssq_state_flag(const char *pseudo) {
-    static const char *const never[] = { "visited", "hover", "focus", "active", "focus-within", "focus-visible", "target", 0 };
+    static const char *const never[] = { "visited", "hover", "active", 0 };
     int k;
     if (w_eq(pseudo, "link") || w_eq(pseudo, "any-link")) return WE_STATE_LINK;
     if (w_eq(pseudo, "checked")) return WE_STATE_CHECKED;
@@ -553,6 +573,17 @@ static int cssq_state_flag(const char *pseudo) {
     if (w_eq(pseudo, "placeholder-shown")) return WE_STATE_PLACEHOLDER;
     if (w_eq(pseudo, "indeterminate")) return WE_STATE_INDETERMINATE;
     if (w_eq(pseudo, "open")) return WE_STATE_OPEN;
+    if (w_eq(pseudo, "target")) return WE_STATE_TARGET;               /* lot 74 */
+    if (w_eq(pseudo, "target-within")) return WE_STATE_TARGET_WITHIN;
+    /* lot 74: the live form state */
+    if (w_eq(pseudo, "focus") || w_eq(pseudo, "focus-visible")) return WE_STATE_FOCUS;
+    if (w_eq(pseudo, "focus-within")) return WE_STATE_FOCUS_WITHIN;
+    if (w_eq(pseudo, "required")) return WE_STATE_REQUIRED;
+    if (w_eq(pseudo, "optional")) return WE_STATE_OPTIONAL;
+    if (w_eq(pseudo, "read-only")) return WE_STATE_READ_ONLY;
+    if (w_eq(pseudo, "read-write")) return WE_STATE_READ_WRITE;
+    if (w_eq(pseudo, "invalid") || w_eq(pseudo, "user-invalid")) return WE_STATE_INVALID;
+    if (w_eq(pseudo, "valid") || w_eq(pseudo, "user-valid")) return WE_STATE_VALID;
     for (k = 0; never[k]; k++) if (w_eq(pseudo, never[k])) return WE_STATE_NEVER;
     return 0;
 }
@@ -560,6 +591,31 @@ static int cssq_state_flag(const char *pseudo) {
 static int cssq_form_element(const we_node_t *n) {
     return n->form_type || w_eq(n->tag, "button") || w_eq(n->tag, "select") || w_eq(n->tag, "textarea") ||
            w_eq(n->tag, "option") || w_eq(n->tag, "fieldset");
+}
+
+/* lot 74: the live form states (focus, validity, editability) */
+static int cssq_match_live(const we_doc_t *d, const we_node_t *n, int state) {
+    int idx = (int)(n - d->nodes), input = w_eq(n->tag, "input") || w_eq(n->tag, "select") || w_eq(n->tag, "textarea");
+    int editable = finput_textlike(n) && !(n->form_flags2 & WE_FF2_READONLY) && !finput_disabled(d, idx);
+    if ((state & WE_STATE_FOCUS) && !(n->form_flags2 & WE_FF2_FOCUS)) return 0;
+    if (state & WE_STATE_FOCUS_WITHIN) {
+        int f = d->forms ? finput_node(d, d->forms->focus) : -1;
+        while (f >= 0 && f != idx) f = d->nodes[f].parent;
+        if (f < 0) return 0;
+    }
+    if ((state & WE_STATE_REQUIRED) && !(input && (n->form_flags2 & WE_FF2_REQUIRED))) return 0;
+    if ((state & WE_STATE_OPTIONAL) && !(input && !(n->form_flags2 & WE_FF2_REQUIRED))) return 0;
+    if ((state & WE_STATE_READ_WRITE) && !editable) return 0;
+    if ((state & WE_STATE_READ_ONLY) && editable) return 0;
+    if ((state & WE_STATE_INVALID) && !finput_invalid(d, idx)) return 0;
+    if ((state & WE_STATE_VALID) && !(input && n->form_ord && !finput_invalid(d, idx))) return 0;
+    if (state & (WE_STATE_TARGET | WE_STATE_TARGET_WITHIN)) {
+        int t = we_target_node(d);
+        if ((state & WE_STATE_TARGET) && t != idx) return 0;
+        while (t >= 0 && t != idx) t = d->nodes[t].parent;
+        if (t < 0) return 0;
+    }
+    return 1;
 }
 
 static int cssq_match_state(const we_doc_t *d, const we_node_t *n, int state) {
@@ -572,7 +628,7 @@ static int cssq_match_state(const we_doc_t *d, const we_node_t *n, int state) {
     if ((state & WE_STATE_PLACEHOLDER) && !(n->first >= 0 && (d->nodes[n->first].form_flags & WE_FF_PLACEHOLDER))) return 0;
     if ((state & WE_STATE_INDETERMINATE) && !(w_eq(n->tag, "progress") && !(n->form_flags & WE_FF_VALUE))) return 0;
     if ((state & WE_STATE_OPEN) && !(w_eq(n->tag, "details") && (n->form_flags & WE_FF_OPEN))) return 0;
-    return 1;
+    return state < WE_STATE_FOCUS || cssq_match_live(d, n, state);
 }
 
 /* ---------- custom properties ---------- */

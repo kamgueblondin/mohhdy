@@ -34,6 +34,10 @@
 #define WE_MAX_NODES 160
 #define WE_MAX_ITEMS OS_FB_WEB_ITEMS
 #define WE_MAX_RULES 64
+/* Lot 74: cascade layers (@layer): names of one level, the parent, the
+ * rank (post-order: sublayers before their layer, unlayered last) */
+#define WE_LAYERS_MAX 16
+#define WE_LAYER_NAME 24
 #define WE_VARS_MAX 12   /* lot 73: custom properties per element */
 #define WE_HINTS_MAX 8   /* lot 73: presentational attributes per element */
 #define WE_POOL 32768
@@ -70,6 +74,55 @@ enum {
 };
 
 typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME_MAX]; } we_grid_names_t;
+/* Lot 74: live state of the form controls of a page, kept by the caller
+ * across renders (we_set_forms). Control k is the k-th input, select,
+ * textarea, button or details in document order. An entry with set = 0
+ * shows the markup; a click or a key copies the markup state first. */
+#define WE_FSTATE_MAX 32
+#define WE_TARGET_MAX 32
+#define WE_BOXSCROLL_MAX 8
+#define WE_FSTATE_VAL 64
+typedef struct {
+    uint8_t set, checked, sel, len;   /* checked: box, radio, open details; sel: option */
+    uint32_t selmask;                 /* list box: selected options (first 32) */
+    char val[WE_FSTATE_VAL];          /* text, password, textarea value */
+} we_fstate_t;
+typedef struct {
+    int16_t focus;        /* focused control, -1 none */
+    int16_t submitter;    /* control of the requested submission, -1 implicit */
+    int16_t submit_form;  /* node of the form to submit, -1 none */
+    uint16_t edits, toggles, submits, resets, refused;
+    uint8_t autofocused;  /* the autofocus control was focused once */
+    we_fstate_t c[WE_FSTATE_MAX];
+    char target[WE_TARGET_MAX];   /* the URL fragment: the :target element id, "" none */
+    char scroll_id[WE_BOXSCROLL_MAX][WE_TARGET_MAX];
+    int16_t scroll_y[WE_BOXSCROLL_MAX];
+    uint8_t nscroll;
+} we_forms_t;
+/* we_form_click / we_form_key results */
+enum { WE_FACT_NONE = 0, WE_FACT_CHANGED = 1, WE_FACT_SUBMIT = 2 };
+/* keys of we_form_key beside ASCII 32..126 */
+#define WE_KEY_BACKSPACE 8
+#define WE_KEY_TAB 9
+#define WE_KEY_ENTER 13
+#define WE_KEY_ESC 27
+#define WE_KEY_UP 0x101
+#define WE_KEY_DOWN 0x102
+#define WE_KEY_SHIFT_TAB 0x103
+#define WE_KEY_LEFT 0x104
+#define WE_KEY_RIGHT 0x105
+/* a form submission: application/x-www-form-urlencoded */
+#define WE_FREQ_URL 512
+#define WE_FREQ_BODY 1024
+typedef struct {
+    uint8_t post;          /* method=post */
+    uint8_t multipart;     /* enctype=multipart/form-data asked (sent urlencoded) */
+    int16_t form;          /* node of the form */
+    char url[WE_FREQ_URL]; /* GET: action (no query, no fragment) ? body; POST: action */
+    char body[WE_FREQ_BODY];
+    int body_len;
+} we_form_req_t;
+
 /* Lot 61: an edge is auto, a line number, a name with an occurrence
  * (nth, negative counts from the end) or a span. A named span counts
  * lines carrying edge[] from the opposite resolved edge. */
@@ -230,7 +283,8 @@ typedef struct {
     uint8_t width_kind, basis_content, border_box;
     uint8_t min_width_kind, max_width_kind, basis_kind, break_all;
     uint8_t nowrap, break_word, visibility, overflow_hidden;
-    uint8_t overflow_axes;     /* lot 63: bit 0 x, bit 1 y clip (hidden, clip, auto, scroll) */
+    uint8_t overflow_axes;     /* lot 63: bit 0 x, bit 1 y clip */
+    uint8_t overflow_scroll;    /* lot 74: bit 0 x, bit 1 y: auto/scroll (scrollbar) */
     uint8_t grid_col_start, grid_row_start, grid_col_span, grid_row_span;
     we_grid_names_t line_names[2];
     /* Lot 61: one repeat(auto-fill|auto-fit, track) per axis. The template
@@ -288,6 +342,15 @@ typedef struct {
     uint8_t form_type, form_flags, form_size, form_rows, form_cols, meter_set;
     uint16_t fval_off, fval_len, fph_off, fph_len;
     int32_t meter[5];
+    /* Lot 74: interactive forms (webeng_finput.inc): name in the pool,
+     * control ordinal + 1 in we_forms_t (0: none), maxlength (0: none),
+     * WE_FF2_* flags */
+    uint16_t fname_off, fname_len;
+    uint8_t form_ord, form_maxlen;
+    uint32_t form_flags2;   /* lot 74: widened for LIST and more */
+    uint8_t form_minlen;      /* lot 74: minlength (0: none) */
+    int8_t tabindex;          /* lot 74: with WE_FF2_TABINDEX, -1..127 */
+    /* fpat_*: see below with sticky */
     /* Lot 64: text-align / text-align-last given as start or end (bits 0-1
      * and 2-3: 1 start, 2 end), resolved against direction after the cascade. */
     uint8_t align_logical;
@@ -302,6 +365,14 @@ typedef struct {
     int8_t z_index;            /* absolute paint order, -8..8 */
     uint8_t z_set, clear_side, valign;
     uint8_t fixed;             /* lot 61: position:fixed (absolute + viewport) */
+    uint8_t sticky;            /* lot 74: position:sticky (relative + the scroll shift) */
+    int16_t sticky_dy;         /* lot 74: the current shift of a sticky box */
+    uint8_t table_fixed;       /* lot 74: table-layout:fixed */
+    uint8_t accent_set, appearance; /* lot 74: accent-color, appearance:none */
+    uint32_t accent;
+    uint16_t fpat_off, fpat_len; /* lot 74: pattern= in the pool */
+    uint16_t flist_off, flist_len; /* lot 74: list= datalist id */
+    int16_t box_scroll_y;      /* lot 74: overflow box scroll offset */
     uint8_t collapse_w;        /* lot 61: shared cell border width, layout time */
     /* Lot 61 border edges, top right bottom left. edge_w -1 and style 0
      * mean "use border / border_style". Only collapsed tables read them. */
@@ -409,6 +480,18 @@ enum { WE_LOGIC_NOT = 1, WE_LOGIC_IS, WE_LOGIC_WHERE, WE_LOGIC_HAS };
 #define WE_STATE_PLACEHOLDER 32
 #define WE_STATE_INDETERMINATE 64
 #define WE_STATE_OPEN 128
+/* Lot 74: live form state (we_forms_t) */
+#define WE_STATE_FOCUS 256
+#define WE_STATE_FOCUS_WITHIN 512
+#define WE_STATE_REQUIRED 1024
+#define WE_STATE_OPTIONAL 2048
+#define WE_STATE_READ_ONLY 4096
+#define WE_STATE_READ_WRITE 8192
+#define WE_STATE_INVALID 16384
+#define WE_STATE_VALID 32768
+/* lot 74: the fragment of the page URL (we_set_target) */
+#define WE_STATE_TARGET 65536
+#define WE_STATE_TARGET_WITHIN 131072
 /* Lot 63: generated content */
 enum { WE_PSEUDO_BEFORE = 1, WE_PSEUDO_AFTER = 2 };
 enum { WE_CONTENT_NONE, WE_CONTENT_LIST, WE_CONTENT_UA_OPEN, WE_CONTENT_UA_CLOSE };
@@ -425,7 +508,8 @@ typedef struct {
     we_selector_attr_t attr[WE_SELECTOR_ATTRS_MAX];
     uint8_t classes, attrs, pseudo, combinator;
     int16_t nth_a, nth_b;
-    uint8_t state, logic_kind[2];       /* lot 73 */
+    uint32_t state;                     /* lot 73, lot 74: WE_STATE_* */
+    uint8_t logic_kind[2];              /* lot 73 */
     uint16_t logic_off[2], logic_len[2]; /* lot 73: arguments in css[] */
 } we_selector_part_t;
 typedef struct {
@@ -435,6 +519,7 @@ typedef struct {
     uint16_t order;
     uint16_t decl_off, decl_len;
     uint8_t pseudo_el;  /* lot 63: 0 element, else WE_PSEUDO_BEFORE/AFTER */
+    uint8_t layer;      /* lot 74: 0 unlayered, else cascade layer index + 1 */
 } we_rule_t;
 
 typedef struct {
@@ -458,6 +543,9 @@ typedef struct {
     uint8_t css_parsed;
     we_rule_t rules[WE_MAX_RULES];
     uint32_t nrules;
+    char layer_name[WE_LAYERS_MAX][WE_LAYER_NAME];   /* lot 74: "" = anonymous */
+    int8_t layer_parent[WE_LAYERS_MAX];
+    uint8_t layer_rank[WE_LAYERS_MAX], nlayers;
     os_fb_web_item_t items[WE_MAX_ITEMS];
     int16_t item_owner[WE_MAX_ITEMS];
     uint32_t nitems;
@@ -473,6 +561,10 @@ typedef struct {
     /* Lot 63: node and pool counts before generated content, so a second
      * we_style drops the generated boxes first. */
     uint16_t source_nodes, source_pool;
+    /* Lot 74: live form state (0: the controls are painted static) and
+     * the number of controls with an ordinal */
+    we_forms_t *forms;
+    uint16_t nform_ctl;
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 
@@ -506,6 +598,7 @@ int we_layout(we_doc_t* d, int viewport_w);
 int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h);
 /* Clamp y to [0, page_h - viewport_h], move fixed boxes, return the offset. */
 int we_scroll(we_doc_t* d, int y);
+int we_box_scroll_click(we_doc_t *d, int x, int y);
 int we_render(we_doc_t* d, const char* html, int len, int viewport_w);
 /* Lot 73: the media size of @media (call after we_parse, before we_style) */
 void we_set_media(we_doc_t *d, int w, int h);
@@ -518,4 +611,24 @@ void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx);
  * ancestor of the deepest laid-out node there; returns its length, 0 when
  * no link is there. */
 int we_link_at(const we_doc_t* d, int x, int y, char* href, int max);
+
+/* Lot 74: interactive forms (webeng_finput.inc). we_set_forms keeps the
+ * state pointer across we_parse; we_forms_init clears a state (new page).
+ * After a WE_FACT_CHANGED result the caller renders the page again; after
+ * WE_FACT_SUBMIT it calls we_form_request and fetches the answer.
+ * we_form_at: control ordinal under page point (x, y), or -1. */
+void we_forms_init(we_forms_t *f);
+void we_set_forms(we_doc_t *d, we_forms_t *f);
+int we_form_at(const we_doc_t *d, int x, int y);
+int we_form_click(we_doc_t *d, int x, int y);
+int we_form_key(we_doc_t *d, int key);
+int we_form_set_text(we_doc_t *d, int ctl, const char *text);
+int we_form_request(const we_doc_t *d, we_form_req_t *req);
+int we_form_value(const we_doc_t *d, int ctl, char *out, int max);
+/* Lot 74: the fragment of the page URL ("#id" or "id", percent-decoded):
+ * the element with that id matches :target after the next we_style.
+ * 0 set, 1 cleared ("" or 0), -1 no forms state or too long. */
+int we_set_target(we_doc_t *d, const char *frag);
+/* the node of the current target, -1 none */
+int we_target_node(const we_doc_t *d);
 #endif
