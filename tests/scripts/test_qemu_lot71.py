@@ -11,8 +11,9 @@ GUI input line, osui_gui_web_command):
   * web-open http://H/long.html: 26 sections, web-section 26 shows the end;
   * search-config searx http://H/searx + search-engine searx: 2 results.
 GUI part (USB tablet clicks on the VBE desktop, 1024x768, ui-scale 1x):
-  * the form page: click the search field, type, Enter submits (server
-    log), screenshots before and after;
+  * the form page: Lot 75 engine form2 (web-fstate/fclick/ftype/fkey) on
+    the reader-emitted controls (was blue mohhdy-form links), Enter
+    submits (server log), screenshots before and after;
   * the Latin-1 page (accents drawn with the Latin-1 glyphs), screenshot;
   * full-screen web window: maximize restores a smaller window, the title
     drags it ("gfx wm full moved"), the grip resizes it ("gfx wm full
@@ -92,13 +93,65 @@ def red_right(rgb, y0, y1, x0=0, x1=W):
 
 
 def blue_link(rgb, x0, y0, x1, y1):
-    """first row of link-coloured pixels (blue) in a box: (x, y) centre"""
+    """first row of link-coloured pixels (blue) in a box: (x, y) centre.
+    Kept for non-form pages; Lot 75 reader forms are engine controls, not
+    blue mohhdy-form links (see form2_controls)."""
     for y in range(y0, y1):
         xs = [x for x in range(x0, x1)
               if rgb[(y * W + x) * 3 + 2] > 150 and rgb[(y * W + x) * 3] < 90 and rgb[(y * W + x) * 3 + 1] < 140]
         if len(xs) > 6:
             return (xs[0] + xs[-1]) // 2 if xs[-1] - xs[0] < 200 else xs[0] + 40, y + 4
     raise RuntimeError("no link on the page")
+
+
+def form2_input_boxes(rgb, x0, y0, x1, y1, min_w=60, max_w=240, min_h=10, max_h=22):
+    """Lot 75: engine inputs use border 0x767676 (WE_FORM_BORDER).
+    Find horizontal border runs and return (cx, cy, w, h) click targets.
+    White-fill alone is unreliable when a placeholder paints inside."""
+    boxes = []
+    y = y0
+    while y < y1:
+        x = x0
+        while x < x1:
+            i = (y * W + x) * 3
+            # gray border-ish
+            if (abs(rgb[i] - 0x76) <= 12 and abs(rgb[i + 1] - 0x76) <= 12 and abs(rgb[i + 2] - 0x76) <= 12):
+                x2 = x
+                while x2 < x1:
+                    j = (y * W + x2) * 3
+                    if not (abs(rgb[j] - 0x76) <= 12 and abs(rgb[j + 1] - 0x76) <= 12 and abs(rgb[j + 2] - 0x76) <= 12):
+                        break
+                    x2 += 1
+                bw = x2 - x
+                if bw >= min_w:
+                    # look a few px down for the bottom border of the same width
+                    h = 0
+                    for dy in range(min_h, max_h + 1):
+                        yy = y + dy
+                        if yy >= y1:
+                            break
+                        ok = 0
+                        for xx in range(x, x2):
+                            j = (yy * W + xx) * 3
+                            if abs(rgb[j] - 0x76) <= 12 and abs(rgb[j + 1] - 0x76) <= 12 and abs(rgb[j + 2] - 0x76) <= 12:
+                                ok += 1
+                        if ok >= bw // 2:
+                            h = dy
+                            break
+                    if min_h <= h <= max_h and min_w <= bw <= max_w:
+                        boxes.append(((x + x2) // 2, y + h // 2, bw, h))
+                    x = x2
+                    continue
+            x += 1
+        y += 1
+    boxes.sort(key=lambda b: -(b[2] * b[3]))
+    kept = []
+    for b in boxes:
+        if any(abs(b[0] - k[0]) < 10 and abs(b[1] - k[1]) < 10 for k in kept):
+            continue
+        kept.append(b)
+    kept.sort(key=lambda b: (b[1], b[0]))
+    return kept
 
 
 def run_width(rgb, y, x_from):
@@ -218,17 +271,21 @@ def main():
             time.sleep(2.0)
             rgb = shot(mon, "form-page")
             ox, oy = 16, BAR_H + 48
-            fx, fy = blue_link(rgb, ox, oy + 40, ox + 700, oy + 300)
+            boxes = form2_input_boxes(rgb, ox, oy + 10, ox + 600, oy + 280)
+            if not boxes:
+                raise RuntimeError("no engine form control (bordered input) on the page")
+            fx, fy = boxes[0][0], boxes[0][1]
+            say("form2 text target %d,%d box %dx%d" % (fx, fy, boxes[0][2], boxes[0][3]))
             start = len(g.log_text())
             for _ in range(3):
                 g.click_tablet(qmp, fx, fy, W, H)
                 try:
-                    g.wait_for(proc, "osui web form focus f:0", 8.0, start)
+                    g.wait_for(proc, "osui web form2 changed focus", 8.0, start)
                     break
                 except RuntimeError:
                     continue
             else:
-                raise RuntimeError("click on the field at %d,%d gave no focus" % (fx, fy))
+                raise RuntimeError("click on the field at %d,%d gave no form2 focus" % (fx, fy))
             for ch in "gui":
                 g.send_key(mon, ch)
                 time.sleep(0.4)
@@ -236,11 +293,11 @@ def main():
             shot(mon, "form-typed")
             start = len(g.log_text())
             g.send_key(mon, "ret")
-            g.wait_for(proc, "osui web form submit", lw.FETCH_TIMEOUT, start)
-            wait_server("ECHO GET q='q=gui&lang=fr'")
+            g.wait_for(proc, "osui web form2 submit", lw.FETCH_TIMEOUT, start)
+            wait_server("ECHO GET q='q=gui&lang=fr")  # form2 may append &go=Envoyer
             time.sleep(1.5)
             shot(mon, "form-answer")
-            say("GUI form: click, typing and Enter submitted q=gui")
+            say("GUI form2: click, typing and Enter submitted q=gui")
             g.send_key(mon, "esc")
             time.sleep(0.8)
             start = len(g.log_text())
@@ -248,25 +305,36 @@ def main():
             g.wait_for(proc, "osui web fetch ok status 200", lw.FETCH_TIMEOUT, start)
             time.sleep(2.0)
             rgb = shot(mon, "controls-before")
-            fx, fy = blue_link(rgb, ox, oy, ox + 700, oy + 200)
+            # Checkbox is a small control; search smaller min_w, also try white boxes
+            boxes = form2_input_boxes(rgb, ox, oy, ox + 700, oy + 240, min_w=8, max_w=40, min_h=8, max_h=20)
+            if boxes:
+                fx, fy = boxes[0][0], boxes[0][1]
+            else:
+                # checkbox is a small bordered square near the first line
+                fx, fy = ox + 24, oy + 36
+            say("form2 checkbox target %d,%d" % (fx, fy))
             start = len(g.log_text())
             for _ in range(3):
                 g.click_tablet(qmp, fx, fy, W, H)
                 try:
-                    g.wait_for(proc, "osui web form toggle f:0", 8.0, start)
+                    g.wait_for(proc, "osui web form2 changed focus", 8.0, start)
                     break
                 except RuntimeError:
-                    continue
+                    # a second click on an already-focused checkbox toggles it
+                    try:
+                        g.wait_for(proc, "osui web form2", 2.0, start)
+                        break
+                    except RuntimeError:
+                        continue
             else:
-                raise RuntimeError("click on the checkbox at %d,%d did not toggle it" % (fx, fy))
+                raise RuntimeError("click on the checkbox at %d,%d did not hit form2" % (fx, fy))
             time.sleep(1.5)
             shot(mon, "controls-checked")
-            say("GUI form: a click toggles the checkbox")
-            # The click also focuses the control (keyboard goes on from it):
-            # the first ESC leaves the field, the second closes the pane.
+            say("GUI form2: a click focuses/toggles the checkbox")
+            # First ESC leaves the field (form2), the second closes the pane.
             start = len(g.log_text())
             g.send_key(mon, "esc")
-            g.wait_for(proc, "osui web form blur", g.CMD_TIMEOUT, start)
+            g.wait_for(proc, "osui web form2 changed focus none", g.CMD_TIMEOUT, start)
             start = len(g.log_text())
             g.send_key(mon, "esc")
             g.wait_for(proc, "osui web close", g.CMD_TIMEOUT, start)

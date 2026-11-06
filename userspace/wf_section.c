@@ -252,7 +252,7 @@ int wf_section_render(const char* src, int n, const wf_sections_t* s, int k, con
     sb_t b;
     stk_t st;
     int i, d;
-    static char fd[WF_FORM_VALUE + 16];
+    static char fd[WF_FORM_VALUE * 4 + 256];
     (void)n;
     if (!s || k < 0 || k >= s->n || cap < 512) return -1;
     b.o = out; b.cap = cap - 260; b.n = 0; b.full = 0;   /* room kept for the closing part */
@@ -270,15 +270,11 @@ int wf_section_render(const char* src, int n, const wf_sections_t* s, int k, con
             int v = 0, j = i + 1;
             while (j < s->off[k + 1] && src[j] >= '0' && src[j] <= '9') v = v * 10 + (src[j++] - '0');
             if (j < s->off[k + 1] && src[j] == '\002') {
-                int q;
-                if (forms) wf_form_display(forms, v, fd, (int)sizeof(fd));
-                else { fd[0] = '['; fd[1] = ' '; fd[2] = ']'; fd[3] = 0; }
-                for (q = 0; fd[q]; q++) {
-                    if (fd[q] == '<') sb_s(&b, "&lt;");
-                    else if (fd[q] == '&') sb_s(&b, "&amp;");
-                    else if (fd[q] == '>') sb_s(&b, "&gt;");
-                    else sb_c(&b, fd[q]);
-                }
+                int q, n;
+                /* Lot 75: real engine form control HTML (not a mohhdy-form link) */
+                if (forms) n = wf_form_emit_html(forms, v, fd, (int)sizeof(fd));
+                else { fd[0] = 0; n = 0; }
+                for (q = 0; q < n; q++) sb_c(&b, fd[q]);
                 i = j;
                 continue;
             }

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Lot 75</title>
+<style>
+body{margin:8px}
+#a{caret-color:#ff0000;user-select:none}
+#b{pointer-events:none;color:#008800}
+#c{scroll-margin:12px;scroll-padding:4px}
+:target{color:#aa00aa}
+</style></head>
+<body>
+<!-- Lot 75: caret-color, user-select, pointer-events, scroll-margin,
+     form= association, formaction, local multipart form. Remote reader
+     forms are exercised by web-open of the test server /form.html. -->
+<h1 id="c">Lot 75</h1>
+<p id="b">PEVENTS</p>
+<form id="f1" action="http://10.0.2.2:18075/echo" method="get"></form>
+<input id="a" name="q" value="" form="f1" size="12">
+<input id="go" type="submit" form="f1" formaction="http://10.0.2.2:18075/echo" value="Go">
+<form id="mp" action="http://10.0.2.2:18075/echo" method="post" enctype="multipart/form-data">
+<input id="m" name="msg" value="hi"><button id="send">Send</button>
+</form>
+<div style="height:400px">pad</div>
+<p id="tgt">TARGET</p>
+</body></html>

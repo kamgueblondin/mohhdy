@@ -80,6 +80,7 @@ int wf_form_add(wf_form_page_t *p, const wf_url_t *base, const char *type, const
                 const char *label, int checked, int maxlen) {
     wf_field_t *fl;
     int kind, form = p->current;
+    int as_button = 0;
     if (!type || !type[0] || f_ieq(type, "text") || f_ieq(type, "search") || f_ieq(type, "email") || f_ieq(type, "url") ||
         f_ieq(type, "tel") || f_ieq(type, "number")) kind = WF_FIELD_TEXT;
     else if (f_ieq(type, "password")) kind = WF_FIELD_PASSWORD;
@@ -88,8 +89,11 @@ int wf_form_add(wf_form_page_t *p, const wf_url_t *base, const char *type, const
     else if (f_ieq(type, "select")) kind = WF_FIELD_SELECT;
     else if (f_ieq(type, "checkbox")) kind = WF_FIELD_CHECKBOX;
     else if (f_ieq(type, "radio")) kind = WF_FIELD_RADIO;
-    else if (f_ieq(type, "submit") || f_ieq(type, "image") || f_ieq(type, "button-submit")) kind = WF_FIELD_SUBMIT;
-    else return -1;   /* file, reset, button (no submit), color, range, date...: not kept */
+    else if (f_ieq(type, "file")) kind = WF_FIELD_FILE;   /* Lot 75 */
+    else if (f_ieq(type, "submit") || f_ieq(type, "image") || f_ieq(type, "button-submit")) {
+        kind = WF_FIELD_SUBMIT;
+        as_button = f_ieq(type, "button-submit");
+    } else return -1;   /* reset, button (no submit), color, range, date...: not kept */
     if (p->nfields >= WF_FORM_FIELDS) { p->dropped++; return -1; }
     if (form < 0) form = implicit_form(p, base);
     if (form < 0) { p->dropped++; return -1; }
@@ -97,6 +101,12 @@ int wf_form_add(wf_form_page_t *p, const wf_url_t *base, const char *type, const
     fl->type = (uint8_t)kind;
     fl->form = (uint8_t)form;
     fl->named = (name && name[0]) ? 1 : 0;
+    fl->flags = (uint8_t)(as_button ? WF_FF_AS_BUTTON : 0);
+    if (as_button) f_cpy(fl->itype, (int)sizeof(fl->itype), "submit");
+    else if (!type || !type[0]) f_cpy(fl->itype, (int)sizeof(fl->itype), "text");
+    else if (f_ieq(type, "button-submit")) f_cpy(fl->itype, (int)sizeof(fl->itype), "submit");
+    else if (f_ieq(type, "textarea") || f_ieq(type, "select")) f_cpy(fl->itype, (int)sizeof(fl->itype), type);
+    else f_cpy(fl->itype, (int)sizeof(fl->itype), type);
     f_cpy(fl->name, (int)sizeof(fl->name), name);
     f_cpy(fl->value, (int)sizeof(fl->value), ((kind == WF_FIELD_CHECKBOX || kind == WF_FIELD_RADIO) && (!value || !value[0])) ? "on" : value);
     fl->checked = (uint8_t)((kind == WF_FIELD_CHECKBOX || kind == WF_FIELD_RADIO) && checked ? 1 : 0);
@@ -403,6 +413,147 @@ int wf_form_display(const wf_form_page_t *p, int field, char *out, int cap) {
     return o;
 }
 
+
+/* Lot 75: attribute value with &, ", < escaped (7-bit HTML) */
+static int emit_esc(char *out, int cap, int o, const char *s) {
+    int i;
+    for (i = 0; s && s[i] && o < cap - 1; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '&') {
+            if (o + 5 >= cap) break;
+            out[o++] = '&'; out[o++] = 'a'; out[o++] = 'm'; out[o++] = 'p'; out[o++] = ';';
+        } else if (c == '"') {
+            if (o + 6 >= cap) break;
+            out[o++] = '&'; out[o++] = 'q'; out[o++] = 'u'; out[o++] = 'o'; out[o++] = 't'; out[o++] = ';';
+        } else if (c == '<') {
+            if (o + 4 >= cap) break;
+            out[o++] = '&'; out[o++] = 'l'; out[o++] = 't'; out[o++] = ';';
+        } else if (c == '>') {
+            if (o + 4 >= cap) break;
+            out[o++] = '&'; out[o++] = 'g'; out[o++] = 't'; out[o++] = ';';
+        } else if (c >= 0x20u && c != 0x7fu) {
+            out[o++] = (char)c;
+        }
+    }
+    out[o] = 0;
+    return o;
+}
+
+static int emit_attr(char *out, int cap, int o, const char *an, const char *av) {
+    if (!av) av = "";
+    if (o + 4 >= cap) return o;
+    out[o++] = ' ';
+    while (*an && o < cap - 1) out[o++] = *an++;
+    if (o + 2 >= cap) return o;
+    out[o++] = '=';
+    out[o++] = '"';
+    o = emit_esc(out, cap - 1, o, av);
+    if (o + 1 >= cap) return o;
+    out[o++] = '"';
+    out[o] = 0;
+    return o;
+}
+
+int wf_form_emit_html(const wf_form_page_t *p, int field, char *out, int cap) {
+    const wf_field_t *f;
+    int o = 0, k;
+    if (!p || !out || cap < 16 || field < 0 || field >= p->nfields) { if (out && cap > 0) out[0] = 0; return 0; }
+    f = &p->field[field];
+    if (f->type == WF_FIELD_HIDDEN) {
+        o = 0;
+        out[o++] = '<'; /* input type=hidden */
+        { const char *t = "input"; while (*t) out[o++] = *t++; }
+        o = emit_attr(out, cap, o, "type", "hidden");
+        if (f->named) { o = emit_attr(out, cap, o, "name", f->name); o = emit_attr(out, cap, o, "id", f->name); }
+        o = emit_attr(out, cap, o, "value", f->value);
+        if (o + 1 < cap) out[o++] = '>';
+        out[o] = 0;
+        return o;
+    }
+    if (f->type == WF_FIELD_TEXTAREA) {
+        const char *t = "<textarea";
+        while (*t && o < cap - 1) out[o++] = *t++;
+        if (f->named) { o = emit_attr(out, cap, o, "name", f->name); o = emit_attr(out, cap, o, "id", f->name); }
+        if (f->label[0]) o = emit_attr(out, cap, o, "placeholder", f->label);
+        if (f->maxlen > 0 && f->maxlen < WF_FORM_VALUE - 1) {
+            char n[8]; int v = f->maxlen, i = 0, j;
+            do { n[i++] = (char)('0' + v % 10); v /= 10; } while (v && i < 7);
+            for (j = 0; j < i / 2; j++) { char c = n[j]; n[j] = n[i - 1 - j]; n[i - 1 - j] = c; }
+            n[i] = 0;
+            o = emit_attr(out, cap, o, "maxlength", n);
+        }
+        if (o + 1 < cap) out[o++] = '>';
+        o = emit_esc(out, cap - 11, o, f->value);
+        { const char *c = "</textarea>"; while (*c && o < cap - 1) out[o++] = *c++; }
+        out[o] = 0;
+        return o;
+    }
+    if (f->type == WF_FIELD_SELECT) {
+        const char *t = "<select";
+        while (*t && o < cap - 1) out[o++] = *t++;
+        if (f->named) { o = emit_attr(out, cap, o, "name", f->name); o = emit_attr(out, cap, o, "id", f->name); }
+        if (o + 1 < cap) out[o++] = '>';
+        for (k = 0; k < f->nopt; k++) {
+            const char *ov = wf_form_option_value(p, field, k);
+            const char *ol = wf_form_option_label(p, field, k);
+            const char *op = "<option";
+            while (*op && o < cap - 1) out[o++] = *op++;
+            o = emit_attr(out, cap, o, "value", ov ? ov : "");
+            if (k == f->sel) {
+                const char *s = " selected";
+                while (*s && o < cap - 1) out[o++] = *s++;
+            }
+            if (o + 1 < cap) out[o++] = '>';
+            o = emit_esc(out, cap - 10, o, ol ? ol : "");
+            { const char *c = "</option>"; while (*c && o < cap - 1) out[o++] = *c++; }
+        }
+        { const char *c = "</select>"; while (*c && o < cap - 1) out[o++] = *c++; }
+        out[o] = 0;
+        return o;
+    }
+    if (f->type == WF_FIELD_SUBMIT && (f->flags & WF_FF_AS_BUTTON)) {
+        const char *t = "<button type=\"submit\"";
+        while (*t && o < cap - 1) out[o++] = *t++;
+        if (f->named) { o = emit_attr(out, cap, o, "name", f->name); o = emit_attr(out, cap, o, "id", f->name); }
+        if (f->value[0]) o = emit_attr(out, cap, o, "value", f->value);
+        if (o + 1 < cap) out[o++] = '>';
+        o = emit_esc(out, cap - 10, o, f->label[0] ? f->label : (f->value[0] ? f->value : "Submit"));
+        { const char *c = "</button>"; while (*c && o < cap - 1) out[o++] = *c++; }
+        out[o] = 0;
+        return o;
+    }
+    /* input: text, password, checkbox, radio, submit, file, hidden already handled */
+    {
+        const char *t = "<input";
+        const char *ty = f->itype[0] ? f->itype : "text";
+        while (*t && o < cap - 1) out[o++] = *t++;
+        o = emit_attr(out, cap, o, "type", ty);
+        if (f->named) { o = emit_attr(out, cap, o, "name", f->name); o = emit_attr(out, cap, o, "id", f->name); }
+        if (f->type == WF_FIELD_CHECKBOX || f->type == WF_FIELD_RADIO) {
+            o = emit_attr(out, cap, o, "value", f->value[0] ? f->value : "on");
+            if (f->checked) {
+                const char *s = " checked";
+                while (*s && o < cap - 1) out[o++] = *s++;
+            }
+        } else if (f->type != WF_FIELD_FILE) {
+            o = emit_attr(out, cap, o, "value", f->value);
+        }
+        if (f->label[0] && (f->type == WF_FIELD_TEXT || f->type == WF_FIELD_PASSWORD || f->type == WF_FIELD_FILE))
+            o = emit_attr(out, cap, o, "placeholder", f->label);
+        if (f->maxlen > 0 && f->maxlen < WF_FORM_VALUE - 1 &&
+            (f->type == WF_FIELD_TEXT || f->type == WF_FIELD_PASSWORD)) {
+            char n[8]; int v = f->maxlen, i = 0, j;
+            do { n[i++] = (char)('0' + v % 10); v /= 10; } while (v && i < 7);
+            for (j = 0; j < i / 2; j++) { char tmp = n[j]; n[j] = n[i - 1 - j]; n[i - 1 - j] = tmp; }
+            n[i] = 0;
+            o = emit_attr(out, cap, o, "maxlength", n);
+        }
+        if (o + 1 < cap) out[o++] = '>';
+        out[o] = 0;
+        return o;
+    }
+}
+
 static int hexd(int v) { return v < 10 ? '0' + v : 'A' + v - 10; }
 
 int wf_form_urlencode_append(char *out, int cap, int len, const char *s) {
@@ -475,6 +626,7 @@ int wf_form_submit(const wf_form_page_t *p, int fi, int submitter, wf_form_submi
         const wf_field_t *fl = &p->field[i];
         if (fl->form != fi || !fl->named) continue;
         if (fl->type == WF_FIELD_SUBMIT && i != submitter) continue;
+        if (fl->type == WF_FIELD_FILE) continue;   /* Lot 75: multipart only (engine) */
         if ((fl->type == WF_FIELD_CHECKBOX || fl->type == WF_FIELD_RADIO) && !fl->checked) continue;
         if (fl->type == WF_FIELD_SELECT && !fl->nopt) continue;
         if (len) { if (len + 1 >= (int)sizeof(q)) return -1; q[len++] = '&'; q[len] = 0; }

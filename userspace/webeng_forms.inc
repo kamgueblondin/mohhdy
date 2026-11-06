@@ -76,9 +76,9 @@ static int forms_input_type(we_doc_t *d, const char *v, int len, int idx) {
     int k;
     for (k = 0; text[k]; k++) if (value_is(v, len, text[k])) return WE_FORM_TEXT;
     if (value_is(v, len, "range")) return WE_FORM_TEXT;   /* lot 74: WE_FF2_RANGE */
+    if (value_is(v, len, "file")) return WE_FORM_FILE;   /* Lot 75 */
     if (value_is(v, len, "color") || value_is(v, len, "date") || value_is(v, len, "time") ||
-        value_is(v, len, "week") || value_is(v, len, "month") || value_is(v, len, "datetime-local") ||
-        value_is(v, len, "file")) {
+        value_is(v, len, "week") || value_is(v, len, "month") || value_is(v, len, "datetime-local")) {
         diag(d, "input type taken as text", idx);
         return WE_FORM_TEXT;
     }
@@ -230,6 +230,20 @@ static void forms_build(we_doc_t *d) {
                 if (n->form_flags & WE_FF_VALUE) (void)forms_text(d, i, d->pool + n->fval_off, n->fval_len, 0, 0);
                 else if (n->form_type == WE_FORM_SUBMIT) (void)forms_text(d, i, "Submit", 6, 0, 0);
                 else if (n->form_type == WE_FORM_RESET) (void)forms_text(d, i, "Reset", 5, 0, 0);
+                break;
+            case WE_FORM_FILE:
+                if (n->form_flags & WE_FF_VALUE) {
+                    /* show the basename of the bound path */
+                    int a = 0, b = n->fval_len;
+                    while (a < b && d->pool[n->fval_off + a]) a++;
+                    a = 0;
+                    for (k = 0; k < n->fval_len; k++) if (d->pool[n->fval_off + k] == '/') a = k + 1;
+                    len = n->fval_len - a;
+                    if (len > WE_FORM_TEXT_MAX) len = WE_FORM_TEXT_MAX;
+                    for (k = 0; k < len; k++) buf[k] = d->pool[n->fval_off + a + k];
+                    (void)forms_text(d, i, buf, len, 0, 0);
+                } else if (n->fph_len) (void)forms_text(d, i, d->pool + n->fph_off, n->fph_len, 0, WE_FF_PLACEHOLDER);
+                else (void)forms_text(d, i, "Browse...", 9, 0, WE_FF_PLACEHOLDER);
                 break;
             default: break;
             }
@@ -428,7 +442,11 @@ static void forms_text_style(we_doc_t *d, we_node_t *n) {
     const we_node_t *p = n->parent >= 0 ? &d->nodes[n->parent] : 0;
     if (n->form_flags & WE_FF_PLACEHOLDER) n->color = 0x757575;
     if (n->form_flags2 & WE_FF2_STALE) { n->display = WE_DISP_NONE; return; }   /* lot 74 */
-    if (n->form_flags2 & WE_FF2_CARET) n->color = WE_FORM_FILL;
+    if (n->form_flags2 & WE_FF2_CARET) {
+        int own = n->parent >= 0 ? n->parent : -1;
+        if (own >= 0 && d->nodes[own].caret_set) n->color = d->nodes[own].caret;
+        else n->color = WE_FORM_FILL;
+    }
     if (p && w_eq(p->tag, "details") && !(p->form_flags & WE_FF_OPEN)) n->display = WE_DISP_NONE;
     if (p && (w_eq(p->tag, "progress") || w_eq(p->tag, "meter"))) n->display = WE_DISP_NONE;
 }

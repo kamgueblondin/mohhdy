@@ -100,14 +100,17 @@ static void test_placeholders(void) {
     m = wf_html_reduce_ex(page, (int)sizeof(page) - 1, &base, g_red, (int)sizeof(g_red), &st, 8000, &fp);
     TEST_ASSERT_EQUAL(1, wf_section_index(g_red, m, &g_s));
     wf_section_render(g_red, m, &g_s, 0, &fp, g_sec, (int)sizeof(g_sec));
-    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<a href=\"mohhdy-form:f:0\">[ Chercher"));
-    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<a href=\"mohhdy-form:s:1\">[ Go ]</a>"));
+    /* Lot 75: placeholders expand to real engine controls */
+    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<form action=\"http://h/s\" method=\"get\">"));
+    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<input type=\"text\" name=\"q\" id=\"q\" value=\"\" placeholder=\"Chercher\">"));
+    TEST_ASSERT_NOT_NULL(strstr(g_sec, "<input type=\"submit\""));
+    TEST_ASSERT_NOT_NULL(strstr(g_sec, "value=\"Go\">"));
     TEST_ASSERT_NULL(strchr(g_sec, '\001'));
     wf_form_focus(&fp, 0);
     wf_form_insert(&fp, '<');
     wf_form_insert(&fp, (char)0xE9);
     wf_section_render(g_red, m, &g_s, 0, &fp, g_sec, (int)sizeof(g_sec));
-    TEST_ASSERT_NOT_NULL(strstr(g_sec, "[ &lt;\xe9|"));
+    TEST_ASSERT_NOT_NULL(strstr(g_sec, "value=\"&lt;\xe9\""));
 }
 
 static void test_one_huge_paragraph(void) {

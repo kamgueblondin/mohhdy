@@ -377,10 +377,10 @@ int shell_page_forms_list(char* out, int cap) {
     }
     for (i = 0; i < g_forms.nfields; i++) {
         const wf_field_t* f = &g_forms.field[i];
-        static const char* const tn[9] = { "?", "text", "password", "textarea", "hidden", "submit", "checkbox", "radio", "select" };
+        static const char* const tn[10] = { "?", "text", "password", "textarea", "hidden", "submit", "checkbox", "radio", "select", "file" };
         scat(out, cap, "field "); scat_int(out, cap, i);
         scat(out, cap, " form "); scat_int(out, cap, f->form);
-        scat(out, cap, " "); scat(out, cap, tn[f->type <= 8 ? f->type : 0]);
+        scat(out, cap, " "); scat(out, cap, tn[f->type <= 9 ? f->type : 0]);
         scat(out, cap, " name="); scat(out, cap, f->name);
         if (f->type != WF_FIELD_PASSWORD) { scat(out, cap, " value="); scat(out, cap, f->value); }
         if (f->type == WF_FIELD_CHECKBOX || f->type == WF_FIELD_RADIO) scat(out, cap, f->checked ? " checked" : " unchecked");
@@ -408,13 +408,14 @@ int shell_page_form_set(int n, const char* value) {
 }
 
 /* Lot 74: a form of the rendered page (webeng_finput.inc) sent with POST */
-int shell_page_request(const char* url, const char* body, int body_len, char* src, int src_max, char* final_url, int url_max,
+int shell_page_request(const char* url, const char* body, int body_len, const char* ctype,
+                       char* src, int src_max, char* final_url, int url_max,
                        char* status, int st_max) {
     wf_fetch_req_t rq;
     if (status && st_max > 0) status[0] = 0;
     if (!url || !body || body_len < 0) return -1;
     rq.method = "POST"; rq.body = body; rq.body_len = body_len;
-    rq.ctype = "application/x-www-form-urlencoded"; rq.extra = 0;
+    rq.ctype = (ctype && ctype[0]) ? ctype : "application/x-www-form-urlencoded"; rq.extra = 0;
     return page_fetch(url, &rq, src, src_max, final_url, url_max, status, st_max);
 }
 
