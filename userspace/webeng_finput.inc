@@ -38,6 +38,9 @@
 #define WE_FF2_NOVALIDATE 128 /* form novalidate, submitter formnovalidate */
 #define WE_FF2_FORM_ATTR 131072  /* Lot 75: form= id association */
 #define WE_FF2_FORMACTION 262144 /* Lot 75: formaction= on a submitter */
+#define WE_FF2_AC_OFF 524288       /* Lot 76: autocomplete=off */
+#define WE_FF2_FORMTARGET 1048576  /* Lot 76: formtarget= present */
+#define WE_FF2_TARGET_BLANK 2097152 /* Lot 76: formtarget=_blank */
 
 /* attributes of Lot 74 on input, select, textarea, button, form, label:
  * 1 when taken */
@@ -50,7 +53,7 @@ static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int
         if (pool_put(d, av, vk, &n->fpat_off) == 0) { n->fpat_len = (uint16_t)vk; n->form_flags2 |= WE_FF2_PATTERN; }
         return 1;
     }
-    if (w_eq(an, "novalidate") || w_eq(an, "formnovalid")   /* formnovalidate, cut to 11 bytes */) { n->form_flags2 |= WE_FF2_NOVALIDATE; return 1; }
+    if (w_eq(an, "novalidate") || w_eq(an, "formnovalidate") || w_eq(an, "formnovalid")) { n->form_flags2 |= WE_FF2_NOVALIDATE; return 1; }
     if (w_eq(an, "autofocus")) { n->form_flags2 |= WE_FF2_AUTOFOCUS; return 1; }
     if (w_eq(an, "formmethod")) {
         if (value_is(av, vk, "dialog")) n->form_flags2 |= WE_FF2_DIALOG;
@@ -71,6 +74,29 @@ static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int
             n->flist_len = (uint16_t)vk;
             n->form_flags2 |= WE_FF2_FORMACTION;
         } else diag(d, "formaction refused", -1);
+        return 1;
+    }
+    /* Lot 76: formtarget=_self|_blank (recorded); other tokens refused */
+    if (w_eq(an, "formtarget") || (w_eq(an, "target") && w_eq(n->tag, "form"))) {
+        if (vk > 0 && pool_put(d, av, vk, &n->ftarget_off) == 0) {
+            n->ftarget_len = (uint16_t)vk;
+            n->form_flags2 |= WE_FF2_FORMTARGET;
+            if (value_is(av, vk, "_blank")) n->form_flags2 |= WE_FF2_TARGET_BLANK;
+            else if (!value_is(av, vk, "_self") && !value_is(av, vk, "_parent") &&
+                     !value_is(av, vk, "_top") && av[0] != '_') {
+                /* named browsing context: keep the token, not blank */
+            } else if (value_is(av, vk, "_parent") || value_is(av, vk, "_top")) {
+                /* treated as _self: no extra windows in the engine */
+            }
+        } else diag(d, "formtarget refused", -1);
+        return 1;
+    }
+    /* Lot 76: autocomplete=; off sets WE_FF2_AC_OFF */
+    if (w_eq(an, "autocomplete")) {  /* Lot 76: needs 12-char attr names */
+        if (vk > 0 && pool_put(d, av, vk, &n->fac_off) == 0) {
+            n->fac_len = (uint16_t)vk;
+            if (value_is(av, vk, "off") || value_is(av, vk, "false")) n->form_flags2 |= WE_FF2_AC_OFF;
+        }
         return 1;
     }
     if (w_eq(an, "formenctype")) {
@@ -135,7 +161,8 @@ static int finput_attr(we_doc_t *d, int idx, const char *an, const char *av, int
 
 static int finput_kind(const we_node_t *n) {
     return w_eq(n->tag, "input") || w_eq(n->tag, "select") || w_eq(n->tag, "textarea") ||
-           w_eq(n->tag, "button") || w_eq(n->tag, "details") || w_eq(n->tag, "dialog");
+           w_eq(n->tag, "button") || w_eq(n->tag, "details") || w_eq(n->tag, "dialog") ||
+           w_eq(n->tag, "output");   /* Lot 76 */
 }
 
 static int finput_node(const we_doc_t *d, int ctl) {
@@ -148,7 +175,8 @@ static int finput_node(const we_doc_t *d, int ctl) {
 static int finput_textlike(const we_node_t *n) {
     return w_eq(n->tag, "textarea") ||
            (w_eq(n->tag, "input") && !(n->form_flags2 & WE_FF2_RANGE) &&
-            (n->form_type == WE_FORM_TEXT || n->form_type == WE_FORM_PASSWORD || !n->form_type));
+            (n->form_type == WE_FORM_TEXT || n->form_type == WE_FORM_PASSWORD ||
+             n->form_type == WE_FORM_COLOR || n->form_type == WE_FORM_DATE || !n->form_type));
 }
 
 /* ---------- Lot 74: number and range (hundredths, forms_fixed) ---------- */
@@ -417,6 +445,7 @@ static int finput_focusable(const we_doc_t *d, int i) {
     const we_node_t *n = &d->nodes[i];
     if (!n->form_ord || finput_disabled(d, i)) return 0;
     if (w_eq(n->tag, "input") && n->form_type == WE_FORM_HIDDEN) return 0;
+    if (w_eq(n->tag, "output")) return 0;   /* Lot 76: readonly display */
     if (!n->is_text && n->display == WE_DISP_NONE) return 0;
     return 1;
 }
@@ -431,6 +460,15 @@ static int finput_set_focus(we_doc_t *d, int ctl) {
 static int finput_cur(const we_doc_t *d, int i, char *out, int max) {
     const we_node_t *n = &d->nodes[i];
     int k;
+    if (w_eq(n->tag, "output")) {
+        /* Lot 76: value= else concatenated text children */
+        if (n->form_flags & WE_FF_VALUE) {
+            k = n->fval_len < max - 1 ? n->fval_len : max - 1;
+            w_cpy(out, max, d->pool + n->fval_off, k);
+            return k;
+        }
+        return finput_text_of(d, i, out, max);
+    }
     if (w_eq(n->tag, "textarea")) return finput_text_of(d, i, out, max);
     if (w_eq(n->tag, "select")) {
         int o = -1, cnt;
@@ -572,6 +610,33 @@ static int finput_pattern_bad(const we_doc_t *d, const we_node_t *n, const char 
 
 
 static int finput_list_ok(const we_doc_t *d, int input, const char *v, int len);
+/* Lot 76: #rrggbb only (exactly 7 bytes) */
+static int finput_color_bad(const char *v, int len) {
+    int k;
+    if (len != 7 || v[0] != '#') return 1;
+    for (k = 1; k < 7; k++) {
+        char c = v[k];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) return 1;
+    }
+    return 0;
+}
+/* Lot 76: YYYY-MM-DD with a real calendar day (no leap-second quirks) */
+static int finput_date_bad(const char *v, int len) {
+    int y, m, d, dim, k, leap;
+    static const int mdays[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    if (len != 10 || v[4] != '-' || v[7] != '-') return 1;
+    for (k = 0; k < 10; k++) {
+        if (k == 4 || k == 7) continue;
+        if (v[k] < '0' || v[k] > '9') return 1;
+    }
+    y = (v[0] - '0') * 1000 + (v[1] - '0') * 100 + (v[2] - '0') * 10 + (v[3] - '0');
+    m = (v[5] - '0') * 10 + (v[6] - '0');
+    d = (v[8] - '0') * 10 + (v[9] - '0');
+    if (y < 1 || m < 1 || m > 12 || d < 1) return 1;
+    leap = (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+    dim = mdays[m] + (m == 2 && leap ? 1 : 0);
+    return d > dim;
+}
 static int finput_invalid(const we_doc_t *d, int i) {
     const we_node_t *n = &d->nodes[i];
     char v[WE_FSTATE_VAL];
@@ -592,6 +657,9 @@ static int finput_invalid(const we_doc_t *d, int i) {
         for (k = 0; k < len; k++) if (v[k] == '@') { if (at >= 0) return 1; at = k; }
         if (at <= 0 || at == len - 1) return 1;
     }
+    /* Lot 76: color / date shape */
+    if (n->form_type == WE_FORM_COLOR && len > 0 && finput_color_bad(v, len)) return 1;
+    if (n->form_type == WE_FORM_DATE && len > 0 && finput_date_bad(v, len)) return 1;
     return 0;
 }
 
@@ -945,6 +1013,15 @@ int we_form_key(we_doc_t *d, int key) {
         int area = w_eq(n->tag, "textarea");
         if ((n->form_flags2 & WE_FF2_NUMBER) && key >= 32 && key <= 126 &&
             !((key >= '0' && key <= '9') || key == '-' || key == '+' || key == '.')) { d->forms->refused++; return WE_FACT_NONE; }
+        /* Lot 76: color accepts # and hex; date accepts digits and '-' */
+        if (n->form_type == WE_FORM_COLOR && key >= 32 && key <= 126 &&
+            !((key >= '0' && key <= '9') || (key >= 'a' && key <= 'f') || (key >= 'A' && key <= 'F') || key == '#')) {
+            d->forms->refused++; return WE_FACT_NONE;
+        }
+        if (n->form_type == WE_FORM_DATE && key >= 32 && key <= 126 &&
+            !((key >= '0' && key <= '9') || key == '-')) {
+            d->forms->refused++; return WE_FACT_NONE;
+        }
         if (key == WE_KEY_ENTER && !area) return finput_submit(d, finput_owner(d, i), finput_default_button(d, finput_owner(d, i)));
         if (!(key == WE_KEY_BACKSPACE || key == WE_KEY_ENTER || (key >= 32 && key <= 126))) return WE_FACT_NONE;
         if (n->form_flags2 & WE_FF2_READONLY) { d->forms->refused++; return WE_FACT_NONE; }
@@ -1175,6 +1252,21 @@ int we_form_request(const we_doc_t *d, we_form_req_t *req) {
         if (d->nodes[sub].form_flags2 & WE_FF2_POST) req->post = 1;
         if (d->nodes[sub].form_flags2 & WE_FF2_DIALOG) { /* formmethod=dialog: no request */ }
         if (d->nodes[sub].form_flags2 & WE_FF2_MULTIPART) req->multipart = 1;
+    }
+    /* Lot 76: formtarget from submitter, else the form */
+    {
+        const we_node_t *tn = 0;
+        if (sub >= 0 && (d->nodes[sub].form_flags2 & WE_FF2_FORMTARGET)) tn = &d->nodes[sub];
+        else if (d->nodes[f].form_flags2 & WE_FF2_FORMTARGET) tn = &d->nodes[f];
+        if (tn && tn->ftarget_len) {
+            int tl = tn->ftarget_len < 15 ? tn->ftarget_len : 15;
+            for (k = 0; k < tl; k++) req->target[k] = d->pool[tn->ftarget_off + k];
+            req->target[tl] = 0;
+            if (tn->form_flags2 & WE_FF2_TARGET_BLANK) req->target_blank = 1;
+        } else {
+            req->target[0] = '_'; req->target[1] = 's'; req->target[2] = 'e';
+            req->target[3] = 'l'; req->target[4] = 'f'; req->target[5] = 0;
+        }
     }
     /* GET never uses multipart bodies */
     if (!req->post) req->multipart = 0;

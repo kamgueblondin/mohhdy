@@ -423,15 +423,17 @@ static void test_l73_form_inputs(void) {
 }
 
 static void test_l73_form_buttons_and_types(void) {
+    /* Lot 76: type=date is WE_FORM_DATE (no longer "taken as text"). value=d still paints. */
     lot52_render(L64_BODY "<input type=submit><input type=reset value=RAZ><input type=hidden value=h><input type=button>"
                  "<input type=date value=d><input type=text size=0><button type=reset disabled>B</button></body>", 320);
     l61_text_at("Submit", 7, 3);
     l61_text_at("RAZ", 69, 3);
     TEST_ASSERT_NULL(find_text("h"));
     l61_rect_at(100, 0, 14, 14, 0xEFEFEF);          /* button without value: padding only */
-    l61_text_at("d", 117, 3);                       /* date: as text */
+    TEST_ASSERT_EQUAL(WE_FORM_DATE, l73_node("input", 4)->form_type);
+    TEST_ASSERT_NOT_NULL(find_text("d"));           /* date value text */
     l61_text_at("B", 173, 17);
-    TEST_ASSERT_EQUAL(1, l61_diag_count("input type taken as text"));
+    TEST_ASSERT_EQUAL(0, l61_diag_count("input type taken as text"));
     TEST_ASSERT_EQUAL(1, l61_diag_count("form size refused"));
     TEST_ASSERT_EQUAL(0x6D6D6D, (int)find_text("B")->color);   /* disabled */
     l61_rect_at(0, 14, 166, 14, 0xFFFFFF);          /* size refused: 20 glyphs, one empty line */

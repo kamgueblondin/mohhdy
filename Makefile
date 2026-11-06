@@ -883,6 +883,7 @@ test-all:
 	@python3 tests/scripts/test_python_facade_removed.py
 	@python3 tests/scripts/check_shell_dispatch_returns.py
 	@python3 tests/scripts/check_initrd_capacity.py
+	@python3 tests/scripts/check_p2p_mesh_heal_before_crash.py
 	@sh tests/scripts/test_lot67_web_host.sh
 
 # Host unit tests rebuilt with --coverage, then one gcov line percentage.
@@ -1542,6 +1543,10 @@ qemu-lot74: $(OS_IMAGE) pack-initrd disk
 .PHONY: qemu-lot75
 qemu-lot75: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot75.py
+
+.PHONY: qemu-lot76
+qemu-lot76: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot76.py
 
 .PHONY: qemu-web-layout
 qemu-web-layout: $(OS_IMAGE) pack-initrd disk

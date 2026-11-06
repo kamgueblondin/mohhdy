@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Lot 76</title>
+<style>
+body{margin:8px;font-family:monospace}
+button#sw::before{content:attr(value)}
+a#tip::after{content:' [' attr(title) ']'}
+</style></head>
+<body>
+<!-- Lot 76: type=color / type=date, autocomplete=off, formtarget=_blank,
+     output, content:attr(title|value). Host test server on 10.0.2.2. -->
+<h1>Lot 76</h1>
+<a id="tip" title="Hint">TIP</a>
+<form id="f" action="http://10.0.2.2:18076/echo" method="get" target="_self">
+<input id="c" type="color" name="c" value="#ff0000" autocomplete="off">
+<input id="d" type="date" name="d" value="2024-02-29">
+<output id="o" name="sum" value="42">42</output>
+<input id="go" type="submit" formtarget="_blank" value="Go">
+</form>
+<button id="sw" name="sw" value="SW">Btn</button>
+</body></html>
