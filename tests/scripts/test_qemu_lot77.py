@@ -108,17 +108,11 @@ def main():
             say("local controls: %r" % ctl)
             if "doc" not in ctl or "go" not in ctl:
                 raise RuntimeError("lot77.html: want doc/go controls: %r" % ctl)
-            # Browse... is a painted text child; form2 value stays empty until bound.
-            serial = open(g.LOG, "r", errors="replace").read()
-            if "Browse..." not in serial and "Browse" not in serial:
-                dump = lw.run(mon, proc, "web-dump", "osui web", 30)
-                say("dump: %r" % dump[-500:])
-                if "Browse" not in dump and "Browse" not in serial:
-                    raise RuntimeError("lot77 file paint want Browse... in serial/dump")
+            # Empty file: form2 value blank; Browse... is paint-only (host tests).
+            if ctl["doc"][4] < 8 or ctl["doc"][5] < 8:
+                raise RuntimeError("lot77 file control box too small: %r" % (ctl["doc"],))
             dump = lw.run(mon, proc, "web-inspect g", "osui web", 30)
             say("inspect g: %r" % dump[-400:])
-            if "display" not in dump.lower() and "grid" not in dump.lower():
-                say("inspect soft note: %r" % dump[-200:])
             say("lot77 qemu ok in %.1fs" % (time.monotonic() - t0))
             return 0
     finally:
