@@ -240,15 +240,19 @@ static void test_reduce_forms(void) {
     TEST_ASSERT_EQUAL(0, fp.field[5].checked);
     TEST_ASSERT_EQUAL_STRING("a<b", fp.field[6].value);
     TEST_ASSERT_EQUAL_STRING("Envoyer", fp.field[7].label);
-    TEST_ASSERT_NOT_NULL(strstr(g_out, "<a href=\"mohhdy-form:f:3\">\001" "3\002</a>"));   /* the select is clickable */
-    TEST_ASSERT_NOT_NULL(strstr(g_out, "<a href=\"mohhdy-form:f:1\">\001" "1\002</a>"));
-    TEST_ASSERT_NOT_NULL(strstr(g_out, "<a href=\"mohhdy-form:s:2\">\001" "2\002</a>"));
+    /* Lot 75: reader emits real <form> and field placeholders for the engine */
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "<form action=\"https://www.google.com/search\" method=\"get\">"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "\001" "3\002"));   /* the select placeholder */
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "\001" "1\002"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "\001" "2\002"));
+    TEST_ASSERT_NULL(strstr(g_out, "mohhdy-form"));
     TEST_ASSERT_NULL(strstr(g_out, "chance"));
     TEST_ASSERT_NULL(strstr(g_out, "Non"));
     TEST_ASSERT_NOT_NULL(strstr(g_out, "<p>fin</p>"));
     /* without a sink the form is dropped as in Lot 67 */
     wf_html_reduce(page, (int)sizeof(page) - 1, &base, g_out, (int)sizeof(g_out), &st);
-    TEST_ASSERT_NULL(strstr(g_out, "mohhdy-form"));
+    TEST_ASSERT_NULL(strstr(g_out, "<form"));
+    TEST_ASSERT_NULL(strstr(g_out, "\001"));
 }
 
 static void test_reduce_budget_ex(void) {

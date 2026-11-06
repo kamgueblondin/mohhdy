@@ -7,11 +7,15 @@
  * WF_FORM_OPT_POOL bytes per page), and submit buttons. A click on a
  * checkbox toggles it, on a radio checks it (and unchecks its group), on a
  * select moves to the next option (wrapping). The
- * desktop shows an editable field as a link "[ value ]" whose href is
- * "mohhdy-form:f:N"; a click focuses field N, keys edit it, Enter submits
- * its form. Submission follows the HTML rules for the subset kept:
+ * Lot 75: the reader emits real <form>/<input>/<textarea>/<select>/<button>
+ * markup so the engine (webeng_finput.inc) drives the controls; a field
+ * placeholder \001N\002 in the reduced HTML is expanded by
+ * wf_section_render via wf_form_emit_html. The old mohhdy-form:f:N links
+ * remain parseable (wf_form_href) for older tests and the console path.
+ * Submission follows the HTML rules for the subset kept:
  * application/x-www-form-urlencoded, GET (query string replaces the
- * action's query) or POST (body), values sent as UTF-8.
+ * action's query) or POST (body), values sent as UTF-8. Lot 75 also
+ * starts multipart/form-data and type=file in the engine path.
  *
  * Bounded: WF_FORM_MAX forms, WF_FORM_FIELDS controls per page, fixed
  * size strings. No JavaScript: forms that need it do not work (said in
@@ -40,14 +44,18 @@ enum {
     WF_FIELD_CHECKBOX = 6, /* Lot 71: sent only when checked */
     WF_FIELD_RADIO = 7,    /* sent only when checked; one per (form, name) */
     WF_FIELD_SELECT = 8,   /* value = the selected option's value */
+    WF_FIELD_FILE = 9,     /* Lot 75: input type=file (engine / multipart) */
 };
 enum { WF_METHOD_GET = 0, WF_METHOD_POST = 1 };
+enum { WF_FF_AS_BUTTON = 1 };  /* Lot 75: submit came from <button> */
 
 typedef struct {
     uint8_t type;
     uint8_t form;          /* index of its form */
     uint8_t named;         /* has a name: sent on submit */
     uint8_t checked;       /* checkbox / radio */
+    uint8_t flags;         /* Lot 75: WF_FF_AS_BUTTON */
+    char itype[12];        /* Lot 75: HTML type to re-emit (text, email, ...) */
     char name[WF_FORM_NAME];
     char value[WF_FORM_VALUE];   /* display bytes (CP1252) */
     char label[WF_FORM_LABEL];   /* placeholder, aria-label or button text */
@@ -63,6 +71,7 @@ typedef struct {
     uint8_t multipart;           /* enctype multipart/form-data: refused on submit */
     uint8_t nfields;
     uint8_t implicit;            /* controls outside any <form> */
+    uint8_t emitted;             /* Lot 75: <form> open already written */
 } wf_form_t;
 
 typedef struct {
@@ -126,6 +135,9 @@ int wf_form_set(wf_form_page_t *p, int field, const char *value);
 /* Text shown for a field: "[ value_ ]" with the cursor when focused,
  * '*' for passwords, the label (placeholder) when empty. */
 int wf_form_display(const wf_form_page_t *p, int field, char *out, int cap);
+/* Lot 75: real HTML for field N (engine forms on the reader view).
+ * Writes tags into out; returns byte count, or 0. */
+int wf_form_emit_html(const wf_form_page_t *p, int field, char *out, int cap);
 /* Builds the request of form f submitted by submitter (a SUBMIT field
  * index or -1). 0, or -1 (no such form, multipart, overflow). */
 int wf_form_submit(const wf_form_page_t *p, int f, int submitter, wf_form_submit_t *out);

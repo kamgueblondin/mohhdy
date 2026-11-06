@@ -1290,9 +1290,9 @@ static int f_fetch(const char *url, char *src, int src_max, char *final_url, int
     if (strchr(url, '?')) return snprintf(src, (size_t)src_max, "<html><head><title>Got</title></head><body>r</body></html>");
     return snprintf(src, (size_t)src_max, "%s", F_PAGE);
 }
-static int f_request(const char *url, const char *body, int body_len, char *src, int src_max, char *final_url, int url_max,
+static int f_request(const char *url, const char *body, int body_len, const char *ctype, char *src, int src_max, char *final_url, int url_max,
                      char *status, int st_max) {
-    (void)url_max; (void)st_max;
+    (void)url_max; (void)st_max; (void)ctype;
     g_f_posts++;
     snprintf(g_f_url, sizeof(g_f_url), "%s", url);
     snprintf(g_f_body, sizeof(g_f_body), "%.*s", body_len, body);

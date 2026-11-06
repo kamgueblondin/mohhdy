@@ -22,9 +22,11 @@
  * type=email): an invalid form is not sent, its first invalid control
  * gets the focus (novalidate / formnovalidate skip the check).
  * we_form_request builds the request: application/x-www-form-urlencoded
+ * (Lot 74) or multipart/form-data with a generated boundary and file
+ * parts read through the local VFS reader (Lot 75).
  * pairs of the successful controls in tree order (HTML 4.10.21), GET
  * puts them as the query of the action (its old query and fragment
- * dropped), POST as the body; multipart/form-data is sent urlencoded and
+ * dropped), POST as the body; Lot 75: multipart/form-data builds a real
  * reported. Values are bytes as the page has them (no charset change). */
 
 /* WE_FF2_FOCUS 4, STALE 32 (a textarea text replaced by the state), CARET
@@ -349,7 +351,7 @@ static void finput_prepare(we_doc_t *d) {
             finput_textarea_text(d, i, s);
         } else {
             n->form_flags = (uint8_t)(s->checked ? n->form_flags | WE_FF_CHECKED : n->form_flags & ~WE_FF_CHECKED);
-            if (finput_textlike(n)) {
+            if (finput_textlike(n) || n->form_type == WE_FORM_FILE) {
                 if (s->len == 0) { n->fval_len = 0; n->form_flags &= (uint8_t)~WE_FF_VALUE; }
                 else if (pool_put(d, s->val, s->len, &n->fval_off) == 0) { n->fval_len = s->len; n->form_flags |= WE_FF_VALUE; }
             }
@@ -954,6 +956,48 @@ int we_form_set_text(we_doc_t *d, int ctl, const char *text) {
     return 0;
 }
 
+/* Lot 75: absolute local path for type=file; refuses URLs, ".." and
+ * non-printable bytes. The path is kept in the control state; the bytes
+ * are read at we_form_request time through the image/VFS reader. */
+static int finput_path_ok(const char *path) {
+    int i, start = 0, n = 0;
+    if (!path || path[0] != '/' || path[1] == '/') return 0;
+    for (i = 0; path[i]; i++) {
+        char c = path[i];
+        if ((unsigned char)c < 33 || (unsigned char)c > 126 || c == ':' || c == '\\' || c == '%' || c == '?' || c == '#') return 0;
+        n++;
+        if (n >= WE_FSTATE_VAL) return 0;
+    }
+    for (i = 1; i <= n; i++) {
+        if (path[i] == '/' || path[i] == 0) {
+            if (i - start == 3 && path[start + 1] == '.' && path[start + 2] == '.') return 0;
+            start = i;
+        }
+    }
+    return n > 0;
+}
+
+int we_form_set_file(we_doc_t *d, int ctl, const char *path) {
+    int i, k;
+    we_fstate_t *s;
+    if (!d || !d->forms) return -1;
+    i = finput_node(d, ctl);
+    if (i < 0 || d->nodes[i].form_type != WE_FORM_FILE || finput_disabled(d, i)) return -1;
+    if (!path || !path[0]) {
+        s = finput_state(d, i);
+        s->len = 0; s->val[0] = 0;
+        d->forms->edits++;
+        return 0;
+    }
+    if (!finput_path_ok(path)) { d->forms->refused++; return -1; }
+    s = finput_state(d, i);
+    for (k = 0; path[k] && k < WE_FSTATE_VAL - 1; k++) s->val[k] = path[k];
+    s->val[k] = 0;
+    s->len = (uint8_t)k;
+    d->forms->edits++;
+    return 0;
+}
+
 int we_form_value(const we_doc_t *d, int ctl, char *out, int max) {
     int i;
     if (!d || !out || max <= 0) return -1;
@@ -997,9 +1041,88 @@ static int finput_pair(char *out, int max, int *o, const we_doc_t *d, const we_n
     return finput_enc(out, max, o, v, vl, crlf);
 }
 
+/* Lot 75: append raw bytes to the multipart body */
+static int finput_mp_put(char *out, int max, int *o, const char *s, int n) {
+    int k;
+    if (*o + n >= max) return -1;
+    for (k = 0; k < n; k++) out[(*o)++] = s[k];
+    return 0;
+}
+
+static int finput_mp_str(char *out, int max, int *o, const char *s) {
+    int n = 0;
+    while (s[n]) n++;
+    return finput_mp_put(out, max, o, s, n);
+}
+
+/* basename of a path kept in state */
+static const char *finput_basename(const char *path) {
+    const char *b = path;
+    int i;
+    for (i = 0; path[i]; i++) if (path[i] == '/') b = path + i + 1;
+    return b[0] ? b : "file";
+}
+
+/* Lot 75: one multipart field (text or file). Returns 0, -1 refuse, -2 overflow */
+static int finput_mp_field(const we_doc_t *d, we_form_req_t *req, int *o, const we_node_t *n,
+                           const char *v, int vl, int is_file) {
+    char line[160];
+    int k = 0, name_len = n->fname_len;
+    if (finput_mp_str(req->body, WE_FREQ_BODY, o, "--") != 0) return -2;
+    if (finput_mp_str(req->body, WE_FREQ_BODY, o, req->boundary) != 0) return -2;
+    if (finput_mp_str(req->body, WE_FREQ_BODY, o, "\r\n") != 0) return -2;
+    /* Content-Disposition */
+    {
+        static const char pref[] = "Content-Disposition: form-data; name=\"";
+        if (finput_mp_str(req->body, WE_FREQ_BODY, o, pref) != 0) return -2;
+        if (finput_mp_put(req->body, WE_FREQ_BODY, o, d->pool + n->fname_off, name_len) != 0) return -2;
+        if (finput_mp_str(req->body, WE_FREQ_BODY, o, "\"") != 0) return -2;
+    }
+    if (is_file) {
+        const char *bn = (v && v[0]) ? finput_basename(v) : "";
+        if (finput_mp_str(req->body, WE_FREQ_BODY, o, "; filename=\"") != 0) return -2;
+        if (finput_mp_str(req->body, WE_FREQ_BODY, o, bn) != 0) return -2;
+        if (finput_mp_str(req->body, WE_FREQ_BODY, o, "\"\r\nContent-Type: application/octet-stream\r\n\r\n") != 0) return -2;
+        if (v && v[0]) {
+            if (!image_read) return -1;
+            {
+                static unsigned char buf[WE_FFILE_MAX + 1];
+                int got = image_read(image_ctx, v, buf, WE_FFILE_MAX + 1);
+                if (got < 0) return -1;
+                if (got > WE_FFILE_MAX) return -1;   /* too large: refused */
+                if (finput_mp_put(req->body, WE_FREQ_BODY, o, (const char *)buf, got) != 0) return -2;
+            }
+        }
+    } else {
+        if (finput_mp_str(req->body, WE_FREQ_BODY, o, "\r\n\r\n") != 0) return -2;
+        if (finput_mp_put(req->body, WE_FREQ_BODY, o, v, vl) != 0) return -2;
+    }
+    if (finput_mp_str(req->body, WE_FREQ_BODY, o, "\r\n") != 0) return -2;
+    (void)line; (void)k;
+    return 0;
+}
+
+/* Lot 75: a short boundary unique to this submission */
+static void finput_boundary(char *out, int max, const we_doc_t *d) {
+    static const char hex[] = "0123456789abcdef";
+    unsigned h = 0x6f75u;
+    int i, n = 0;
+    for (i = 0; i < (int)d->nnodes && i < 64; i++) h = h * 131u + (unsigned)d->nodes[i].form_ord + (unsigned)d->nodes[i].fname_len;
+    if (d->forms) h ^= ((unsigned)d->forms->edits << 8) ^ (unsigned)d->forms->submits;
+    {
+        const char *p = "----mohhdy";
+        while (*p && n < max - 1) out[n++] = *p++;
+    }
+    for (i = 0; i < 16 && n < max - 1; i++) {
+        out[n++] = hex[h & 15u];
+        h = h * 1103515245u + 12345u;
+    }
+    out[n] = 0;
+}
+
 int we_form_request(const we_doc_t *d, we_form_req_t *req) {
     int f, i, o = 0, sub, a, k;
-    char v[WE_FSTATE_VAL];
+    char v[256];   /* Lot 75: attr values up to 255; was WE_FSTATE_VAL */
     if (!d || !req || !d->forms || d->forms->submit_form < 0 || d->forms->submit_form >= (int)d->nnodes) return -1;
     f = d->forms->submit_form;
     if (!w_eq(d->nodes[f].tag, "form")) return -1;
@@ -1008,16 +1131,52 @@ int we_form_request(const we_doc_t *d, we_form_req_t *req) {
     req->form = (int16_t)f;
     req->post = (d->nodes[f].form_flags2 & WE_FF2_POST) ? 1 : 0;
     req->multipart = (d->nodes[f].form_flags2 & WE_FF2_MULTIPART) ? 1 : 0;
+    /* GET never uses multipart bodies */
+    if (!req->post) req->multipart = 0;
+    if (req->multipart) {
+        finput_boundary(req->boundary, WE_FREQ_BOUNDARY, d);
+        {
+            const char *p = "multipart/form-data; boundary=";
+            int n = 0;
+            while (*p && n < WE_FREQ_CTYPE - 1) req->ctype[n++] = *p++;
+            for (k = 0; req->boundary[k] && n < WE_FREQ_CTYPE - 1; k++) req->ctype[n++] = req->boundary[k];
+            req->ctype[n] = 0;
+        }
+    } else {
+        const char *p = "application/x-www-form-urlencoded";
+        for (k = 0; p[k] && k < WE_FREQ_CTYPE - 1; k++) req->ctype[k] = p[k];
+        req->ctype[k] = 0;
+    }
     for (i = 1; i < (int)d->nnodes; i++) {
         const we_node_t *n = &d->nodes[i];
-        int vl;
+        int vl, rc;
         if (!n->form_ord || !n->fname_len || finput_owner(d, i) != f || finput_disabled(d, i)) continue;
         if (w_eq(n->tag, "details") || w_eq(n->tag, "dialog")) continue;
         if (finput_submit_kind(n) || n->form_type == WE_FORM_RESET || n->form_type == WE_FORM_BUTTON) {
             if (i != sub) continue;
             vl = (n->form_flags & WE_FF_VALUE) ? (n->fval_len < (int)sizeof(v) - 1 ? n->fval_len : (int)sizeof(v) - 1) : 0;
             w_cpy(v, (int)sizeof(v), d->pool + n->fval_off, vl);
-            if (finput_pair(req->body, WE_FREQ_BODY, &o, d, n, v, vl, 0) != 0) return -2;
+            if (req->multipart) {
+                rc = finput_mp_field(d, req, &o, n, v, vl, 0);
+                if (rc != 0) return rc == -1 ? -1 : -2;
+            } else if (finput_pair(req->body, WE_FREQ_BODY, &o, d, n, v, vl, 0) != 0) return -2;
+            continue;
+        }
+        if (n->form_type == WE_FORM_FILE) {
+            we_fstate_t tmp;
+            const we_fstate_t *s = &tmp;
+            if (!req->multipart) continue;   /* file only in multipart */
+            if (d->forms->c[n->form_ord - 1].set) s = &d->forms->c[n->form_ord - 1];
+            else { finput_capture(d, i, &tmp); }
+            if (!s->len) {
+                /* empty file control: still send the field with empty filename */
+                rc = finput_mp_field(d, req, &o, n, "", 0, 1);
+                if (rc != 0) return rc == -1 ? -1 : -2;
+                continue;
+            }
+            rc = finput_mp_field(d, req, &o, n, s->val, s->len, 1);
+            if (rc == -1) { return -1; }   /* refused: no reader / too big / bad read */
+            if (rc != 0) return -2;
             continue;
         }
         if (w_eq(n->tag, "select") && forms_listbox(n)) {
@@ -1027,13 +1186,24 @@ int we_form_request(const we_doc_t *d, we_form_req_t *req) {
                 int opt = finput_option(d, i, k, 0);
                 if (!(d->nodes[opt].form_flags & WE_FF_SELECTED)) continue;
                 vl = finput_option_value(d, opt, v, (int)sizeof(v));
-                if (finput_pair(req->body, WE_FREQ_BODY, &o, d, n, v, vl, 0) != 0) return -2;
+                if (req->multipart) {
+                    rc = finput_mp_field(d, req, &o, n, v, vl, 0);
+                    if (rc != 0) return rc == -1 ? -1 : -2;
+                } else if (finput_pair(req->body, WE_FREQ_BODY, &o, d, n, v, vl, 0) != 0) return -2;
             }
             continue;
         }
         if ((n->form_type == WE_FORM_CHECKBOX || n->form_type == WE_FORM_RADIO) && !(n->form_flags & WE_FF_CHECKED)) continue;
         vl = finput_cur(d, i, v, (int)sizeof(v));
-        if (finput_pair(req->body, WE_FREQ_BODY, &o, d, n, v, vl, w_eq(n->tag, "textarea")) != 0) return -2;
+        if (req->multipart) {
+            rc = finput_mp_field(d, req, &o, n, v, vl, 0);
+            if (rc != 0) return rc == -1 ? -1 : -2;
+        } else if (finput_pair(req->body, WE_FREQ_BODY, &o, d, n, v, vl, w_eq(n->tag, "textarea")) != 0) return -2;
+    }
+    if (req->multipart) {
+        if (finput_mp_str(req->body, WE_FREQ_BODY, &o, "--") != 0) return -2;
+        if (finput_mp_str(req->body, WE_FREQ_BODY, &o, req->boundary) != 0) return -2;
+        if (finput_mp_str(req->body, WE_FREQ_BODY, &o, "--\r\n") != 0) return -2;
     }
     req->body[o] = 0;
     req->body_len = o;

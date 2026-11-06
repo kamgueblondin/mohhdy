@@ -70,7 +70,8 @@ int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px);
 /* Lot 73: we_node_t.form_type of a form control */
 enum {
     WE_FORM_NONE = 0, WE_FORM_TEXT, WE_FORM_PASSWORD, WE_FORM_CHECKBOX, WE_FORM_RADIO,
-    WE_FORM_SUBMIT, WE_FORM_RESET, WE_FORM_BUTTON, WE_FORM_HIDDEN
+    WE_FORM_SUBMIT, WE_FORM_RESET, WE_FORM_BUTTON, WE_FORM_HIDDEN,
+    WE_FORM_FILE   /* Lot 75: input type=file, multipart only */
 };
 
 typedef struct { char name[WE_TRACKS_MAX + 1][WE_GRID_LINE_ALIASES][WE_GRID_NAME_MAX]; } we_grid_names_t;
@@ -111,16 +112,21 @@ enum { WE_FACT_NONE = 0, WE_FACT_CHANGED = 1, WE_FACT_SUBMIT = 2 };
 #define WE_KEY_SHIFT_TAB 0x103
 #define WE_KEY_LEFT 0x104
 #define WE_KEY_RIGHT 0x105
-/* a form submission: application/x-www-form-urlencoded */
+/* a form submission: urlencoded or multipart/form-data (Lot 75) */
 #define WE_FREQ_URL 512
-#define WE_FREQ_BODY 1024
+#define WE_FREQ_BODY 8192
+#define WE_FREQ_CTYPE 96
+#define WE_FREQ_BOUNDARY 48
+#define WE_FFILE_MAX 2048   /* max bytes read from a VFS file part */
 typedef struct {
     uint8_t post;          /* method=post */
-    uint8_t multipart;     /* enctype=multipart/form-data asked (sent urlencoded) */
+    uint8_t multipart;     /* 1: body is multipart, ctype set */
     int16_t form;          /* node of the form */
     char url[WE_FREQ_URL]; /* GET: action (no query, no fragment) ? body; POST: action */
     char body[WE_FREQ_BODY];
     int body_len;
+    char ctype[WE_FREQ_CTYPE];     /* Lot 75: Content-Type (with boundary) */
+    char boundary[WE_FREQ_BOUNDARY];
 } we_form_req_t;
 
 /* Lot 61: an edge is auto, a line number, a name with an occurrence
@@ -623,6 +629,8 @@ int we_form_at(const we_doc_t *d, int x, int y);
 int we_form_click(we_doc_t *d, int x, int y);
 int we_form_key(we_doc_t *d, int key);
 int we_form_set_text(we_doc_t *d, int ctl, const char *text);
+/* Lot 75: bind a local VFS path to a type=file control (absolute path). */
+int we_form_set_file(we_doc_t *d, int ctl, const char *path);
 int we_form_request(const we_doc_t *d, we_form_req_t *req);
 int we_form_value(const we_doc_t *d, int ctl, char *out, int max);
 /* Lot 74: the fragment of the page URL ("#id" or "id", percent-decoded):

@@ -254,20 +254,41 @@ static void put_num(ob_t* b, int v) {
     while (k) ob_c(b, t[--k]);
 }
 
-/* A form control becomes a link "mohhdy-form:f:N" (or s: for a submit)
- * whose text is the placeholder \001N\002, replaced by the section
- * builder (wf_html_section) with the current value of field N. */
+/* Lot 75: a form control is a placeholder \001N\002; wf_section_render
+ * expands it with wf_form_emit_html into a real engine control. */
 static void put_field(ob_t* b, int idx, int submit) {
-    ob_s(b, "<a href=\"mohhdy-form:");
-    ob_c(b, submit ? 's' : 'f');
-    ob_c(b, ':');
-    put_num(b, idx);
-    ob_s(b, "\">");
+    (void)submit;
     ob_c(b, '\001');
     put_num(b, idx);
     ob_c(b, '\002');
-    ob_s(b, "</a>");
     b->nodes++;
+}
+
+/* Lot 75: open <form> with absolute action (and optional enctype). */
+static void put_form_open(ob_t* b, wf_form_t* f) {
+    int i;
+    if (f->emitted) return;
+    ob_s(b, "<form action=\"");
+    for (i = 0; f->action[i]; i++) {
+        char c = f->action[i];
+        if (c == '&') ob_s(b, "&amp;");
+        else if (c == '"') ob_s(b, "&quot;");
+        else if ((unsigned char)c >= 0x20u) ob_c(b, c);
+    }
+    ob_s(b, f->method == WF_METHOD_POST ? "\" method=\"post\"" : "\" method=\"get\"");
+    if (f->multipart) ob_s(b, " enctype=\"multipart/form-data\"");
+    ob_c(b, '>');
+    f->emitted = 1;
+    b->nodes++;
+}
+
+/* Lot 75: form open for an explicit <form> or the first formless control. */
+static void put_field_with_form(ob_t* b, int idx, int submit) {
+    if (idx >= 0 && idx < g_forms->nfields) {
+        int fi = g_forms->field[idx].form;
+        if (fi >= 0 && fi < g_forms->nforms) put_form_open(b, &g_forms->form[fi]);
+    }
+    put_field(b, idx, submit);
 }
 
 /* Inner text of the element whose open tag ends at i (for <button>,
@@ -318,12 +339,25 @@ static int form_tag(ob_t* b, const char* in, int n, int i, int j, int e, int clo
     int next = e < n ? e + 1 : n, idx, maxlen = 0, k;
     (void)i;
     if (seq(name, "form")) {
-        if (close) { wf_form_end(g_forms); return next; }
+        if (close) {
+            /* close the current open form in HTML if it was emitted */
+            if (g_forms->current >= 0 && g_forms->current < g_forms->nforms &&
+                g_forms->form[g_forms->current].emitted) {
+                g_forms->form[g_forms->current].emitted = 0;
+                ob_s(b, "</form>");
+                b->nodes++;
+            }
+            wf_form_end(g_forms);
+            return next;
+        }
         get_attr_text(in, j, e, "action", action, (int)sizeof(action));
         get_attr(in, j, e, "method", method, (int)sizeof(method));
         get_attr(in, j, e, "enctype", enc, (int)sizeof(enc));
         { int r = 0, w = 0; while (action[r]) { if ((unsigned char)action[r] >= 0x20u) action[w++] = action[r]; r++; } action[w] = 0; }
-        wf_form_begin(g_forms, base, action, method, enc);
+        {
+            int fi = wf_form_begin(g_forms, base, action, method, enc);
+            if (fi >= 0) put_form_open(b, &g_forms->form[fi]);
+        }
         return next;
     }
     if (close) return seq(name, "input") || seq(name, "textarea") || seq(name, "button") || seq(name, "select") ? next : -1;
@@ -341,13 +375,13 @@ static int form_tag(ob_t* b, const char* in, int n, int i, int j, int e, int clo
     if (seq(name, "textarea")) {
         next = inner_text(in, n, next, "textarea", value, (int)sizeof(value), 0);
         idx = wf_form_add(g_forms, base, "textarea", fname, value, label, 0, maxlen);
-        if (idx >= 0) put_field(b, idx, 0);
+        if (idx >= 0) put_field_with_form(b, idx, 0);
         return next;
     }
     if (seq(name, "select")) {
         idx = wf_form_add(g_forms, base, "select", fname, "", label, 0, 0);
         next = select_options(in, n, next, idx);
-        if (idx >= 0) put_field(b, idx, 0);
+        if (idx >= 0) put_field_with_form(b, idx, 0);
         return next;
     }
     if (seq(name, "button")) {
@@ -356,7 +390,7 @@ static int form_tag(ob_t* b, const char* in, int n, int i, int j, int e, int clo
         next = inner_text(in, n, next, "button", label, (int)sizeof(label), 1);
         if (type[0] && !seq(type, "submit")) return next;
         idx = wf_form_add(g_forms, base, "button-submit", fname, value, label, 0, 0);
-        if (idx >= 0) put_field(b, idx, 1);
+        if (idx >= 0) put_field_with_form(b, idx, 1);
         return next;
     }
     if (get_attr(in, j, e, "type", type, (int)sizeof(type)) < 0) type[0] = 0;
@@ -367,7 +401,7 @@ static int form_tag(ob_t* b, const char* in, int n, int i, int j, int e, int clo
         if (seq(type, "submit")) label[0] = 0;   /* a submit shows its value */
     }
     idx = wf_form_add(g_forms, base, type, fname, value, label, has_attr(in, j, e, "checked"), maxlen);
-    if (idx >= 0 && g_forms->field[idx].type != WF_FIELD_HIDDEN) put_field(b, idx, g_forms->field[idx].type == WF_FIELD_SUBMIT);
+    if (idx >= 0) put_field_with_form(b, idx, g_forms->field[idx].type == WF_FIELD_SUBMIT);
     return next;
 }
 
@@ -684,6 +718,15 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
     /* room was kept for the closing tags */
     b.full = 0;
     if (b.n > cap - 40) b.n = cap - 40;
+    /* Lot 75: close any open engine <form> (explicit or implicit) */
+    if (g_forms) {
+        int fi;
+        for (fi = 0; fi < g_forms->nforms; fi++)
+            if (g_forms->form[fi].emitted) {
+                g_forms->form[fi].emitted = 0;
+                ob_s(&b, "</form>");
+            }
+    }
     if (st->truncated) ob_s(&b, "<p>[page tronquee]</p>");
     ob_s(&b, "</body></html>");
     b.o[b.n] = 0;

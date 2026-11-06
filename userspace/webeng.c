@@ -279,9 +279,12 @@ static int find_ci(const char* s, int n, int from, const char* word) {
 }
 
 static void unlink_last(we_doc_t *d, int parent, int old_last);
+/* Lot 75: form file parts reuse the local image reader (set below). */
+static we_image_read_fn image_read;
+static void *image_ctx;
 #include "webeng_forms.inc"
 #include "webeng_hints.inc"
-#include "webeng_finput.inc"   /* lot 74 */
+#include "webeng_finput.inc"   /* lot 74 + lot 75 file/multipart */
 #include "webeng_iframe.inc"
 
 int we_parse(we_doc_t* d, const char* html, int len) {
@@ -5021,8 +5024,6 @@ static os_fb_web_item_t* emit(we_doc_t* d, int owner, uint8_t kind, int x, int y
 }
 
 /* Local images use the same decoder as img-info and the desktop viewer. */
-static we_image_read_fn image_read;
-static void *image_ctx;
 static struct {
     unsigned char source[WE_IMAGE_SOURCE_MAX];
     unsigned char scratch[WE_IMAGE_SCRATCH_MAX];

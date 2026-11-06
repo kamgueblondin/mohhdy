@@ -824,7 +824,8 @@ static int web_form_post(const char *url, const we_form_req_t *q, char *out, int
     int len, k;
     if (!g_wops || !g_wops->request) { app_out(out, out_max, "osui web form2 error=no_network", 0); return -1; }
     g_web_final[0] = 0;
-    len = g_wops->request(url, q->body, q->body_len, g_web_src, OSUI_WEB_SRC_MAX, g_web_final, (int)sizeof(g_web_final),
+    len = g_wops->request(url, q->body, q->body_len, q->ctype[0] ? q->ctype : 0,
+                          g_web_src, OSUI_WEB_SRC_MAX, g_web_final, (int)sizeof(g_web_final),
                           status, (int)sizeof(status));
     if (len < 0) { app_out(out, out_max, status[0] ? status : "osui web form2 error=failed", 0); return -1; }
     we_forms_init(&g_web_forms);
@@ -858,7 +859,7 @@ static void web_form_send(char *out, int out_max) {
     scpy(m, (int)sizeof(m), q.post ? "POST " : "GET ");
     scat(m, (int)sizeof(m), url);
     if (q.post) { scat(m, (int)sizeof(m), " body "); scat(m, (int)sizeof(m), q.body); }
-    if (q.multipart) scat(m, (int)sizeof(m), " (multipart sent urlencoded)");
+    if (q.multipart) { scat(m, (int)sizeof(m), " multipart "); scat(m, (int)sizeof(m), q.boundary); }
     app_out(out, out_max, "osui web form2 submit ", m);
     if (q.post) {
         if (!osui_gui_web_is_url(url)) { app_out(out, out_max, "osui web form2 error=post_local_page", 0); return; }

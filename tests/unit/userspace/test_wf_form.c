@@ -21,8 +21,10 @@ static void setup_google(void) {
     TEST_ASSERT_EQUAL(1, wf_form_add(&g_fp, &base, "text", "q", "", "Rechercher", 0, 0));
     TEST_ASSERT_EQUAL(2, wf_form_add(&g_fp, &base, "submit", "btnG", "Recherche Google", 0, 0, 0));
     TEST_ASSERT_EQUAL(3, wf_form_add(&g_fp, &base, "submit", "btnI", "J'ai de la chance", 0, 0, 0));
-    TEST_ASSERT_EQUAL(-1, wf_form_add(&g_fp, &base, "file", "f", "", 0, 0, 0));
-    TEST_ASSERT_EQUAL(4, wf_form_add(&g_fp, &base, "checkbox", "c", "", 0, 0, 0));   /* unchecked: kept, not sent */
+    /* Lot 75 review: type=file kept (was refused); urlencoded submit skips it */
+    TEST_ASSERT_EQUAL(4, wf_form_add(&g_fp, &base, "file", "f", "", 0, 0, 0));
+    TEST_ASSERT_EQUAL(WF_FIELD_FILE, g_fp.field[4].type);
+    TEST_ASSERT_EQUAL(5, wf_form_add(&g_fp, &base, "checkbox", "c", "", 0, 0, 0));   /* unchecked: kept, not sent */
     wf_form_end(&g_fp);
 }
 

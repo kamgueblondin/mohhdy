@@ -71,9 +71,10 @@ typedef struct {
     /* Lot 73: advances the animated images (wf_webimg_tick); 1 when a
      * frame changed (the atlas generation then differs and is resent) */
     int (*anim_tick)(void);
-    /* Lot 74: a form of the rendered page sent with POST
-     * (application/x-www-form-urlencoded body); the answer like section 0 */
-    int (*request)(const char *url, const char *body, int body_len, char *src, int src_max, char *final_url, int url_max,
+    /* Lot 74/75: a form of the rendered page sent with POST
+     * (urlencoded or multipart body); the answer like section 0 */
+    int (*request)(const char *url, const char *body, int body_len, const char *ctype,
+                   char *src, int src_max, char *final_url, int url_max,
                    char *status, int st_max);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);

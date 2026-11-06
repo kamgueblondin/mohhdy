@@ -282,7 +282,13 @@ static void test_l74_post_buttons_and_errors(void) {
     TEST_ASSERT_EQUAL(0, strcmp(l74_req(0, &q), "/p?keep=1"));
     TEST_ASSERT_EQUAL(1, q.post);
     TEST_ASSERT_EQUAL(1, q.multipart);
-    TEST_ASSERT_EQUAL(0, strcmp(q.body, "a+b=x%3Dy%26z&btn=v"));
+    /* Lot 75 review: multipart builds a real body (was urlencoded) */
+    TEST_ASSERT_TRUE(q.boundary[0] != 0);
+    TEST_ASSERT_NOT_NULL(strstr(q.ctype, "multipart/form-data; boundary="));
+    TEST_ASSERT_NOT_NULL(strstr(q.body, "name=\"a b\""));
+    TEST_ASSERT_NOT_NULL(strstr(q.body, "x=y&z"));
+    TEST_ASSERT_NOT_NULL(strstr(q.body, "name=\"btn\""));
+    TEST_ASSERT_NOT_NULL(strstr(q.body, "\r\nv\r\n"));
     /* a button without type submits; without value it sends an empty value */
     (void)l74_click("t");
     l74_type("\x7e\x2e");
@@ -297,12 +303,18 @@ static void test_l74_post_buttons_and_errors(void) {
     TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l74_click("d"));
     TEST_ASSERT_EQUAL(0, we_form_request(&g_doc, &q));       /* 180 bytes fit */
     l74_done();
-    /* a body that does not fit */
+    /* a body that does not fit (Lot 75: WE_FREQ_BODY is 8192) */
     {
-        static char html[4000];
-        int o = sprintf(html, "<form method=post>");
-        for (k = 0; k < 12; k++) o += sprintf(html + o, "<input name=n%d value='%s'>", k, "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
-        o += sprintf(html + o, "<input id=s type=submit></form>");
+        static char html[16000];
+        char longv[260];
+        int o, j;
+        for (j = 0; j < 200; j++) longv[j] = '%';
+        longv[200] = 0;
+        /* submit first so it stays inside WE_FSTATE_MAX */
+        o = sprintf(html, "<form method=post><input id=s type=submit>");
+        for (k = 0; k < 28 && o < (int)sizeof(html) - 300; k++)
+            o += sprintf(html + o, "<input name=n%d value='%s'>", k, longv);
+        o += sprintf(html + o, "</form>");
         l74_open(html);
         TEST_ASSERT_EQUAL(WE_FACT_SUBMIT, l74_click("s"));
         TEST_ASSERT_EQUAL(-2, we_form_request(&g_doc, &q));
