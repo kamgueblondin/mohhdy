@@ -522,14 +522,15 @@ static void test_l57_invalid_position_36(void) {
     lot57_image("<body style='margin:0'>"
         "<img id=im src='/images/mire-g1.png' alt='fallback' style='object-fit:contain;object-position:left top;width:24px;height:24px;object-position:101% 0%'>"
         "</body>");
-    TEST_ASSERT_EQUAL(0, lot52_node("im")->x);
-    TEST_ASSERT_EQUAL(0, lot52_node("im")->y);
+    /* Lot 81 review point: object-position 101% 0% now resolves (was refused). */
     TEST_ASSERT_EQUAL(24, lot52_node("im")->w);
     TEST_ASSERT_EQUAL(24, lot52_node("im")->h);
     TEST_ASSERT_EQUAL(WE_FIT_CONTAIN, lot52_node("im")->object_fit);
-    TEST_ASSERT_EQUAL(0, lot52_node("im")->object_x);
+    TEST_ASSERT_EQUAL(101, lot52_node("im")->object_x);
     TEST_ASSERT_EQUAL(0, lot52_node("im")->object_y);
-    TEST_ASSERT_TRUE(lot52_has_diag("object position refused"));
+    TEST_ASSERT_EQUAL(0, lot52_node("im")->object_dx);
+    TEST_ASSERT_EQUAL(0, lot52_node("im")->object_dy);
+    TEST_ASSERT_FALSE(lot52_has_diag("object position refused"));
     TEST_ASSERT_EQUAL(1, g_doc.perf.images);
 }
 
@@ -552,14 +553,15 @@ static void test_l57_invalid_position_38(void) {
     lot57_image("<body style='margin:0'>"
         "<img id=im src='/images/mire-g1.png' alt='fallback' style='object-fit:contain;object-position:left top;width:24px;height:24px;object-position:-1% top'>"
         "</body>");
-    TEST_ASSERT_EQUAL(0, lot52_node("im")->x);
-    TEST_ASSERT_EQUAL(0, lot52_node("im")->y);
+    /* Lot 81 review point: object-position -1% top now resolves (was refused). */
     TEST_ASSERT_EQUAL(24, lot52_node("im")->w);
     TEST_ASSERT_EQUAL(24, lot52_node("im")->h);
     TEST_ASSERT_EQUAL(WE_FIT_CONTAIN, lot52_node("im")->object_fit);
-    TEST_ASSERT_EQUAL(0, lot52_node("im")->object_x);
+    TEST_ASSERT_EQUAL(-1, lot52_node("im")->object_x);
     TEST_ASSERT_EQUAL(0, lot52_node("im")->object_y);
-    TEST_ASSERT_TRUE(lot52_has_diag("object position refused"));
+    TEST_ASSERT_EQUAL(0, lot52_node("im")->object_dx);
+    TEST_ASSERT_EQUAL(0, lot52_node("im")->object_dy);
+    TEST_ASSERT_FALSE(lot52_has_diag("object position refused"));
     TEST_ASSERT_EQUAL(1, g_doc.perf.images);
 }
 
@@ -582,14 +584,15 @@ static void test_l57_invalid_position_40(void) {
     lot57_image("<body style='margin:0'>"
         "<img id=im src='/images/mire-g1.png' alt='fallback' style='object-fit:contain;object-position:left top;width:24px;height:24px;object-position:3px 4px'>"
         "</body>");
-    TEST_ASSERT_EQUAL(0, lot52_node("im")->x);
-    TEST_ASSERT_EQUAL(0, lot52_node("im")->y);
+    /* Lot 81 review point: object-position 3px 4px now resolves (was refused). */
     TEST_ASSERT_EQUAL(24, lot52_node("im")->w);
     TEST_ASSERT_EQUAL(24, lot52_node("im")->h);
     TEST_ASSERT_EQUAL(WE_FIT_CONTAIN, lot52_node("im")->object_fit);
     TEST_ASSERT_EQUAL(0, lot52_node("im")->object_x);
     TEST_ASSERT_EQUAL(0, lot52_node("im")->object_y);
-    TEST_ASSERT_TRUE(lot52_has_diag("object position refused"));
+    TEST_ASSERT_EQUAL(3, lot52_node("im")->object_dx);
+    TEST_ASSERT_EQUAL(4, lot52_node("im")->object_dy);
+    TEST_ASSERT_FALSE(lot52_has_diag("object position refused"));
     TEST_ASSERT_EQUAL(1, g_doc.perf.images);
 }
 

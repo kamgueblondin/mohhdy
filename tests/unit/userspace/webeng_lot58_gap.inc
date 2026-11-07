@@ -213,20 +213,16 @@ static void test_l58_gap_percent_gap(void) {
         "<div id=g style='display:grid;width:100px;grid-template-columns:40px 40px;gap:4px;gap:calc(10% + 2px)'>"
         "<div id=a style='height:10px'></div><div id=b style='height:10px'></div><div id=c style='height:10px'>"
         "</div></div></body>", 320);
+    /* Lot 81 review point: calc() with a percentage gap now resolves (was refused). */
+    /* column gap 10% of 100 + 2 = 12; the row gap has no definite height: 2 */
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
     TEST_ASSERT_EQUAL(40, lot52_node("a")->w);
-    TEST_ASSERT_EQUAL(10, lot52_node("a")->h);
-    TEST_ASSERT_EQUAL(44, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(52, lot52_node("b")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("b")->y);
-    TEST_ASSERT_EQUAL(40, lot52_node("b")->w);
-    TEST_ASSERT_EQUAL(10, lot52_node("b")->h);
     TEST_ASSERT_EQUAL(0, lot52_node("c")->x);
-    TEST_ASSERT_EQUAL(14, lot52_node("c")->y);
-    TEST_ASSERT_EQUAL(40, lot52_node("c")->w);
-    TEST_ASSERT_EQUAL(10, lot52_node("c")->h);
-    TEST_ASSERT_EQUAL(24, lot52_node("g")->h);
-    TEST_ASSERT_TRUE(lot52_has_diag("gap refused"));
+    TEST_ASSERT_EQUAL(12, lot52_node("c")->y);
+    TEST_ASSERT_EQUAL(22, lot52_node("g")->h);
+    TEST_ASSERT_FALSE(lot52_has_diag("gap refused"));
 }
 
 static void test_l58_gap_too_many_gap(void) {

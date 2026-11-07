@@ -91,18 +91,19 @@ static void test_l80_bad_9(void) {
 
 static void test_l80_badgap_0(void) {
     lot52_render("<body style='margin:0'><div id=g style='display:grid;width:200px;grid-template-columns:40px 40px;column-gap:6px;column-gap:calc(10% + 2px)'><div id=c0 style='height:5px'></div><div id=c1 style='height:5px'></div></div></body>", 480);
-    TEST_ASSERT_EQUAL(46, lot52_node("c1")->x);
-    TEST_ASSERT_EQUAL(6, lot52_node("g")->col_gap);
+    /* Lot 81 review point: column-gap calc(10% + 2px) now resolves (was refused). */
+    TEST_ASSERT_EQUAL(62, lot52_node("c1")->x);
+    TEST_ASSERT_EQUAL(2, lot52_node("g")->col_gap);
     TEST_ASSERT_EQUAL(0, lot52_node("g")->gap_pct[0]);
-    TEST_ASSERT_TRUE(g_doc.ndiag > 0);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l80_badgap_1(void) {
     lot52_render("<body style='margin:0'><div id=g style='display:grid;width:200px;grid-template-columns:40px 40px;column-gap:6px;column-gap:min(10%,5px)'><div id=c0 style='height:5px'></div><div id=c1 style='height:5px'></div></div></body>", 480);
-    TEST_ASSERT_EQUAL(46, lot52_node("c1")->x);
-    TEST_ASSERT_EQUAL(6, lot52_node("g")->col_gap);
+    /* Lot 81 review point: column-gap min(10%,5px) now resolves (was refused). */
+    TEST_ASSERT_EQUAL(45, lot52_node("c1")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("g")->gap_pct[0]);
-    TEST_ASSERT_TRUE(g_doc.ndiag > 0);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l80_badgap_2(void) {

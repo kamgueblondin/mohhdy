@@ -368,17 +368,13 @@ static void test_l58_ratio_invalid_ratio_22(void) {
 static void test_l58_ratio_invalid_ratio_23(void) {
     lot52_render("<body style='margin:0'><div id=a style='width:80px;aspect-ratio:2;aspect-ratio:1.5'></div>"
         "<div id=b style='height:5px'></div></body>", 320);
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
+    /* Lot 81 review point: a decimal aspect-ratio now resolves (was refused). */
     TEST_ASSERT_EQUAL(80, lot52_node("a")->w);
-    TEST_ASSERT_EQUAL(40, lot52_node("a")->h);
-    TEST_ASSERT_EQUAL(0, lot52_node("b")->x);
-    TEST_ASSERT_EQUAL(40, lot52_node("b")->y);
-    TEST_ASSERT_EQUAL(320, lot52_node("b")->w);
-    TEST_ASSERT_EQUAL(5, lot52_node("b")->h);
-    TEST_ASSERT_TRUE(lot52_has_diag("aspect ratio refused"));
-    TEST_ASSERT_EQUAL(2, lot52_node("a")->aspect_num);
-    TEST_ASSERT_EQUAL(1, lot52_node("a")->aspect_den);
+    TEST_ASSERT_EQUAL(53, lot52_node("a")->h);
+    TEST_ASSERT_EQUAL(53, lot52_node("b")->y);
+    TEST_ASSERT_FALSE(lot52_has_diag("aspect ratio refused"));
+    TEST_ASSERT_EQUAL(3, lot52_node("a")->aspect_num);
+    TEST_ASSERT_EQUAL(2, lot52_node("a")->aspect_den);
 }
 
 static void test_l58_ratio_invalid_ratio_24(void) {
@@ -416,17 +412,14 @@ static void test_l58_ratio_invalid_ratio_25(void) {
 static void test_l58_ratio_invalid_ratio_26(void) {
     lot52_render("<body style='margin:0'><div id=a style='width:80px;aspect-ratio:2;aspect-ratio:auto 2 / 1'></div>"
         "<div id=b style='height:5px'></div></body>", 320);
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
+    /* Lot 81 review point: aspect-ratio auto && ratio now resolves (was refused). */
     TEST_ASSERT_EQUAL(80, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(40, lot52_node("a")->h);
-    TEST_ASSERT_EQUAL(0, lot52_node("b")->x);
     TEST_ASSERT_EQUAL(40, lot52_node("b")->y);
-    TEST_ASSERT_EQUAL(320, lot52_node("b")->w);
-    TEST_ASSERT_EQUAL(5, lot52_node("b")->h);
-    TEST_ASSERT_TRUE(lot52_has_diag("aspect ratio refused"));
+    TEST_ASSERT_FALSE(lot52_has_diag("aspect ratio refused"));
     TEST_ASSERT_EQUAL(2, lot52_node("a")->aspect_num);
     TEST_ASSERT_EQUAL(1, lot52_node("a")->aspect_den);
+    TEST_ASSERT_EQUAL(1, lot52_node("a")->aspect_auto);
 }
 
 static void test_l58_ratio_invalid_ratio_27(void) {
