@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Lot 79</title>
+<style>
+body{margin:8px;font-family:monospace}
+#g{display:grid;width:120px;grid-template-columns:repeat(3,36px);column-gap:6px;grid-auto-flow:dense;align-items:stretch}
+#g div{height:12px;background:#ccc}
+#a,#b{grid-column:span 2}
+#box{display:grid;width:100px;height:50px;grid-template-columns:20px 20px 20px;grid-template-rows:10px;justify-content:space-between;margin-top:8px;background:#eee}
+#box div{height:10px;background:#888}
+#auto{display:grid;width:60px;grid-template-columns:60px;grid-auto-rows:14px;margin-top:8px;background:#ddd;align-items:stretch}
+#auto div{background:#aaa;height:14px}
+</style></head>
+<body>
+<!-- Lot 79: dense flow (a,b span 2; c fills hole), auto-rows, space-between. -->
+<h1>Lot 79</h1>
+<div id="g"><div id="a"></div><div id="b"></div><div id="c"></div></div>
+<div id="box"><div id="x"></div><div id="y"></div><div id="z"></div></div>
+<div id="auto"><div id="r1"></div><div id="r2"></div><div id="r3"></div></div>
+</body></html>
