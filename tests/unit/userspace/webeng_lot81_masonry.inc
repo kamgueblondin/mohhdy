@@ -4391,10 +4391,12 @@ static void test_l81_mas_cascade_masonry_bogus(void) {
     TEST_ASSERT_EQUAL(7, lot52_node("c2")->y);
 }
 
-static void test_l81_mas_cols_refused(void) {
+static void test_l81_mas_cols_masonry(void) {
     lot52_render("<body style='margin:0'><div id=g style='display:grid;width:100px;grid-template-columns:masonry'><div id=c0 style='height:5px'></div><div id=c1 style='height:5px'></div></div></body>", 480);
-    TEST_ASSERT_EQUAL(0, lot52_node("g")->masonry);
-    TEST_ASSERT_TRUE(lot52_has_diag("grid tracks refused"));
+    /* lot 82: masonry columns; one auto row as tall as its items */
+    TEST_ASSERT_EQUAL(2, lot52_node("g")->masonry);
+    TEST_ASSERT_EQUAL(5, lot52_node("g")->h);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void lot81_masonry_run(void) {
@@ -4541,5 +4543,5 @@ static void lot81_masonry_run(void) {
     RUN_TEST(test_l81_mas_cascade_10px_masonry);
     RUN_TEST(test_l81_mas_cascade_masonry_subgrid);
     RUN_TEST(test_l81_mas_cascade_masonry_bogus);
-    RUN_TEST(test_l81_mas_cols_refused);
+    RUN_TEST(test_l81_mas_cols_masonry);
 }

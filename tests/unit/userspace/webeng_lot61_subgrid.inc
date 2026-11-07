@@ -135,12 +135,13 @@ static void test_l61_subgrid_nested_is_refused(void) {
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
-static void test_l61_subgrid_padding_on_axis_is_refused(void) {
+static void test_l61_subgrid_padding_on_axis_is_offset(void) {
     lot52_render(L61_SUB_PARENT "<div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid;padding-left:4px'>"
         "<div id=a>A</div><div id=b>B</div></div></div></body>", 320);
-    l61_box("a", 4, 0, 96, 10);
-    l61_box("b", 4, 10, 96, 10);
-    TEST_ASSERT_TRUE(lot52_has_diag("subgrid box offsets refused"));
+    /* lot 82: the padding is an edge offset on the first inherited track */
+    l61_box("a", 4, 0, 46, 10);
+    l61_box("b", 50, 0, 50, 10);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l61_subgrid_padding_on_other_axis_is_accepted(void) {
@@ -371,7 +372,7 @@ static void lot61_subgrid_run(void) {
     RUN_TEST(test_l61_subgrid_without_grid_parent_is_refused);
     RUN_TEST(test_l61_subgrid_on_a_block_is_refused);
     RUN_TEST(test_l61_subgrid_nested_is_refused);
-    RUN_TEST(test_l61_subgrid_padding_on_axis_is_refused);
+    RUN_TEST(test_l61_subgrid_padding_on_axis_is_offset);
     RUN_TEST(test_l61_subgrid_padding_on_other_axis_is_accepted);
     RUN_TEST(test_l61_subgrid_restyle_to_tracks_drops_inheritance);
     RUN_TEST(test_l61_subgrid_items_share_parent_first_baseline);
