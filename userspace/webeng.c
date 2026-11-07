@@ -1529,6 +1529,7 @@ static int parse_placement(const char *v, int len, uint8_t *start, uint8_t *span
 /* Lot 81: calc() tracks of one declaration are staged here; the declaration
  * copies them into its region of the node table only when it is accepted. */
 static int16_t calc_stage[12][2];
+static we_doc_t *track_pool_doc;
 static int calc_stage_n, calc_stage_cap, calc_stage_base;
 
 static void calc_stage_open(int base, int cap) { calc_stage_n = 0; calc_stage_base = base; calc_stage_cap = cap; }
@@ -1555,8 +1556,18 @@ static int track_math(const char *v, int len, int16_t *out) {
         return 0;
     }
     if (math_eval(&e, 10000, &f1) || math_eval(&e, 20000, &f2)) return -1;
-    if (f2 - f1 != f1 - f0 || f0 < -2000 || f0 > 2000 || f1 - f0 < -20000 || f1 - f0 > 20000) return -1;
     if (calc_stage_n >= calc_stage_cap) return -1;
+    if (f2 - f1 != f1 - f0 || f0 < -2000 || f0 > 2000 || f1 - f0 < -20000 || f1 - f0 > 20000) {
+        /* Lot 82: min()/max()/clamp() of a percentage is not linear: the
+         * whole expression goes to the document pool. */
+        if (!track_pool_doc || track_pool_doc->ntrack_pool >= WE_TRACK_POOL_MAX) return -1;
+        track_pool_doc->track_pool[track_pool_doc->ntrack_pool] = e;
+        calc_stage[calc_stage_n][0] = (int16_t)track_pool_doc->ntrack_pool++;
+        calc_stage[calc_stage_n][1] = WE_TRACK_POOLED;
+        *out = (int16_t)(WE_TRACK_CALC - (calc_stage_base + calc_stage_n));
+        calc_stage_n++;
+        return 0;
+    }
     calc_stage[calc_stage_n][0] = (int16_t)f0;
     calc_stage[calc_stage_n][1] = (int16_t)(f1 - f0);
     *out = (int16_t)(WE_TRACK_CALC - (calc_stage_base + calc_stage_n));
@@ -1594,7 +1605,9 @@ static int track_value(const char *v, int len, int16_t *size, int16_t *low, int1
         start = 7;
         while (start < len && w_space(v[start])) start++;
         end = start;
-        while (end < len && v[end] != ',') end++;
+        /* Lot 82: a math floor (minmax(max(60%, 20px), 1fr)) has its own commas. */
+        { int depth = 0;
+          while (end < len && (v[end] != ',' || depth)) { depth += v[end] == '(' ? 1 : v[end] == ')' ? -1 : 0; end++; } }
         if (end == len) return -1;
         { int last = end; while (last > start && w_space(v[last - 1])) last--;
           if (track_length(v + start, last - start, low)) return -1; }
@@ -2183,8 +2196,10 @@ static void subgrid_validate(we_doc_t *d) {
         for (axis = 0; axis < 2; axis++) {
             int a = axis ? 0 : 3, b = axis ? 2 : 1;
             if (!n->subgrid[axis]) continue;
-            if (n->border || n->padding[a] || n->padding[b] || n->margin[a] || n->margin[b] ||
-                (n->margin_auto & (axis ? (WE_AUTO_TOP | WE_AUTO_BOTTOM) : (WE_AUTO_LEFT | WE_AUTO_RIGHT)))) {
+            /* Lot 82: padding, border and margin are edge offsets (CSS Grid 2,
+             * 9.3); auto margins still have no inherited track to absorb. */
+            (void)a; (void)b;
+            if (n->margin_auto & (axis ? (WE_AUTO_TOP | WE_AUTO_BOTTOM) : (WE_AUTO_LEFT | WE_AUTO_RIGHT))) {
                 diag(d, "subgrid box offsets refused", (int)i);
                 continue;
             }
@@ -2277,6 +2292,14 @@ static int w_max(int a, int b) { return a > b ? a : b; }
 
 /* Gap difference of a subgrid on an axis: its own declared gap minus the
  * parent's, split h1 (after a track) and h2 (before it). */
+static int box_edge(const we_node_t *n, int side);
+/* Lot 82: a subgrid's margin, border and padding at one edge of an axis:
+ * the extra layer the items next to that edge carry (CSS Grid 2, 9.3). */
+static int subgrid_offset(const we_node_t *s, int axis, int end) {
+    int side = axis ? (end ? 2 : 0) : (end ? 1 : 3);
+    return s->margin[side] + box_edge(s, side) + s->padding[side];
+}
+
 static int subgrid_gap_delta(const we_node_t *s, int axis, int gap, int *h1, int *h2) {
     int delta = (s->gap_set >> axis) & 1 ? own_axis_gap(s, axis) - gap : 0;
     *h1 = delta / 2;
@@ -2290,7 +2313,9 @@ static int subgrid_item_extra(const we_node_t *s, int axis, int first, int span,
     int h1, h2, count = axis ? s->grid_rows : s->grid_cols, extra = 0;
     (void)subgrid_gap_delta(s, axis, gap, &h1, &h2);
     if (first > 0) extra += h2;
+    else extra += subgrid_offset(s, axis, 0);
     if (first + span < count) extra += h1;
+    else extra += subgrid_offset(s, axis, 1);
     return extra;
 }
 
@@ -2309,9 +2334,13 @@ static void subgrid_tracks(we_node_t *n, int axis, const int *sizes, const int *
         if (step < 0) step = 0;
     }
     for (k = 0; k < count; k++) {
-        int left = pos[start + k] - base + (k > 0 ? h2 : 0), size;
+        int left = pos[start + k] - base + (k > 0 ? h2 : 0), size, first = subgrid_offset(n, axis, 0);
         if (k + 1 < count) size = pos[start + k + 1] - base + h2 - step - left;
         else size = pos[start + k] + sizes[start + k] - base - left;
+        /* Lot 82: tracks are in content coordinates: the start offset moves
+         * every line; the first track loses it, the last the end offset. */
+        if (k == 0) size -= first;
+        if (k + 1 == count) size -= subgrid_offset(n, axis, 1);
         if (size < 0) size = 0;
         if (axis) { n->row_size[k] = (int16_t)size; n->row_floor[k] = n->row_cap[k] = -1; }
         else { n->col_size[k] = (int16_t)size; n->col_floor[k] = n->col_cap[k] = -1; }
@@ -4725,16 +4754,17 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         we_grid_names_t names;
         we_auto_repeat_t automatic;
         int count, axis = w_eq(prop, "grid-template-rows");
-        if (axis && value_is(v, vl, "masonry")) {
-            /* Lot 81: masonry rows: items pack into the shortest column. */
-            n->masonry = 1; n->subgrid[1] = 0;
-            n->auto_mode[1] = n->tpl_count[1] = 0;
-            w_zero(&n->line_names[1], sizeof(n->line_names[1]));
-            n->grid_rows = 0;
+        if (value_is(v, vl, "masonry")) {
+            /* Lot 81: masonry rows: items pack into the shortest column.
+             * Lot 82: masonry columns: items pack into the shortest row. */
+            n->masonry = (uint8_t)(axis ? 1 : 2); n->subgrid[axis] = 0;
+            n->auto_mode[axis] = n->tpl_count[axis] = 0;
+            w_zero(&n->line_names[axis], sizeof(n->line_names[axis]));
+            if (axis) n->grid_rows = 0; else n->grid_cols = 0;
             return;
         }
         if (value_is(v, vl, "subgrid") || subgrid_names_valid(v, vl)) {
-            if (axis) n->masonry = 0;
+            if (n->masonry == (axis ? 1 : 2)) n->masonry = 0;
             n->sub_names[axis][0] = 0;
             if (!value_is(v, vl, "subgrid")) w_cpy(n->sub_names[axis], sizeof(n->sub_names[axis]), v + (v[7] == '[' ? 7 : 8), vl - (v[7] == '[' ? 7 : 8));
             n->subgrid[axis] = 1;
@@ -4752,7 +4782,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (count >= 0) calc_stage_commit(n);
         else calc_stage_open(0, 0);
         if (count >= 0) n->subgrid[axis] = 0;
-        if (count >= 0 && axis) n->masonry = 0;
+        if (count >= 0 && n->masonry == (axis ? 1 : 2)) n->masonry = 0;
         if (count >= 0) {
             n->auto_mode[axis] = (uint8_t)automatic.mode;
             n->auto_at[axis] = (uint8_t)automatic.at;
@@ -5302,6 +5332,7 @@ int we_style(we_doc_t* d) {
     uint32_t i, count;
     if (!d || d->nnodes == 0) return -1;
     if (!d->css_parsed) { parse_css(d); d->css_parsed = 1; }
+    track_pool_doc = d; d->ntrack_pool = 0;
     if (d->source_nodes) drop_generated(d);
     count = d->source_nodes = (uint16_t)d->nnodes;
     d->source_pool = (uint16_t)d->pool_used;
@@ -8903,6 +8934,10 @@ typedef struct {
     int span[WE_MAX_NODES];
     uint8_t collapsed[2][WE_TRACKS_MAX];
 } we_grid_work_t;
+/* Lot 82: masonry columns give every item its own inline box; the per item
+ * span and last-ascent slots are free then and hold its x and width. */
+#define item_x lascent
+#define item_w span
 static we_grid_work_t grid_work[WE_DEPTH_MAX + 1];
 /* Column assignment for rowspan. One slot per layout depth. */
 typedef struct {
@@ -8932,7 +8967,12 @@ static int track_resolve(const we_node_t *n, int axis, int v, int size) {
         const int16_t *c = n->track_calc[WE_TRACK_CALC - v];
         long value;
         if (base < 0) return size ? WE_TRACK_AUTO : -1;
-        value = c[0] + (long)base * c[1] / 10000;
+        if (c[1] == WE_TRACK_POOLED) {
+            int pooled;
+            if (!track_pool_doc || c[0] < 0 || c[0] >= track_pool_doc->ntrack_pool ||
+                math_eval(&track_pool_doc->track_pool[c[0]], base, &pooled)) return size ? WE_TRACK_AUTO : -1;
+            value = pooled;
+        } else value = c[0] + (long)base * c[1] / 10000;
         return value < 0 ? 0 : value > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : (int)value;
     }
     if (!WE_TRACK_IS_PCT(v)) return v;
@@ -9255,7 +9295,7 @@ static int16_t subgrid_ascent[WE_MAX_NODES][WE_TRACKS_MAX], subgrid_ldescent[WE_
 static int subgrid_row_edge(const we_node_t *sub, int k, int gap, int bottom) {
     int h1, h2;
     (void)subgrid_gap_delta(sub, 1, gap, &h1, &h2);
-    return bottom ? (k + 1 < sub->grid_rows ? h1 : 0) : (k > 0 ? h2 : 0);
+    return bottom ? (k + 1 < sub->grid_rows ? h1 : subgrid_offset(sub, 1, 1)) : (k > 0 ? h2 : subgrid_offset(sub, 1, 0));
 }
 
 /* Row contributions of a row subgrid's items, measured at the widths the
@@ -9355,6 +9395,73 @@ static int masonry_rows(we_doc_t *d, int idx, we_track_work_t *items, we_grid_wo
     return rows + 1;
 }
 
+/* Lot 82: masonry columns. The rows come from the template (px, %, calc()
+ * or auto; fr is auto). In document order each item gets its shrink-to-fit
+ * width and takes the row window (its span, or its explicit start) whose
+ * longest running edge is shortest, topmost on ties; it is placed at that
+ * edge. Auto rows then grow to their tallest item; a spanning item puts its
+ * excess on the last row of its window. */
+static int masonry_columns(we_doc_t *d, int idx, we_track_work_t *items, we_grid_work_t *work,
+                           int count, int cx, int cy, int cw, int gx, int gy, int depth) {
+    const we_node_t *n = &d->nodes[idx];
+    int running[WE_TRACKS_MAX], fixed[WE_TRACKS_MAX], rows = n->grid_rows ? n->grid_rows : 1, k, r, y, widest = 0;
+    if (rows > WE_TRACKS_MAX) rows = WE_TRACKS_MAX;
+    for (r = 0; r < rows; r++) {
+        int spec = grid_spec(n, 1, r);
+        running[r] = 0;
+        fixed[r] = spec >= 0 ? spec : -1;
+        work->height[r] = fixed[r] >= 0 ? fixed[r] : grid_floor(n, 1, r);
+    }
+    for (k = 0; k < count; k++) {
+        we_node_t *child = &d->nodes[items->node[k]];
+        int span = child->grid_row_span < 1 ? 1 : child->grid_row_span, best = 0, left = -1, j, width, height, room, fit, child_w;
+        if (span > rows) span = rows;
+        if (child->grid_row_start && child->grid_row_start - 1 + span <= rows) {
+            best = child->grid_row_start - 1;
+            for (j = best; j < best + span; j++) if (running[j] > left) left = running[j];
+        } else for (r = 0; r + span <= rows; r++) {
+            int edge = 0;
+            for (j = r; j < r + span; j++) if (running[j] > edge) edge = running[j];
+            if (left < 0 || edge < left) { left = edge; best = r; }
+        }
+        if (left < 0) left = 0;
+        spacing_node(child, cw);
+        room = cw - node_border_extra(child) - child->margin[1] - child->margin[3];
+        fit = child->max_content;
+        if (fit > room) fit = room;
+        if (fit < child->min_content) fit = child->min_content;
+        width = preferred_outer(child, cw, fit);
+        if (width < 0) width = 0;
+        child->grid_row_span = (uint8_t)span;
+        child->grid_col_span = 1;
+        work->row[k] = best;
+        work->col[k] = 0;
+        work->item_x[k] = limit_coord(cx + left);
+        work->item_w[k] = width;
+        child_w = grid_item_width(n, child, width, items->node[k]);
+        height = measure_area_height(d, items->node[k], child_w, depth + 1);
+        if (height < 0) height = 0;
+        work->item_h[k] = height;
+        work->baseline[k] = 0;
+        for (j = best; j < best + span; j++) running[j] = left + width + gx;
+        if (left + width > widest) widest = left + width;
+        if (span == 1) {
+            if (fixed[best] < 0 && height > work->height[best]) work->height[best] = height;
+        } else {
+            int have = (span - 1) * gy, last = best + span - 1;
+            for (j = best; j < best + span; j++) have += work->height[j];
+            if (height > have && fixed[last] < 0) work->height[last] += height - have;
+        }
+    }
+    if (widest > cw) diag(d, "grid width overflow", idx);
+    work->column[0] = cw; work->column_x[0] = cx;
+    for (r = 0, y = cy; r < rows; r++) {
+        work->row_y[r] = limit_coord(y);
+        y += work->height[r] + (r + 1 < rows ? gy : 0);
+    }
+    return rows;
+}
+
 static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) {
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[depth];
@@ -9373,6 +9480,7 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     count = collect_items(d, idx, items);
     cols = n->grid_cols ? n->grid_cols : 1;
     w_zero(work, sizeof(*work));
+    if (n->masonry == 2) return masonry_columns(d, idx, items, work, count, cx, cy, cw, gx, gy, depth);
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
         int end = child->grid_col_start ? child->grid_col_start + child->grid_col_span - 1 : child->grid_col_span;
@@ -9564,6 +9672,7 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
          * grid_item_width keeps the full track width). */
         if (subgrid_on(items->node[k], 1)) vertical = WE_PACK_STRETCH;
         width = work->column_x[c + child->grid_col_span - 1] + work->column[c + child->grid_col_span - 1] - work->column_x[c];
+        if (n->masonry == 2) width = work->item_w[k];
         height = work->row_y[r + child->grid_row_span - 1] + work->height[r + child->grid_row_span - 1] - work->row_y[r];
         child_width = grid_item_width(n, child, width, items->node[k]);
         {
@@ -9576,7 +9685,7 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
         if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) && vertical == WE_PACK_STRETCH && child->height < 0 && !child->height_percent)
             child_height = height_constraint(d, items->node[k], height - vertical_extra(child) - child->margin[0] - child->margin[2], fixed_height) + vertical_extra(child) + child->margin[0] + child->margin[2];
         if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) && vertical == WE_PACK_STRETCH && child->height < 0 && !child->height_percent) assigned_h = child_height;
-        x = work->column_x[c] + ((child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ?
+        x = (n->masonry == 2 ? work->item_x[k] : work->column_x[c]) + ((child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ?
             horizontal_auto(child, width, child_width - child->margin[1] - child->margin[3], 0) :
             pack_distance(horizontal, width - child_width, 0, 1));
         if (child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) {
@@ -12365,6 +12474,7 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     d->viewport_w = (int16_t)(viewport_w > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : viewport_w);
     d->viewport_h = (int16_t)viewport_h;
     d->scroll_y = 0;
+    track_pool_doc = d;
     w_zero(static_set, sizeof(static_set));
     d->nitems = 0; math_refused = 0; wavy_decoration = 0; gradient_banded = 0; text_shadow_blur = 0; radius_stepped = 0; radius_square = 0; baseline_probe = 0; probe_level = probe_count = 0;
     d->perf.boxes = d->perf.lines = d->perf.items_dropped = 0;

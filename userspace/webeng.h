@@ -232,6 +232,8 @@ enum { WE_WRAP_NORMAL, WE_WRAP_BREAK_WORD, WE_WRAP_ANYWHERE };
 #define WE_MATH_DEPTH_MAX 4
 #define WE_MATH_LITERAL_MAX 2000
 #define WE_MATH_VALUE_MAX 1000000
+#define WE_TRACK_POOL_MAX 32
+#define WE_TRACK_POOLED (-32768)
 #define WE_DOCUMENT_MAX (1024 * 1024)
 enum { WE_LEN_WIDTH, WE_LEN_HEIGHT, WE_LEN_MIN_W, WE_LEN_MAX_W, WE_LEN_MIN_H, WE_LEN_MAX_H,
        WE_LEN_BASIS, WE_LEN_LEFT, WE_LEN_TOP, WE_LEN_RIGHT, WE_LEN_BOTTOM, WE_LEN_ROW_GAP, WE_LEN_COL_GAP,
@@ -611,6 +613,10 @@ typedef struct {
      * the number of controls with an ordinal */
     we_forms_t *forms;
     uint16_t nform_ctl;
+    /* Lot 82: non-linear min()/max()/clamp() track lengths with a
+     * percentage, kept whole and evaluated against the track base. */
+    we_length_t track_pool[WE_TRACK_POOL_MAX];
+    uint8_t ntrack_pool;
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 
