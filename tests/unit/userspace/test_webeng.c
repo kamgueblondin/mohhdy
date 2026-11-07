@@ -333,6 +333,13 @@ static void test_flex_and_grid(void) {
 #include "webeng_lot79_space.inc"
 #include "webeng_lot79_auto.inc"
 #include "webeng_lot79_edges.inc"
+#include "webeng_lot80_tracks.inc"
+#include "webeng_lot80_auto.inc"
+#include "webeng_lot80_rows.inc"
+#include "webeng_lot80_minmax.inc"
+#include "webeng_lot80_gap.inc"
+#include "webeng_lot80_stretch.inc"
+#include "webeng_lot80_edges.inc"
 
 int main(void) {
     unity_init();
@@ -1921,6 +1928,7 @@ int main(void) {
     lot79_space_run();
     lot79_auto_run();
     lot79_edges_run();
+    lot80_tracks_run(); lot80_auto_run(); lot80_rows_run(); lot80_minmax_run(); lot80_gap_run(); lot80_stretch_run(); lot80_edges_run();
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

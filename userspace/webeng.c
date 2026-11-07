@@ -1469,8 +1469,8 @@ static void set_math(we_node_t *n, int slot, const we_length_t *expr) {
     } else if (slot >= WE_LEN_LEFT && slot <= WE_LEN_BOTTOM) {
         static const uint8_t flags[] = {WE_INSET_LEFT, WE_INSET_TOP, WE_INSET_RIGHT, WE_INSET_BOTTOM};
         n->inset_flags |= flags[slot - WE_LEN_LEFT];
-    } else if (slot == WE_LEN_ROW_GAP) n->row_gap = (int16_t)fixed;
-    else n->col_gap = (int16_t)fixed;
+    } else if (slot == WE_LEN_ROW_GAP) { n->row_gap = (int16_t)fixed; n->gap_pct[1] = 0; }
+    else { n->col_gap = (int16_t)fixed; n->gap_pct[0] = 0; }
 }
 
 static int parse_pack(const char *v, int len, int distribution, int stretch) {
@@ -1534,8 +1534,8 @@ static int track_token(const char *v, int len, int16_t *size) {
         *size = (int16_t)-n;
         return 0;
     }
-    if (parse_dimension(v, len, &n, &percent) || percent) return -1;
-    *size = (int16_t)n;
+    if (parse_dimension(v, len, &n, &percent)) return -1;
+    *size = (int16_t)(percent ? WE_TRACK_PCT - n : n);
     return 0;
 }
 
@@ -1549,8 +1549,8 @@ static int track_value(const char *v, int len, int16_t *size, int16_t *low, int1
         while (end < len && v[end] != ',') end++;
         if (end == len) return -1;
         { int last = end; while (last > start && w_space(v[last - 1])) last--;
-          if (parse_dimension(v + start, last - start, &number, &percent) || percent) return -1; }
-        *low = (int16_t)number;
+          if (parse_dimension(v + start, last - start, &number, &percent)) return -1; }
+        *low = (int16_t)(percent ? WE_TRACK_PCT - number : number);
         start = end + 1;
         while (start < len && w_space(v[start])) start++;
         end = len;
@@ -1559,7 +1559,10 @@ static int track_value(const char *v, int len, int16_t *size, int16_t *low, int1
         end--;
         while (end > start && w_space(v[end - 1])) end--;
         if (track_token(v + start, end - start, size)) return -1;
-        if (*size >= 0) {
+        if (WE_TRACK_IS_PCT(*size) || WE_TRACK_IS_PCT(*low)) {
+            /* lot 80: a percentage bound is ordered at resolve time. */
+            if (*size >= 0 || WE_TRACK_IS_PCT(*size)) { *cap = *size; *size = WE_TRACK_AUTO; }
+        } else if (*size >= 0) {
             *cap = *size < *low ? *low : *size;
             *size = WE_TRACK_AUTO;
         }
@@ -1570,8 +1573,8 @@ static int track_value(const char *v, int len, int16_t *size, int16_t *low, int1
         if (end <= start || v[--end] != ')') return -1;
         while (start < end && w_space(v[start])) start++;
         while (end > start && w_space(v[end - 1])) end--;
-        if (parse_dimension(v + start, end - start, &number, &percent) || percent) return -1;
-        *size = WE_TRACK_AUTO; *low = 0; *cap = (int16_t)number;
+        if (parse_dimension(v + start, end - start, &number, &percent)) return -1;
+        *size = WE_TRACK_AUTO; *low = 0; *cap = (int16_t)(percent ? WE_TRACK_PCT - number : number);
         return 0;
     }
     return track_token(v, len, size);
@@ -1583,8 +1586,8 @@ typedef struct { int mode, at; } we_auto_repeat_t;
 
 /* A definite track: fixed, or minmax with a fixed floor and a fr or fixed cap. */
 static int definite_track(int size, int low, int cap) {
-    if (size >= 0) return 1;
-    return low >= 0 && (size != WE_TRACK_AUTO || cap >= 0);
+    if (size >= 0 || WE_TRACK_IS_PCT(size)) return 1;
+    return (low >= 0 || WE_TRACK_IS_PCT(low)) && (size != WE_TRACK_AUTO || cap >= 0 || WE_TRACK_IS_PCT(cap));
 }
 
 static int parse_track_list(const char *v, int len, int16_t *sizes, int16_t *floors, int16_t *caps,
@@ -2475,7 +2478,7 @@ static int functional_tokens(const char *v, int len, int *starts, int *lengths, 
 }
 
 static int gap_declaration(we_node_t *n, const char *v, int len) {
-    int starts[2], lengths[2], values[2], count = functional_tokens(v, len, starts, lengths, 2), i, percent;
+    int starts[2], lengths[2], values[2], count = functional_tokens(v, len, starts, lengths, 2), i, percent, pct[2] = {0, 0};
     we_length_t expr[2];
     if (count < 1) return -1;
     w_zero(expr, sizeof(expr));
@@ -2485,14 +2488,16 @@ static int gap_declaration(we_node_t *n, const char *v, int len) {
             if (math_eval(&expr[i], 0, &values[i])) return -1;
             if (values[i] < 0) values[i] = 0;
             if (values[i] > WE_LAYOUT_MAX) values[i] = WE_LAYOUT_MAX;
-        } else if (parse_dimension(v + starts[i], lengths[i], &values[i], &percent) || percent) return -1;
+        } else if (parse_dimension(v + starts[i], lengths[i], &values[i], &percent)) return -1;
+        else if (percent) { pct[i] = 0x8000 | values[i]; values[i] = 0; }
     }
-    if (count == 1) { values[1] = values[0]; expr[1] = expr[0]; }
+    if (count == 1) { values[1] = values[0]; expr[1] = expr[0]; pct[1] = pct[0]; }
+    n->gap_pct[1] = (uint16_t)pct[0]; n->gap_pct[0] = (uint16_t)pct[1];
     n->length[WE_LEN_ROW_GAP] = expr[0]; n->length[WE_LEN_COL_GAP] = expr[1];
     n->gap = (int16_t)values[0];
     n->gap_set = 3;
-    n->row_gap = count == 1 && !expr[0].count ? -1 : (int16_t)values[0];
-    n->col_gap = count == 1 && !expr[1].count ? -1 : (int16_t)values[1];
+    n->row_gap = count == 1 && !expr[0].count && !pct[0] ? -1 : (int16_t)values[0];
+    n->col_gap = count == 1 && !expr[1].count && !pct[1] ? -1 : (int16_t)values[1];
     return 0;
 }
 
@@ -4078,7 +4083,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
                w_eq(prop, "align-items") || w_eq(prop, "align-self") ||
                w_eq(prop, "justify-items") || w_eq(prop, "justify-self")) {
         int distribution = w_eq(prop, "justify-content") || w_eq(prop, "align-content");
-        int value = parse_pack(v, vl, distribution, !w_eq(prop, "justify-content"));
+        int value = parse_pack(v, vl, distribution, 1);
         if ((w_eq(prop, "align-items") || w_eq(prop, "align-self")) &&
             (value_is(v, vl, "baseline") || value_is(v, vl, "first baseline"))) value = WE_PACK_BASELINE;
         if ((w_eq(prop, "align-items") || w_eq(prop, "align-self")) && value_is(v, vl, "last baseline"))
@@ -4108,7 +4113,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             }
             if (w_eq(prop, "place-self") && value_is(v + a[0], lengths[0], "auto")) first = 0;
             if (c == 2) {
-                second = parse_pack(v + a[1], lengths[1], distribution, !distribution);
+                second = parse_pack(v + a[1], lengths[1], distribution, 1);
                 if (w_eq(prop, "place-self") && value_is(v + a[1], lengths[1], "auto")) second = 0;
             } else second = first;
             if (first < 0 || second < 0) diag(d, "place alignment refused", -1);
@@ -4125,9 +4130,14 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         }
     } else if (w_eq(prop, "row-gap") || w_eq(prop, "column-gap")) {
         int number, percent;
-        if (parse_dimension(v, vl, &number, &percent) || percent) diag(d, "axis gap refused", -1);
-        else if (w_eq(prop, "row-gap")) { n->row_gap = (int16_t)number; n->gap_set |= 2; }
-        else { n->col_gap = (int16_t)number; n->gap_set |= 1; }
+        if (parse_dimension(v, vl, &number, &percent)) diag(d, "axis gap refused", -1);
+        else if (w_eq(prop, "row-gap")) {
+            n->row_gap = (int16_t)(percent ? 0 : number); n->gap_set |= 2;
+            n->gap_pct[1] = (uint16_t)(percent ? 0x8000 | number : 0);
+        } else {
+            n->col_gap = (int16_t)(percent ? 0 : number); n->gap_set |= 1;
+            n->gap_pct[0] = (uint16_t)(percent ? 0x8000 | number : 0);
+        }
     } else if (w_eq(prop, "grid-auto-flow")) {
         int a[4], lengths[4], c = tokens(v, vl, a, lengths), dense = 0, column = 0, axis = 0, ok = c >= 1 && c <= 2;
         for (k = 0; k < c && k < 2; k++) {
@@ -4830,6 +4840,8 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->auto_mode[0] = n->auto_mode[1] = n->tpl_count[0] = n->tpl_count[1] = 0;
         n->subgrid[0] = n->subgrid[1] = 0;
         n->sub_gap[0] = n->sub_gap[1] = 0;
+        n->track_base[0] = n->track_base[1] = -1;
+        n->gap_pct[0] = n->gap_pct[1] = 0;
         w_zero(n->grid_request, sizeof(n->grid_request));
         n->grid_col_start = n->grid_row_start = 0;
         n->grid_dense = n->grid_column_flow = n->area_count = n->area_rows = n->area_cols = 0;
@@ -6095,6 +6107,19 @@ static int own_axis_gap(const we_node_t *n, int vertical) {
 static int axis_gap(const we_node_t *n, int vertical) {
     if (n->sub_gap[vertical] > 0) return n->sub_gap[vertical] - 1;
     return own_axis_gap(n, vertical);
+}
+
+static int definite_height(const we_doc_t *d, int idx, int depth);
+
+/* Lot 80: a percentage gap resolves against the content box of its axis:
+ * the inline size for column-gap, a definite block size for row-gap, else 0. */
+static int layout_gap(const we_doc_t *d, int idx, int vertical, int width) {
+    const we_node_t *n = &d->nodes[idx];
+    int base;
+    if (n->sub_gap[vertical] > 0 || !(n->gap_pct[vertical] & 0x8000)) return axis_gap(n, vertical);
+    base = vertical ? definite_height(d, idx, 0) : width;
+    if (base <= 0) return 0;
+    { long g = (long)base * (n->gap_pct[vertical] & 0x7fff) / 100; return g > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : (int)g; }
 }
 
 static int vertical_extra(const we_node_t *n) {
@@ -8653,7 +8678,16 @@ typedef char layout_workspace_is_bounded[
     sizeof(containing_height) + sizeof(flow_baseline) + sizeof(measure_content) + sizeof(measure_cache) + sizeof(int16_t) * WE_MAX_ITEMS +
     sizeof(os_fb_web_item_t) * WE_MAX_ITEMS <= WE_LAYOUT_WORKSPACE_MAX ? 1 : -1];
 
-static int track_extent(int size, int low, int cap) {
+static int track_resolve(const we_node_t *n, int axis, int v, int size) {
+    int base = n->track_base[axis];
+    if (!WE_TRACK_IS_PCT(v)) return v;
+    if (base < 0) return size ? WE_TRACK_AUTO : -1;
+    return (int)((long)base * (WE_TRACK_PCT - v) / 100);
+}
+
+static int track_extent(const we_node_t *n, int axis, int size, int low, int cap) {
+    size = track_resolve(n, axis, size, 1); low = track_resolve(n, axis, low, 0); cap = track_resolve(n, axis, cap, 0);
+    if (cap >= 0 && cap < low) cap = low;
     if (size >= 0) return size;
     if (cap >= 0) return cap;
     return low > 0 ? low : 0;
@@ -8666,9 +8700,9 @@ static void grid_expand(we_node_t *n, int axis, int available, int gap) {
     int16_t *size = axis ? n->row_size : n->col_size;
     int16_t *low = axis ? n->row_floor : n->col_floor, *cap = axis ? n->row_cap : n->col_cap;
     if (!n->auto_mode[axis] || total < 1) return;
-    repeat = track_extent(n->tpl_size[axis][at], n->tpl_floor[axis][at], n->tpl_cap[axis][at]);
+    repeat = track_extent(n, axis, n->tpl_size[axis][at], n->tpl_floor[axis][at], n->tpl_cap[axis][at]);
     for (k = 0; k < total; k++)
-        if (k != at) other += track_extent(n->tpl_size[axis][k], n->tpl_floor[axis][k], n->tpl_cap[axis][k]);
+        if (k != at) other += track_extent(n, axis, n->tpl_size[axis][k], n->tpl_floor[axis][k], n->tpl_cap[axis][k]);
     if (available >= 0)
         while (total + copies <= WE_TRACKS_MAX &&
                other + (copies + 1) * repeat + (total + copies - 1) * gap <= available) copies++;
@@ -8755,18 +8789,23 @@ static int grid_place(we_doc_t *d, we_track_work_t *items, we_grid_work_t *work,
 
 static int grid_spec(const we_node_t *n, int vertical, int k) {
     int declared = vertical ? n->grid_rows : n->grid_cols;
-    return k < declared ? (vertical ? n->row_size[k] : n->col_size[k]) : (vertical ? n->auto_row : n->auto_col);
+    return track_resolve(n, vertical, k < declared ? (vertical ? n->row_size[k] : n->col_size[k]) : (vertical ? n->auto_row : n->auto_col), 1);
 }
 
 static int grid_floor(const we_node_t *n, int vertical, int k) {
     int declared = vertical ? n->grid_rows : n->grid_cols;
     int low = k < declared ? (vertical ? n->row_floor[k] : n->col_floor[k]) : (vertical ? n->auto_row_floor : n->auto_col_floor);
+    low = track_resolve(n, vertical, low, 0);
     return low < 0 ? 0 : low;
 }
 
+/* lot 80: a percentage bound may resolve below its floor; minmax keeps the floor. */
 static int grid_cap(const we_node_t *n, int vertical, int k) {
     int declared = vertical ? n->grid_rows : n->grid_cols;
-    return k < declared ? (vertical ? n->row_cap[k] : n->col_cap[k]) : (vertical ? n->auto_row_cap : n->auto_col_cap);
+    int cap = k < declared ? (vertical ? n->row_cap[k] : n->col_cap[k]) : (vertical ? n->auto_row_cap : n->auto_col_cap);
+    int low = grid_floor(n, vertical, k);
+    cap = track_resolve(n, vertical, cap, 0);
+    return cap >= 0 && cap < low ? low : cap;
 }
 
 /* Fractions share a common unit. Freeze floors above that unit and solve
@@ -9017,7 +9056,9 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     we_grid_work_t *work = &grid_work[depth];
     int count, cols, seen;
     int rows, k, used_width, used_height, fixed_height = definite_height(d, idx, 0);
-    int gx = axis_gap(n, 0), gy = axis_gap(n, 1), position;
+    int gx = layout_gap(d, idx, 0, cw), gy = layout_gap(d, idx, 1, cw), position;
+    n->track_base[0] = (int16_t)(cw < 0 ? -1 : cw > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : cw);
+    n->track_base[1] = (int16_t)(fixed_height < 0 ? -1 : fixed_height > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : fixed_height);
     if (n->auto_mode[0] || n->auto_mode[1]) {
         int c;
         grid_expand(n, 0, cw, gx);
@@ -9061,6 +9102,17 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     fit_auto_columns(n, cols, cw, gx, work->minimum, work->column);
     used_width = grid_track_sizes(n, 0, cols, cw, gx, work->column, work->collapsed[0]);
     if (used_width > cw) diag(d, "grid width overflow", idx);
+    /* Lot 80: justify-content:stretch grows auto-max columns equally. */
+    if (n->justify_content == WE_PACK_STRETCH && cw > used_width) {
+        int receivers = 0, remaining = cw - used_width;
+        for (k = 0; k < cols; k++)
+            if (!work->collapsed[0][k] && grid_spec(n, 0, k) == WE_TRACK_AUTO && grid_cap(n, 0, k) < 0) receivers++;
+        for (k = 0; k < cols && receivers; k++)
+            if (!work->collapsed[0][k] && grid_spec(n, 0, k) == WE_TRACK_AUTO && grid_cap(n, 0, k) < 0) {
+                int extra = remaining / receivers + (remaining % receivers != 0);
+                work->column[k] += extra; remaining -= extra; used_width += extra; receivers--;
+            }
+    }
     position = cx; seen = 0;
     for (k = 0; k < cols; k++) {
         if (seen && !work->collapsed[0][k]) position += gx;
@@ -9126,10 +9178,10 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     {
         int receivers = 0, remaining = fixed_height > used_height ? fixed_height - used_height : 0;
         for (k = 0; k < rows; k++)
-            if (k >= n->grid_rows || n->row_size[k] == WE_TRACK_AUTO) receivers++;
+            if (grid_spec(n, 1, k) == WE_TRACK_AUTO) receivers++;
         for (k = 0; k < rows; k++) {
             int extra = 0;
-            if (n->align_content == WE_PACK_STRETCH && receivers && (k >= n->grid_rows || n->row_size[k] == WE_TRACK_AUTO)) {
+            if (n->align_content == WE_PACK_STRETCH && receivers && grid_spec(n, 1, k) == WE_TRACK_AUTO) {
                 extra = remaining / receivers + (remaining % receivers != 0);
                 remaining -= extra;
                 receivers--;
@@ -9492,7 +9544,7 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
     int vertical = n->flex_dir != 0;
     int main = vertical ? definite_height(d, idx, 0) : cw;
     int cross_available = vertical ? cw : definite_height(d, idx, 0);
-    int gap = axis_gap(n, vertical), cross_gap = axis_gap(n, !vertical);
+    int gap = layout_gap(d, idx, vertical, cw), cross_gap = layout_gap(d, idx, !vertical, cw);
     int wrap = n->flex_wrap && main >= 0;
     int k, lines = 0, cross_total = 0;
     if (n->flex_wrap && main < 0) diag(d, "column wrap requires height", idx);

@@ -488,16 +488,17 @@ static void test_l57_bad_track_31(void) {
         "<div id=g style='display:grid;width:120px;grid-template-columns:30px 1fr;grid-template-columns:minmax(10%,1fr);'>"
         "<div id=a style='height:10px;background:red'></div><div id=b style='height:10px;background:blue'></div></div>"
         "</body>", 320);
+    /* Lot 80 review point: percentage track bounds now resolve (were refused). */
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
-    TEST_ASSERT_EQUAL(30, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(120, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(10, lot52_node("a")->h);
-    TEST_ASSERT_EQUAL(30, lot52_node("b")->x);
-    TEST_ASSERT_EQUAL(0, lot52_node("b")->y);
-    TEST_ASSERT_EQUAL(90, lot52_node("b")->w);
+    TEST_ASSERT_EQUAL(0, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(10, lot52_node("b")->y);
+    TEST_ASSERT_EQUAL(120, lot52_node("b")->w);
     TEST_ASSERT_EQUAL(10, lot52_node("b")->h);
-    TEST_ASSERT_EQUAL(2, lot52_node("g")->grid_cols);
-    TEST_ASSERT_TRUE(lot52_has_diag("grid tracks refused"));
+    TEST_ASSERT_EQUAL(1, lot52_node("g")->grid_cols);
+    TEST_ASSERT_FALSE(lot52_has_diag("grid tracks refused"));
 }
 
 static void test_l57_bad_track_32(void) {
@@ -505,16 +506,17 @@ static void test_l57_bad_track_32(void) {
         "<div id=g style='display:grid;width:120px;grid-template-columns:30px 1fr;grid-template-columns:fit-content(10%);'>"
         "<div id=a style='height:10px;background:red'></div><div id=b style='height:10px;background:blue'></div></div>"
         "</body>", 320);
+    /* Lot 80 review point: percentage track bounds now resolve (were refused). */
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
-    TEST_ASSERT_EQUAL(30, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(10, lot52_node("a")->h);
-    TEST_ASSERT_EQUAL(30, lot52_node("b")->x);
-    TEST_ASSERT_EQUAL(0, lot52_node("b")->y);
-    TEST_ASSERT_EQUAL(90, lot52_node("b")->w);
+    TEST_ASSERT_EQUAL(0, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(10, lot52_node("b")->y);
+    TEST_ASSERT_EQUAL(0, lot52_node("b")->w);
     TEST_ASSERT_EQUAL(10, lot52_node("b")->h);
-    TEST_ASSERT_EQUAL(2, lot52_node("g")->grid_cols);
-    TEST_ASSERT_TRUE(lot52_has_diag("grid tracks refused"));
+    TEST_ASSERT_EQUAL(1, lot52_node("g")->grid_cols);
+    TEST_ASSERT_FALSE(lot52_has_diag("grid tracks refused"));
 }
 
 static void test_l57_bad_track_33(void) {

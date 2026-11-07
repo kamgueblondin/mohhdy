@@ -64,6 +64,10 @@ int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px);
 #define WE_LAYOUT_WORKSPACE_MAX (512 * 1024)
 #define WE_MEASURE_BUDGET (WE_MAX_NODES * WE_MAX_NODES)
 #define WE_TRACK_AUTO (-32768)
+/* lot 80: a percentage track is stored as WE_TRACK_PCT - pct (pct 0..2000),
+ * resolved against track_base at layout; never aliases fr (-1..-8) or auto. */
+#define WE_TRACK_PCT (-30000)
+#define WE_TRACK_IS_PCT(v) ((v) <= WE_TRACK_PCT && (v) >= WE_TRACK_PCT - 2000)
 #define WE_GRID_AREAS_MAX 8
 #define WE_GRID_NAME_MAX 16
 #define WE_GRID_LINE_ALIASES 2
@@ -314,6 +318,8 @@ typedef struct {
      * tracks, gap (sub_gap - 1, 0 when none) and line names in place. */
     uint8_t subgrid[2];
     int16_t sub_gap[2];
+    int16_t track_base[2];     /* lot 80: px base for % tracks, -1 indefinite */
+    uint16_t gap_pct[2];       /* lot 80: 0x8000 | pct for column [0] / row [1] gap */
     uint8_t gap_set;           /* lot 61: bit 0 column, bit 1 row gap declared */
     we_grid_request_t grid_request[2];
     int16_t col_size[WE_TRACKS_MAX];
