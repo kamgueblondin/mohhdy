@@ -299,10 +299,12 @@ static void test_l55_flex_invalid_gap_preserves_axes(void) {
     lot52_render("<body style='margin:0'><div id=r style='display:flex;gap:4px 8px;gap:1px 2px 3px;column-gap:10%'>"
         "<div id=a style='width:20px;height:10px'></div><div id=b style='width:20px;height:10px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(4, lot52_node("r")->row_gap);
-    TEST_ASSERT_EQUAL(8, lot52_node("r")->col_gap);
-    TEST_ASSERT_EQUAL(28, lot52_node("b")->x);
+    /* Lot 80 review point: column-gap:10% now resolves against the 320px row. */
+    TEST_ASSERT_EQUAL(0, lot52_node("r")->col_gap);
+    TEST_ASSERT_EQUAL(0x8000 | 10, lot52_node("r")->gap_pct[0]);
+    TEST_ASSERT_EQUAL(52, lot52_node("b")->x);
     TEST_ASSERT_TRUE(lot52_has_diag("gap refused"));
-    TEST_ASSERT_TRUE(lot52_has_diag("axis gap refused"));
+    TEST_ASSERT_FALSE(lot52_has_diag("axis gap refused"));
 }
 
 static void test_l55_flex_wrap_line_justify_independent(void) {

@@ -384,7 +384,7 @@ static void test_l55_grid_hidden_display_does_not_occupy(void) {
 
 static void test_l55_grid_repeat_count_and_weight_bounds(void) {
     static const char *invalid[] = {"repeat(0,1fr)", "repeat(9,1fr)", "repeat(2,0fr)",
-        "repeat(2,9fr)", "repeat(2,20%)", "20px 0fr", "-1px 1fr", "999999999999px"};
+        "repeat(2,9fr)", /* lot 80: repeat(2,20%) now valid */ "20px 0fr", "-1px 1fr", "999999999999px"};
     unsigned i;
     for (i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
         char html[600];
