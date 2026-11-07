@@ -68,6 +68,13 @@ int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px);
  * resolved against track_base at layout; never aliases fr (-1..-8) or auto. */
 #define WE_TRACK_PCT (-30000)
 #define WE_TRACK_IS_PCT(v) ((v) <= WE_TRACK_PCT && (v) >= WE_TRACK_PCT - 2000)
+/* lot 81: a linear calc() track (px + pct) is stored as WE_TRACK_CALC - slot,
+ * the slot indexing the node's track_calc table (template axis 0: 0..11,
+ * axis 1: 12..23, grid-auto-columns: 24..27, grid-auto-rows: 28..31). */
+#define WE_TRACK_CALC (-29000)
+#define WE_TRACK_CALC_MAX 32
+#define WE_TRACK_IS_CALC(v) ((v) <= WE_TRACK_CALC && (v) > WE_TRACK_CALC - WE_TRACK_CALC_MAX)
+#define WE_TRACK_IS_MARK(v) (WE_TRACK_IS_PCT(v) || WE_TRACK_IS_CALC(v))
 #define WE_GRID_AREAS_MAX 8
 #define WE_GRID_NAME_MAX 16
 #define WE_GRID_LINE_ALIASES 2
@@ -280,6 +287,8 @@ typedef struct {
     uint8_t span_refused, colspan;
     /* computed style */
     uint8_t display, bold, align, has_bg;
+    uint8_t inline_outer;      /* lot 81: inline-flex / inline-grid (display keeps FLEX/GRID) */
+    uint8_t masonry;           /* lot 81: grid-template-rows: masonry */
     uint8_t flex_dir;          /* 0 row, 1 column (display:flex) */
     uint8_t grid_cols;         /* 1..8 when display:grid, else 0 */
     uint8_t flex_wrap, float_side, grid_rows, relative;
@@ -318,7 +327,9 @@ typedef struct {
      * tracks, gap (sub_gap - 1, 0 when none) and line names in place. */
     uint8_t subgrid[2];
     int16_t sub_gap[2];
+    char sub_names[2][40];     /* lot 81: subgrid [a] [b] ... local line names, raw groups */
     int16_t track_base[2];     /* lot 80: px base for % tracks, -1 indefinite */
+    int16_t track_calc[WE_TRACK_CALC_MAX][2]; /* lot 81: calc() tracks: px, pct * 100 */
     uint16_t gap_pct[2];       /* lot 80: 0x8000 | pct for column [0] / row [1] gap */
     uint8_t gap_set;           /* lot 61: bit 0 column, bit 1 row gap declared */
     we_grid_request_t grid_request[2];
@@ -331,6 +342,8 @@ typedef struct {
     char grid_area[WE_GRID_NAME_MAX];
     uint8_t object_fit, object_fit_set;
     int16_t object_x, object_y;
+    int16_t object_dx, object_dy; /* lot 81: px offsets added to the percentage position */
+    uint8_t aspect_auto;       /* lot 81: aspect-ratio auto && <ratio> (images keep natural ratio) */
     int16_t row_gap, col_gap;
     int16_t height_pct, min_height_pct, max_height_pct;
     uint8_t height_percent, min_height_percent, max_height_percent;

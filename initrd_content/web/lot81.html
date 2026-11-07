@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Lot 81</title>
+<style>
+body{margin:8px;font-family:monospace}
+.ig{display:inline-grid;grid-template-columns:30px;background:#ccc}
+.ig div{height:10px}
+#m{display:grid;width:100px;grid-template-columns:50px 50px;grid-template-rows:masonry;margin-top:8px}
+#m div{background:#999}
+.fw{height:24px}
+#cg{display:grid;width:200px;grid-template-columns:50px 50px;column-gap:calc(10% + 4px)}
+#ct{display:grid;width:200px;grid-template-columns:calc(50% - 10px) 1fr;margin-top:8px}
+#cg div,#ct div{height:10px;background:#aaa}
+</style></head>
+<body>
+<!-- Lot 81: inline-grid, masonry rows, shrink-to-fit floats, aspect-ratio, calc() gaps and tracks. -->
+<h1>Lot 81</h1>
+<div id="ib"><div id="i1" class="ig"><div></div></div><div id="i2" class="ig"><div></div></div></div>
+<div id="m"><div id="m1" style="height:20px"></div><div id="m2" style="height:10px"></div><div id="m3" style="height:10px"></div></div>
+<div class="fw"><div id="fl" style="float:left;height:10px;background:#888"><div style="width:40px;height:4px"></div></div></div>
+<div class="fw"><div id="ar" style="float:left;height:20px;aspect-ratio:1.5;background:#777"></div></div>
+<div id="cg"><div id="g1"></div><div id="g2"></div></div>
+<div id="ct"><div id="t1"></div><div id="t2"></div></div>
+</body></html>

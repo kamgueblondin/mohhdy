@@ -2249,11 +2249,13 @@ static void test_l52_float_auto_width_uses_bounded_half_container(void) {
     floating = lot52_node("f");
     word = find_text("word");
     TEST_ASSERT_NOT_NULL(word);
+    /* Lot 81 review point: an auto-width float shrinks to fit its content
+     * (empty here, so the WE_CHAR_W floor) instead of half the container. */
     TEST_ASSERT_EQUAL(-1, floating->width);
-    TEST_ASSERT_EQUAL(60, floating->w);
+    TEST_ASSERT_EQUAL(WE_CHAR_W, floating->w);
     TEST_ASSERT_EQUAL(20, floating->h);
     TEST_ASSERT_EQUAL(0, floating->x);
-    TEST_ASSERT_EQUAL(60, word->x);
+    TEST_ASSERT_EQUAL(WE_CHAR_W, word->x);
     TEST_ASSERT_EQUAL(1, word->y);
     TEST_ASSERT_EQUAL(20, lot52_node("p")->h);
     TEST_ASSERT_EQUAL(1, g_doc.perf.floats);

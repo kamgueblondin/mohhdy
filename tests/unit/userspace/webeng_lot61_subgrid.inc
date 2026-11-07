@@ -99,10 +99,14 @@ static void test_l61_subgrid_unresolved_name_reported_once(void) {
 static void test_l61_subgrid_line_name_list_is_refused(void) {
     lot52_render(L61_SUB_PARENT "<div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid [a] [b]'>"
         "<div id=a>A</div><div id=b>B</div></div></div></body>", 320);
-    TEST_ASSERT_EQUAL(0, lot52_node("s")->subgrid[0]);
-    l61_box("a", 0, 0, 100, 10);
-    l61_box("b", 0, 10, 100, 10);
-    TEST_ASSERT_TRUE(lot52_has_diag("subgrid line names refused"));
+    /* Lot 81 review point: subgrid with a line-name list is now a subgrid
+     * whose lines carry the local names (was refused). */
+    TEST_ASSERT_EQUAL(1, lot52_node("s")->subgrid[0]);
+    TEST_ASSERT_EQUAL_STRING("a", lot52_node("s")->line_names[0].name[0][0]);
+    TEST_ASSERT_EQUAL_STRING("b", lot52_node("s")->line_names[0].name[1][0]);
+    l61_box("a", 0, 0, 50, 10);
+    l61_box("b", 50, 0, 50, 10);
+    TEST_ASSERT_FALSE(lot52_has_diag("subgrid line names refused"));
 }
 
 static void test_l61_subgrid_without_grid_parent_is_refused(void) {
@@ -122,10 +126,13 @@ static void test_l61_subgrid_on_a_block_is_refused(void) {
 static void test_l61_subgrid_nested_is_refused(void) {
     lot52_render(L61_SUB_PARENT "<div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid'>"
         "<div id=t style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid'><div id=a>A</div><div id=b>B</div></div></div></div></body>", 320);
-    l61_box("t", 0, 0, 100, 20);
-    l61_box("a", 0, 0, 100, 10);
-    l61_box("b", 0, 10, 100, 10);
-    TEST_ASSERT_TRUE(lot52_has_diag("nested subgrid refused"));
+    /* Lot 81 review point: a nested subgrid now inherits its subgrid parent's
+     * tracks (was refused and laid out as a one-column grid). */
+    l61_box("t", 0, 0, 100, 10);
+    l61_box("a", 0, 0, 50, 10);
+    l61_box("b", 50, 0, 50, 10);
+    TEST_ASSERT_FALSE(lot52_has_diag("nested subgrid refused"));
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l61_subgrid_padding_on_axis_is_refused(void) {
