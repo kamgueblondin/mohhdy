@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Lot 82</title>
+<style>
+body{margin:8px;font-family:monospace}
+#g{display:grid;width:200px;grid-template-columns:min(50%, 60px) 1fr}
+#g div,#cl div{height:10px;background:#ccc}
+#p{display:grid;width:100px;grid-template-columns:50px 50px;margin-top:8px}
+#s{display:grid;grid-column:1 / 3;grid-template-columns:subgrid;padding-left:4px;background:#eee}
+#s div{height:10px;background:#999}
+#m{display:grid;width:100px;grid-template-columns:masonry;grid-template-rows:10px 10px;margin-top:8px}
+#m div{background:#888}
+#cl{display:grid;width:200px;grid-template-columns:30px 30px;column-gap:clamp(4px, 10%, 30px);margin-top:8px}
+</style></head>
+<body>
+<!-- Lot 82: min()/max()/clamp() percentages, subgrid edge offsets, masonry columns. -->
+<h1>Lot 82</h1>
+<div id="g"><div id="a"></div><div id="b"></div></div>
+<div id="p"><div id="s"><div id="i0"></div><div id="i1"></div></div></div>
+<div id="m"><div id="m0" style="width:30px"></div><div id="m1" style="width:20px"></div><div id="m2" style="width:10px"></div></div>
+<div id="cl"><div id="g1"></div><div id="g2"></div></div>
+</body></html>
