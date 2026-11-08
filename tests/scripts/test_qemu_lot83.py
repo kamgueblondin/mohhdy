@@ -94,8 +94,8 @@ def main():
             box("fi", (8, None, 70, 20))
             j0 = box("j0", (8, None, 50, 10))
             box("j1", (58, j0[1], 50, 10))
-            t0 = box("t0", (8, None, 30, 10))
-            box("t1", (8, t0[1] + 10, 20, 20))
+            s0 = box("t0", (8, None, 30, 10))
+            box("t1", (8, s0[1] + 10, 20, 20))
             say("lot83 qemu ok in %.1fs" % (time.monotonic() - t0))
             return 0
     finally:
