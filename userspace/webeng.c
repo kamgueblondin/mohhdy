@@ -2250,11 +2250,10 @@ static void subgrid_validate(we_doc_t *d) {
             int a = axis ? 0 : 3, b = axis ? 2 : 1;
             if (!n->subgrid[axis]) continue;
             /* Lot 82: padding, border and margin are edge offsets (CSS Grid 2,
-             * 9.3); auto margins still have no inherited track to absorb. */
+             * 9.3). Lot 83: auto margins are no longer refused: a subgrid
+             * always fills its area on a subgridded axis (the subgrid layout
+             * never reads margin_auto there), so they compute to zero. */
             (void)a; (void)b;
-            /* Lot 83: a subgrid always fills its area on a subgridded axis;
-             * auto margins there compute to zero (no free space to absorb). */
-            n->margin_auto &= (uint8_t)~(axis ? (WE_AUTO_TOP | WE_AUTO_BOTTOM) : (WE_AUTO_LEFT | WE_AUTO_RIGHT));
             subgrid_ok[i] |= (uint8_t)(1 << axis);
         }
     }
@@ -4799,8 +4798,9 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         } else diag(d, "width constraint refused", -1);
     } else if (w_eq(prop, "masonry-auto-flow")) {
         /* Lot 83: pack | next, optionally with definite-first | ordered
-         * (document order is already the placement order). */
-        int a[4], l[4], c = tokens(v, vl, a, l), k, mode = -1, order = 0, ok = c >= 1 && c <= 2;
+         * (document order is already the placement order). A blank value
+         * never reaches here; a third keyword always repeats a class. */
+        int a[4], l[4], c = tokens(v, vl, a, l), k, mode = -1, order = 0, ok = 1;
         for (k = 0; ok && k < c; k++) {
             const char *t = v + a[k];
             if (mode < 0 && (value_is(t, l[k], "pack") || value_is(t, l[k], "next"))) mode = value_is(t, l[k], "next");
