@@ -352,6 +352,14 @@ static void test_flex_and_grid(void) {
 #include "webeng_lot82_suboff.inc"
 #include "webeng_lot82_mcols.inc"
 #include "webeng_lot82_extra.inc"
+#include "webeng_lot83_spacing.inc"
+#include "webeng_lot83_spshort.inc"
+#include "webeng_lot83_spctx.inc"
+#include "webeng_lot83_subam.inc"
+#include "webeng_lot83_mnext.inc"
+#include "webeng_lot83_malign.inc"
+#include "webeng_lot83_mintr.inc"
+#include "webeng_lot83_extra.inc"
 
 int main(void) {
     unity_init();
@@ -1940,7 +1948,7 @@ int main(void) {
     lot79_space_run();
     lot79_auto_run();
     lot79_edges_run();
-    lot80_tracks_run(); lot80_auto_run(); lot80_rows_run(); lot80_minmax_run(); lot80_gap_run(); lot80_stretch_run(); lot80_edges_run(); lot81_inline_run(); lot81_masonry_run(); lot81_calcgap_run(); lot81_aspect_run(); lot81_objpos_run(); lot81_calctrack_run(); lot81_subgrid_run(); lot81_paint_run(); lot82_mathpct_run(); lot82_suboff_run(); lot82_mcols_run(); lot82_extra_run();
+    lot80_tracks_run(); lot80_auto_run(); lot80_rows_run(); lot80_minmax_run(); lot80_gap_run(); lot80_stretch_run(); lot80_edges_run(); lot81_inline_run(); lot81_masonry_run(); lot81_calcgap_run(); lot81_aspect_run(); lot81_objpos_run(); lot81_calctrack_run(); lot81_subgrid_run(); lot81_paint_run(); lot82_mathpct_run(); lot82_suboff_run(); lot82_mcols_run(); lot82_extra_run(); lot83_spacing_run(); lot83_spshort_run(); lot83_spctx_run(); lot83_subam_run(); lot83_mnext_run(); lot83_malign_run(); lot83_mintr_run(); lot83_extra_run();
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
