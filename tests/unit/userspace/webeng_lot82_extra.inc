@@ -8,7 +8,7 @@ static void l82_pool_page(char *html, int size, int grids) {
     snprintf(html + at, size - at, "</body>");
 }
 
-static char l82_html[16384];
+static char l82_html[32768];
 
 static void test_l82_pool_sixteen_grids_fit(void) {
     char id[8];
@@ -19,15 +19,26 @@ static void test_l82_pool_sixteen_grids_fit(void) {
     snprintf(id, sizeof id, "b15");
     TEST_ASSERT_EQUAL(35, lot52_node(id)->x);
     TEST_ASSERT_EQUAL(30, lot52_node(id)->w);
-    TEST_ASSERT_EQUAL(32, g_doc.ntrack_pool);
+    /* lot 83: the shared max(10%, 30px) is pooled once */
+    TEST_ASSERT_EQUAL(17, g_doc.ntrack_pool);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l82_pool_full_refuses_the_next_track_list(void) {
-    l82_pool_page(l82_html, sizeof l82_html, 17);
+    /* lot 83: 64 slots; nine grids of eight distinct min() tracks: the
+     * ninth list does not fit and is refused whole */
+    int k, t, at = 0;
+    at += snprintf(l82_html + at, sizeof l82_html - at, "<body style='margin:0'>");
+    for (k = 0; k < 9; k++) {
+        at += snprintf(l82_html + at, sizeof l82_html - at, "<div style='display:grid;width:400px;grid-template-columns:");
+        for (t = 0; t < 8; t++) at += snprintf(l82_html + at, sizeof l82_html - at, "min(50%%, %dpx) ", 10 + k * 8 + t);
+        at += snprintf(l82_html + at, sizeof l82_html - at, "'><div id=a%d style='height:2px'></div></div>", k);
+    }
+    snprintf(l82_html + at, sizeof l82_html - at, "</body>");
     lot52_render(l82_html, 480);
-    TEST_ASSERT_EQUAL(35, lot52_node("a15")->w);
-    TEST_ASSERT_EQUAL(200, lot52_node("a16")->w);
+    TEST_ASSERT_EQUAL(66, lot52_node("a7")->w);
+    TEST_ASSERT_EQUAL(400, lot52_node("a8")->w);
+    TEST_ASSERT_EQUAL(64, g_doc.ntrack_pool);
     TEST_ASSERT_TRUE(lot52_has_diag("grid tracks refused"));
 }
 
@@ -39,7 +50,7 @@ static void test_l82_pool_restyle_reuses_the_pool(void) {
         TEST_ASSERT_EQUAL(0, we_style(&g_doc));
         TEST_ASSERT_TRUE(we_layout(&g_doc, 480) >= 0);
     }
-    TEST_ASSERT_EQUAL(24, g_doc.ntrack_pool);
+    TEST_ASSERT_EQUAL(13, g_doc.ntrack_pool);
     TEST_ASSERT_EQUAL(31, lot52_node("a11")->w);
     TEST_ASSERT_EQUAL(31, lot52_node("b11")->x);
 }

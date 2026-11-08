@@ -1813,27 +1813,45 @@ static void test_l82_sub_arow_20_14_3_4(void) {
 
 static void test_l82_sub_automargin_0(void) {
     lot52_render("<body style='margin:0'><div id=p style='display:grid;width:200px;grid-template-columns:50px 50px'><div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid;margin-left:auto'><div id=a style='height:5px'></div></div></div></body>", 480);
-    TEST_ASSERT_TRUE(lot52_has_diag("subgrid box offsets refused"));
+    /* lot 83: auto margins on a subgridded axis compute to zero */
+    TEST_ASSERT_EQUAL(0, lot52_node("s")->x);
+    TEST_ASSERT_EQUAL(100, lot52_node("s")->w);
+    TEST_ASSERT_EQUAL(50, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l82_sub_automargin_1(void) {
     lot52_render("<body style='margin:0'><div id=p style='display:grid;width:200px;grid-template-columns:50px 50px'><div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid;margin-right:auto'><div id=a style='height:5px'></div></div></div></body>", 480);
-    TEST_ASSERT_TRUE(lot52_has_diag("subgrid box offsets refused"));
+    /* lot 83: auto margins on a subgridded axis compute to zero */
+    TEST_ASSERT_EQUAL(0, lot52_node("s")->x);
+    TEST_ASSERT_EQUAL(100, lot52_node("s")->w);
+    TEST_ASSERT_EQUAL(50, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l82_sub_automargin_2(void) {
     lot52_render("<body style='margin:0'><div id=p style='display:grid;width:200px;grid-template-columns:50px 50px'><div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid;margin:0 auto'><div id=a style='height:5px'></div></div></div></body>", 480);
-    TEST_ASSERT_TRUE(lot52_has_diag("subgrid box offsets refused"));
+    /* lot 83: auto margins on a subgridded axis compute to zero */
+    TEST_ASSERT_EQUAL(0, lot52_node("s")->x);
+    TEST_ASSERT_EQUAL(100, lot52_node("s")->w);
+    TEST_ASSERT_EQUAL(50, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l82_sub_automargin_r0(void) {
     lot52_render("<body style='margin:0'><div id=p style='display:grid;width:50px;grid-template-columns:50px;grid-template-rows:10px 10px'><div id=s style='display:grid;grid-row:1 / 3;grid-template-rows:subgrid;margin-top:auto'><div id=a></div></div></div></body>", 480);
-    TEST_ASSERT_TRUE(lot52_has_diag("subgrid box offsets refused"));
+    /* lot 83: auto margins on a subgridded axis compute to zero */
+    TEST_ASSERT_EQUAL(0, lot52_node("s")->y);
+    TEST_ASSERT_EQUAL(20, lot52_node("s")->h);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l82_sub_automargin_r1(void) {
     lot52_render("<body style='margin:0'><div id=p style='display:grid;width:50px;grid-template-columns:50px;grid-template-rows:10px 10px'><div id=s style='display:grid;grid-row:1 / 3;grid-template-rows:subgrid;margin-bottom:auto'><div id=a></div></div></div></body>", 480);
-    TEST_ASSERT_TRUE(lot52_has_diag("subgrid box offsets refused"));
+    /* lot 83: auto margins on a subgridded axis compute to zero */
+    TEST_ASSERT_EQUAL(0, lot52_node("s")->y);
+    TEST_ASSERT_EQUAL(20, lot52_node("s")->h);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void lot82_suboff_run(void) {
