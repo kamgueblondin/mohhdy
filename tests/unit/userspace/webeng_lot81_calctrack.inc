@@ -2069,12 +2069,12 @@ static void test_l81_cal_refused_0(void) {
     lot52_render("<body style='margin:0'><div id=g style='display:grid;width:200px;grid-template-columns:20px 1fr;grid-template-columns:min(50%, 40px) 1fr'><div id=c0 style='height:5px'></div><div id=c1 style='height:5px'></div></div></body>", 480);
     TEST_ASSERT_EQUAL(0, lot52_node("c0")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("c0")->y);
-    TEST_ASSERT_EQUAL(20, lot52_node("c0")->w);
-    TEST_ASSERT_EQUAL(20, lot52_node("c1")->x);
+    TEST_ASSERT_EQUAL(40, lot52_node("c0")->w);
+    TEST_ASSERT_EQUAL(40, lot52_node("c1")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("c1")->y);
-    TEST_ASSERT_EQUAL(180, lot52_node("c1")->w);
+    TEST_ASSERT_EQUAL(160, lot52_node("c1")->w);
     TEST_ASSERT_EQUAL(2, lot52_node("g")->grid_cols);
-    TEST_ASSERT_TRUE(lot52_has_diag("grid tracks refused"));
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag); /* lot 82: pooled min()/max()/clamp() */
 }
 
 static void test_l81_cal_refused_1(void) {
@@ -2086,19 +2086,19 @@ static void test_l81_cal_refused_1(void) {
     TEST_ASSERT_EQUAL(0, lot52_node("c1")->y);
     TEST_ASSERT_EQUAL(180, lot52_node("c1")->w);
     TEST_ASSERT_EQUAL(2, lot52_node("g")->grid_cols);
-    TEST_ASSERT_TRUE(lot52_has_diag("grid tracks refused"));
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag); /* lot 82: pooled min()/max()/clamp() */
 }
 
 static void test_l81_cal_refused_2(void) {
     lot52_render("<body style='margin:0'><div id=g style='display:grid;width:200px;grid-template-columns:20px 1fr;grid-template-columns:clamp(10px, 20%, 30px) 1fr'><div id=c0 style='height:5px'></div><div id=c1 style='height:5px'></div></div></body>", 480);
     TEST_ASSERT_EQUAL(0, lot52_node("c0")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("c0")->y);
-    TEST_ASSERT_EQUAL(20, lot52_node("c0")->w);
-    TEST_ASSERT_EQUAL(20, lot52_node("c1")->x);
+    TEST_ASSERT_EQUAL(30, lot52_node("c0")->w);
+    TEST_ASSERT_EQUAL(30, lot52_node("c1")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("c1")->y);
-    TEST_ASSERT_EQUAL(180, lot52_node("c1")->w);
+    TEST_ASSERT_EQUAL(170, lot52_node("c1")->w);
     TEST_ASSERT_EQUAL(2, lot52_node("g")->grid_cols);
-    TEST_ASSERT_TRUE(lot52_has_diag("grid tracks refused"));
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag); /* lot 82: pooled min()/max()/clamp() */
 }
 
 static void test_l81_cal_refused_3(void) {
