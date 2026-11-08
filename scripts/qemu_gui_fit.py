@@ -22,6 +22,11 @@ RAM = os.environ.get("GPT2_RAM", "1024M")
 SOCK = os.environ.get("MOHHDY_FIT_SOCK", "/tmp/mohhdy-qemu-fit.sock")
 # xdotool --name regex of the QEMU GTK window (run_gpt2.sh: "Mohhdy OS GPT-2")
 WIN_NAME = os.environ.get("MOHHDY_FIT_NAME", "QEMU|Mohhdy OS")
+# The guest only drives an ISA NE2000 at 0x300 (kernel.c boot_ne2k_device,
+# OS_NET_NIC_BASE_PORT). Without an explicit NIC, QEMU's pc machine adds a
+# PCI e1000 the guest never probes, so no link, DHCP or DNS. Same user-mode
+# (slirp) setup as the lot 67 web jobs; MOHHDY_NET=0 starts with no network.
+NET_ARGS = ["-netdev", "user,id=n0", "-device", "ne2k_isa,netdev=n0"]
 MIN_W, MIN_H = 640, 400
 MAX_W, MAX_H = 1920, 1200
 
@@ -165,6 +170,7 @@ def main():
         "-serial", "unix:%s,server,nowait" % SOCK,
         "-no-reboot", "-no-shutdown",
     ]
+    cmd.extend(NET_ARGS if os.environ.get("MOHHDY_NET", "1") != "0" else ["-nic", "none"])
     if os.path.isfile(DISK):
         cmd.extend(["-drive", "file=%s,format=raw,if=ide,cache=writethrough" % DISK])
 
