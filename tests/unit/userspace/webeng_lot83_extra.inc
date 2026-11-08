@@ -252,6 +252,72 @@ static void test_l83_document_still_fits(void) {
     TEST_ASSERT_EQUAL(64, WE_TRACK_POOL_MAX);
 }
 
+static void test_l83_masonry_next_reset_on_restyle(void) {
+    static we_forms_t f;
+    static const char *page = "<style>#g:target{masonry-auto-flow:next}</style><body style='margin:0'><div id=g style='display:grid;width:200px;grid-template-columns:masonry;grid-template-rows:5px 5px'>"
+                              "<div id=c0 style='width:50px;height:5px'></div><div id=c1 style='width:5px;height:5px'></div><div id=c2 style='width:5px;height:5px'></div></div></body>";
+    we_forms_init(&f);
+    we_set_forms(&g_doc, &f);
+    TEST_ASSERT_EQUAL(0, we_set_target(&g_doc, "#g"));
+    lot52_render(page, 480);
+    TEST_ASSERT_EQUAL(1, lot52_node("g")->masonry_next);
+    TEST_ASSERT_EQUAL(50, lot52_node("c2")->x);
+    TEST_ASSERT_EQUAL(1, we_set_target(&g_doc, ""));
+    TEST_ASSERT_EQUAL(0, we_style(&g_doc));
+    TEST_ASSERT_TRUE(we_layout(&g_doc, 480) >= 0);
+    TEST_ASSERT_EQUAL(0, lot52_node("g")->masonry_next);
+    TEST_ASSERT_EQUAL(5, lot52_node("c2")->x);
+    TEST_ASSERT_EQUAL(5, lot52_node("c2")->y);
+    we_set_forms(&g_doc, 0);
+}
+
+static void test_l83_masonry_intrinsic_min_content_is_widest_word(void) {
+    lot52_render("<body style='margin:0'><div style='width:300px'><div id=r style='float:left'>abcd</div></div>"
+                 "<div style='width:300px;clear:both'><div id=g style='width:min-content;display:grid;grid-template-columns:masonry;grid-template-rows:auto'>"
+                 "<div id=c0>ab abcd ab</div></div></div></body>", 480);
+    TEST_ASSERT_TRUE(lot52_node("r")->w > 0);
+    TEST_ASSERT_EQUAL(lot52_node("r")->w, lot52_node("g")->w);
+}
+
+static void test_l83_masonry_intrinsic_max_content_keeps_text_on_one_line(void) {
+    lot52_render("<body style='margin:0'><div style='width:300px'><div id=r style='float:left'>ab abcd ab</div></div>"
+                 "<div style='width:300px;clear:both'><div id=g style='float:left;display:grid;grid-template-columns:masonry;grid-template-rows:auto'>"
+                 "<div id=c0>ab abcd ab</div></div></div></body>", 480);
+    TEST_ASSERT_EQUAL(lot52_node("r")->w, lot52_node("g")->w);
+    TEST_ASSERT_EQUAL(lot52_node("r")->h, lot52_node("c0")->h);
+}
+
+static void test_l83_subgrid_cross_axis_auto_margin_kept(void) {
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:200px;grid-template-columns:100px;grid-template-rows:30px'><div id=s style='display:grid;grid-template-columns:subgrid;grid-template-rows:10px;margin-top:auto'><div id=a style='height:5px'></div></div></div></body>", 480);
+    TEST_ASSERT_EQUAL(20, lot52_node("s")->y);
+    TEST_ASSERT_EQUAL(100, lot52_node("s")->w);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l83_subgrid_auto_margin_auto_tracks(void) {
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:200px;grid-template-columns:auto auto;justify-content:start'><div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid;margin-left:auto'>"
+                 "<div id=a style='width:20px;height:5px'></div><div id=b style='width:30px;height:5px'></div></div></div></body>", 480);
+    TEST_ASSERT_EQUAL(0, lot52_node("s")->x);
+    TEST_ASSERT_EQUAL(50, lot52_node("s")->w);
+    TEST_ASSERT_EQUAL(20, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l83_subgrid_auto_margin_in_float(void) {
+    lot52_render("<body style='margin:0'><div style='width:300px'><div id=p style='float:left;display:grid;grid-template-columns:auto auto'><div id=s style='display:grid;grid-column:1 / 3;grid-template-columns:subgrid;margin-right:auto'>"
+                 "<div id=a style='width:20px;height:5px'></div><div id=b style='width:30px;height:5px'></div></div></div></div></body>", 480);
+    TEST_ASSERT_EQUAL(50, lot52_node("p")->w);
+    TEST_ASSERT_EQUAL(50, lot52_node("s")->w);
+    TEST_ASSERT_EQUAL(0, g_doc.ndiag);
+}
+
+static void test_l83_masonry_flow_blank_value_keeps_old(void) {
+    lot52_render("<style>#g{masonry-auto-flow:next}#g{masonry-auto-flow:  }</style><body style='margin:0'><div id=g style='display:grid;grid-template-columns:masonry'></div></body>", 480);
+    TEST_ASSERT_EQUAL(1, lot52_node("g")->masonry_next);
+    lot52_render("<body style='margin:0'><div id=g style='display:grid;grid-template-columns:masonry;masonry-auto-flow:next;masonry-auto-flow:\t'></div></body>", 480);
+    TEST_ASSERT_EQUAL(1, lot52_node("g")->masonry_next);
+}
+
 static void lot83_extra_run(void) {
     RUN_TEST(test_l83_pool_identical_padding_shares_one_slot);
     RUN_TEST(test_l83_pool_distinct_padding_takes_slots);
@@ -282,4 +348,11 @@ static void lot83_extra_run(void) {
     RUN_TEST(test_l83_subgrid_auto_margin_no_diag_restyle);
     RUN_TEST(test_l83_non_subgrid_auto_margin_still_centres);
     RUN_TEST(test_l83_document_still_fits);
+    RUN_TEST(test_l83_masonry_flow_blank_value_keeps_old);
+    RUN_TEST(test_l83_masonry_next_reset_on_restyle);
+    RUN_TEST(test_l83_masonry_intrinsic_min_content_is_widest_word);
+    RUN_TEST(test_l83_masonry_intrinsic_max_content_keeps_text_on_one_line);
+    RUN_TEST(test_l83_subgrid_cross_axis_auto_margin_kept);
+    RUN_TEST(test_l83_subgrid_auto_margin_auto_tracks);
+    RUN_TEST(test_l83_subgrid_auto_margin_in_float);
 }
