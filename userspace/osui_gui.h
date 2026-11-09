@@ -84,6 +84,10 @@ typedef struct {
     int (*page_preview)(int field, char *out, int cap);
     int (*page_fill)(const char *line, char *out, int cap);
     int (*page_css)(const char *line, char *out, int cap);
+    /* Lot 87: the remembered value of a text field of the rendered page
+     * (form2 controls), by page URL and field name; length > 0 when one
+     * is remembered. Secrets are never remembered, so never offered. */
+    int (*page_offer)(const char *url, const char *name, char *out, int cap);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
 /* "web-open URL|FILE", "web-forms", "web-section N|next|prev", "web-input N TEXT", "web-submit [N]",

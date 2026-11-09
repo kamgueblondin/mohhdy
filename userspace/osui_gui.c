@@ -202,6 +202,8 @@ static int (*g_wops_atlas_dims)(void *ctx, int slot, int *w, int *h);
  * cleared on every new page; the source length for a render after a
  * click or a key */
 static we_forms_t g_web_forms;
+static void web_offer_clear(void);   /* Lot 87 */
+static int web_offer_take(char *out, int out_max);
 static int g_web_forms_ready, g_web_src_n;
 static int osui_web_pipeline(const char *src, int n) {
     int defined = 0, expanded = 0, kept = 0, dropped = 0, vdef = 0, unres = 0, m, rc, k;
@@ -440,6 +442,7 @@ static int web_go_page(const char *file, int push, char *out, int out_max) {
     char status[320];
     g_web_errpage = 0;
     we_forms_init(&g_web_forms);   /* lot 74: a new page, new controls */
+    web_offer_clear();
     g_web_forms_ready = 1;
     if (osui_gui_web_load(file, status, (int)sizeof(status)) != 0) {
         if (out) { scat(out, out_max, status); scat(out, out_max, "\n"); }
@@ -564,6 +567,7 @@ static int web_form_command(const char *line, char *out, int out_max) {
         for (k = 0; names[k]; k++) if (scmp(a, names[k]) == 0) key = keys[k];
         if (key < 0 && a[0] && !a[1]) key = (unsigned char)a[0];
         if (key < 0) { app_out(out, out_max, "osui web form2 error=usage web-fkey KEY", 0); return 1; }
+        if (key == WE_KEY_DOWN && web_offer_take(out, out_max)) return 1;
         fr = we_form_key(&g_web, key);
         if (fr < 0) { app_out(out, out_max, "osui web form2 none", 0); return 1; }
         web_form_result(fr, out, out_max);
@@ -910,14 +914,78 @@ static void web_form_send(char *out, int out_max) {
     (void)web_go(url, 1, out, out_max);
 }
 
+/* Lot 87: autofill on the rendered page (form2). Lot 86 offered the
+ * remembered value only on the reader's mohhdy-form links, which Lot 75
+ * replaced by engine controls, so a click on a field never offered it.
+ * The offer is for the focused text control; Down takes it. */
+static int g_offer_ctl = -1;
+static char g_offer_name[32], g_offer_val[WE_FSTATE_VAL];
+
+static void web_offer_clear(void) { g_offer_ctl = -1; g_offer_name[0] = 0; g_offer_val[0] = 0; }
+
+static const we_node_t *web_ctl_node(int ctl) {
+    int i;
+    if (ctl < 0) return 0;
+    for (i = 1; i < (int)g_web.nnodes; i++) if (g_web.nodes[i].form_ord == ctl + 1) return &g_web.nodes[i];
+    return 0;
+}
+
+static void web_offer_for_focus(char *out, int out_max) {
+    const we_node_t *n;
+    char cur[WE_FSTATE_VAL];
+    int k, len;
+    web_offer_clear();
+    if (!g_wops || !g_wops->page_offer || !osui_gui_web_is_url(g_web_file)) return;
+    n = web_ctl_node(g_web_forms.focus);
+    if (!n || n->form_type != WE_FORM_TEXT || n->fname_len == 0) return;
+    len = n->fname_len < (int)sizeof(g_offer_name) - 1 ? n->fname_len : (int)sizeof(g_offer_name) - 1;
+    if ((int)n->fname_off + len > WE_POOL) return;
+    for (k = 0; k < len; k++) g_offer_name[k] = g_web.pool[n->fname_off + k];
+    g_offer_name[len] = 0;
+    if (g_wops->page_offer(g_web_file, g_offer_name, g_offer_val, (int)sizeof(g_offer_val)) <= 0) {
+        web_offer_clear();
+        return;
+    }
+    /* nothing to offer when the field already holds the value */
+    if (we_form_value(&g_web, g_web_forms.focus, cur, (int)sizeof(cur)) >= 0 && scmp(cur, g_offer_val) == 0) {
+        web_offer_clear();
+        return;
+    }
+    g_offer_ctl = g_web_forms.focus;
+    {
+        char m[64];
+        scpy(m, (int)sizeof(m), " name=");
+        scat(m, (int)sizeof(m), g_offer_name);
+        scat(m, (int)sizeof(m), " key=Down");
+        app_out(out, out_max, "osui web autofill offer", m);
+    }
+}
+
+/* Down on the control that has the offer: 1 when the value was taken */
+static int web_offer_take(char *out, int out_max) {
+    char m[48];
+    if (g_offer_ctl < 0 || g_offer_ctl != g_web_forms.focus) return 0;
+    if (we_form_set_text(&g_web, g_offer_ctl, g_offer_val) != 0) { web_offer_clear(); return 0; }
+    (void)web_form_render();
+    scpy(m, (int)sizeof(m), " name=");
+    scat(m, (int)sizeof(m), g_offer_name);
+    app_out(out, out_max, "osui web autofill applied", m);
+    web_offer_clear();
+    return 1;
+}
+
 static void web_form_result(int fr, char *out, int out_max) {
     char m[48];
-    if (fr == WE_FACT_SUBMIT) { web_form_send(out, out_max); return; }
+    if (fr == WE_FACT_SUBMIT) { web_offer_clear(); web_form_send(out, out_max); return; }
     if (fr == WE_FACT_CHANGED) (void)web_form_render();
     scpy(m, (int)sizeof(m), fr == WE_FACT_CHANGED ? " changed focus " : " same focus ");
     if (g_web_forms.focus < 0) scat(m, (int)sizeof(m), "none");
     else gui_cat_u(m, (int)sizeof(m), (unsigned)g_web_forms.focus);
     app_out(out, out_max, "osui web form2", m);
+    if (g_web_forms.focus != g_offer_ctl) {
+        if (g_web_forms.focus >= 0 && fr == WE_FACT_CHANGED) web_offer_for_focus(out, out_max);
+        else web_offer_clear();
+    }
 }
 
 /* Lot 86: a text field just took the focus. The remembered values for it
@@ -2216,6 +2284,7 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         int fk, wk = g_web_mobile ? -1 : web_form_keymap(key);
         /* Lot 74: the focused control of the rendered page first; an arrow
          * a text field does not use still scrolls */
+        if (wk == WE_KEY_DOWN && web_offer_take(out, out_max)) return 0;
         if (wk >= 0) {
             int fr = we_form_key(&g_web, wk);
             if (fr > 0 || (fr == 0 && key != OS_VGA_KEY_UP && key != OS_VGA_KEY_DOWN && key != OS_VGA_KEY_LEFT && key != OS_VGA_KEY_RIGHT)) { web_form_result(fr, out, out_max); return 0; }

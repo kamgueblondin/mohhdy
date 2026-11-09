@@ -58,4 +58,58 @@ int edid_best_mode(const edid_info_t *e, int *w, int *h, int *hz);
 /* "edid ok RHT 1024x768 260x195mm 12.8in" style line; returns length */
 int edid_describe(const edid_info_t *info, char *out, int cap);
 uint32_t edid_isqrt(uint32_t v);
+
+/* Lot 87 (US-080): CEA-861 extension block (tag 0x02), the block after
+ * the base block when byte 126 says there is one. QEMU's std VGA may or
+ * may not expose one depending on its version; the parser does not
+ * depend on it and is host tested with hand-built blocks. */
+#define EDID_CEA_SVD 16
+#define EDID_CEA_SAD 8
+#define EDID_CEA_DTD 6
+enum { EDID_AUDIO_LPCM = 1, EDID_AUDIO_AC3 = 2, EDID_AUDIO_AAC = 6, EDID_AUDIO_DTS = 7, EDID_AUDIO_EAC3 = 10 };
+typedef struct {
+    int ok;
+    int revision;                /* 1..3 */
+    int dtd_offset;              /* byte 2: 0 = no DTD and no data block */
+    int underscan, basic_audio, ycbcr444, ycbcr422;
+    int native_dtds;             /* byte 3 low nibble */
+    int svd_n;                   /* short video descriptors kept (<= EDID_CEA_SVD) */
+    int svd_total;               /* seen, including the ones not kept */
+    uint8_t vic[EDID_CEA_SVD];
+    uint8_t svd_native[EDID_CEA_SVD];
+    int sad_n;
+    int sad_format[EDID_CEA_SAD], sad_channels[EDID_CEA_SAD];
+    int sad_rates[EDID_CEA_SAD]; /* bit 0 32 kHz .. bit 6 192 kHz */
+    int sad_extra[EDID_CEA_SAD]; /* LPCM: bit depth mask (16/20/24); else max kbps */
+    int hdmi;                    /* HDMI 1.x vendor block (OUI 00-0C-03) */
+    uint16_t phys_addr;          /* a.b.c.d nibbles */
+    int hdmi_dc;                 /* deep colour bits: 30, 36, 48 as 1/2/4 */
+    int hdmi_tmds_mhz;           /* 0 when not given */
+    int hf;                      /* HDMI Forum block (OUI C4-5D-D8) */
+    int hf_tmds_mhz;
+    int speakers;                /* speaker allocation mask, 0 none */
+    int vcdb, quant_rgb, quant_ycc; /* video capability block */
+    int colorimetry;             /* extended tag 5 mask */
+    int hdr, hdr_eotf;           /* extended tag 6 */
+    int hdr_max_lum;             /* code value, 0 not given */
+    int y420_n;                  /* VICs in the YCbCr 4:2:0 video block */
+    int unknown_blocks;
+    int dtd_n;
+    int dtd_w[EDID_CEA_DTD], dtd_h[EDID_CEA_DTD], dtd_hz[EDID_CEA_DTD];
+} edid_cea_t;
+
+/* 0 ok; -1 not a CEA block; -2 checksum; -3 args; -4 bad layout
+ * (offset or data block past the DTD area). */
+int edid_cea_parse(const uint8_t *blk, int len, edid_cea_t *c);
+/* Base block and up to the extensions the buffer holds: 0 a CEA block was
+ * parsed, 1 extension present but not CEA (c->ok = 0, *tag set), -1 none
+ * or the base block is bad. */
+int edid_parse_ext(const uint8_t *data, int len, edid_info_t *e, edid_cea_t *c, int *tag);
+/* CTA VIC -> mode for the common progressive and interlaced codes.
+ * 0 ok, -1 unknown. *interlaced may be 0. */
+int edid_vic_mode(int vic, int *w, int *h, int *hz, int *interlaced);
+/* native SVD, else the first DTD, else the largest known VIC. 0 / -1 */
+int edid_cea_best(const edid_cea_t *c, int *w, int *h, int *hz);
+/* "cea ok rev 3 svd 4 best 1920x1080@60 audio 1 hdmi 1.0.0.0 dtd 1" */
+int edid_cea_describe(const edid_cea_t *c, char *out, int cap);
 #endif

@@ -242,3 +242,259 @@ int edid_describe(const edid_info_t *e, char *o, int cap) {
     } else n = put(o, cap, n, "size unknown");
     return n;
 }
+
+/* ---- Lot 87: CEA-861 extension ---------------------------------------- */
+
+typedef struct { uint8_t vic; uint16_t w, h; uint8_t hz, il; } vic_mode_t;
+/* CTA-861-G table 3, the codes a TV or a monitor commonly lists */
+static const vic_mode_t k_vic[] = {
+    { 1, 640, 480, 60, 0 },    { 2, 720, 480, 60, 0 },    { 3, 720, 480, 60, 0 },
+    { 4, 1280, 720, 60, 0 },   { 5, 1920, 1080, 60, 1 },  { 6, 1440, 480, 60, 1 },
+    { 7, 1440, 480, 60, 1 },   { 16, 1920, 1080, 60, 0 }, { 17, 720, 576, 50, 0 },
+    { 18, 720, 576, 50, 0 },   { 19, 1280, 720, 50, 0 },  { 20, 1920, 1080, 50, 1 },
+    { 21, 1440, 576, 50, 1 },  { 22, 1440, 576, 50, 1 },  { 31, 1920, 1080, 50, 0 },
+    { 32, 1920, 1080, 24, 0 }, { 33, 1920, 1080, 25, 0 }, { 34, 1920, 1080, 30, 0 },
+    { 47, 1280, 720, 120, 0 }, { 63, 1920, 1080, 120, 0 }, { 64, 1920, 1080, 100, 0 },
+    { 93, 3840, 2160, 24, 0 }, { 94, 3840, 2160, 25, 0 }, { 95, 3840, 2160, 30, 0 },
+    { 96, 3840, 2160, 50, 0 }, { 97, 3840, 2160, 60, 0 }, { 98, 4096, 2160, 24, 0 },
+    { 99, 4096, 2160, 25, 0 }, { 100, 4096, 2160, 30, 0 }, { 101, 4096, 2160, 50, 0 },
+    { 102, 4096, 2160, 60, 0 },
+};
+
+int edid_vic_mode(int vic, int *w, int *h, int *hz, int *interlaced) {
+    unsigned i;
+    for (i = 0; i < sizeof(k_vic) / sizeof(k_vic[0]); i++) {
+        if (k_vic[i].vic != vic) continue;
+        if (w) *w = k_vic[i].w;
+        if (h) *h = k_vic[i].h;
+        if (hz) *hz = k_vic[i].hz;
+        if (interlaced) *interlaced = k_vic[i].il;
+        return 0;
+    }
+    return -1;
+}
+
+static void cea_zero(edid_cea_t *c) {
+    uint8_t *p = (uint8_t *)c;
+    unsigned i;
+    for (i = 0; i < sizeof(*c); i++) p[i] = 0;
+}
+
+/* an 18 byte detailed timing: active size and refresh (0 if blanking is 0) */
+static int dtd_decode(const uint8_t *d, int *w, int *h, int *hz) {
+    unsigned clock = (unsigned)d[0] | ((unsigned)d[1] << 8);
+    int tw, th, ha, va;
+    if (!clock) return -1;
+    tw = d[2] | ((d[4] & 0xF0) << 4);
+    th = d[5] | ((d[7] & 0xF0) << 4);
+    ha = tw + (d[3] | ((d[4] & 0x0F) << 8));
+    va = th + (d[6] | ((d[7] & 0x0F) << 8));
+    if (tw <= 0 || th <= 0) return -1;
+    *w = tw;
+    *h = th;
+    *hz = 0;
+    if (ha > tw && va > th) {
+        unsigned v = (clock * 10000u) / (unsigned)(ha * va);
+        if (v >= 24u && v <= 360u) *hz = (int)v;
+    }
+    return 0;
+}
+
+static void cea_svd(edid_cea_t *c, const uint8_t *p, int n) {
+    int i;
+    for (i = 0; i < n; i++) {
+        int code = p[i], vic, native = 0;
+        if (code == 0 || code == 128 || code >= 254) continue;   /* reserved */
+        if (code >= 129 && code <= 192) { vic = code & 0x7F; native = 1; }
+        else vic = code;
+        c->svd_total++;
+        if (c->svd_n >= EDID_CEA_SVD) continue;
+        c->vic[c->svd_n] = (uint8_t)vic;
+        c->svd_native[c->svd_n] = (uint8_t)native;
+        c->svd_n++;
+    }
+}
+
+static void cea_sad(edid_cea_t *c, const uint8_t *p, int n) {
+    int i;
+    for (i = 0; i + 3 <= n; i += 3) {
+        int fmt = (p[i] >> 3) & 15;
+        if (fmt == 0 || fmt == 15) continue;    /* reserved / extended: not kept */
+        if (c->sad_n >= EDID_CEA_SAD) return;
+        c->sad_format[c->sad_n] = fmt;
+        c->sad_channels[c->sad_n] = (p[i] & 7) + 1;
+        c->sad_rates[c->sad_n] = p[i + 1] & 0x7F;
+        c->sad_extra[c->sad_n] = fmt == EDID_AUDIO_LPCM ? (p[i + 2] & 7) : (fmt <= 8 ? p[i + 2] * 8 : 0);
+        c->sad_n++;
+    }
+}
+
+static void cea_vsdb(edid_cea_t *c, const uint8_t *p, int n) {
+    uint32_t oui;
+    if (n < 3) { c->unknown_blocks++; return; }
+    oui = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
+    if (oui == 0x000C03u && n >= 5) {
+        c->hdmi = 1;
+        c->phys_addr = (uint16_t)((p[3] << 8) | p[4]);
+        if (n >= 6) c->hdmi_dc = (p[5] >> 4) & 7;
+        if (n >= 7 && p[6]) c->hdmi_tmds_mhz = p[6] * 5;
+    } else if (oui == 0xC45DD8u && n >= 5) {
+        c->hf = 1;
+        if (p[4]) c->hf_tmds_mhz = p[4] * 5;
+    } else c->unknown_blocks++;
+}
+
+static void cea_ext(edid_cea_t *c, const uint8_t *p, int n) {
+    if (n < 1) { c->unknown_blocks++; return; }
+    switch (p[0]) {
+    case 0:
+        if (n < 2) { c->unknown_blocks++; return; }
+        c->vcdb = 1;
+        c->quant_ycc = (p[1] >> 7) & 1;
+        c->quant_rgb = (p[1] >> 6) & 1;
+        break;
+    case 5:
+        if (n < 2) { c->unknown_blocks++; return; }
+        c->colorimetry = p[1];
+        break;
+    case 6:
+        if (n < 3) { c->unknown_blocks++; return; }
+        c->hdr = 1;
+        c->hdr_eotf = p[1] & 0x3F;
+        if (n >= 4) c->hdr_max_lum = p[3];
+        break;
+    case 14:
+        c->y420_n += n - 1;
+        break;
+    default:
+        c->unknown_blocks++;
+        break;
+    }
+}
+
+int edid_cea_parse(const uint8_t *b, int len, edid_cea_t *c) {
+    unsigned sum = 0;
+    int i, d, pos;
+    if (!c) return -3;
+    cea_zero(c);
+    if (!b || len < EDID_BLOCK) return -3;
+    if (b[0] != 0x02) return -1;
+    for (i = 0; i < EDID_BLOCK; i++) sum += b[i];
+    if ((sum & 0xFFu) != 0) return -2;
+    c->revision = b[1];
+    d = b[2];
+    c->dtd_offset = d;
+    if (d != 0 && (d < 4 || d > 127)) return -4;
+    if (c->revision >= 2) {
+        c->underscan = (b[3] >> 7) & 1;
+        c->basic_audio = (b[3] >> 6) & 1;
+        c->ycbcr444 = (b[3] >> 5) & 1;
+        c->ycbcr422 = (b[3] >> 4) & 1;
+        c->native_dtds = b[3] & 15;
+    }
+    /* data block collection, revision 3 only, bytes 4 .. d-1 */
+    if (c->revision >= 3 && d > 4) {
+        pos = 4;
+        while (pos < d) {
+            int tag = b[pos] >> 5, n = b[pos] & 31;
+            const uint8_t *p = b + pos + 1;
+            if (pos + 1 + n > d) return -4;
+            switch (tag) {
+            case 1: cea_sad(c, p, n); break;
+            case 2: cea_svd(c, p, n); break;
+            case 3: cea_vsdb(c, p, n); break;
+            case 4: if (n >= 1) c->speakers = p[0] | (n >= 2 ? p[1] << 8 : 0); else c->unknown_blocks++; break;
+            case 7: cea_ext(c, p, n); break;
+            default: c->unknown_blocks++; break;
+            }
+            pos += 1 + n;
+        }
+    }
+    if (d) {
+        for (pos = d; pos + 18 <= 127; pos += 18) {
+            int w, h, hz;
+            if (b[pos] == 0 && b[pos + 1] == 0) break;   /* padding starts */
+            if (dtd_decode(b + pos, &w, &h, &hz) != 0) break;
+            if (c->dtd_n >= EDID_CEA_DTD) break;
+            c->dtd_w[c->dtd_n] = w;
+            c->dtd_h[c->dtd_n] = h;
+            c->dtd_hz[c->dtd_n] = hz;
+            c->dtd_n++;
+        }
+    }
+    c->ok = 1;
+    return 0;
+}
+
+int edid_parse_ext(const uint8_t *data, int len, edid_info_t *e, edid_cea_t *c, int *tag) {
+    int k;
+    if (tag) *tag = 0;
+    if (c) cea_zero(c);
+    if (!e || !c || edid_parse(data, len, e) != 0) return -1;
+    if (e->ext_blocks <= 0) return -1;
+    for (k = 1; k <= e->ext_blocks && (k + 1) * EDID_BLOCK <= len; k++) {
+        const uint8_t *blk = data + k * EDID_BLOCK;
+        if (tag && !*tag) *tag = blk[0];
+        if (blk[0] == 0x02 && edid_cea_parse(blk, EDID_BLOCK, c) == 0) {
+            if (tag) *tag = 0x02;
+            return 0;
+        }
+    }
+    return (len >= 2 * EDID_BLOCK) ? 1 : -1;
+}
+
+int edid_cea_best(const edid_cea_t *c, int *w, int *h, int *hz) {
+    int i, bw = 0, bh = 0, bz = 0;
+    if (!c || !c->ok) return -1;
+    for (i = 0; i < c->svd_n; i++) {
+        int il = 0;
+        if (c->svd_native[i] && edid_vic_mode(c->vic[i], &bw, &bh, &bz, &il) == 0 && !il) {
+            *w = bw; *h = bh; *hz = bz;
+            return 0;
+        }
+    }
+    if (c->dtd_n) { *w = c->dtd_w[0]; *h = c->dtd_h[0]; *hz = c->dtd_hz[0]; return 0; }
+    bw = bh = bz = 0;
+    for (i = 0; i < c->svd_n; i++) {
+        int vw, vh, vz, il = 0;
+        if (edid_vic_mode(c->vic[i], &vw, &vh, &vz, &il) != 0 || il) continue;
+        if (vw * vh > bw * bh || (vw * vh == bw * bh && vz > bz)) { bw = vw; bh = vh; bz = vz; }
+    }
+    if (!bw) return -1;
+    *w = bw; *h = bh; *hz = bz;
+    return 0;
+}
+
+int edid_cea_describe(const edid_cea_t *c, char *o, int cap) {
+    int n = 0, w, h, hz;
+    if (!o || cap < 2) return 0;
+    o[0] = 0;
+    if (!c || !c->ok) return put(o, cap, 0, "cea none");
+    n = put(o, cap, n, "cea ok rev ");
+    n = put_u(o, cap, n, (unsigned)c->revision);
+    n = put(o, cap, n, " svd ");
+    n = put_u(o, cap, n, (unsigned)c->svd_total);
+    if (edid_cea_best(c, &w, &h, &hz) == 0) {
+        n = put(o, cap, n, " best ");
+        n = put_u(o, cap, n, (unsigned)w);
+        n = put(o, cap, n, "x");
+        n = put_u(o, cap, n, (unsigned)h);
+        if (hz) { n = put(o, cap, n, "@"); n = put_u(o, cap, n, (unsigned)hz); }
+    }
+    n = put(o, cap, n, " audio ");
+    n = put_u(o, cap, n, (unsigned)c->sad_n);
+    if (c->hdmi) {
+        n = put(o, cap, n, " hdmi ");
+        n = put_u(o, cap, n, (unsigned)((c->phys_addr >> 12) & 15));
+        n = put(o, cap, n, ".");
+        n = put_u(o, cap, n, (unsigned)((c->phys_addr >> 8) & 15));
+        n = put(o, cap, n, ".");
+        n = put_u(o, cap, n, (unsigned)((c->phys_addr >> 4) & 15));
+        n = put(o, cap, n, ".");
+        n = put_u(o, cap, n, (unsigned)(c->phys_addr & 15));
+    }
+    if (c->hdr) n = put(o, cap, n, " hdr");
+    n = put(o, cap, n, " dtd ");
+    n = put_u(o, cap, n, (unsigned)c->dtd_n);
+    return n;
+}

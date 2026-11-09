@@ -83,6 +83,19 @@ int shell_desk_fill_key(wf_form_page_t *p, int field, const char *url) {
     return wf_formfill_key(&g_fill, p, field, url);
 }
 
+int shell_desk_offer(const char *url, const char *name, char *out, int cap) {
+    char host[64];
+    int n;
+    if (!out || cap <= 0) return -1;
+    out[0] = 0;
+    if (!url || !name || !name[0]) return -1;
+    ready();
+    if (wf_formfill_host(url, host, (int)sizeof(host)) != 0) return -1;
+    if (wf_autofill_get(&g_fill, host, name, out, cap) != 0) { out[0] = 0; return -1; }
+    for (n = 0; out[n]; n++) {}
+    return n > 0 ? n : -1;
+}
+
 desk_cfg_t *shell_desk_cfg(void) { ready(); return &g_cfg; }
 int shell_desk_nav_held(void) { return g_hold; }
 

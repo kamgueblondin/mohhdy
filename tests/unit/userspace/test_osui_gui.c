@@ -1486,7 +1486,7 @@ static int l86_css(const char *line, char *out, int cap) {
 }
 static void test_lot86_shell_page_ops_routing(void) {
     static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                             l86_load, l86_preview, l86_fill, l86_css };
+                                             l86_load, l86_preview, l86_fill, l86_css, 0 };
     static const osui_web_page_ops_t none = { 0 };
     setup();
     /* without the shell entries every command answers, nothing crashes */
@@ -1549,7 +1549,7 @@ static int l86_form_key(int key) {
 static void test_lot86_focus_offers_and_down(void) {
     static const osui_web_page_ops_t ops = { m_sections, m_current, m_section, m_form_link, l86_form_key,
                                              m_form_set, m_submit, m_flist, 0, 0, 0, 0, 0,
-                                             0, 0, l86_fill_offers, 0 };
+                                             0, 0, l86_fill_offers, 0, 0 };
     char ev[64];
     int x, y;
     setup();
@@ -1584,6 +1584,105 @@ static void test_lot86_focus_offers_and_down(void) {
     memset(g_out, 0, sizeof(g_out));
     osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
     TEST_ASSERT_EQUAL(1, g_m_submits);
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_web_page_ops(0);
+    osui_gui_set_web_fetch(0);
+}
+
+/* Lot 87: the rendered page's own controls (form2) offer the remembered
+ * value too: a click on the field lists it, Down takes it, Enter sends it.
+ * Lot 86 only offered it on the reader's mohhdy-form links. */
+static int g_l87_calls;
+static char g_l87_url[128], g_l87_name[32];
+static int l87_offer(const char *url, const char *name, char *out, int cap) {
+    g_l87_calls++;
+    snprintf(g_l87_url, sizeof(g_l87_url), "%s", url);
+    snprintf(g_l87_name, sizeof(g_l87_name), "%s", name);
+    if (strcmp(name, "q") == 0) return snprintf(out, (size_t)cap, "mohhdy os");
+    if (strcmp(name, "p") == 0) return snprintf(out, (size_t)cap, "v w");   /* the value it holds */
+    out[0] = 0;
+    return -1;
+}
+static void test_lot87_form2_autofill(void) {
+    static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request,
+                                             0, 0, 0, 0, l87_offer };
+    static const osui_web_page_ops_t no_offer = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request, 0, 0, 0, 0, 0 };
+    char ev[64];
+    int x, y;
+    setup();
+    g_f_fetches = g_f_posts = 0;
+    g_l87_calls = 0;
+    osui_gui_set_web_fetch(f_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT(f_box("q", &x, &y));
+    snprintf(ev, sizeof(ev), "web click %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_event(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 changed focus 0"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill offer name=q key=Down"));
+    TEST_ASSERT_EQUAL_STRING("https://ex.am/dir/page", g_l87_url);
+    TEST_ASSERT_EQUAL_STRING("q", g_l87_name);
+    /* the value is not printed with the offer */
+    TEST_ASSERT_NULL(strstr(g_out, "mohhdy os"));
+    /* a second click on the focused field asks nothing again */
+    g_l87_calls = 0;
+    osui_gui_event(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, g_l87_calls);
+    /* Down takes it; the field holds the remembered text */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_feed_key(OS_VGA_KEY_DOWN, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill applied name=q"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "value=mohhdy os"));
+    /* a second Down is an ordinary key again */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_feed_key(OS_VGA_KEY_DOWN, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NULL(strstr(g_out, "autofill applied"));
+    /* Enter sends the filled value */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey enter", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 submit GET https://ex.am/find?q=mohhdy+os"));
+    TEST_ASSERT_EQUAL_STRING("https://ex.am/find?q=mohhdy+os", g_f_url);
+    /* a field that already holds the remembered value: no offer */
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT(f_box("p", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "changed focus"));
+    TEST_ASSERT_EQUAL_STRING("p", g_l87_name);
+    TEST_ASSERT_NULL(strstr(g_out, "autofill offer"));
+    /* the console Down key on q (web-fkey) takes the offer like the desktop */
+    TEST_ASSERT(f_box("q", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "autofill offer name=q"));
+    /* moving the focus away drops the offer: Down on the checkbox is not it */
+    osui_gui_web_command("web-fkey tab", g_out, (int)sizeof(g_out));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NULL(strstr(g_out, "autofill applied"));
+    /* the keyboard focus back on q offers it again, like a click */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey stab", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "autofill offer name=q"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "autofill applied name=q"));
+    /* without the op: no offer, nothing asked */
+    osui_gui_set_web_page_ops(&no_offer);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT(f_box("q", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    g_l87_calls = 0;
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, g_l87_calls);
+    TEST_ASSERT_NULL(strstr(g_out, "autofill"));
+    osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));
     osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
     osui_gui_set_web_page_ops(0);
     osui_gui_set_web_fetch(0);
@@ -1690,6 +1789,7 @@ int main(void) {
     RUN_TEST(test_lot75_gui_multipart_ctype);
     RUN_TEST(test_lot86_shell_page_ops_routing);
     RUN_TEST(test_lot86_focus_offers_and_down);
+    RUN_TEST(test_lot87_form2_autofill);
     RUN_TEST(test_lot74_gui_fragment);
     unity_print_results();
     unity_cleanup();
