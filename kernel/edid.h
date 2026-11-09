@@ -32,6 +32,17 @@ typedef struct {
     int standard_w[8], standard_h[8], standard_hz[8];
     int established_n;   /* how many of the 17 VESA established modes are set */
     int established;     /* bit i set => established mode i (0..16) */
+    /* Lot 86: still the base block read at boot, not a DDC transaction. */
+    int week;            /* manufacture week 1..54, else 0 */
+    uint32_t serial;     /* binary serial, bytes 12..15, 0 if the block says 0 */
+    char serial_text[14]; /* descriptor 0xFF, or "" */
+    int chroma_ok;       /* 1 when any chromaticity byte was non-zero */
+    int chroma_wx, chroma_wy; /* white point, 0..1023 (10-bit, /1024) */
+    int dtd_n;           /* detailed timings found, including the preferred one */
+    int dtd_w[4], dtd_h[4], dtd_hz[4];
+    /* Lot 86: extension count from byte 126. The bytes after the base
+     * block are not read. This is still not a DDC transaction. */
+    int ext_blocks;
 } edid_info_t;
 
 /* 0 on success (info->ok = 1); -1 bad header, -2 bad checksum, -3 args */
@@ -39,6 +50,11 @@ int edid_parse(const uint8_t *block, int len, edid_info_t *info);
 /* Established timing bit 0..16 -> width and height. 0 ok, -1 out of range.
  * Bit 0 is 720x400@70, bit 16 is 1152x870@75 (EDID byte 35 bit 7 first). */
 int edid_established_mode(int bit, int *w, int *h);
+/* Refresh of established timing bit 0..16. 0 ok, -1 out of range. */
+int edid_established_hz(int bit, int *hz);
+/* Preferred detailed timing when the block has one, otherwise the
+ * established mode with the most pixels. 0 ok, -1 none. */
+int edid_best_mode(const edid_info_t *e, int *w, int *h, int *hz);
 /* "edid ok RHT 1024x768 260x195mm 12.8in" style line; returns length */
 int edid_describe(const edid_info_t *info, char *out, int cap);
 uint32_t edid_isqrt(uint32_t v);

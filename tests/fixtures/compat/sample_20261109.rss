@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<rss version="2.0"><channel>
+<title>Mohhdy notes</title>
+<item><title>First &amp; only</title><link>https://example.com/a</link><description>A <b>short</b> blurb.</description></item>
+<item><title>Second</title><link>https://example.com/b</link><description>More text.</description></item>
+</channel></rss>

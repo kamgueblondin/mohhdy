@@ -130,12 +130,19 @@ static void test_lot69_scale_and_resize(void) {
     TEST_ASSERT_EQUAL(0, s.resize);
 }
 
+static void test_lot86_chrome_suite(void) {
+    TEST_ASSERT_EQUAL(0, gfx_wm_chrome_suite());
+    TEST_ASSERT_EQUAL(0, gfx_wm_chrome_check(R(8, 40, 1024, 700), 30, 8));
+    TEST_ASSERT(gfx_wm_chrome_check(R(0, 0, 80, 40), 30, 4) != 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_buttons_and_hit);
     RUN_TEST(test_close_minimize_maximize_drag);
     RUN_TEST(test_draw_buttons_colors);
     RUN_TEST(test_lot69_scale_and_resize);
+    RUN_TEST(test_lot86_chrome_suite);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

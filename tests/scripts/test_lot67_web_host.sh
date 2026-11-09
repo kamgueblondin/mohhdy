@@ -12,7 +12,7 @@ gcc -O1 -m32 -Wall -Werror -I"$ROOT/userspace" -I"$ROOT/kernel" -I"$ROOT/include
     "$ROOT/tests/host/wf_fetch_host.c" \
     "$ROOT"/userspace/wf_http.c "$ROOT"/userspace/wf_dns.c "$ROOT"/userspace/wf_tls.c "$ROOT"/userspace/wf_fetch.c "$ROOT"/userspace/wf_cache.c "$ROOT"/userspace/wf_cookie.c "$ROOT"/userspace/wf_inflate.c \
     "$ROOT"/userspace/wf_x509.c "$ROOT"/userspace/wf_bn.c "$ROOT"/userspace/wf_sha512.c "$ROOT"/userspace/wf_ec.c "$ROOT"/userspace/wf_p256.c "$ROOT"/userspace/wf_aead.c \
-    "$ROOT"/userspace/wf_rsa.c "$ROOT"/userspace/wf_html.c "$ROOT"/userspace/wf_read.c "$ROOT"/userspace/wf_score.c "$ROOT"/userspace/wf_searchform.c "$ROOT"/userspace/wf_article.c "$ROOT"/userspace/wf_srcset.c "$ROOT"/userspace/wf_entity.c "$ROOT"/userspace/wf_form.c \
+    "$ROOT"/userspace/wf_rsa.c "$ROOT"/userspace/wf_html.c "$ROOT"/userspace/wf_sitecss.c "$ROOT"/userspace/wf_read.c "$ROOT"/userspace/wf_score.c "$ROOT"/userspace/wf_searchform.c "$ROOT"/userspace/wf_article.c "$ROOT"/userspace/wf_srcset.c "$ROOT"/userspace/wf_entity.c "$ROOT"/userspace/wf_form.c \
     "$ROOT"/userspace/wf_section.c "$ROOT"/userspace/wsearch_api.c "$ROOT"/userspace/wsearch.c "$ROOT"/userspace/wsearch_local.c "$ROOT"/kernel/sha256.c "$ROOT"/kernel/aes_gcm.c "$ROOT"/kernel/x25519.c || { echo "FAIL: build"; exit 1; }
 HP=$((20000 + $$ % 20000)); SP=$((HP + 1))
 python3 "$ROOT/scripts/lot67_web_server.py" "$W/pki" $HP $SP > server.log 2>&1 &
@@ -20,9 +20,25 @@ SRV=$!
 trap 'kill $SRV 2>/dev/null' EXIT
 i=0; while ! grep -q READY server.log 2>/dev/null; do i=$((i+1)); [ $i -gt 50 ] && { echo "FAIL: server"; cat server.log; exit 1; }; sleep 0.1; done
 pass=0; fail=0
+# 30 s bound without timeout(1): the Rust coreutils timeout on newer CI
+# runners refuses non-UTF-8 argv ("invalid UTF-8 was detected"), and the
+# form checks pass raw Latin-1 bytes (caf\351) on purpose.
+bounded() {
+    ./wf_fetch_host "$@" &
+    bp=$!
+    ( trap 'kill $bs 2>/dev/null; exit 0' TERM
+      sleep 30 & bs=$!
+      wait $bs && kill -9 $bp 2>/dev/null ) >/dev/null 2>&1 &
+    bw=$!
+    wait $bp
+    brc=$?
+    kill $bw 2>/dev/null
+    wait $bw 2>/dev/null
+    return $brc
+}
 check() {  # name expect-regex args...
     name=$1; want=$2; shift 2
-    out=$(timeout 30 ./wf_fetch_host "$@" 2>&1)
+    out=$(bounded "$@" 2>&1)
     if printf '%s\n' "$out" | grep -Eq "$want"; then pass=$((pass+1)); echo "  ok   $name"
     else fail=$((fail+1)); echo "  FAIL $name"; printf '%s\n' "$out" | sed 's/^/       /' | head -20; fi
 }

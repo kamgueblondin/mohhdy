@@ -16,6 +16,11 @@ static struct {
     bridge_t br;
 } g_conn;
 static int g_opened, g_reused;
+/* Lot 86: settings "net off". Refuses before resolve/connect. */
+static int g_offline;
+
+void wf_fetch_set_offline(int on) { g_offline = on ? 1 : 0; }
+int wf_fetch_offline(void) { return g_offline; }
 
 void wf_fetch_conn_stats(int* opened, int* reused) { if (opened) *opened = g_opened; if (reused) *reused = g_reused; }
 
@@ -275,6 +280,8 @@ int wf_fetch_ex(const wf_fetch_env_t* env, const char* url, const wf_fetch_req_t
     int max = env->max_redirects, i, plain, cache_idx;
     uint8_t* z = (uint8_t*)res;
     for (i = 0; i < (int)sizeof(*res); i++) z[i] = 0;
+    if (g_offline) { scopy(res->err, (int)sizeof(res->err), "network off"); return -1; }
+    if (env && env->jar && env->now) (void)wf_cookie_expire(env->jar, env->now);
     if (max < 0) max = 0;
     if (max > WF_FETCH_MAX_REDIRECTS) max = WF_FETCH_MAX_REDIRECTS;
     if (wf_url_parse(url, &u) != 0) { scopy(res->err, (int)sizeof(res->err), "bad URL"); return -1; }

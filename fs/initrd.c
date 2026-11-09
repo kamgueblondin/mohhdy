@@ -7,7 +7,7 @@ extern void print_string_vga(const char* str, char color);
 
 // Variables globales
 initrd_t* current_initrd = 0;
-#define INITRD_FILE_MAX 136U  /* Lot 79: lot79.html filled 128-8 spare; keep margin */
+#define INITRD_FILE_MAX 144U  /* Lot 86: lot86form.html used the last spare; keep 8 */
 static initrd_file_t files_array[INITRD_FILE_MAX]; /* up to INITRD_FILE_MAX files */
 static os_dirent_t initrd_page_entries[INITRD_FILE_MAX];
 

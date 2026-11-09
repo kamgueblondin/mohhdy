@@ -52,6 +52,7 @@ void wf_cache_meta(const char* head, int len, wf_cache_meta_t* m) {
     int i = 0, cc_seen = 0, pragma_nc = 0;
     m->store = 1; m->no_cache = 0; m->max_age = -1;
     m->etag[0] = 0; m->last_modified[0] = 0;
+    m->age = 0; m->vary[0] = 0;
     while (i < len) {
         int a = i, e, colon = -1, v, ve;
         while (i < len && head[i] != '\n') i++;
@@ -72,6 +73,22 @@ void wf_cache_meta(const char* head, int len, wf_cache_meta_t* m) {
         } else if (colon - a == 13 && starts(head + a, colon - a, "last-modified")) {
             int n = ve - v, k;
             if (n > 0 && n < WF_CACHE_DATE) { for (k = 0; k < n; k++) m->last_modified[k] = head[v + k]; m->last_modified[n] = 0; }
+        } else if (colon - a == 3 && starts(head + a, colon - a, "age")) {
+            long x = 0; int j, digits = 0;
+            for (j = v; j < ve && head[j] >= '0' && head[j] <= '9'; j++) {
+                if (x < 100000000L) x = x * 10 + (head[j] - '0');
+                digits++;
+            }
+            if (digits) m->age = (int)x;
+        } else if (colon - a == 4 && starts(head + a, colon - a, "vary")) {
+            int n = ve - v, k;
+            if (n == 1 && head[v] == '*') m->store = 0;
+            else if (n > 0) {
+                m->no_cache = 1;
+                if (n >= (int)sizeof(m->vary)) n = (int)sizeof(m->vary) - 1;
+                for (k = 0; k < n; k++) m->vary[k] = head[v + k];
+                m->vary[n] = 0;
+            }
         }
     }
     if (!cc_seen && pragma_nc) m->store = 0;
@@ -92,9 +109,13 @@ int wf_cache_lookup(wf_cache_t* c, const char* url, uint32_t now, int* idx) {
     if (k < 0) { c->misses++; return WF_CACHE_MISS; }
     e = &c->e[k];
     e->last_use = ++c->stamp;
-    if (!e->meta.no_cache && e->meta.max_age > 0 && now - e->stored_at < (uint32_t)e->meta.max_age) {   /* a clock gone back wraps: stale */
-        c->hits++;
-        return WF_CACHE_FRESH;
+    if (!e->meta.no_cache && e->meta.max_age > 0) {
+        uint32_t elapsed = now - e->stored_at;   /* a clock gone back wraps: stale */
+        uint32_t age = e->meta.age > 0 ? (uint32_t)e->meta.age : 0U;
+        if (age <= 0xFFFFFFFFu - elapsed && elapsed + age < (uint32_t)e->meta.max_age) {
+            c->hits++;
+            return WF_CACHE_FRESH;
+        }
     }
     return WF_CACHE_STALE;
 }

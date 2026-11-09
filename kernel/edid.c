@@ -37,6 +37,8 @@ int edid_parse(const uint8_t *b, int len, edid_info_t *e) {
         for (k = 0; k < 3; k++) if (e->mfg[k] < 'A' || e->mfg[k] > 'Z') e->mfg[k] = '?';
     }
     e->product = (uint16_t)(b[10] | (b[11] << 8));
+    e->serial = (uint32_t)b[12] | ((uint32_t)b[13] << 8) | ((uint32_t)b[14] << 16) | ((uint32_t)b[15] << 24);
+    e->week = (b[16] >= 1 && b[16] <= 54) ? b[16] : 0;
     e->year = b[17] ? 1990 + b[17] : 0;
     e->version = b[18];
     e->revision = b[19];
@@ -45,6 +47,17 @@ int edid_parse(const uint8_t *b, int len, edid_info_t *e) {
     e->digital = (b[20] & 0x80u) ? 1 : 0;
     /* gamma: stored 0 and 255 mean "not stated" (EDID 1.4) */
     if (b[23] && b[23] != 255) e->gamma_100 = 100 + b[23];
+    /* Chromaticity, bytes 25..34. The low two bits are packed in 25 and 26. */
+    {
+        int rx = (b[27] << 2) | (b[25] >> 6);
+        int ry = (b[28] << 2) | ((b[25] >> 4) & 3);
+        int wx = (b[33] << 2) | ((b[26] >> 2) & 3);
+        int wy = (b[34] << 2) | (b[26] & 3);
+        int any = 0, bi;
+        for (bi = 25; bi <= 34; bi++) if (b[bi]) any = 1;
+        (void)rx; (void)ry;
+        if (any) { e->chroma_ok = 1; e->chroma_wx = wx; e->chroma_wy = wy; }
+    }
     /* established timings, bytes 35..37, the 17 VESA modes in bit order */
     {
         unsigned bits = (unsigned)b[35] << 9 | (unsigned)b[36] << 1 | ((b[37] >> 7) & 1u);
@@ -92,22 +105,40 @@ int edid_parse(const uint8_t *b, int len, edid_info_t *e) {
                 e->range_hmin = d[7];
                 e->range_hmax = d[8];
                 e->range_clock = d[9] * 10;
+            } else if (d[3] == 0xFF && !e->serial_text[0]) {
+                int p = 0, c;
+                for (c = 5; c < 18 && p < 13; c++) {
+                    if (d[c] == 0x0A || d[c] == 0) break;
+                    if (d[c] >= 32 && d[c] < 127) e->serial_text[p++] = (char)d[c];
+                }
+                e->serial_text[p] = 0;
             }
             continue;
         }
-        if (e->native_w) continue;   /* the first timing stays the preferred one */
         clock = (unsigned)d[0] | ((unsigned)d[1] << 8);
-        e->native_w = d[2] | ((d[4] & 0xF0) << 4);
-        e->native_h = d[5] | ((d[7] & 0xF0) << 4);
-        e->mm_w = d[12] | ((d[14] & 0xF0) << 4);
-        e->mm_h = d[13] | ((d[14] & 0x0F) << 8);
-        ha = e->native_w + (d[3] | ((d[4] & 0x0F) << 8));
-        va = e->native_h + (d[6] | ((d[7] & 0x0F) << 8));
-        t = ha > e->native_w && va > e->native_h ? ha * va : 0;
-        if (clock && t) {
-            /* clock is in 10 kHz units */
-            unsigned hz = (clock * 10000u) / (unsigned)t;
-            if (hz >= 24u && hz <= 360u) e->refresh_hz = (int)hz;
+        {
+            int tw = d[2] | ((d[4] & 0xF0) << 4);
+            int th = d[5] | ((d[7] & 0xF0) << 4);
+            int hz = 0;
+            ha = tw + (d[3] | ((d[4] & 0x0F) << 8));
+            va = th + (d[6] | ((d[7] & 0x0F) << 8));
+            t = ha > tw && va > th ? ha * va : 0;
+            if (clock && t) {
+                unsigned v = (clock * 10000u) / (unsigned)t;
+                if (v >= 24u && v <= 360u) hz = (int)v;
+            }
+            if (e->dtd_n < 4 && tw > 0 && th > 0) {
+                e->dtd_w[e->dtd_n] = tw;
+                e->dtd_h[e->dtd_n] = th;
+                e->dtd_hz[e->dtd_n] = hz;
+                e->dtd_n++;
+            }
+            if (e->native_w) continue;   /* the first timing stays the preferred one */
+            e->native_w = tw;
+            e->native_h = th;
+            e->mm_w = d[12] | ((d[14] & 0xF0) << 4);
+            e->mm_h = d[13] | ((d[14] & 0x0F) << 8);
+            if (hz) e->refresh_hz = hz;
         }
     }
     /* sizes under 3 cm are placeholders (projectors report 0, some 1x1) */
@@ -117,6 +148,7 @@ int edid_parse(const uint8_t *b, int len, edid_info_t *e) {
         uint32_t d2 = (uint32_t)(e->size_mm_w * e->size_mm_w + e->size_mm_h * e->size_mm_h);
         e->diag_tenths = (int)((edid_isqrt(d2 * 100u) * 10u + 127u) / 254u);
     }
+    e->ext_blocks = b[126];
     e->ok = 1;
     return 0;
 }
@@ -148,6 +180,41 @@ int edid_established_mode(int bit, int *w, int *h) {
     if (bit < 0 || bit > 16 || !w || !h) return -1;
     *w = ew[bit];
     *h = eh[bit];
+    return 0;
+}
+
+int edid_established_hz(int bit, int *hz) {
+    static const int ez[17] = {
+        70, 88, 60, 67, 72, 75, 56, 60,
+        72, 75, 75, 87, 60, 70, 75, 75, 75
+    };
+    if (bit < 0 || bit > 16 || !hz) return -1;
+    *hz = ez[bit];
+    return 0;
+}
+
+int edid_best_mode(const edid_info_t *e, int *w, int *h, int *hz) {
+    int bit, best = -1, area = 0, bw = 0, bh = 0, bz = 0;
+    if (!e || !e->ok || !w || !h || !hz) return -1;
+    if (e->native_w > 0 && e->native_h > 0) {
+        *w = e->native_w;
+        *h = e->native_h;
+        *hz = e->refresh_hz;
+        return 0;
+    }
+    for (bit = 0; bit < 17; bit++) {
+        int mw, mh, mz, a;
+        if ((e->established & (1 << bit)) == 0) continue;
+        if (edid_established_mode(bit, &mw, &mh) != 0) continue;
+        if (edid_established_hz(bit, &mz) != 0) continue;
+        a = mw * mh;
+        if (a > area) { area = a; best = bit; bw = mw; bh = mh; bz = mz; }
+    }
+    if (best < 0) return -1;
+    *w = bw;
+    *h = bh;
+    *hz = bz;
+    (void)best;
     return 0;
 }
 

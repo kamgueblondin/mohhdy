@@ -3,6 +3,9 @@
  * TCP through the networker, TLS 1.2 with certificate checks against the
  * root store in /etc/ca-roots.pem. Offline pages in /web stay local files. */
 #include "shell_fetch.h"
+#include "shell_desk.h"
+#include "wf_blocks.h"
+#include "wf_feed.h"
 #include "wf_guest.h"
 #include "wf_html.h"
 #include "wf_entity.h"
@@ -14,6 +17,10 @@
 #include "wsearch.h"
 #include "wsearch_api.h"
 #include "wf_searchform.h"
+#include "wf_formfill.h"
+#include "fsops.h"
+
+extern const fsops_io_t shell_fs_io;
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
@@ -33,6 +40,8 @@ static wf_sections_t g_sec;
 static wf_form_page_t g_forms;
 static int g_cur;
 static int g_page_ok;
+static char g_blocks[2048];
+static int g_blocks_n;
 
 /* Lot 72: images of the page shown in the GUI (atlas + decode buffers,
  * about 1.7 MiB, see wf_webimg.h) */
@@ -213,20 +222,23 @@ int shell_fetch_line(const char* line) {
         }
         g_text[n] = 0;
     }
+    if (!shell_desk_nav_held()) shell_desk_note(g_res.url[0] ? g_res.url : url, 0);
     print_string("fetch body-begin\n");
     print_string(g_text);
     print_string("\nfetch body-end\n");
     return 0;
 }
 
+/* Lot 86: the reader applies <style> only when this is on, or for web-load. */
+static int g_css_on;
+
+static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int src_max, char* final_url, int url_max,
+                        char* status, int st_max);
+
 /* Lot 71: GET or a form request (POST body) for the GUI. The reduced page
  * keeps its forms; section 0 is written into src. */
 static int page_fetch(const char* url, const wf_fetch_req_t* req, char* src, int src_max, char* final_url, int url_max,
                       char* status, int st_max) {
-    static char line_out[600];
-    static wf_url_t base;
-    wf_html_stats_t st;
-    int i, n;
     g_verbose = 0;
     if (status && st_max > 0) status[0] = 0;
     /* Lot 69: "search:QUERY" is the result page of a search */
@@ -243,19 +255,39 @@ static int page_fetch(const char* url, const wf_fetch_req_t* req, char* src, int
         }
         return -1;
     }
+    return page_present(req, g_css_on, src, src_max, final_url, url_max, status, st_max);
+}
+
+static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int src_max, char* final_url, int url_max,
+                        char* status, int st_max) {
+    static char line_out[600];
+    static wf_url_t base;
+    wf_html_stats_t st;
+    int i, n;
     for (i = 0; i < url_max - 1 && g_res.url[i]; i++) final_url[i] = g_res.url[i];
     final_url[i] = 0;
     g_body[g_res.body_len] = 0;
     g_page_ok = 0;
+    g_blocks_n = 0;
+    if (wf_feed_looks((const char *)g_body, g_res.body_len)) {
+        static wf_feed_t feed;
+        if (wf_feed_parse((const char *)g_body, g_res.body_len, &feed) == 0)
+            g_blocks_n = wf_feed_text(&feed, g_blocks, (int)sizeof(g_blocks));
+    }
+    if (g_blocks_n <= 0)
+        g_blocks_n = wf_blocks_text((const char *)g_body, g_res.body_len, g_blocks, (int)sizeof(g_blocks), 0);
     if (wf_url_parse(g_res.url, &base) != 0) return -1;
     if (is_html(&g_res, g_body, g_res.body_len)) {
         wf_html_set_charset(wf_charset_header(g_res.content_type, ctlen(g_res.content_type)));
         wf_html_set_images(g_img_on);
+        wf_html_set_sitecss(use_css);
         g_full_n = wf_html_reduce_ex((const char*)g_body, g_res.body_len, &base, g_full, (int)sizeof(g_full), &st,
                                      PAGE_NODE_BUDGET, &g_forms);
+        wf_html_set_sitecss(0);
         if (g_full_n > 0 && wf_section_index(g_full, g_full_n, &g_sec) > 0) {
             g_page_ok = 1;
             g_cur = 0;
+            if (!shell_desk_nav_held()) shell_desk_note(final_url[0] ? final_url : g_res.url, st.title);
             n = wf_section_render(g_full, g_full_n, &g_sec, 0, &g_forms, src, src_max);
             /* Lot 72: favicon and the images of section 0 */
             if (g_img_on) {
@@ -268,7 +300,9 @@ static int page_fetch(const char* url, const wf_fetch_req_t* req, char* src, int
                 if (n > 0) n = with_images(src, n, src_max);
             }
         } else {
+            wf_html_set_sitecss(use_css);
             n = wf_html_reduce((const char*)g_body, g_res.body_len, &base, src, src_max, &st);
+            wf_html_set_sitecss(0);
         }
     } else {
         /* text/plain and others: shown escaped in a <pre> */
@@ -359,6 +393,9 @@ int shell_page_form_key(int key) {
     if (key == OS_TERM_KEY_DEL) { (void)wf_form_delete(&g_forms); return 0; }
     if (key == OS_VGA_KEY_LEFT) { (void)wf_form_move(&g_forms, -1); return 0; }
     if (key == OS_VGA_KEY_RIGHT) { (void)wf_form_move(&g_forms, 1); return 0; }
+    /* Lot 86: Down in a text field takes the remembered value (autofill);
+     * with nothing remembered the key goes on (the page scrolls). */
+    if (key == OS_VGA_KEY_DOWN && shell_desk_fill_key(&g_forms, g_forms.focus, g_res.url) == 0) return 0;
     if (key == OS_TERM_KEY_HOME) { (void)wf_form_move(&g_forms, -1000); return 0; }
     if (key == OS_TERM_KEY_END) { (void)wf_form_move(&g_forms, 1000); return 0; }
     if (key >= 0x20 && key <= 0xff && key != 0x7f) { (void)wf_form_insert(&g_forms, (char)key); return 0; }
@@ -412,6 +449,12 @@ int shell_page_article(char* out, int cap) {
     n = wf_article_text(g_full, g_full_n, out, cap - 1);
     if (n < 0) n = 0;
     if (n < cap - 1) { out[n++] = '\n'; out[n] = 0; }
+    /* Lot 86: the raw page's tables and lists, kept beside the reader text. */
+    if (g_blocks_n > 0 && n < cap - 1) {
+        int k = 0;
+        while (k < g_blocks_n && n < cap - 1) out[n++] = g_blocks[k++];
+        out[n] = 0;
+    }
     return n;
 }
 
@@ -456,6 +499,8 @@ int shell_page_submit(int n, char* src, int src_max, char* final_url, int url_ma
     }
     for (i = 0; sub.url[i] && i < (int)sizeof(url) - 1; i++) url[i] = sub.url[i];
     url[i] = 0;
+    /* Lot 86: remember typed values before the next page replaces the form. */
+    (void)shell_desk_remember_form(&g_forms, f, g_res.url[0] ? g_res.url : url);
     {
         /* Lot 72: Google search form: the page without JavaScript, then
          * the fallback engines (shell_search_google_form) */
@@ -483,4 +528,126 @@ int shell_page_submit(int n, char* src, int src_max, char* final_url, int url_ma
         return page_fetch(url, &rq, src, src_max, final_url, url_max, status, st_max);
     }
     return page_fetch(url, 0, src, src_max, final_url, url_max, status, st_max);
+}
+
+static int take_num(const char **s) {
+    int n = 0, any = 0;
+    while (**s == ' ') (*s)++;
+    while (**s >= '0' && **s <= '9' && n < 1000) { n = n * 10 + (**s - '0'); (*s)++; any = 1; }
+    return any ? n : -1;
+}
+
+int shell_page_load(const char *path, const char *url, char *status, int st_max) {
+    int n, i;
+    static char src[128];
+    static char final_url[8];
+    if (status && st_max > 0) status[0] = 0;
+    if (!path || !path[0] || !url || !url[0]) {
+        if (status) scat(status, st_max, "osui web load error=usage web-load PATH URL");
+        return -1;
+    }
+    n = fsops_read(&shell_fs_io, path, (char *)g_body, (int)sizeof(g_body) - 1);
+    if (n < 0) {
+        if (status) scat(status, st_max, "osui web load error=read");
+        return -1;
+    }
+    for (i = 0; i < (int)sizeof(g_res); i++) ((char *)&g_res)[i] = 0;
+    for (i = 0; url[i] && i < (int)sizeof(g_res.url) - 1; i++) g_res.url[i] = url[i];
+    g_res.url[i] = 0;
+    for (i = 0; i < 9; i++) g_res.content_type[i] = "text/html"[i];
+    g_res.status = 200;
+    g_res.body_len = n;
+    g_body[n] = 0;
+    /* A saved page is opened with its stylesheet. The operator flag is unchanged. */
+    return page_present(0, 1, src, (int)sizeof(src), final_url, (int)sizeof(final_url), status, st_max);
+}
+
+int shell_page_preview(int field, char *out, int cap) {
+    static char body[WF_FORM_SUBMIT_MAX + WF_FORM_BODY_MAX + 16];
+    int n;
+    if (!out || cap < 16) return -1;
+    out[0] = 0;
+    if (!g_page_ok) { scat(out, cap, "web-preview none\n"); return -1; }
+    if (field < 0) field = g_forms.focus;
+    if (field < 0 || field >= g_forms.nfields) field = wf_form_first_text(&g_forms, -1);
+    n = wf_formfill_preview(&g_forms, field, body, (int)sizeof(body));
+    if (n < 0) { scat(out, cap, "web-preview error=submit_refused\n"); return -1; }
+    scat(out, cap, "web-preview ");
+    scat(out, cap, body);
+    return n;
+}
+
+int shell_page_fill_cmd(const char *line, char *out, int cap) {
+    const char *a = line ? line : "";
+    int field, offer, i, n;
+    wf_fill_offer_t got[WF_FILL_OFFERS];
+    if (!out || cap < 16) return -1;
+    out[0] = 0;
+    while (*a && *a != ' ') a++;
+    while (*a == ' ') a++;
+    if (!g_page_ok) { scat(out, cap, "web-fill none\n"); return -1; }
+    if (a[0] == 'r' && a[1] == 'e') {
+        n = shell_desk_remember_form(&g_forms, -1, g_res.url);
+        scat(out, cap, "web-fill remembered ");
+        scat_int(out, cap, n);
+        scat(out, cap, "\n");
+        return 0;
+    }
+    if (a[0] == 'a' && a[1] == 'p') {
+        const char *p = a;
+        int n1, n2;
+        while (*p && *p != ' ') p++;
+        n1 = take_num(&p);
+        n2 = take_num(&p);
+        if (n2 >= 0) { field = n1; offer = n2; }
+        else { field = g_forms.focus; offer = n1; }
+        if (field < 0) field = wf_form_first_text(&g_forms, -1);
+        if (offer < 0 || shell_desk_apply_offer(&g_forms, field, offer, g_res.url) != 0) {
+            scat(out, cap, "web-fill error=no_offer\n");
+            return -1;
+        }
+        scat(out, cap, "web-fill applied ");
+        scat_int(out, cap, offer);
+        scat(out, cap, "\n");
+        return 0;
+    }
+    field = take_num(&a);
+    if (field < 0) field = g_forms.focus;
+    if (field < 0) field = wf_form_first_text(&g_forms, -1);
+    n = shell_desk_offers(&g_forms, field, g_res.url, got, WF_FILL_OFFERS);
+    scat(out, cap, "web-fill field ");
+    scat_int(out, cap, field);
+    scat(out, cap, " offers ");
+    scat_int(out, cap, n);
+    scat(out, cap, "\n");
+    for (i = 0; i < n; i++) {
+        scat(out, cap, "offer ");
+        scat_int(out, cap, i);
+        scat(out, cap, " ");
+        scat(out, cap, got[i].name);
+        scat(out, cap, " ");
+        scat(out, cap, got[i].value);
+        scat(out, cap, "\n");
+    }
+    return 0;
+}
+
+int shell_page_css_cmd(const char *line, char *out, int cap) {
+    const char *a = line ? line : "";
+    if (!out || cap < 16) return -1;
+    out[0] = 0;
+    while (*a && *a != ' ') a++;
+    while (*a == ' ') a++;
+    if (a[0] == 'o' && a[1] == 'n' && (a[2] == 0 || a[2] == ' ')) {
+        g_css_on = 1;
+        scat(out, cap, "web-css on\n");
+        return 0;
+    }
+    if (a[0] == 'o' && a[1] == 'f' && a[2] == 'f') {
+        g_css_on = 0;
+        scat(out, cap, "web-css off\n");
+        return 0;
+    }
+    if (wf_html_sitecss_report(out, cap) <= 0) scat(out, cap, "css none\n");
+    return 0;
 }

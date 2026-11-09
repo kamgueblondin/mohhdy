@@ -4475,7 +4475,7 @@ void syscall_init() {
     gpt2_progress_hook = ai_ring0_progress;
     g_ai_mapped_pid = 0;
     // Enregistre notre handler pour l'interruption 0x80
-    register_interrupt_handler(0x80, (interrupt_handler_t)syscall_handler);
+    register_interrupt_handler(0x80, syscall_handler);
 }
 
 /* Lot 46: SYS_OUT_CAPTURE (kernel/out_capture.h). A capture left open by a

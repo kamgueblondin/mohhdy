@@ -61,6 +61,9 @@ typedef struct {
 
 /* 0 when a final response was received (any status), < 0 otherwise. */
 int wf_fetch(const wf_fetch_env_t* env, const char* url, uint8_t* body, int cap, wf_fetch_result_t* res);
+/* Lot 86: when on, every fetch fails with "network off" and opens nothing. */
+void wf_fetch_set_offline(int on);
+int wf_fetch_offline(void);
 
 /* Lot 71: a request other than a plain GET. method "POST" sends body
  * (body_len bytes, content type ctype) on the first hop; a 301/302/303

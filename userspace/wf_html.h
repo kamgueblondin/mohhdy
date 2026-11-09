@@ -54,6 +54,13 @@ void wf_html_set_viewport(int vw, int dpr100);
  * WF_CS_NONE: then a <meta> charset in the page decides (HTML rule: the
  * transport charset wins). Applies to the next reduce. */
 void wf_html_set_charset(int cs);
+/* Lot 86: when on, the next reduce applies the page's <style> (display:none
+ * skips a subtree; color, weight and align are copied onto the kept tag).
+ * Off by default so earlier callers keep the same bytes. */
+void wf_html_set_sitecss(int on);
+int wf_html_sitecss_on(void);
+/* Report of the sheet built by the last reduce that had sitecss on. */
+int wf_html_sitecss_report(char *out, int cap);
 /* Plain text of a page for the console (tags removed, blocks on new
  * lines). Lot 71: every character reference decoded and the text written
  * as UTF-8 (the console decodes UTF-8), Latin-1 pages converted. */

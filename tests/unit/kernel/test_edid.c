@@ -151,6 +151,51 @@ static void test_standard_and_established(void) {
     TEST_ASSERT_EQUAL(1024, e.native_w);
 }
 
+static void test_lot86_week_serial_white(void) {
+    edid_info_t e;
+    uint8_t *d2;
+    make_block(1024, 768, 260, 195, 26, 20);
+    g_b[12] = 0x78; g_b[13] = 0x56; g_b[14] = 0x34; g_b[15] = 0x12;
+    g_b[16] = 12;
+    g_b[33] = 0x50; g_b[34] = 0x54;
+    d2 = g_b + 54 + 18;
+    d2[0] = 0x20; d2[1] = 0x4E;
+    d2[2] = (uint8_t)(800 & 0xFF); d2[4] = (uint8_t)(((800 >> 8) & 0x0F) << 4);
+    d2[5] = (uint8_t)(600 & 0xFF); d2[7] = (uint8_t)(((600 >> 8) & 0x0F) << 4);
+    fix_sum(g_b);
+    TEST_ASSERT_EQUAL(0, edid_parse(g_b, EDID_BLOCK, &e));
+    TEST_ASSERT_EQUAL(0x12345678u, e.serial);
+    TEST_ASSERT_EQUAL(12, e.week);
+    TEST_ASSERT_EQUAL(1, e.chroma_ok);
+    TEST_ASSERT_EQUAL(0x50 * 4, e.chroma_wx);
+    TEST_ASSERT_EQUAL(0x54 * 4, e.chroma_wy);
+    TEST_ASSERT_EQUAL(2, e.dtd_n);
+    TEST_ASSERT_EQUAL(1024, e.native_w);
+    TEST_ASSERT_EQUAL(800, e.dtd_w[1]);
+    TEST_ASSERT_EQUAL(600, e.dtd_h[1]);
+    TEST_ASSERT_EQUAL(0, e.ext_blocks);
+    g_b[126] = 1;
+    fix_sum(g_b);
+    TEST_ASSERT_EQUAL(0, edid_parse(g_b, EDID_BLOCK, &e));
+    TEST_ASSERT_EQUAL(1, e.ext_blocks);
+    TEST_ASSERT_EQUAL(1024, e.native_w);
+    {
+        int w = 0, h = 0, hz = 0;
+        TEST_ASSERT_EQUAL(0, edid_best_mode(&e, &w, &h, &hz));
+        TEST_ASSERT_EQUAL(1024, w);
+        TEST_ASSERT_EQUAL(768, h);
+        TEST_ASSERT_EQUAL(0, edid_established_hz(16, &hz));
+        TEST_ASSERT_EQUAL(75, hz);
+        e.native_w = 0;
+        e.native_h = 0;
+        e.established = 1 << 7;   /* 800x600@60 */
+        TEST_ASSERT_EQUAL(0, edid_best_mode(&e, &w, &h, &hz));
+        TEST_ASSERT_EQUAL(800, w);
+        TEST_ASSERT_EQUAL(600, h);
+        TEST_ASSERT_EQUAL(60, hz);
+    }
+}
+
 static void test_isqrt(void) {
     TEST_ASSERT_EQUAL(0, edid_isqrt(0));
     TEST_ASSERT_EQUAL(1, edid_isqrt(3));
@@ -168,6 +213,7 @@ int main(void) {
     RUN_TEST(test_describe);
     RUN_TEST(test_standard_and_established);
     RUN_TEST(test_isqrt);
+    RUN_TEST(test_lot86_week_serial_white);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

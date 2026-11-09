@@ -116,6 +116,59 @@ static int ts_before(const char* a, const char* b) {
     return 0;
 }
 
+/* Lot 86: now + seconds as YYYYMMDDHHMMSS. seconds is capped at ten years
+ * so the arithmetic stays inside 32 bits. A bad stamp returns -1. */
+static int leap(int y) { return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0); }
+static int month_days(int y, int m) {
+    static const int d[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    if (m == 2 && leap(y)) return 29;
+    if (m < 1 || m > 12) return 0;
+    return d[m - 1];
+}
+static int read_ts(const char* s, int* y, int* mo, int* d, int* h, int* mi, int* se) {
+    int i, v[6], w[6] = { 4, 2, 2, 2, 2, 2 }, p = 0;
+    if (!s) return -1;
+    for (i = 0; i < 14; i++) if (s[i] < '0' || s[i] > '9') return -1;
+    for (i = 0; i < 6; i++) {
+        int k, x = 0;
+        for (k = 0; k < w[i]; k++) x = x * 10 + (s[p++] - '0');
+        v[i] = x;
+    }
+    *y = v[0]; *mo = v[1]; *d = v[2]; *h = v[3]; *mi = v[4]; *se = v[5];
+    if (*y < 1970 || *y > 2099 || *mo < 1 || *mo > 12 || *d < 1 || *d > month_days(*y, *mo)) return -1;
+    if (*h > 23 || *mi > 59 || *se > 59) return -1;
+    return 0;
+}
+static void write_ts(char out[15], int y, int mo, int d, int h, int mi, int se) {
+    int v[6], w[6] = { 4, 2, 2, 2, 2, 2 }, i, p = 0;
+    v[0] = y; v[1] = mo; v[2] = d; v[3] = h; v[4] = mi; v[5] = se;
+    for (i = 0; i < 6; i++) {
+        int x = v[i], k;
+        for (k = w[i] - 1; k >= 0; k--) { out[p + k] = (char)('0' + x % 10); x /= 10; }
+        p += w[i];
+    }
+    out[14] = 0;
+}
+static int add_seconds(const char* now, uint32_t sec, char out[15]) {
+    int y, mo, d, h, mi, se;
+    if (sec > 10U * 366U * 24U * 3600U) sec = 10U * 366U * 24U * 3600U;
+    if (read_ts(now, &y, &mo, &d, &h, &mi, &se) != 0) return -1;
+    se += (int)(sec % 60U); sec /= 60U;
+    mi += (int)(sec % 60U); sec /= 60U;
+    h += (int)(sec % 24U); sec /= 24U;
+    d += (int)sec;
+    if (se >= 60) { se -= 60; mi++; }
+    if (mi >= 60) { mi -= 60; h++; }
+    if (h >= 24) { h -= 24; d++; }
+    while (d > month_days(y, mo)) {
+        d -= month_days(y, mo);
+        mo++;
+        if (mo > 12) { mo = 1; y++; if (y > 2099) return -1; }
+    }
+    write_ts(out, y, mo, d, h, mi, se);
+    return 0;
+}
+
 static int find(const wf_cookie_jar_t* j, const char* name, const char* dom, const char* path) {
     int i;
     for (i = 0; i < WF_COOKIE_MAX; i++)
@@ -187,12 +240,23 @@ int wf_cookie_set(wf_cookie_jar_t* j, const char* host, const char* req_path, in
                 if (v[av_s] == '-' || (vl == 1 && v[av_s] == '0')) del = 1;
                 else {
                     int allz = 1;
-                    for (k = 0; k < vl; k++) if (v[av_s + k] != '0') allz = 0;
+                    uint32_t age = 0;
+                    for (k = 0; k < vl; k++) {
+                        if (v[av_s + k] < '0' || v[av_s + k] > '9') { allz = -1; break; }
+                        if (v[av_s + k] != '0') allz = 0;
+                        if (age < 100000000U) age = age * 10U + (uint32_t)(v[av_s + k] - '0');
+                    }
                     if (allz) del = 1;
+                    else if (allz == 0 && now && slen(now) == 14) {
+                        if (add_seconds(now, age, c.expires) != 0) c.expires[0] = 0;
+                    }
                 }
             } else if (al == 7 && ieq_n(v + as, "expires", 7) && vl > 0 && now && slen(now) == 14) {
                 char ts[15];
-                if (parse_date(v + av_s, vl, ts) == 0 && ts_before(ts, now)) del = 1;
+                if (parse_date(v + av_s, vl, ts) == 0) {
+                    if (ts_before(ts, now)) del = 1;
+                    else ncpy(c.expires, (int)sizeof(c.expires), ts, 14, 0);
+                }
             }
         }
     }
@@ -317,4 +381,14 @@ void wf_cookie_list(const wf_cookie_jar_t* j, char* out, int cap) {
         p = app(out, cap, p, "\n");
     }
     if (p < 0 && cap > 4) { out[cap - 4] = '.'; out[cap - 3] = '.'; out[cap - 2] = '\n'; out[cap - 1] = 0; }
+}
+
+int wf_cookie_expire(wf_cookie_jar_t* j, const char* now) {
+    int i, n = 0;
+    if (!j || !now || slen(now) != 14) return 0;
+    for (i = 0; i < WF_COOKIE_MAX; i++) {
+        if (!j->c[i].used || !j->c[i].expires[0]) continue;
+        if (ts_before(j->c[i].expires, now)) { j->c[i].used = 0; j->deleted++; n++; }
+    }
+    return n;
 }

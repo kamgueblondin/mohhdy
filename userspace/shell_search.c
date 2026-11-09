@@ -5,6 +5,7 @@
  * or ending with '='), for example a local test server. Results stay in
  * a static table (WSEARCH_MAX entries); nothing is stored on disk. */
 #include "shell_search.h"
+#include "wf_store.h"
 #include "wsearch.h"
 #include "wsearch_api.h"
 #include "wsearch_local.h"
@@ -246,7 +247,25 @@ static int cookies_line(const char* a) {
     }
     if (s_pre(a, "off") && !a[3]) { j->enabled = 0; (void)wf_cookie_clear(j, 0); print_string("cookies off\n"); return 0; }
     if (s_pre(a, "on") && !a[2]) { j->enabled = 1; print_string("cookies on\n"); return 0; }
-    if (*a) { print_string("cookies error usage: cookies [clear [DOMAIN] | on | off]\n"); return 1; }
+    if (s_pre(a, "save") && !a[4]) {
+        static char blob[12 * 1024];
+        int n = wf_store_cookies_save(j, blob, (int)sizeof(blob));
+        if (n < 0 || osui_gui_persist_write("/persist/cookies.txt", blob, n) != 0) {
+            print_string("cookies save error\n"); return 1;
+        }
+        print_string("cookies saved\n");
+        return 0;
+    }
+    if (s_pre(a, "load") && !a[4]) {
+        static char blob[12 * 1024];
+        int n = osui_gui_persist_read("/persist/cookies.txt", blob, (int)sizeof(blob) - 1);
+        int en = j->enabled;
+        if (n < 0 || wf_store_cookies_load(j, blob, n) != 0) { print_string("cookies load error\n"); return 1; }
+        j->enabled = en;
+        print_string("cookies loaded\n");
+        return 0;
+    }
+    if (*a) { print_string("cookies error usage: cookies [clear [DOMAIN] | on | off | save | load]\n"); return 1; }
     num[0] = 0; s_int(num, (int)sizeof(num), wf_cookie_count(j));
     print_string(j->enabled ? "cookies on count " : "cookies off count ");
     print_string(num);

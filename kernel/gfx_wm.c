@@ -159,3 +159,49 @@ void gfx_wm_draw_grip(uint32_t *fb, int fw, int fh, int pitch, gfx_wm_rect_t win
         }
     }
 }
+
+int gfx_wm_chrome_check(gfx_wm_rect_t win, int title_h, int scale) {
+    int b, n, prev_left;
+    if (win.w < GFX_WM_MIN_W || win.h < GFX_WM_MIN_H || title_h < 16) return -1;
+    n = gfx_wm_btn(title_h, scale);
+    if (n < GFX_WM_BTN || n > title_h - 4) return -2;
+    prev_left = win.x + win.w;
+    for (b = GFX_WM_HIT_CLOSE; b >= GFX_WM_HIT_MIN; b--) {
+        int x, y;
+        gfx_wm_button_pos(win, title_h, scale, b, &x, &y);
+        if (x < win.x + 8 || y < win.y || x + n > win.x + win.w || y + n > win.y + GFX_WM_PAD + title_h) return -3;
+        if (x + n > prev_left) return -4;
+        if (gfx_wm_hit(win, title_h, scale, x + n / 2, y + n / 2) != b) return -5;
+        prev_left = x;
+    }
+    if (gfx_wm_hit(win, title_h, scale, win.x + 12, win.y + title_h / 2) != GFX_WM_HIT_TITLE) return -6;
+    if (gfx_wm_hit(win, title_h, scale, win.x + win.w - 2, win.y + win.h - 2) != GFX_WM_HIT_RESIZE) return -7;
+    return 0;
+}
+
+int gfx_wm_chrome_suite(void) {
+    static const int scales[] = {1, 4, 6, 8, 12, 16};
+    static const int ww[] = {200, 360, 480, 768, 1024};
+    static const int hh[] = {120, 280, 320, 560, 768};
+    int s, i, bad = 0, title;
+    for (title = 30; title <= 40; title += 10) {
+        for (s = 0; s < 6; s++) {
+            for (i = 0; i < 5; i++) {
+                gfx_wm_rect_t w, area, placed;
+                gfx_wm_win_t st;
+                w.x = 8; w.y = 40; w.w = ww[i]; w.h = hh[i];
+                if (gfx_wm_chrome_check(w, title, scales[s]) != 0) bad++;
+                gfx_wm_reset(&st);
+                area.x = 0; area.y = 0; area.w = 1024; area.h = 768;
+                st.maximized = 1;
+                gfx_wm_place(&st, w, area, &placed);
+                if (placed.x != area.x || placed.y != area.y || placed.w != area.w || placed.h != area.h) bad++;
+                st.maximized = 0;
+                st.minimized = 1;
+                gfx_wm_place(&st, w, area, &placed);
+                if (placed.w != 0 || placed.h != 0) bad++;
+            }
+        }
+    }
+    return bad;
+}

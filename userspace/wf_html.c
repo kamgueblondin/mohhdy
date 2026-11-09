@@ -1,5 +1,6 @@
 /* wf_html.c - Lot 67: reader-view reduction of a fetched page (see wf_html.h). */
 #include "wf_html.h"
+#include "wf_sitecss.h"
 #include "wf_srcset.h"
 #include "wf_entity.h"
 #include "wf_read.h"
@@ -71,6 +72,19 @@ static int in_list(const char* name, const char* const* list) {
     int i;
     for (i = 0; list[i]; i++) if (seq(name, list[i])) return 1;
     return 0;
+}
+
+static int g_sitecss;
+static wf_site_t g_site;
+
+void wf_html_set_sitecss(int on) { g_sitecss = on ? 1 : 0; }
+int wf_html_sitecss_on(void) { return g_sitecss; }
+int wf_html_sitecss_report(char *out, int cap) { return wf_site_report(&g_site, out, cap); }
+
+static void ob_style(ob_t *b, int offset) {
+    char sty[96];
+    if (!g_sitecss) return;
+    if (wf_site_style_attr(&g_site, offset, sty, (int)sizeof(sty)) > 0) ob_s(b, sty);
 }
 
 static const char* const DROP_BLOCK[] = {"script", "style", "noscript", "svg", "template", "iframe", "object",
@@ -683,6 +697,8 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
     }
     st->charset = g_cs;
     if (forms) forms->charset = g_cs;   /* Lot 72: any page charset (was latin1 only) */
+    if (g_sitecss) (void)wf_site_prepare(&g_site, in, n);
+    else g_site.ready = 0;
     if (node_budget <= 0) node_budget = WF_HTML_NODE_BUDGET;
     b.o = out; b.cap = cap; b.n = 0; b.full = 0; b.nodes = 0;
     if (cap < 64) { if (cap > 0) out[0] = 0; return 0; }
@@ -758,6 +774,15 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
                 }
             }
             if (!name[0]) { put_text(&b, in, i, i + 1, &last_sp, pre); i++; continue; }   /* a lone '<' */
+            if (g_sitecss && !close && wf_site_hidden_at(&g_site, i)) {
+                int voidish = seq(name, "br") || seq(name, "img") || seq(name, "hr") || seq(name, "input") ||
+                              seq(name, "meta") || seq(name, "link") || seq(name, "source") ||
+                              (e > i && e <= n && in[e - 1] == '/');
+                st->blocks_dropped++;
+                if (voidish) i = e < n ? e + 1 : n;
+                else i = skip_block(in, n, e < n ? e + 1 : n, name);
+                continue;
+            }
             if (seq(name, "body")) body_seen = 1;
             if (g_forms) {
                 int nx;
@@ -810,11 +835,13 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
                         ob_c(&b, '"');
                         st->links++;
                     }
+                    ob_style(&b, i);
                     ob_c(&b, '>');
                 } else {
                     ob_c(&b, '<');
                     if (close) ob_c(&b, '/');
                     ob_s(&b, name);
+                    if (!close) ob_style(&b, i);
                     ob_c(&b, '>');
                 }
                 if (!seq(name, "a") && !seq(name, "b") && !seq(name, "i") && !seq(name, "em") && !seq(name, "strong") &&
@@ -826,7 +853,9 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
                     if (ends_with(&b, "<p>")) { b.n -= 3; b.nodes--; }      /* empty paragraph: dropped */
                     else if (!ends_with(&b, "</p>")) ob_s(&b, "</p>");
                 } else if (!ends_with(&b, "<p>")) {
-                    ob_s(&b, "<p>");
+                    ob_s(&b, "<p");
+                    ob_style(&b, i);
+                    ob_s(&b, ">");
                     b.nodes++;
                 }
                 last_sp = 1;
@@ -899,8 +928,8 @@ static int html_text(const char* in, int n, char* out, int cap, int display) {
             /* Lot 72: a glyph page selector prints nothing and sets the
              * page of the next bytes (reset at every tag) */
             char u[4];
-            int k, m, sp = os_page_of_sel((unsigned char)in[i]);
-            if (sp >= 0) { dpage = sp; i++; continue; }
+            int k, m;
+            if (os_display_skip(&dpage, (unsigned char)in[i])) { i++; continue; }
             m = os_display_to_utf8_page((unsigned)dpage, (unsigned char)in[i], u, (int)sizeof(u));
             for (k = 0; k < m; k++) ob_c(&b, u[k]);
             i++; nl = 0; last_sp = 0;

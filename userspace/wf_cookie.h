@@ -31,6 +31,10 @@ typedef struct {
     char path[WF_COOKIE_PATH];
     uint32_t order;                  /* set order, for eviction */
     uint8_t used, host_only, secure, http_only, same_site;   /* 0 none 1 lax 2 strict 3 none */
+    /* Lot 86: YYYYMMDDHHMMSS when the guest clock was trusted at Set-Cookie
+     * and the cookie has a future Expires or a positive Max-Age. Empty means
+     * a session cookie (the old behaviour when there is no clock). */
+    char expires[15];
 } wf_cookie_t;
 
 typedef struct {
@@ -57,6 +61,10 @@ int wf_cookie_header(wf_cookie_jar_t* j, const char* host, const char* req_path,
 int wf_cookie_count(const wf_cookie_jar_t* j);
 /* removes the cookies of a domain (and its subdomains), all when 0 or "" */
 int wf_cookie_clear(wf_cookie_jar_t* j, const char* domain);
+/* Lot 86: drop cookies whose expires stamp is set and strictly before now
+ * (YYYYMMDDHHMMSS). Session cookies (empty expires) stay. Returns how many
+ * were dropped. now shorter than 14 digits drops nothing. */
+int wf_cookie_expire(wf_cookie_jar_t* j, const char* now);
 /* one line per cookie, values masked: "domain path name len=N secure host-only" */
 void wf_cookie_list(const wf_cookie_jar_t* j, char* out, int cap);
 #endif

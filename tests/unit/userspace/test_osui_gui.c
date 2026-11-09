@@ -1465,6 +1465,130 @@ static void test_lot75_gui_multipart_ctype(void) {
     osui_gui_set_web_fetch(0);
 }
 
+/* Lot 86: web-load, web-preview, web-fill and web-css reach the shell
+ * through the page ops table (no direct shell_fetch.c call from the GUI) */
+static char g_l86_last[160];
+static int l86_load(const char *path, const char *url, char *status, int st_max) {
+    snprintf(g_l86_last, sizeof(g_l86_last), "load|%s|%s", path, url);
+    return snprintf(status, (size_t)st_max, "shell page loaded");
+}
+static int l86_preview(int field, char *out, int cap) {
+    snprintf(g_l86_last, sizeof(g_l86_last), "preview|%d", field);
+    return snprintf(out, (size_t)cap, "preview GET /q?x=1");
+}
+static int l86_fill(const char *line, char *out, int cap) {
+    snprintf(g_l86_last, sizeof(g_l86_last), "fill|%s", line);
+    return snprintf(out, (size_t)cap, "fill ok");
+}
+static int l86_css(const char *line, char *out, int cap) {
+    snprintf(g_l86_last, sizeof(g_l86_last), "css|%s", line);
+    return snprintf(out, (size_t)cap, "css ok");
+}
+static void test_lot86_shell_page_ops_routing(void) {
+    static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                             l86_load, l86_preview, l86_fill, l86_css };
+    static const osui_web_page_ops_t none = { 0 };
+    setup();
+    /* without the shell entries every command answers, nothing crashes */
+    osui_gui_set_web_page_ops(&none);
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-load /p.html https://ex.am/p", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web load unavailable"));
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-preview 2", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web preview unavailable"));
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-fill", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web fill unavailable"));
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-css on", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web css unavailable"));
+
+    osui_gui_set_web_page_ops(&ops);
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-load   /p.html   https://ex.am/p", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL_STRING("load|/p.html|https://ex.am/p", g_l86_last);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "shell page loaded"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-preview 12", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("preview|12", g_l86_last);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "preview GET"));
+    osui_gui_web_command("web-preview", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("preview|-1", g_l86_last);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fill 3 bob", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("fill|web-fill 3 bob", g_l86_last);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "fill ok"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-css off", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("css|web-css off", g_l86_last);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "css ok"));
+    /* web-cssx is not web-css: the prefix needs a space or the end */
+    g_l86_last[0] = 0;
+    osui_gui_web_command("web-cssx", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("", g_l86_last);
+    osui_gui_set_web_page_ops(0);
+}
+
+/* Lot 86: a field that takes the focus lists its remembered value, and
+ * Down in the focused field fills it instead of scrolling the page */
+static int g_l86_offers;
+static int l86_fill_offers(const char *line, char *out, int cap) {
+    (void)line;
+    if (g_l86_offers) return snprintf(out, (size_t)cap, "web-fill field 0 offers 1\noffer 0 q mohhdy\n") > 0 ? 0 : -1;
+    return snprintf(out, (size_t)cap, "web-fill field 0 offers 0\n") > 0 ? 0 : -1;
+}
+static int l86_form_key(int key) {
+    if (g_m_focus >= 0 && key == OS_VGA_KEY_DOWN) {
+        if (!g_l86_offers) return -1;
+        snprintf(g_m_val, sizeof(g_m_val), "mohhdy");
+        return 0;
+    }
+    return m_form_key(key);
+}
+static void test_lot86_focus_offers_and_down(void) {
+    static const osui_web_page_ops_t ops = { m_sections, m_current, m_section, m_form_link, l86_form_key,
+                                             m_form_set, m_submit, m_flist, 0, 0, 0, 0, 0,
+                                             0, 0, l86_fill_offers, 0 };
+    char ev[64];
+    int x, y;
+    setup();
+    osui_gui_set_web_fetch(m_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    g_m_val[0] = 0; g_m_focus = -1; g_m_keys = g_m_submits = g_m_set = 0;
+    /* no remembered value: the focus line only, Down goes on to the page */
+    g_l86_offers = 0;
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://example.com/", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT(find_link("mohhdy-form:f:0", &x, &y));
+    snprintf(ev, sizeof(ev), "web click %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_event(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form focus f:0"));
+    TEST_ASSERT_NULL(strstr(g_out, "autofill"));
+    osui_gui_feed_key(OS_VGA_KEY_DOWN, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("", g_m_val);
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));   /* blur */
+    /* a remembered value: listed on focus, Down fills the field */
+    g_l86_offers = 1;
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://example.com/", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT(find_link("mohhdy-form:f:0", &x, &y));
+    snprintf(ev, sizeof(ev), "web click %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_event(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form focus f:0"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "offer 0 q mohhdy"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill key=Down"));
+    osui_gui_feed_key(OS_VGA_KEY_DOWN, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("mohhdy", g_m_val);
+    TEST_ASSERT_EQUAL(0, g_m_sec);   /* the page did not change section */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, g_m_submits);
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_web_page_ops(0);
+    osui_gui_set_web_fetch(0);
+}
+
 /* Lot 74: fragments: :target and the scroll to the element */
 static int t_pages_load(const char *file, char *buf, int max) {
     const char *r = 0;
@@ -1564,6 +1688,8 @@ int main(void) {
     RUN_TEST(test_lot74_form_url);
     RUN_TEST(test_lot74_gui_forms);
     RUN_TEST(test_lot75_gui_multipart_ctype);
+    RUN_TEST(test_lot86_shell_page_ops_routing);
+    RUN_TEST(test_lot86_focus_offers_and_down);
     RUN_TEST(test_lot74_gui_fragment);
     unity_print_results();
     unity_cleanup();

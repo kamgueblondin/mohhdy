@@ -140,16 +140,15 @@ static int css_hex(char c) {
  * CP1252 / Latin-1 as one byte; Greek, Cyrillic, Latin Extended-A and
  * symbols as the page selector, the byte, then back to page 0; '?'
  * when there is no glyph. */
-static void char_ref_cp(int code, char out[4]) {
-    unsigned char b = 0;
-    int pg = code > 0 ? os_cp_page((uint32_t)code, &b) : -1;
-    out[1] = 0;
-    if (pg > 0 && b < 0xFFu) {
-        out[0] = (char)os_page_sel[pg]; out[1] = (char)b; out[2] = (char)os_page_sel[0]; out[3] = 0;
-        return;
-    }
-    b = code > 0 ? os_cp1252_from_cp((uint32_t)code) : 0;
-    out[0] = b >= 0x20u && b != 0x7Fu && b < 0xFFu ? (char)b : '?';
+static void char_ref_cp(int code, char out[6]) {
+    int page = 0, n;
+    out[0] = 0;
+    /* Lot 86: page 5 needs the 0xFF switch (up to 3 bytes) plus a return
+     * to page 0 so the next letter in the same chunk stays CP1252. */
+    n = code > 0 ? os_display_put((uint32_t)code, &page, out, 5) : 0;
+    if (n <= 0) { out[0] = '?'; out[1] = 0; return; }
+    if (page != 0 && n < 5) out[n++] = (char)os_page_sel[0];
+    out[n] = 0;
 }
 
 /* Lot 72: wf_entity_table order (unsigned bytes, shorter first) */
@@ -163,7 +162,7 @@ static int ent_cmp(const char *a, const char *b, int bl) {
     return a[bl] ? 1 : 0;
 }
 
-static int char_ref(const char *s, int n, char out[4]) {
+static int char_ref(const char *s, int n, char out[6]) {
     static const char *const names[] = { "amp", "lt", "gt", "quot", "apos", "nbsp", "shy", "mdash", "ndash", "hellip",
         "lsquo", "rsquo", "ldquo", "rdquo", "laquo", "raquo", "copy", "reg", "trade", "times", "middot", "bull",
         "ensp", "emsp", "thinsp", "euro" };
@@ -243,7 +242,7 @@ static int add_text(we_doc_t* d, int parent, const char* s, int n) {
     if (n > 0) d->nodes[parent].has_text = 1;
     int i = 0, o = 0, graphic = 0, newline = 0, page = 0, node_page = -1;
     while (i < n && o < (int)sizeof(buf) - 1) {
-        char c = s[i], rep[4];
+        char c = s[i], rep[6];
         int k, used = 1, sp;
         if (c == '\r') { i++; continue; }
         if (c == '&') {
@@ -258,12 +257,14 @@ static int add_text(we_doc_t* d, int parent, const char* s, int n) {
             unsigned char u = (unsigned char)rep[k];
             sp = os_page_of_sel(u);
             if (sp >= 0) { page = sp; continue; }
+            /* Lot 86: page 1 byte 0xFF switches to page 5 and is not a cell. */
+            if (page == 1 && u == 0xFFu) { page = 5; continue; }
             if (w_space((char)u) && c != '&') {
                 buf[o++] = u == '\n' ? '\n' : u == '\t' ? '\t' : ' ';   /* lot 63: tabs kept for tab-size */
                 if (u == '\n') newline = 1;
                 continue;
             }
-            if (u >= 0x80u && u < 0xFFu) {
+            if (u >= 0x80u) {
                 if (node_page >= 0 && node_page != page) {
                     /* the page changes: what came before is one node */
                     if (add_text_node(d, parent, buf, o, graphic, newline, node_page) != 0) return -1;
@@ -272,9 +273,9 @@ static int add_text(we_doc_t* d, int parent, const char* s, int n) {
                 node_page = page;
             }
             if (rep[k] != ' ' && rep[k] != WE_SHY) graphic = 1;
-            /* Lot 71: the source is in display bytes (CP1252); the font has
-             * glyphs for 0x80..0xFE. */
-            buf[o++] = c == '&' ? rep[k] : ((u >= 32 && u < 127) || (u >= 0x80u && u < 0xFFu) ? (char)u : '?');
+            /* Display bytes, including 0xFF when it is a real page glyph
+             * (the page-5 switch was consumed above). */
+            buf[o++] = c == '&' ? rep[k] : ((u >= 32 && u < 127) || u >= 0x80u ? (char)u : '?');
         }
     }
     if (i < n) diag(d, "text source exceeds limit", parent);

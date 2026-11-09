@@ -2125,6 +2125,12 @@ typedef struct {
     uint8_t range_hmin, range_hmax; /* kHz */
     uint16_t range_clock_mhz;
     char name[14];                  /* monitor name, or "" */
+    /* Lot 86: more of the same boot block. 0 means the block did not say. */
+    uint8_t week;                   /* manufacture week 1..54 */
+    uint8_t dtd_n;                  /* detailed timings, including the preferred */
+    uint16_t serial_lo, serial_hi;  /* binary serial, little endian halves */
+    uint16_t chroma_wx, chroma_wy;  /* white point 0..1023, 0 if the bytes were 0 */
+    char serial_text[14];
 } os_display_info_t;
 #define OS_OUTCAP_BAD (-1)
 #define OS_OUTCAP_BUSY (-2)

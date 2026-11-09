@@ -40,7 +40,7 @@ static void t_cat_u(char *d, int max, unsigned v) {
 
 static const char k_tb_tasks[] = "[Actualiser] [Tuer] [Processus/Services] [Fermer]";
 static const char k_tb_view[] = "[Haut] [Bas] [Editer] [Fermer]  + - zoom, f ajuster, fleches";
-static const char k_tb_settings[] = "[Actualiser] [Fermer]";
+static const char k_tb_settings[] = "[Actualiser] [Echelle+] [Echelle-] [Reseau] [Moteur] [Fermer]";
 static const char k_tb_p2p[] = "[Pairs] [Stats] [Up] [Down] [Envoyer] [Fermer]";
 static const char k_tb_pmrun[] = "[Relancer] [Verifier] [Editer] [Fermer]";
 static const char k_tb_panel[] = "[Executer] [Menu] [Actualiser] [Fermer]";
@@ -73,9 +73,9 @@ const char *osui_tool_name(int kind) {
 /* Only non-interactive commands that print and return: a GUI window must
  * never start an editor, the desktop again or a blocking loop. */
 int osui_tool_cmd_allowed(const char *cmd) {
-    static const char *const exact[] = { "ps", "mem", "uptime", "date", "rtc-check", "whoami", "hal-info", 0 };
+    static const char *const exact[] = { "ps", "mem", "uptime", "date", "rtc-check", "whoami", "hal-info", "settings", 0 };
     static const char *const prefix[] = { "kill ", "service-status ", "p2p-", "pm-run ", "pm-check ",
-                                          "ai-model", "screen-adapt", 0 };
+                                          "ai-model", "screen-adapt", "settings ", 0 };
     int i;
     if (!cmd || !cmd[0]) return 0;
     for (i = 0; cmd[i]; i++) if (cmd[i] == ';' || cmd[i] == '|' || cmd[i] == '&' || cmd[i] == '>' || cmd[i] == '<' || cmd[i] == '`' || cmd[i] == '$') return 0;
@@ -676,7 +676,10 @@ static void settings_fill(osui_tool_t *t, const osui_tool_src_t *src) {
     add_line(t, "  US QWERTY, PS/2 set 1 (seule disposition du decodeur)", -1, OSUI_APP_A_TEXT);
     add_line(t, "Utilisateur:", -1, OSUI_APP_A_DIR);
     (void)run_into(t, src, "whoami", OSUI_APP_A_TEXT);
-    set_status(t, "lecture seule: ces valeurs viennent du noyau et du shell", 0);
+    add_line(t, "", 0, OSUI_APP_A_TEXT);
+    add_line(t, "Reglages partages (echelle, reseau, moteur):", -1, OSUI_APP_A_DIR);
+    (void)run_into(t, src, "settings", OSUI_APP_A_TEXT);
+    set_status(t, "Echelle, reseau et moteur: les boutons appellent settings", 0);
 }
 
 static void p2p_fill(osui_tool_t *t, const osui_tool_src_t *src, const char *cmd) {
@@ -1008,7 +1011,14 @@ int osui_tool_tool(osui_tool_t *t, int b, const osui_tool_src_t *src) {
         return OSUI_TOOL_CHANGED;
     case OS_FB_APP_SETTINGS:
         if (b == 0) settings_fill(t, src);
-        else if (b == 1) return OSUI_TOOL_CLOSE;
+        else if (b >= 1 && b <= 4) {
+            char cmd[24];
+            t_cpy(cmd, (int)sizeof(cmd), "settings button ");
+            cmd[16] = (char)('0' + b);
+            cmd[17] = 0;
+            if (src && src->run) (void)src->run(cmd, g_out, (int)sizeof(g_out));
+            settings_fill(t, src);
+        } else if (b == 5) return OSUI_TOOL_CLOSE;
         return OSUI_TOOL_CHANGED;
     case OS_FB_APP_P2P:
         if (b == 0) p2p_fill(t, src, "p2p-peers");

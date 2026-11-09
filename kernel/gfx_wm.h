@@ -52,6 +52,13 @@ void gfx_wm_reset(gfx_wm_win_t *s);     /* default place and state */
 int gfx_wm_btn(int title_h, int scale);   /* Lot 69: scaled button side */
 void gfx_wm_draw_grip(uint32_t *fb, int fw, int fh, int pitch, gfx_wm_rect_t win, int title_h, int scale, uint32_t ink);
 void gfx_wm_draw_buttons(uint32_t *fb, int fw, int fh, int pitch, gfx_wm_rect_t win, int title_h, int scale);
+/* Lot 86: 0 when the three title buttons sit inside the bar, do not
+ * overlap, and a click on each centre hits that button. The grip stays
+ * in the bottom-right corner. scale is quarters (4 = 1x) or 1..3. */
+int gfx_wm_chrome_check(gfx_wm_rect_t win, int title_h, int scale);
+/* The sizes the desktop actually uses (full screen, restored, minimum,
+ * a tool window) at every zoom step. Returns how many checks failed. */
+int gfx_wm_chrome_suite(void);
 #define GFX_WM_RGB_CLOSE 0xE0524Bu
 #define GFX_WM_RGB_MIN 0xE6B43Cu
 #define GFX_WM_RGB_MAX 0x3DB45Au

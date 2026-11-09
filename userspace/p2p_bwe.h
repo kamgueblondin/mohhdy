@@ -93,6 +93,12 @@ typedef struct {
      * set by p2p_bwe_on_ack when the match came from this table. */
     p2p_bwe_pkt_t late[P2P_BWE_INFLIGHT];
     uint8_t late_hit;
+    /* Lot 86: the last few loss reports. A late ack clears its slot.
+     * loss_ppm is 0 until at least 8 packets have been accounted, so one
+     * outstanding loss still cuts the pacer by exactly one eighth. */
+    uint32_t loss_seq[8];
+    uint8_t loss_open[8];
+    uint8_t loss_slot;
 } p2p_bwe_t;
 
 void p2p_bwe_init(p2p_bwe_t* b, uint32_t mss, uint32_t initial_bps, uint32_t now_ms);
@@ -114,6 +120,9 @@ void p2p_bwe_on_rtt(p2p_bwe_t* b, uint32_t rtt_ms, uint32_t now_ms);
 /* Pacer: 1 when `bytes` may be sent now (and they are charged), else 0. */
 int p2p_bwe_can_send(p2p_bwe_t* b, uint32_t bytes, uint32_t now_ms);
 uint32_t p2p_bwe_btlbw(const p2p_bwe_t* b);
+/* Confirmed-or-still-open losses per million of (samples + open losses).
+ * 0 when fewer than 8 packets are in that sum. Not a WAN measurement. */
+uint32_t p2p_bwe_loss_ppm(const p2p_bwe_t* b);
 uint32_t p2p_bwe_bdp(const p2p_bwe_t* b);
 /* cwnd in datagrams, at least P2P_BWE_MIN_CWND */
 uint32_t p2p_bwe_cwnd_pkts(const p2p_bwe_t* b);
