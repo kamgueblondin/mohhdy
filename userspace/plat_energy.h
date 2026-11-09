@@ -30,6 +30,12 @@ typedef struct {
     uint32_t sim_ms;          /* simulated time elapsed */
     uint32_t auto_switches;
     int charging;
+    /* Lot 85: idle dim. The battery stays simulated. dim is 1 after the
+     * profile's screen_dim_s with no input; refresh_hz is then half. */
+    uint32_t idle_ms;
+    uint32_t bright_hz;
+    uint32_t bright_pace;     /* pace cap before a dim, restored when idle ends */
+    int dim;
 } plat_energy_t;
 
 void plat_energy_init(plat_energy_t* e);
@@ -47,4 +53,7 @@ uint32_t plat_energy_pct(const plat_energy_t* e);
 /* minutes left at the last draw (0 when no simulation) */
 uint32_t plat_energy_minutes_left(const plat_energy_t* e);
 int plat_energy_report(const plat_energy_t* e, char* out, int cap);
+/* Note how long the operator has been idle. Returns 1 when the screen
+ * should dim. performance never dims (screen_dim_s is 0). */
+int plat_energy_idle(plat_energy_t* e, uint32_t idle_ms);
 #endif

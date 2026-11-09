@@ -7,6 +7,17 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 85 (9 November 2026)
+
+US-031 partial, phase3_complete=false. Masonry-rows auto columns follow the
+packed column. Border sides are 0..64 px. The reader keeps an article, a
+main, or a news/docs class, and a header search form (GET and POST).
+web-read prints that text. Wikipedia forms use the API. Google, measured
+again on 2026-11-09, still answers with the enablejs page. SYS_DISPLAY_INFO
+carries the extra EDID facts from the boot read; DDC is not driven.
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097 stay
+simule. See docs/lot85_plan.md.
+
 ### Lot 66 (31 October 2026)
 
 US-G23 done: deploy apply/verify, refused apply, rollback and named

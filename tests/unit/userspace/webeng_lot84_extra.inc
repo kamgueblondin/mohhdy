@@ -1,10 +1,11 @@
-/* Lot 84 hand-written corners: the shared pool, the 0..8 cap, a refused
- * negative width, ordered clearing definite-first, and the document cap. */
+/* Lot 84 hand-written corners: the shared pool, the 0..64 cap, a refused
+ * negative width, ordered clearing definite-first, and the document cap.
+ * Lot 85 lifted the old 8px paint cap, so min(50%, 20px) is 20. */
 static void test_l84_border_shorthand_and_cap(void) {
     lot52_render("<body style='margin:0'><div style='width:200px'><div id=a style='border-left:min(50%, 20px) solid'><div id=b style='height:2px'></div></div></div></body>", 480);
-    /* 50% of 200 is 100, min with 20px is 20, the paint cap is 8 */
-    TEST_ASSERT_EQUAL(8, lot52_node("b")->x);
-    TEST_ASSERT_EQUAL(192, lot52_node("b")->w);
+    /* 50% of 200 is 100, min with 20px is 20, and 20 is inside the 64px cap */
+    TEST_ASSERT_EQUAL(20, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(180, lot52_node("b")->w);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 

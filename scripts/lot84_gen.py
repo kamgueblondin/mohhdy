@@ -70,8 +70,8 @@ def border_px(e, basis):
     v = ev(e, basis)
     if v < 0:
         v = 0
-    if v > 8:
-        v = 8
+    if v > 64:
+        v = 64
     return v
 
 
@@ -301,7 +301,7 @@ def gen_border():
     bases = (100, 160, 200, 240)
     # side patterns: left, top, left+right, four values
     sides = ("left", "top", "x", "box")
-    lines = [emit_header("percentage math in border widths, clamped to 0..8")]
+    lines = [emit_header("percentage math in border widths, clamped to 0..64")]
     names = []
     n = 0
     for e in exprs:
@@ -322,13 +322,14 @@ def gen_border():
                 elif side == "x":
                     decl = "border-left-width:%s;border-right-width:%s;border-style:solid" % (css, css)
                     bx, by, bw = b, 0, basis - 2 * b
-                    if bw < 0:
-                        bw = 0
+                    # The engine never lays out a content box narrower than one glyph.
+                    if bw < 8:
+                        bw = 8
                 else:
                     decl = "border-width:%s;border-style:solid" % css
                     bx, by, bw = b, b, basis - 2 * b
-                    if bw < 0:
-                        bw = 0
+                    if bw < 8:
+                        bw = 8
                 html = ("<body style='margin:0'><div style='width:%dpx'><div id=a style='%s'>"
                         "<div id=b style='height:2px'></div></div></div></body>" % (basis, decl))
                 fn = "test_l84_bor_%d" % len(names)

@@ -150,6 +150,7 @@ int wsearch_kind(const char *e) {
     if (a_eq(e, "google-api")) return WSEARCH_KIND_GOOGLE_API;
     if (a_eq(e, "google")) return WSEARCH_KIND_GOOGLE;
     if (a_eq(e, "wikipedia") || a_eq(e, "wiki")) return WSEARCH_KIND_WIKI;
+    if (a_eq(e, "local")) return WSEARCH_KIND_LOCAL;
     if (a_pre_ci(e, n, "https://") || a_pre_ci(e, n, "http://")) return WSEARCH_KIND_URL;
     return -1;
 }
@@ -497,9 +498,10 @@ int wsearch_parse_google_html(const char *h, int n, wsearch_page_t *pg) {
     for (k = 0; k < (int)sizeof(*pg); k++) ((char *)pg)[k] = 0;
     if (a_find_ci(h, n, 0, "/sorry/") >= 0 || a_find_ci(h, n, 0, "unusual traffic") >= 0 || a_find_ci(h, n, 0, "g-recaptcha") >= 0)
         pg->blocked = 1;
-    /* Lot 71 (measured 2026-11): Google answers clients without
-     * JavaScript with a redirect to /httpservice/retry/enablejs or an
-     * "update your browser" page: no result to parse, try another engine */
+    /* Lot 71 (measured 2026-11, again 2026-11-09 with gbv=1): Google
+     * answers clients without JavaScript with a redirect to
+     * /httpservice/retry/enablejs or an "update your browser" page:
+     * no result to parse, try another engine */
     if (a_find_ci(h, n, 0, "/httpservice/retry/enablejs") >= 0 || a_find_ci(h, n, 0, "browser isn't supported") >= 0)
         pg->blocked = 2;
     /* Lot 72 (measured 2026-11-01 with gbv=1 and text browser agents):

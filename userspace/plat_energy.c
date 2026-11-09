@@ -33,6 +33,10 @@ void plat_energy_init(plat_energy_t* e) {
     e->sim_ms = 0;
     e->auto_switches = 0;
     e->charging = 0;
+    e->idle_ms = 0;
+    e->bright_hz = 30;
+    e->bright_pace = 0;
+    e->dim = 0;
 }
 
 int plat_energy_apply(plat_energy_t* e, int profile) {
@@ -44,7 +48,36 @@ int plat_energy_apply(plat_energy_t* e, int profile) {
     e->poll_budget = p.poll_budget;
     /* saver bounds the mesh data rate; balanced a looser bound */
     e->pace_cap_bps = profile == PLAT_PWR_SAVER ? 64000U : profile == PLAT_PWR_BALANCED ? 1000000U : 0U;
+    e->bright_hz = p.refresh_hz;
+    e->bright_pace = e->pace_cap_bps;
+    e->dim = 0;
+    e->idle_ms = 0;
     e->applied++;
+    return 0;
+}
+
+int plat_energy_idle(plat_energy_t* e, uint32_t idle_ms) {
+    plat_power_policy_t p;
+    if (!e || plat_power_policy(e->profile, &p) != 0) return -1;
+    e->idle_ms = idle_ms;
+    if (!e->bright_hz) e->bright_hz = p.refresh_hz;
+    if (p.screen_dim_s && idle_ms >= p.screen_dim_s * 1000U) {
+        uint32_t hz = e->bright_hz / 2U;
+        e->dim = 1;
+        e->refresh_hz = hz < 5U ? 5U : hz;
+        /* The mesh cap is part of the same idle policy. performance has
+         * no cap (bright_pace 0), so this leaves it alone. A second idle
+         * call must not halve the already-halved cap: bright_pace is the
+         * value apply() stored. */
+        if (e->bright_pace) {
+            uint32_t half = e->bright_pace / 2U;
+            e->pace_cap_bps = half < 8000U ? 8000U : half;
+        }
+        return 1;
+    }
+    e->dim = 0;
+    e->refresh_hz = e->bright_hz;
+    e->pace_cap_bps = e->bright_pace;
     return 0;
 }
 
@@ -127,6 +160,7 @@ int plat_energy_report(const plat_energy_t* e, char* out, int cap) {
     } else {
         e_cat(out, cap, " battery none (emulated pc, mains)");
     }
+    e_cat(out, cap, e->dim ? " dim 1" : " dim 0");
     e_cat(out, cap, "\n");
     return e_len(out);
 }

@@ -982,9 +982,30 @@ static int glyph_smooth(const uint8_t *g, int q, int dx, int dy, int n) {
 /* One glyph at scale q: 1x the 8x8 font; above, the native font of the
  * scale (or the smoothed upscale in font mode 1). Lot 72: by glyph slot
  * (os_glyph_index_page), so the glyph pages draw too. */
+/* Lot 85: a composed letter (index past the font) is the base glyph plus
+ * the accent. The native square font has no slot for it, so every scale
+ * uses the 8x8 composition. */
+static int composed_glyph(unsigned idx, uint8_t out[8]) {
+    int mi, row;
+    unsigned base;
+    if (idx < OS_GLYPH_TOTAL) return 0;
+    mi = (int)(idx - OS_GLYPH_TOTAL);
+    if (mi < 0 || mi >= OS_MARK_COUNT) return 0;
+    base = os_glyph_index(os_mark_rec[mi].base);
+    for (row = 0; row < 8; row++)
+        out[row] = (uint8_t)os_mark_compose_row(gfx_font8[base], row, os_mark_rec[mi].m1, os_mark_rec[mi].m2);
+    return 1;
+}
+
 static int glyph_pixel_idx(unsigned idx, int q, int dx, int dy) {
     int n = os_ui_px(8, q), cell;
+    uint8_t comp[8];
     if (dx < 0 || dy < 0 || dx >= n || dy >= n) return 0;
+    if (composed_glyph(idx, comp)) {
+        if (q == 4) return glyph_bit(comp, dx, dy);
+        if (g_font_mode) return glyph_smooth(comp, q, dx, dy, n);
+        return glyph_bit(comp, dx * 8 / n, dy * 8 / n);
+    }
     if (idx >= OS_GLYPH_TOTAL) idx = OS_GLYPH_QMARK;
     if (q == 4) return glyph_bit(gfx_font8[idx], dx, dy);
     if (g_font_mode) return glyph_smooth(gfx_font8[idx], q, dx, dy, n);
@@ -1013,9 +1034,14 @@ int gfx_glyph_pixel_page(int page, char ch, int q, int dx, int dy) {
 
 static void draw_glyph_bits(uint32_t *fb, int w, int h, int x, int y, unsigned idx, uint32_t c) {
     int gy, gx, n;
-    if (idx >= OS_GLYPH_TOTAL) idx = OS_GLYPH_QMARK;
+    uint8_t comp[8];
+    const uint8_t *g;
+    if (composed_glyph(idx, comp)) g = comp;
+    else {
+        if (idx >= OS_GLYPH_TOTAL) idx = OS_GLYPH_QMARK;
+        g = gfx_font8[idx];
+    }
     if (g_tq == OS_UI_Q1) {
-        const uint8_t *g = gfx_font8[idx];
         for (gy = 0; gy < 8; gy++) {
             uint8_t bits = g[gy];
             for (gx = 0; gx < 8; gx++) {

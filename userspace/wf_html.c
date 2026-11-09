@@ -2,6 +2,7 @@
 #include "wf_html.h"
 #include "wf_srcset.h"
 #include "wf_entity.h"
+#include "wf_read.h"
 #include "../include/os_charset.h"
 
 static char lc(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
@@ -102,9 +103,14 @@ static int chrome_block(const char* in, int s, int e) {
     /* language pickers (Wikipedia lists 300+ languages before the content) */
     if (get_attr(in, s, e, "hreflang", v, (int)sizeof(v)) > 0) return 1;
     {
-        static char cl[160];
+        static char cl[160], idv[48];
         int k;
-        if (get_attr(in, s, e, "class", cl, (int)sizeof(cl)) > 0)
+        if (get_attr(in, s, e, "class", cl, (int)sizeof(cl)) <= 0) cl[0] = 0;
+        else for (k = 0; cl[k]; k++) cl[k] = lc(cl[k]);
+        if (get_attr(in, s, e, "id", idv, (int)sizeof(idv)) <= 0) idv[0] = 0;
+        else for (k = 0; idv[k]; k++) idv[k] = lc(idv[k]);
+        if (wf_read_chrome(idv, cl)) return 1;
+        if (cl[0])
             for (k = 0; cl[k]; k++)
                 if (seq_pre(cl + k, "interlanguage") || seq_pre(cl + k, "language-list") || seq_pre(cl + k, "skip-link") ||
                     seq_pre(cl + k, "visually-hidden") || seq_pre(cl + k, "sr-only") || seq_pre(cl + k, "vector-menu"))
@@ -542,6 +548,116 @@ static void find_icon(const char* in, int n, const wf_url_t* base, wf_html_stats
     }
 }
 
+/* Lot 85: a search box in the page header sits outside the article the
+ * reader keeps. Record and emit that form so web-submit still works.
+ * A login form (no q/query/search/s text field) stays in the chrome. */
+static int search_field_name(const char* n) {
+    return seq(n, "q") || seq(n, "query") || seq(n, "search") || seq(n, "s");
+}
+
+static int form_close_at(const char* in, int n, int from) {
+    int depth = 1, i = from;
+    while (i < n && depth > 0) {
+        char name[16];
+        int close, j, e, q = 0;
+        if (in[i] != '<') { i++; continue; }
+        close = (i + 1 < n && in[i + 1] == '/');
+        j = tag_name(in, n, i + 1 + close, name, (int)sizeof(name));
+        e = j;
+        while (e < n && (q || in[e] != '>')) {
+            if (in[e] == '"' || in[e] == '\'') q = (q == in[e]) ? 0 : (q ? q : in[e]);
+            e++;
+        }
+        if (seq(name, "form")) {
+            if (close) depth--;
+            else if (e < n && in[e - 1] != '/') depth++;
+        }
+        i = e < n ? e + 1 : n;
+        if (!name[0]) continue;
+    }
+    return i;
+}
+
+static int form_has_search(const char* in, int n, int from, int to) {
+    int i = from;
+    while (i < to) {
+        char name[16], fname[WF_FORM_NAME], type[16];
+        int close, j, e, q = 0, k;
+        if (in[i] != '<') { i++; continue; }
+        close = (i + 1 < n && in[i + 1] == '/');
+        j = tag_name(in, n, i + 1 + close, name, (int)sizeof(name));
+        e = j;
+        while (e < to && (q || in[e] != '>')) {
+            if (in[e] == '"' || in[e] == '\'') q = (q == in[e]) ? 0 : (q ? q : in[e]);
+            e++;
+        }
+        if (!close && (seq(name, "input") || seq(name, "textarea"))) {
+            type[0] = 0;
+            get_attr(in, j, e < n ? e : n, "type", type, (int)sizeof(type));
+            for (k = 0; type[k]; k++) type[k] = lc(type[k]);
+            if (!type[0] || seq(type, "text") || seq(type, "search")) {
+                fname[0] = 0;
+                get_attr(in, j, e < n ? e : n, "name", fname, (int)sizeof(fname));
+                for (k = 0; fname[k]; k++) fname[k] = lc(fname[k]);
+                if (search_field_name(fname)) return 1;
+            }
+        }
+        i = e < to ? e + 1 : to;
+    }
+    return 0;
+}
+
+static void replay_form(const char* in, int n, int from, int to, ob_t* b, const wf_url_t* base) {
+    int i = from;
+    while (i < to && !b->full) {
+        char name[16];
+        int close, j, e, q = 0, nx;
+        if (in[i] != '<') { i++; continue; }
+        close = (i + 1 < n && in[i + 1] == '/');
+        j = tag_name(in, n, i + 1 + close, name, (int)sizeof(name));
+        e = j;
+        while (e < n && (q || in[e] != '>')) {
+            if (in[e] == '"' || in[e] == '\'') q = (q == in[e]) ? 0 : (q ? q : in[e]);
+            e++;
+        }
+        if (!ob_room(b, 600)) { b->full = 1; break; }
+        nx = form_tag(b, in, n, i, j, e, close, name, base);
+        i = nx >= 0 ? nx : (e < n ? e + 1 : n);
+    }
+}
+
+/* Scans in[0, limit) for a search form and emits it into b. Returns the
+ * index the main reduce should resume at (limit, or later when the form
+ * itself runs past the content root). */
+static int keep_leading_search_forms(const char* in, int n, int limit, ob_t* b, const wf_url_t* base) {
+    int i = 0, resume = limit;
+    if (!g_forms || limit <= 0) return limit;
+    while (i < limit && !b->full) {
+        char name[16];
+        int close, j, e, q = 0, end;
+        if (in[i] != '<') { i++; continue; }
+        close = (i + 1 < n && in[i + 1] == '/');
+        j = tag_name(in, n, i + 1 + close, name, (int)sizeof(name));
+        e = j;
+        while (e < n && (q || in[e] != '>')) {
+            if (in[e] == '"' || in[e] == '\'') q = (q == in[e]) ? 0 : (q ? q : in[e]);
+            e++;
+        }
+        if (!close && seq(name, "form")) {
+            int open_end = e < n ? e + 1 : n;
+            end = form_close_at(in, n, open_end);
+            if (form_has_search(in, n, i, end)) {
+                replay_form(in, n, i, end, b, base);
+                if (end > resume) resume = end;
+            }
+            i = end > i ? end : i + 1;
+            continue;
+        }
+        i = e < n ? e + 1 : n;
+    }
+    return resume;
+}
+
 int wf_html_reduce(const char* in, int n, const wf_url_t* base, char* out, int cap, wf_html_stats_t* st) {
     return wf_html_reduce_ex(in, n, base, out, cap, st, WF_HTML_NODE_BUDGET, 0);
 }
@@ -551,7 +667,7 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
     static wf_url_t link;
     static char href[WF_URL_PATH_MAX], abs_url[WF_URL_HOST_MAX + WF_URL_PATH_MAX + 16];
     ob_t b;
-    int i = 0, last_sp = 1, pre = 0, in_title = 0, tn = 0, k, body_seen = 0;
+    int i = 0, last_sp = 1, pre = 0, in_title = 0, tn = 0, k, body_seen = 0, span_hi;
     wf_html_stats_t dummy;
     if (!st) st = &dummy;
     for (k = 0; k < (int)sizeof(*st); k++) ((char*)st)[k] = 0;
@@ -593,6 +709,15 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
         }
     }
     if (g_images) find_icon(in, n, base, st);
+    /* Lot 85: when the page has a clear article root, the reader keeps
+     * that interior and leaves the surrounding chrome out of the node
+     * budget. A page with no such root is unchanged. */
+    {
+        int span_lo = 0;
+        span_hi = n;
+        (void)wf_read_root(in, n, &span_lo, &span_hi, 0);
+        if (span_lo > 0 && span_lo < n) i = span_lo;
+    }
     ob_s(&b, "<html><head><title>");
     if (!st->title[0]) ob_s(&b, "(untitled)");
     for (k = 0; st->title[k]; k++) {
@@ -601,7 +726,12 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
     }
     ob_s(&b, "</title></head><body>");
     (void)in_title;
-    while (i < n && !b.full) {
+    /* Lot 85: keep a header search form that the content root would skip. */
+    if (i > 0 && g_forms) {
+        int resume = keep_leading_search_forms(in, n, i, &b, base);
+        if (resume > i && resume <= n) i = resume;
+    }
+    while (i < span_hi && i < n && !b.full) {
         if (b.nodes >= node_budget) { b.full = 1; break; }
         if (in[i] == '<') {
             char name[16];

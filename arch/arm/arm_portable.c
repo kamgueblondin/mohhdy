@@ -157,9 +157,27 @@ int arm_port_bwe(void) {
     p2p_bwe_on_loss(&b, 1U, 2000U);
     if (b.inflight_bytes != 0U || b.losses != 1U) return 0;
     rate = p2p_bwe_on_ack(&b, 1U, 2000U);
-    if (!b.late_hit || rate != 128U || b.samples != 1U || p2p_bwe_btlbw(&b) == 0U) return 0;
+    if (!b.late_hit || rate != 128U || b.samples != 1U || p2p_bwe_btlbw(&b) == 0U || b.losses != 0U) return 0;
     if (p2p_bwe_on_ack(&b, 1U, 2001U) != 0U || b.late_hit) return 0;
     return p2p_bwe_on_ack(&b, 99U, 2001U) == 0U;
+}
+
+/* Lot 85: U+1EA0 (A with dot below) is a composed letter on a glyph page,
+ * and a letter with no free byte falls back to its base letter. */
+int arm_port_marks(void) {
+    char out[8], back[8];
+    int page = 0, n;
+    unsigned char b = 0;
+    n = os_display_put(0x1EA0u, &page, out, (int)sizeof(out));
+    if (n != 2 || page != 2 || (unsigned char)out[0] != 0x8Fu) return 0;
+    if (os_display_cp(2, (unsigned char)out[1]) != 0x1EA0u) return 0;
+    if (os_cp_page(0x1EA0u, &b) != 2) return 0;
+    os_display_str_to_utf8(out, n, back, (int)sizeof(back));
+    if ((unsigned char)back[0] != 0xE1u || (unsigned char)back[1] != 0xBAu || (unsigned char)back[2] != 0xA0u) return 0;
+    if (os_mark_ascii_base(0x1EB2u) != 'A') return 0;
+    if (os_cp1252_from_cp(0xFF21u) != 'A') return 0;
+    if (os_cp1252_from_cp(0x0259u) != 'e') return 0;
+    return 1;
 }
 
 uint32_t arm_port_selftest(void) {
@@ -172,5 +190,6 @@ uint32_t arm_port_selftest(void) {
     if (arm_port_aead()) m |= ARM_PORT_AEAD;
     if (arm_port_pages()) m |= ARM_PORT_PAGES;
     if (arm_port_bwe()) m |= ARM_PORT_BWE;
+    if (arm_port_marks()) m |= ARM_PORT_MARKS;
     return m;
 }

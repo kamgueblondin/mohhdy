@@ -59,8 +59,11 @@ ALL_TEST_BINS = $(KERNEL_TEST_BINS) $(USERSPACE_TEST_BINS) $(FS_TEST_BINS) \
 all: $(ALL_TEST_BINS)
 	@echo "All test binaries compiled successfully"
 
-# Cible par défaut
-test: all
+# The runner recompiles each test and executes that copy (see
+# scripts/run_all_tests.sh). Building $(ALL_TEST_BINS) first only repeated
+# that compile. On the coverage job the extra pass pushed qemu-platform
+# past the 15 minute limit after the line count had already passed.
+test:
 	@echo "Running complete test suite..."
 	@bash ./scripts/run_all_tests.sh
 
@@ -383,7 +386,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_ps2_decode: $(UNIT_DIR)/userspace/test_p
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/ps2_decode.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
 
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webeng: $(UNIT_DIR)/userspace/test_webeng.c $(UNIT_DIR)/userspace/webeng_lot52.inc $(UNIT_DIR)/userspace/webeng_lot53.inc $(UNIT_DIR)/userspace/webeng_lot54.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot55_*.inc) $(UNIT_DIR)/userspace/webeng_lot56.inc $(UNIT_DIR)/userspace/webeng_lot56b.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot57_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot58_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot59_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot60_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot61*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot62*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot63*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot64*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot69*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot72*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot73*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot74*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot75*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot76*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot77*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot78*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot79*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot80*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot81*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot82*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot83*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot84*.inc) ../include/os_ui_scale.h ../include/os_charset.h ../include/os_charset_pages.h ../userspace/wf_entity_table.inc ../userspace/webeng.c ../userspace/webeng.h ../userspace/imgdec.c ../userspace/imgdec.h ../userspace/imgdec_jpeg.inc ../include/os_syscalls.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_webeng: $(UNIT_DIR)/userspace/test_webeng.c $(UNIT_DIR)/userspace/webeng_lot52.inc $(UNIT_DIR)/userspace/webeng_lot53.inc $(UNIT_DIR)/userspace/webeng_lot54.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot55_*.inc) $(UNIT_DIR)/userspace/webeng_lot56.inc $(UNIT_DIR)/userspace/webeng_lot56b.inc $(wildcard $(UNIT_DIR)/userspace/webeng_lot57_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot58_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot59_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot60_*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot61*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot62*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot63*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot64*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot69*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot72*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot73*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot74*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot75*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot76*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot77*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot78*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot79*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot80*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot81*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot82*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot83*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot84*.inc) $(wildcard $(UNIT_DIR)/userspace/webeng_lot85*.inc) ../include/os_ui_scale.h ../include/os_charset.h ../include/os_charset_pages.h ../userspace/wf_entity_table.inc ../userspace/webeng.c ../userspace/webeng.h ../userspace/imgdec.c ../userspace/imgdec.h ../userspace/imgdec_jpeg.inc ../include/os_syscalls.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 	@echo "Compiled userspace test: $(notdir $@)"
@@ -815,9 +818,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_lot75: $(UNIT_DIR)/userspace/test_wf_
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_lot76: $(UNIT_DIR)/userspace/test_wf_lot76.c $(WF_NET_SRCS) ../userspace/wf_section.c $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_NET_SRCS) ../userspace/wf_section.c $(FRAMEWORK_SOURCES)
-$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wsearch_api: $(UNIT_DIR)/userspace/test_wsearch_api.c ../userspace/wsearch_api.c ../userspace/wsearch.c ../userspace/wf_entity.c ../userspace/wsearch_api.h $(wildcard fixtures/search/*) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wsearch_api: $(UNIT_DIR)/userspace/test_wsearch_api.c ../userspace/wsearch_api.c ../userspace/wsearch.c ../userspace/wsearch_local.c ../userspace/wf_entity.c ../userspace/wsearch_api.h $(wildcard fixtures/search/*) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/wsearch_api.c ../userspace/wsearch.c ../userspace/wf_entity.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/wsearch_api.c ../userspace/wsearch.c ../userspace/wsearch_local.c ../userspace/wf_entity.c $(FRAMEWORK_SOURCES)
 
 # Lot 72: browser images (wf_html <img>, wf_webimg atlas, engine atlas item)
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_p256: $(UNIT_DIR)/userspace/test_wf_p256.c $(WF_CRYPTO_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
@@ -861,7 +864,17 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_webimg: $(UNIT_DIR)/userspace/test_wf
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) ../userspace/wf_webimg.c ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 
 # Lot 67: URL / HTTP / DNS / TLS PRF / fetch
-WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_srcset.c ../userspace/wf_entity.c ../userspace/wf_form.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_cache.c ../userspace/wf_cookie.c ../userspace/wf_inflate.c ../kernel/x25519.c $(WF_X509_SRCS)
+WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_read.c ../userspace/wf_score.c ../userspace/wf_searchform.c ../userspace/wf_article.c ../userspace/wf_srcset.c ../userspace/wf_entity.c ../userspace/wf_form.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_cache.c ../userspace/wf_cookie.c ../userspace/wf_inflate.c ../kernel/x25519.c $(WF_X509_SRCS)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_lot85: $(UNIT_DIR)/userspace/test_wf_lot85.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_article: $(UNIT_DIR)/userspace/test_wf_article.c ../userspace/wf_article.c ../userspace/wf_article.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/wf_article.c $(FRAMEWORK_SOURCES)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_lot85_sites: $(UNIT_DIR)/userspace/test_wf_lot85_sites.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(wildcard fixtures/reader/*) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_http: $(UNIT_DIR)/userspace/test_wf_http.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)

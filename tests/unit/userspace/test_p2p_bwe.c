@@ -170,6 +170,7 @@ static void test_loss_and_table_bounds(void) {
         uint32_t rate = p2p_bwe_on_ack(&g_b, 3U, 6U);
         TEST_ASSERT_TRUE(rate > 0U);
         TEST_ASSERT_EQUAL(1U, g_b.late_hit);
+        TEST_ASSERT_EQUAL(0U, g_b.losses);   /* Lot 85: the late ack cancels the provisional loss */
         TEST_ASSERT_EQUAL(1U, g_b.samples);
         TEST_ASSERT_TRUE(p2p_bwe_btlbw(&g_b) > 0U);
         TEST_ASSERT_EQUAL((P2P_BWE_INFLIGHT - 1U) * MSS, g_b.inflight_bytes);
@@ -180,6 +181,21 @@ static void test_loss_and_table_bounds(void) {
     TEST_ASSERT_EQUAL(0, p2p_bwe_on_send(&g_b, 999U, MSS, 1U));
     TEST_ASSERT_TRUE(strcmp(p2p_bwe_state_name(P2P_BWE_DRAIN), "drain") == 0);
     TEST_ASSERT_TRUE(p2p_bwe_cwnd_pkts(&g_b) >= P2P_BWE_MIN_CWND);
+}
+
+static void test_outstanding_loss_slows_the_pacer(void) {
+    uint32_t full, cut;
+    p2p_bwe_init(&g_b, MSS, 80000U, 0U);
+    TEST_ASSERT_EQUAL(0, p2p_bwe_on_send(&g_b, 1U, MSS, 0U));
+    full = g_b.pacing_bps;
+    TEST_ASSERT_TRUE(full > 8U);
+    p2p_bwe_on_loss(&g_b, 1U, 10U);
+    cut = g_b.pacing_bps;
+    TEST_ASSERT_EQUAL(1U, g_b.losses);
+    TEST_ASSERT_EQUAL(full - full / 8U, cut);
+    TEST_ASSERT_TRUE(p2p_bwe_on_ack(&g_b, 1U, 12U) > 0U);
+    TEST_ASSERT_EQUAL(0U, g_b.losses);
+    TEST_ASSERT_TRUE(g_b.pacing_bps >= cut);
 }
 
 static void test_pacer_spacing(void) {
@@ -217,6 +233,7 @@ int main(void) {
     RUN_TEST(test_app_limited_keeps_estimate);
     RUN_TEST(test_probe_rtt_after_stale_min);
     RUN_TEST(test_loss_and_table_bounds);
+    RUN_TEST(test_outstanding_loss_slows_the_pacer);
     RUN_TEST(test_pacer_spacing);
     unity_print_results();
     unity_cleanup();
