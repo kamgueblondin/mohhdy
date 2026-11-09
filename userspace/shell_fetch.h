@@ -19,6 +19,8 @@ int shell_page_form_link(const char* href);
 int shell_page_form_key(int key);
 int shell_page_form_set(int n, const char* value);
 int shell_page_forms_list(char* out, int cap);
+/* Lot 85: plain text of the page the reader kept (headings, lists, tables). */
+int shell_page_article(char* out, int cap);
 /* Lot 74: POST of a form of the rendered page (urlencoded body) */
 /* Lot 75: ctype may be 0 (urlencoded) or multipart/form-data; boundary=... */
 int shell_page_request(const char* url, const char* body, int body_len, const char* ctype,

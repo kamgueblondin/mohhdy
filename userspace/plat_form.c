@@ -181,3 +181,54 @@ int plat_form_physical(const os_display_info_t* d, int* diag_tenths, char* out, 
     f_cat(out, cap, "\n");
     return 0;
 }
+
+/* Lot 85 (US-080): extras from the same EDID block. Absent fields are
+ * left out, so the line only names what the block actually said. */
+int plat_form_edid_detail(const os_display_info_t* d, char* out, int cap) {
+    int any = 0;
+    if (out && cap > 0) out[0] = 0;
+    if (!d) return -1;
+    if (d->digital || d->refresh_hz || d->gamma_100 || d->std_n || d->established_n ||
+        d->range_vmin || d->range_vmax || d->name[0]) any = 1;
+    if (!any) return 0;
+    f_cat(out, cap, "display edid");
+    if (d->digital) f_cat(out, cap, " digital 1");
+    if (d->gamma_100) {
+        f_cat(out, cap, " gamma ");
+        f_cat_u(out, cap, (uint32_t)(d->gamma_100 / 100));
+        f_cat(out, cap, ".");
+        f_cat_u(out, cap, (uint32_t)((d->gamma_100 / 10) % 10));
+        f_cat_u(out, cap, (uint32_t)(d->gamma_100 % 10));
+    }
+    if (d->refresh_hz) { f_cat(out, cap, " refresh "); f_cat_u(out, cap, d->refresh_hz); }
+    if (d->name[0]) {
+        int i;
+        f_cat(out, cap, " name ");
+        for (i = 0; i < 13 && d->name[i]; i++) {
+            char one[2];
+            char c = d->name[i];
+            if (c < 32 || c > 126) c = '?';
+            one[0] = c; one[1] = 0;
+            f_cat(out, cap, one);
+        }
+    }
+    if (d->std_n && d->std_w && d->std_h) {
+        f_cat(out, cap, " standard ");
+        f_cat_u(out, cap, d->std_w); f_cat(out, cap, "x"); f_cat_u(out, cap, d->std_h);
+        if (d->std_hz) { f_cat(out, cap, "@"); f_cat_u(out, cap, d->std_hz); }
+        f_cat(out, cap, " n "); f_cat_u(out, cap, d->std_n);
+    }
+    if (d->established_n) { f_cat(out, cap, " established "); f_cat_u(out, cap, d->established_n); }
+    if (d->range_vmin || d->range_vmax) {
+        f_cat(out, cap, " range ");
+        f_cat_u(out, cap, d->range_vmin); f_cat(out, cap, "-"); f_cat_u(out, cap, d->range_vmax);
+        f_cat(out, cap, "Hz");
+        if (d->range_hmin || d->range_hmax) {
+            f_cat(out, cap, " "); f_cat_u(out, cap, d->range_hmin); f_cat(out, cap, "-");
+            f_cat_u(out, cap, d->range_hmax); f_cat(out, cap, "kHz");
+        }
+        if (d->range_clock_mhz) { f_cat(out, cap, " clock "); f_cat_u(out, cap, d->range_clock_mhz); }
+    }
+    f_cat(out, cap, "\n");
+    return f_len(out);
+}

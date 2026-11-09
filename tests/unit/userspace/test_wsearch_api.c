@@ -213,6 +213,29 @@ static void test_wiki(void) {
 
 
 /* Lot 72: the page Google gives gbv=1 clients today (measured 2026-11-01) */
+/* Lot 85: measured again from this network on 2026-11-09.
+ * google.com/search?q=harbour&gbv=1 returned 92893 bytes whose first
+ * screen is a noscript refresh to /httpservice/retry/enablejs.
+ * The Wikipedia query API returned Harbor, David Harbour, and a third hit. */
+static void test_live_measure_20261109(void) {
+    static wsearch_cfg_t c;
+    int n = load("google_live_20261109.html");
+    wsearch_cfg_default(&c);
+    TEST_ASSERT_EQUAL(0, wsearch_cfg_set(&c, "wiki_lang", "en"));
+    TEST_ASSERT_TRUE(n > 80);
+    TEST_ASSERT_EQUAL(0, wsearch_api_parse(WSEARCH_KIND_GOOGLE, g_buf, n, &g_pg));
+    TEST_ASSERT_EQUAL(2, g_pg.blocked);
+    n = load("wiki_live_20261109.json");
+    TEST_ASSERT_TRUE(n > 200);
+    TEST_ASSERT_EQUAL(3, wsearch_api_parse(WSEARCH_KIND_WIKI, g_buf, n, &g_pg));
+    TEST_ASSERT_EQUAL(WSEARCH_LAYOUT_WIKI, g_pg.layout);
+    TEST_ASSERT_EQUAL_STRING("Harbor", g_pg.r[0].title);
+    TEST_ASSERT_EQUAL_STRING("https://en.wikipedia.org/wiki/Harbor", g_pg.r[0].url);
+    TEST_ASSERT_NOT_NULL(strstr(g_pg.r[0].snippet, "harbour"));
+    TEST_ASSERT_EQUAL_STRING("David Harbour", g_pg.r[1].title);
+    TEST_ASSERT_EQUAL_STRING("https://en.wikipedia.org/wiki/David_Harbour", g_pg.r[1].url);
+}
+
 static void test_google_update_browser(void) {
     int n = load("google_update_browser.html");
     TEST_ASSERT_EQUAL(0, wsearch_api_parse(WSEARCH_KIND_GOOGLE, g_buf, n, &g_pg));
@@ -297,6 +320,7 @@ int main(void) {
     RUN_TEST(test_json_bounds);
     RUN_TEST(test_html_text);
     RUN_TEST(test_wiki);
+    RUN_TEST(test_live_measure_20261109);
     RUN_TEST(test_local_catalogue);
     unity_print_results();
     unity_cleanup();

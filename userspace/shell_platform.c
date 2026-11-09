@@ -1039,6 +1039,8 @@ int shell_platform_line(const char* line) {
         if (sys_display(&di) != 0) { print_string("display-info error syscall\n"); return 1; }
         plat_form_physical(&di, 0, g_out, (int)sizeof(g_out));
         print_string(g_out);
+        /* Lot 85: the EDID extras, on their own line, only when the block had them. */
+        if (plat_form_edid_detail(&di, g_out, (int)sizeof(g_out)) > 0) print_string(g_out);
         return 0;
     }
     if (s_eq(cmd, "power-apply")) return cmd_power_apply(rest);

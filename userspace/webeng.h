@@ -443,7 +443,7 @@ typedef struct {
     we_transform_t tf[WE_TF_MAX];
     uint8_t tf_count, tf_origin_pct;
     int16_t tf_origin[2];
-    /* Lot 62: outline (style 0 none, width 0..8, offset -32..32, colour
+    /* Lot 62: outline (style 0 none, width 0..64, offset -32..32, colour
      * currentColor unless set) and up to WE_SHADOWS_MAX box shadows. */
     uint8_t outline_style, outline_w, outline_color_set;
     int8_t outline_offset;

@@ -1,5 +1,6 @@
 /* wf_read.c - Lot 85. See wf_read.h. Freestanding, no heap. */
 #include "wf_read.h"
+#include "wf_score.h"
 
 static char lc(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
 static int sp(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
@@ -172,9 +173,27 @@ int wf_read_root(const char *in, int n, int *lo, int *hi, wf_read_info_t *info) 
         info->text_chars = best_text;
         info->link_chars = best_link;
     }
+    if (!best_kind) {
+        int slo = 0, shi = 0, text = 0, links = 0;
+        /* Lot 85: news and docs pages that use a class instead of
+         * <article> or <main>. A page with no such block stays whole. */
+        if (wf_score_pick(in, n, &slo, &shi, &text, &links)) {
+            best_lo = slo;
+            best_hi = shi;
+            best_kind = 5;
+            best_text = text;
+            best_link = links;
+        }
+    }
     if (!best_kind) return 0;
     if (lo) *lo = best_lo;
     if (hi) *hi = best_hi;
+    if (info) {
+        info->chosen = 1;
+        info->kind = best_kind;
+        info->text_chars = best_text;
+        info->link_chars = best_link;
+    }
     return 1;
 }
 
@@ -223,6 +242,8 @@ int wf_read_chrome(const char *id, const char *cls) {
     if (id && content_id(id)) return 0;
     for (i = 0; ids[i]; i++) if (id && eq(id, ids[i])) return 1;
     for (i = 0; classes[i]; i++) if (token(cls, classes[i])) return 1;
+    /* Lot 85: news and docs chrome (sidebar, breadcrumb, comments). */
+    if (wf_score_is_chrome(id, cls)) return 1;
     return 0;
 }
 

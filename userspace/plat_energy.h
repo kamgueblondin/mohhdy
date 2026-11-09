@@ -34,6 +34,7 @@ typedef struct {
      * profile's screen_dim_s with no input; refresh_hz is then half. */
     uint32_t idle_ms;
     uint32_t bright_hz;
+    uint32_t bright_pace;     /* pace cap before a dim, restored when idle ends */
     int dim;
 } plat_energy_t;
 

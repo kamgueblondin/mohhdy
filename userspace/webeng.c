@@ -15,6 +15,15 @@ static int w_eq(const char* a, const char* b) {
     return a[i] == b[i];
 }
 static char w_low(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
+/* Lot 85: one border or outline side is 0..64 px. The parser already
+ * refuses a length above 64. Percentage widths and paint used to stop
+ * at 8, which made a 20px border look like 8. edge_w is int8_t, so 64
+ * still fits. */
+#define WE_BORDER_CAP 64
+static int border_cap(int px) {
+    if (px < 0) return 0;
+    return px > WE_BORDER_CAP ? WE_BORDER_CAP : px;
+}
 static int w_space(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
 static int w_namec(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
@@ -1222,8 +1231,8 @@ static void spacing_node(we_node_t *n, int cw) {
         if (v < -2000) v = -2000;
         if (bit < 4) n->margin[bit] = (int16_t)v; else n->padding[bit - 4] = (int16_t)v;
     }
-    /* Lot 84: border widths with a percentage or pooled math. The 0..8 cap
-     * is the same one edge_w already applies to px widths. */
+    /* Lot 84/85: border widths with a percentage or pooled math. The
+     * 0..64 cap is the same one edge_w applies to px widths. */
     if (n->border_pct) {
         int side;
         for (side = 0; side < 4; side++) if (n->border_pct & (1u << side)) {
@@ -1234,7 +1243,7 @@ static void spacing_node(we_node_t *n, int cw) {
                     math_eval(&track_pool_doc->track_pool[idx], cw, &v)) v = 0;
             } else v = t < 0 ? -((-t * cw) / 1000) : (t * cw) / 1000;
             if (v < 0) v = 0;
-            if (v > 8) v = 8;
+            v = border_cap(v);
             n->edge_w[side] = (int8_t)v;
         }
         n->own_edges = 1;
@@ -3022,7 +3031,7 @@ static int border_list_decl(we_node_t *n, int kind, const char *v, int vl) {
         else if (parse_color(v + a[k], l[k], &cols[k])) return -1;
     }
     if (kind == 1 && c == 1 && specs[0] == WE_NO_PCT) {
-        /* Uniform px keeps the historical border field (paint caps at 8). */
+        /* Uniform px keeps the historical border field (paint cap is 64). */
         n->border = (int16_t)vals[0];
         n->border_pct = 0;
         for (side = 0; side < 4; side++) n->edge_w[side] = -1;
@@ -3109,7 +3118,7 @@ static void border_edges_reset(we_node_t *n) {
     n->border_pct = 0;
 }
 
-/* Lot 84: a border width is a length (0..64, stored capped at 8 on a side),
+/* Lot 84/85: a border width is a length (0..64, stored as-is on a side),
  * a percentage, or min()/max()/clamp()/calc() with a percentage. */
 static int border_width_token(const char *v, int len, int *px, int *spec) {
     int pct = WE_NO_PCT;
@@ -3127,7 +3136,7 @@ static int border_width_token(const char *v, int len, int *px, int *spec) {
 static void border_width_apply(we_node_t *n, int side, int px, int spec) {
     if (spec == WE_NO_PCT) {
         n->border_pct = (uint8_t)(n->border_pct & ~(1u << side));
-        n->edge_w[side] = (int8_t)(px > 8 ? 8 : px);
+        n->edge_w[side] = (int8_t)border_cap(px);
     } else {
         n->border_pct = (uint8_t)(n->border_pct | (1u << side));
         n->border_spec[side] = (int16_t)spec;
@@ -3636,7 +3645,7 @@ static int outline_width_value(const char *v, int len, int *out) {
     if (value_is(v, len, "thick")) { *out = 5; return 0; }
     if (len < 1 || v[0] < '0' || v[0] > '9' || parse_len(v, len, &px, &pct) != 0 || pct) return -1;
     if (!(len == 1 && v[0] == '0') && !(len > 2 && (w_ieq_n(v + len - 2, 2, "px") || w_ieq_n(v + len - 2, 2, "em")))) return -1;
-    *out = px > 8 ? 8 : px;
+    *out = border_cap(px);
     return 0;
 }
 
@@ -5483,7 +5492,7 @@ int we_style(we_doc_t* d) {
          * the outer cell edges (CSS 17.6.2). */
         if (n->display == WE_DISP_TABLE && n->border_collapse) {
             for (side = 0; side < 4; side++)
-                if (n->edge_w[side] < 0) n->edge_w[side] = (int8_t)(n->border > 8 ? 8 : n->border);
+                if (n->edge_w[side] < 0) n->edge_w[side] = (int8_t)border_cap(n->border);
             n->border = 0;
         }
     }
@@ -8794,17 +8803,17 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         if (w[1]) edge_paint(d, idx, style[1], color[1], 1, bx + bw - w[1], by + w[0], w[1], bh - w[0] - w[2]);
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell && radii_any(&radii) && (n->border_style == 5 || n->border_style == 6)) {
-        radius_dashed(d, idx, &radii, bx, by, bw, bh, n->border > 8 ? 8 : n->border, n->border_style, n->border_color);
+        radius_dashed(d, idx, &radii, bx, by, bw, bh, border_cap(n->border), n->border_style, n->border_color);
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell && radii_any(&radii) &&
         (n->border_style == 0 || n->border_style == WE_BS_SOLID || n->border_style == 4 || (n->border_style >= 7 && n->border_style <= 10))) {
-        radius_border(d, idx, &radii, bx, by, bw, bh, n->border > 8 ? 8 : n->border, n->border_style, n->border_color);
+        radius_border(d, idx, &radii, bx, by, bw, bh, border_cap(n->border), n->border_style, n->border_color);
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell && n->border_style >= 7 && n->border_style <= 10) {
-        frame_3d(d, idx, n->border_style, n->border_color, bx, by, bw, bh, n->border > 8 ? 8 : n->border);
+        frame_3d(d, idx, n->border_style, n->border_color, bx, by, bw, bh, border_cap(n->border));
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell && (n->border_style == 5 || n->border_style == 6 || (n->border_style == 4 && n->border >= 3))) {
-        int t = n->border > 8 ? 8 : n->border, inner_h = bh - 2 * t;
+        int t = border_cap(n->border), inner_h = bh - 2 * t;
         edge_paint(d, idx, n->border_style, n->border_color, 0, by, bx, t, bw);
         edge_paint(d, idx, n->border_style, n->border_color, 0, by + bh - t, bx, t, bw);
         edge_paint(d, idx, n->border_style, n->border_color, 1, bx, by + t, t, inner_h);
@@ -8812,7 +8821,7 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         border_slot = 1;
     } else if (n->border > 0 && !n->collapse_cell) {
         os_fb_web_item_t* it = emit(d, idx, OS_FB_WEB_BORDER, bx, by, bw, bh, n->border_color);
-        if (it) it->bold = (uint8_t)(n->border > 8 ? 8 : n->border);
+        if (it) it->bold = (uint8_t)(border_cap(n->border));
         border_slot = 1;
     }
     (void)border_slot;
@@ -11073,10 +11082,10 @@ static void shift_cell(we_doc_t *d, int idx, int first_item, int shift) {
     }
 }
 
-/* One resolved edge: width 0..8, style code, colour. none gives width 0;
+/* One resolved edge: width 0..64, style code, colour. none gives width 0;
  * a collapsed table keeps its moved width in edge_w (border is 0). */
 static void edge_of(const we_node_t *n, int side, int *w, int *style, uint32_t *color) {
-    *w = n->edge_w[side] >= 0 ? n->edge_w[side] : (n->border > 8 ? 8 : n->border);
+    *w = n->edge_w[side] >= 0 ? n->edge_w[side] : (border_cap(n->border));
     *style = n->edge_style[side] ? n->edge_style[side] : n->border_style;
     *color = (n->edge_color_set >> side) & 1 ? n->edge_color[side] : n->border_color;
     if (*w < 0) *w = 0;

@@ -85,6 +85,14 @@ static void update_outputs(p2p_bwe_t* b) {
     uint32_t min_cwnd = P2P_BWE_MIN_CWND * b->mss;
     b->pacing_bps = mul_gain(bw, b->pacing_gain);
     if (!b->pacing_bps) b->pacing_bps = 1U;
+    /* Lot 85 (US-068/073): an outstanding loss slows the pacer by one
+     * eighth until the late ack cancels it. A confirmed delivery
+     * (losses back to 0) uses the full rate again. This is still a
+     * laboratory estimator: no WAN and no cross traffic. */
+    if (b->losses && b->pacing_bps > 8U) {
+        uint32_t cut = b->pacing_bps / 8U;
+        if (cut) b->pacing_bps -= cut;
+    }
     if (b->state == P2P_BWE_PROBE_RTT) b->cwnd_bytes = min_cwnd;
     else if (!bdp) b->cwnd_bytes = 10U * b->mss;
     else {

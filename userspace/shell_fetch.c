@@ -7,11 +7,13 @@
 #include "wf_html.h"
 #include "wf_entity.h"
 #include "wf_form.h"
+#include "wf_article.h"
 #include "wf_section.h"
 #include "shell_search.h"
 #include "wf_webimg.h"
 #include "wsearch.h"
 #include "wsearch_api.h"
+#include "wf_searchform.h"
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
@@ -401,6 +403,18 @@ int shell_page_forms_list(char* out, int cap) {
     return 0;
 }
 
+/* Lot 85: "web-read". The reduced page as plain text, bounded by cap. */
+int shell_page_article(char* out, int cap) {
+    int n;
+    if (!out || cap < 16) return -1;
+    out[0] = 0;
+    if (!g_page_ok || g_full_n <= 0) { scat(out, cap, "osui web read none\n"); return 0; }
+    n = wf_article_text(g_full, g_full_n, out, cap - 1);
+    if (n < 0) n = 0;
+    if (n < cap - 1) { out[n++] = '\n'; out[n] = 0; }
+    return n;
+}
+
 /* Sets field n (console "web-input"); 0 or -1. */
 int shell_page_form_set(int n, const char* value) {
     if (!g_page_ok || n < 0 || n >= g_forms.nfields) return -1;
@@ -449,6 +463,19 @@ int shell_page_submit(int n, char* src, int src_max, char* final_url, int url_ma
         if (sub.method != WF_METHOD_POST && wsearch_google_form(url, gq, (int)sizeof(gq))) {
             g_page_ok = 0;
             return shell_search_google_form(gq, src, src_max, final_url, url_max, status, st_max);
+        }
+        /* Lot 85: Wikipedia search forms (GET or POST) go to the API.
+         * A POST to Google does too. Any other host is fetched for real:
+         * GET uses the query string, POST sends the urlencoded body. */
+        {
+            static char sq[WSEARCH_QUERY + 1];
+            int route = wf_search_route(url, sub.method == WF_METHOD_POST ? sub.body : 0, sq, (int)sizeof(sq));
+            if (route == WF_ROUTE_WIKI || (route == WF_ROUTE_GOOGLE && sub.method == WF_METHOD_POST)) {
+                g_page_ok = 0;
+                if (route == WF_ROUTE_WIKI)
+                    return shell_search_wiki_form(sq, src, src_max, final_url, url_max, status, st_max);
+                return shell_search_google_form(sq, src, src_max, final_url, url_max, status, st_max);
+            }
         }
     }
     if (sub.method == WF_METHOD_POST) {

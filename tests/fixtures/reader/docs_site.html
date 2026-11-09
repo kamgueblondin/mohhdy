@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Building the guest</title></head>
+<body>
+<header class="site-header">
+  <a href="/docs">Docs home</a>
+  <form action="/search" method="get">
+    <input type="text" name="q" value="">
+    <button type="submit">Search docs</button>
+  </form>
+</header>
+<nav class="main-nav">
+  <a href="/docs/start">Start</a>
+  <a href="/docs/build">Build</a>
+</nav>
+<aside class="sidebar">
+  <a href="/docs/unrelated">SIDEBARLINK</a>
+  <a href="/docs/glossary">Glossary</a>
+</aside>
+<div class="markdown-body">
+  <h1>Building the guest</h1>
+  <p>Build the guest with make and boot it under QEMU. The command the reader must keep is make qemu-lot85.</p>
+  <p>The image is a freestanding i386 kernel plus a Ring 3 shell. Test programs live in the test initrd, not in the production archive.</p>
+  <h2>Steps</h2>
+  <ol>
+    <li>Fetch the tree.</li>
+    <li>Run make in the source root.</li>
+    <li>Boot with qemu-system-i386 and the test initrd.</li>
+  </ol>
+  <pre><code>make qemu-lot85</code></pre>
+  <p>The layout engine holds 160 nodes. A documentation page that wraps the text in markdown-body is the content root when the page has no article element.</p>
+  <p>Tables stay readable as cells. The status column and the meaning column of a small table are both part of the body.</p>
+  <table>
+    <tr><th>status</th><th>meaning</th></tr>
+    <tr><td>0</td><td>the block parsed</td></tr>
+    <tr><td>2</td><td>the remote page asked for JavaScript</td></tr>
+  </table>
+  <p>A sidebar link is chrome. The reader drops that link because it sits in the aside, not because of this sentence.</p>
+  <h2>Memory</h2>
+  <p>The fetch buffer is 384 KiB and the reduced page is 256 KiB. Both are static. There is no heap in this path.</p>
+  <p>Borders paint up to 64 pixels on a side. A wider length is refused and the previous width stays.</p>
+</div>
+<div class="pagination"><a href="/docs/next">PAGERNEXT</a></div>
+</body>
+</html>

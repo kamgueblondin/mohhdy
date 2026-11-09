@@ -48,4 +48,8 @@ uint32_t plat_form_isqrt(uint32_t v);
 /* Lot 69 (US-080): "display physical ..." line from SYS_DISPLAY_INFO;
  * sets *diag_tenths (0 when unknown). 0 known, 1 unknown, -1 args. */
 int plat_form_physical(const os_display_info_t* d, int* diag_tenths, char* out, int cap);
+/* Lot 85: a second line for the EDID extras SYS_DISPLAY_INFO now carries.
+ * Writes nothing and returns 0 when every extra field is zero, so a
+ * display with only the old size line stays on that one line. */
+int plat_form_edid_detail(const os_display_info_t* d, char* out, int cap);
 #endif

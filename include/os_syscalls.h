@@ -2095,7 +2095,12 @@ typedef struct {
 /* Lot 69 (US-080): read-only display facts for the form-factor plan.
  * ecx = os_display_info_t*. Any user task; nothing is changed. The size
  * comes from the EDID block of the Bochs/QEMU std VGA (MMIO BAR 2, read
- * once at boot while Ring 0 still owns PCI); source 0 = no EDID. */
+ * once at boot while Ring 0 still owns PCI); source 0 = no EDID.
+ * Lot 85: the same boot read also fills the base-block extras (digital
+ * input, gamma, refresh, the first standard timing, established-mode
+ * count, range limits, monitor name). This is the EDID block the VGA
+ * device publishes. The kernel still does not drive DDC/I2C on a real
+ * monitor, so a machine without that BAR keeps source 0. */
 #define SYS_DISPLAY_INFO 164
 #define OS_DISPLAY_SRC_NONE 0
 #define OS_DISPLAY_SRC_EDID_DTD 1   /* detailed timing, mm */
@@ -2109,7 +2114,17 @@ typedef struct {
     uint8_t edid_status;            /* 0 ok, 1 no device, 2 no BAR, 3 bad header, 4 bad checksum */
     char mfg[4];
     uint8_t ui_hint_q;              /* Lot 69: fw_cfg opt/mohhdy/ui-scale, 0 none */
-    uint8_t pad_[3];
+    uint8_t digital;                /* Lot 85: 1 digital input, 0 analog or unknown */
+    uint16_t refresh_hz;            /* preferred timing, 0 when blanking is absent */
+    uint16_t gamma_100;             /* 100 = gamma 1.00, 0 unknown */
+    uint16_t std_w, std_h;          /* first standard timing, 0 if none */
+    uint8_t std_hz;
+    uint8_t std_n;                  /* how many standard timings the block listed */
+    uint8_t established_n;          /* how many of the 17 VESA modes are set */
+    uint8_t range_vmin, range_vmax; /* Hz, 0 if the block has no range descriptor */
+    uint8_t range_hmin, range_hmax; /* kHz */
+    uint16_t range_clock_mhz;
+    char name[14];                  /* monitor name, or "" */
 } os_display_info_t;
 #define OS_OUTCAP_BAD (-1)
 #define OS_OUTCAP_BUSY (-2)

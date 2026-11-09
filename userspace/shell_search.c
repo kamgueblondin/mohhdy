@@ -355,6 +355,31 @@ int shell_search_google_form(const char* q, char* src, int src_max, char* final_
 }
 int shell_search_google_state(void) { return g_google_state; }
 
+/* Lot 85: the search box on a Wikipedia page. The article HTML is fine;
+ * the search form's result page is not, without JavaScript. The API path
+ * (search-engine wikipedia, already the first fallback) answers instead. */
+int shell_search_wiki_form(const char* q, char* src, int src_max, char* final_url, int url_max, char* status, int st_max) {
+    static char st[700], note[180], saved[WSEARCH_ENGINE_URL];
+    int n, rc;
+    cfg_load();
+    s_cpy(saved, (int)sizeof(saved), g_engine);
+    s_cpy(g_engine, (int)sizeof(g_engine), "wikipedia");
+    rc = run_search(q, st, (int)sizeof(st));
+    s_cpy(g_engine, (int)sizeof(g_engine), saved);
+    s_cpy(note, (int)sizeof(note),
+          "Formulaire Wikipedia (GET ou POST) repondu par l'API: la page HTML de recherche exige JavaScript.");
+    if (status && st_max > 0) {
+        status[0] = 0;
+        s_cat(status, st_max, "osui web wiki-form ");
+        s_cat(status, st_max, st);
+    }
+    if (rc != 0) return -1;
+    n = wsearch_results_html_note(&g_page, q, g_used, note, src, src_max);
+    if (n < 0) return -1;
+    if (final_url && url_max > 0) { final_url[0] = 0; s_cat(final_url, url_max, "search:"); s_cat(final_url, url_max, q); }
+    return n;
+}
+
 int shell_search_page(const char* q, char* src, int src_max, char* final_url, int url_max, char* status, int st_max) {
     static char st[700];
     int n, rc;

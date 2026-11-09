@@ -80,8 +80,9 @@ static void test_l64_column_cases(void) {
 static void test_l64_edge_cases(void) {
     lot52_render(L64_BODY "<div id=a style='width:4px;height:4px;border-top-width:65px;border-top-width:12px;border-top-style:solid'></div></body>", 320);
     TEST_ASSERT_EQUAL(1, l61_diag_count("border edge refused"));
-    l64_box("a", 0, 0, 4, 12);                                /* capped at 8 */
-    l61_rect_at(0, 0, 4, 8, 0x000000);
+    /* 65px is refused. 12px is inside the 64px cap, so the box is 4+12. */
+    l64_box("a", 0, 0, 4, 16);
+    l61_rect_at(0, 0, 4, 12, 0x000000);
     lot52_render(L64_BODY "<div id=a style='border-inline-width:3px;border-inline-width:2px wide;border-inline-style:solid'>x</div></body>", 320);
     TEST_ASSERT_EQUAL(1, l61_diag_count("border edge refused"));
     TEST_ASSERT_EQUAL(3, lot52_node("a")->edge_w[3]);         /* neither side changed */

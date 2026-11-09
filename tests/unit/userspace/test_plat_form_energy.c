@@ -157,6 +157,20 @@ static void test_physical_from_display_info(void) {
     TEST_ASSERT_EQUAL(1, plat_form_physical(&d, &diag, out, (int)sizeof(out)));
     TEST_ASSERT_EQUAL(0, diag);
     TEST_ASSERT_EQUAL(-1, plat_form_physical(0, &diag, out, (int)sizeof(out)));
+    /* extras stay off the size line, and off the detail line when absent */
+    TEST_ASSERT_EQUAL(0, plat_form_edid_detail(&d, out, (int)sizeof(out)));
+    TEST_ASSERT_EQUAL(0, out[0]);
+    d.digital = 1; d.gamma_100 = 220; d.refresh_hz = 60;
+    memcpy(d.name, "QEMU", 5);
+    d.std_n = 2; d.std_w = 1920; d.std_h = 1080; d.std_hz = 60;
+    d.established_n = 4;
+    d.range_vmin = 50; d.range_vmax = 75; d.range_hmin = 30; d.range_hmax = 80; d.range_clock_mhz = 150;
+    TEST_ASSERT_TRUE(plat_form_edid_detail(&d, out, (int)sizeof(out)) > 0);
+    TEST_ASSERT_TRUE(strstr(out, "display edid digital 1 gamma 2.20 refresh 60 name QEMU") != 0);
+    TEST_ASSERT_TRUE(strstr(out, "standard 1920x1080@60 n 2") != 0);
+    TEST_ASSERT_TRUE(strstr(out, "established 4") != 0);
+    TEST_ASSERT_TRUE(strstr(out, "range 50-75Hz 30-80kHz clock 150") != 0);
+    TEST_ASSERT_EQUAL(-1, plat_form_edid_detail(0, out, (int)sizeof(out)));
 }
 
 /* the EDID diagonal changes the plan: a 1024x768 at 7 in is a tablet */
@@ -183,6 +197,13 @@ static void test_idle_dims_the_refresh(void) {
     TEST_ASSERT_EQUAL(15U, e.refresh_hz);
     TEST_ASSERT_EQUAL(0, plat_energy_idle(&e, 0));
     TEST_ASSERT_EQUAL(30U, e.refresh_hz);
+    TEST_ASSERT_EQUAL(1000000U, e.pace_cap_bps);
+    TEST_ASSERT_EQUAL(1, plat_energy_idle(&e, 300000U));
+    TEST_ASSERT_EQUAL(500000U, e.pace_cap_bps);
+    TEST_ASSERT_EQUAL(1, plat_energy_idle(&e, 300000U));
+    TEST_ASSERT_EQUAL(500000U, e.pace_cap_bps);   /* a second idle does not halve again */
+    TEST_ASSERT_EQUAL(0, plat_energy_idle(&e, 0));
+    TEST_ASSERT_EQUAL(1000000U, e.pace_cap_bps);
     TEST_ASSERT_EQUAL(0, plat_energy_apply(&e, PLAT_PWR_PERFORMANCE));
     TEST_ASSERT_EQUAL(0, plat_energy_idle(&e, 1000000U));
     TEST_ASSERT_TRUE(plat_energy_report(&e, out, (int)sizeof(out)) > 0);

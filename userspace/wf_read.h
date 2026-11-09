@@ -10,7 +10,8 @@
 typedef struct {
     int candidates;     /* elements that looked like a content root */
     int chosen;         /* 0 none (the whole page), 1 a root was selected */
-    int kind;           /* 1 article, 2 main, 3 role=main, 4 content id */
+    int kind;           /* 1 article, 2 main, 3 role=main, 4 content id,
+                           5 class or text-density block (wf_score) */
     int text_chars;     /* letters inside the chosen root */
     int link_chars;     /* letters inside <a> in that root */
     int boilerplate;    /* times wf_read_chrome said yes during a reduce */

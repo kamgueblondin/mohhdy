@@ -290,6 +290,25 @@ void gfx_fb_display_info(os_display_info_t *o) {
     o->source = g_edid.size_mm_w == 0 ? OS_DISPLAY_SRC_NONE
               : (g_edid.mm_w >= 30 && g_edid.mm_h >= 30) ? OS_DISPLAY_SRC_EDID_DTD : OS_DISPLAY_SRC_EDID_CM;
     for (i = 0; i < 4; i++) o->mfg[i] = g_edid.mfg[i];
+    /* Lot 85: the rest of the base block. Still the boot-time EDID read
+     * (QEMU publishes it in the VGA BAR). Not a DDC transaction. */
+    o->digital = (uint8_t)(g_edid.digital ? 1 : 0);
+    o->refresh_hz = (uint16_t)(g_edid.refresh_hz > 0 && g_edid.refresh_hz < 1000 ? g_edid.refresh_hz : 0);
+    o->gamma_100 = (uint16_t)(g_edid.gamma_100 > 0 && g_edid.gamma_100 < 1000 ? g_edid.gamma_100 : 0);
+    o->std_n = (uint8_t)(g_edid.standard_n > 255 ? 255 : g_edid.standard_n);
+    if (g_edid.standard_n > 0) {
+        o->std_w = (uint16_t)g_edid.standard_w[0];
+        o->std_h = (uint16_t)g_edid.standard_h[0];
+        o->std_hz = (uint8_t)(g_edid.standard_hz[0] > 255 ? 255 : g_edid.standard_hz[0]);
+    }
+    o->established_n = (uint8_t)(g_edid.established_n > 255 ? 255 : g_edid.established_n);
+    o->range_vmin = (uint8_t)(g_edid.range_vmin > 255 ? 255 : g_edid.range_vmin);
+    o->range_vmax = (uint8_t)(g_edid.range_vmax > 255 ? 255 : g_edid.range_vmax);
+    o->range_hmin = (uint8_t)(g_edid.range_hmin > 255 ? 255 : g_edid.range_hmin);
+    o->range_hmax = (uint8_t)(g_edid.range_hmax > 255 ? 255 : g_edid.range_hmax);
+    o->range_clock_mhz = (uint16_t)(g_edid.range_clock > 0 && g_edid.range_clock < 10000 ? g_edid.range_clock : 0);
+    for (i = 0; i < 13 && g_edid.name[i]; i++) o->name[i] = g_edid.name[i];
+    o->name[i < 13 ? i : 13] = 0;
 }
 
 static uint32_t pci_vga_bar(void) {
