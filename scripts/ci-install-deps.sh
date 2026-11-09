@@ -52,10 +52,25 @@ Acquire::https::Timeout "30";
 Acquire::ftp::Timeout "30";
 EOF
 
-sudo apt-get update
-sudo apt-get install -y --no-install-recommends \
-    -o APT::Keep-Downloaded-Packages=true \
-    "${PKGS[@]}"
+# The Azure mirror has failed apt-get update with exit 100 (Lot 86 CI).
+# The ARM job already retries against archive.ubuntu.com. Do the same here.
+apt_from_network() {
+    sudo apt-get update
+    sudo apt-get install -y --no-install-recommends \
+        -o APT::Keep-Downloaded-Packages=true \
+        "${PKGS[@]}"
+}
+for attempt in 1 2; do
+    if apt_from_network; then
+        break
+    fi
+    echo "[ci-deps] apt attempt ${attempt} failed; switching to archive.ubuntu.com"
+    sudo sed -i 's#http://azure.archive.ubuntu.com#http://archive.ubuntu.com#g' \
+        /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+    if [ "$attempt" = 2 ]; then
+        exit 1
+    fi
+done
 mkdir -p "$CACHE"
 archives=(/var/cache/apt/archives/*.deb)
 if [ "${#archives[@]}" -gt 0 ]; then
