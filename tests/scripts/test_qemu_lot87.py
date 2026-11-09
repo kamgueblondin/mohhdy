@@ -14,6 +14,8 @@ guest reaches it as 10.0.2.2 (slirp).
     the more specific layered rule hides.
   * script walls: /lot87/wall.html is named an enablejs wall with its
     noscript fallback; /lot87/blocked (403) is named a block page.
+  * autofill forget HOST NAME VALUE forgets one value; the GUI's Delete
+    on a highlighted row of the list forgets that one.
   * GUI form2 autofill: two values remembered from the console (web-fill
     remember, grace then ada) are offered when the tablet clicks the field
     of the rendered page; the list is drawn under the field (its highlight
@@ -197,6 +199,17 @@ def main():
             # the console editor lists both, newest first (same store)
             offers = lw.run(mon, proc, "web-fill 3", "web-fill field", 20)
             need(offers, ["offers 2", "offer 0 user ada", "offer 1 user grace"], "web-fill offers")
+            # a third value, then forget just that one from the console
+            lw.run(mon, proc, "web-input 3 temp87", "osui web input ok", 30)
+            lw.run(mon, proc, "web-fill remember", "web-fill remembered", 20)
+            listed = lw.run(mon, proc, "autofill list", "autofill ", 20)
+            need(listed, ["10.0.2.2 user values 3"], "autofill list (3)")
+            gone = lw.run(mon, proc, "autofill forget 10.0.2.2 user temp87", "autofill ", 20)
+            need(gone, ["autofill forgot value left 2"], "autofill forget value")
+            offers = lw.run(mon, proc, "web-fill 3", "web-fill field", 20)
+            need(offers, ["offers 2", "offer 0 user ada", "offer 1 user grace"], "web-fill offers after forget")
+            refuse(offers, ["temp87"], "web-fill offers after forget")
+            say("console: temp87 remembered then forgotten alone; ada and grace kept")
 
             # ---- GUI: click the field, Down takes the value, Enter posts it
             g.send_command_until(mon, "gui", "osui gui live", proc, wait_prompt=False)
@@ -259,6 +272,32 @@ def main():
             g.wait_for(proc, "osui web form2 submit POST", lw.FETCH_TIMEOUT, start)
             wait_server("ECHO POST q='' body=b'user=grace&msg=bonjour'")
             say("GUI: Down ada, Down grace, Up ada, click grace; Enter posted user=grace")
+            g.send_key(mon, "esc")
+            time.sleep(0.5)
+
+            # ---- GUI: Delete on a highlighted row forgets that value
+            start = len(g.log_text())
+            lw.type_line(mon, proc, "web %s/form.html" % u, mode="getc")
+            g.wait_for(proc, "osui web fetch ok status 200", lw.FETCH_TIMEOUT, start)
+            time.sleep(2.0)
+            start = len(g.log_text())
+            g.click_tablet(qmp, offered[0], offered[1], W, H)
+            g.wait_for(proc, "osui web autofill offer name=user", g.CMD_TIMEOUT, start)
+            time.sleep(0.6)
+            offer_line = [ln for ln in g.normalized_log(g.log_text()[start:]).splitlines()
+                          if "osui web autofill offer name=user" in ln][-1]
+            nvals = int(offer_line.split("values=")[1].split()[0]) if "values=" in offer_line else 1
+            start = len(g.log_text())
+            g.send_key(mon, "down")
+            g.wait_for(proc, "osui web autofill applied name=user", g.CMD_TIMEOUT, start)
+            time.sleep(0.6)
+            start = len(g.log_text())
+            g.send_key(mon, "delete")
+            want = "osui web autofill removed name=user row 1 left %d" % (nvals - 1)
+            g.wait_for(proc, want, g.CMD_TIMEOUT, start)
+            say("GUI: Delete forgot the highlighted value (%d -> %d)" % (nvals, nvals - 1))
+            g.send_key(mon, "esc")
+            time.sleep(0.4)
             g.send_key(mon, "esc")
             time.sleep(0.5)
             say("lot87 qemu ok in %.1fs" % (time.monotonic() - t0))

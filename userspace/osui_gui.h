@@ -91,6 +91,10 @@ typedef struct {
     /* Lot 87: value idx (0 the newest, as page_offer) of the same key; the
      * desktop lists them under the field. Length > 0, or -1. */
     int (*page_offer_at)(const char *url, const char *name, int idx, char *out, int cap);
+    /* Lot 87: forget one remembered value of the key (Delete on the
+     * highlighted row of the list). Values the key still holds, 0 when it
+     * went, -1 when the value was not there. */
+    int (*page_offer_drop)(const char *url, const char *name, const char *value);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
 /* Lot 87: the autofill list drawn under the focused field: up to max

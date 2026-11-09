@@ -136,6 +136,42 @@ int wf_autofill_forget(wf_autofill_t *a, const char *host) {
     return n;
 }
 
+static wf_af_ent_t *find_ent_rw(wf_autofill_t *a, const char *host, const char *name) {
+    const wf_af_ent_t *e = find_ent(a, host, name);
+    return e ? &a->e[e - a->e] : 0;
+}
+
+int wf_autofill_forget_key(wf_autofill_t *a, const char *host, const char *name) {
+    wf_af_ent_t *e = find_ent_rw(a, host, name);
+    if (!e) return 0;
+    azero(e, (uint32_t)sizeof(*e));
+    a->n--;
+    return 1;
+}
+
+int wf_autofill_drop(wf_autofill_t *a, const char *host, const char *name, const char *value) {
+    wf_af_ent_t *e = find_ent_rw(a, host, name);
+    int k, at;
+    if (!e || !value) return -1;
+    if (seq(e->value, value)) at = 0;
+    else {
+        for (at = -1, k = 0; k < e->nold; k++) if (seq(e->old[k], value)) { at = k + 1; break; }
+        if (at < 0) return -1;
+    }
+    if (e->nold == 0) {
+        /* the last value: the key goes */
+        azero(e, (uint32_t)sizeof(*e));
+        a->n--;
+        return 0;
+    }
+    /* value list: [value, old0, old1...]; remove index 'at' and close up */
+    if (at == 0) acpy(e->value, WF_AF_VALUE, e->old[0], 0);
+    for (k = (at == 0 ? 0 : at - 1); k < e->nold - 1; k++) acpy(e->old[k], WF_AF_VALUE, e->old[k + 1], 0);
+    e->nold--;
+    azero(e->old[e->nold], (uint32_t)WF_AF_VALUE);
+    return 1 + e->nold;
+}
+
 static int app(char *o, int cap, int p, const char *s) {
     while (s && *s) { if (p >= cap - 1) return -1; o[p++] = *s++; }
     return p;

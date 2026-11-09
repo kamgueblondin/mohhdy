@@ -41,6 +41,13 @@ int wf_autofill_get_at(wf_autofill_t *a, const char *host, const char *name, int
 /* Lot 87: how many values a key holds (0 when unknown). */
 int wf_autofill_count(const wf_autofill_t *a, const char *host, const char *name);
 int wf_autofill_forget(wf_autofill_t *a, const char *host);
+/* Lot 87: forget one key (host, field name) with all its values: 1 when
+ * it was there, 0 when not. */
+int wf_autofill_forget_key(wf_autofill_t *a, const char *host, const char *name);
+/* Lot 87: forget one value of a key (exact text). The older values move
+ * up; the key goes when its last value goes. Returns how many values the
+ * key still holds (0 when it went), -1 when that value was not there. */
+int wf_autofill_drop(wf_autofill_t *a, const char *host, const char *name, const char *value);
 int wf_autofill_save(const wf_autofill_t *a, char *out, int cap);
 int wf_autofill_load(wf_autofill_t *a, const char *text, int len);
 int wf_autofill_text(const wf_autofill_t *a, char *out, int cap);

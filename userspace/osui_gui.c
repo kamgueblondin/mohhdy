@@ -205,6 +205,7 @@ static we_forms_t g_web_forms;
 static void web_offer_clear(void);   /* Lot 87 */
 static int web_offer_take(char *out, int out_max);
 static int web_offer_key(int wk, char *out, int out_max);
+static int web_offer_drop(char *out, int out_max);
 static int web_offer_click(int cx, int cy, char *out, int out_max);
 static int g_web_forms_ready, g_web_src_n;
 static int osui_web_pipeline(const char *src, int n) {
@@ -569,6 +570,11 @@ static int web_form_command(const char *line, char *out, int out_max) {
         a = line + 9;
         for (k = 0; names[k]; k++) if (scmp(a, names[k]) == 0) key = keys[k];
         if (key < 0 && a[0] && !a[1]) key = (unsigned char)a[0];
+        if (key < 0 && scmp(a, "del") == 0) {
+            /* Lot 87: Delete belongs to the autofill list only */
+            if (!web_offer_drop(out, out_max)) app_out(out, out_max, "osui web form2 none", 0);
+            return 1;
+        }
         if (key < 0) { app_out(out, out_max, "osui web form2 error=usage web-fkey KEY", 0); return 1; }
         if (web_offer_key(key, out, out_max)) return 1;
         fr = we_form_key(&g_web, key);
@@ -928,9 +934,12 @@ static char g_offer_name[32], g_offer_val[WE_FSTATE_VAL];
  * after it (Lot 87 first chunk behaviour). */
 static char g_offer_list[OSUI_OFFER_MAX][WE_FSTATE_VAL];
 static int g_offer_n, g_offer_sel, g_offer_taken;
+/* the text the field held when the list opened (Delete of the last row
+ * puts it back) */
+static char g_offer_orig[WE_FSTATE_VAL];
 
 static void web_offer_clear(void) {
-    g_offer_ctl = -1; g_offer_name[0] = 0; g_offer_val[0] = 0;
+    g_offer_ctl = -1; g_offer_name[0] = 0; g_offer_val[0] = 0; g_offer_orig[0] = 0;
     g_offer_n = 0; g_offer_sel = 0; g_offer_taken = 0;
 }
 
@@ -980,6 +989,7 @@ static void web_offer_for_focus(char *out, int out_max) {
         return;
     }
     scpy(g_offer_val, WE_FSTATE_VAL, g_offer_list[0]);
+    scpy(g_offer_orig, WE_FSTATE_VAL, cur);
     g_offer_ctl = g_web_forms.focus;
     {
         char m[80];
@@ -1023,6 +1033,49 @@ static int web_offer_step(int dir, char *out, int out_max) {
 }
 
 static int web_offer_take(char *out, int out_max) { return web_offer_step(1, out, out_max); }
+
+/* Lot 87: Delete on the highlighted row forgets that value (the session
+ * file too, through page_offer_drop), like a browser's suggestion list.
+ * The highlight stays on the row that takes its place and fills it; when
+ * no value is left the list closes and the field gets back the text it
+ * had. 1 when the key was the list's. Without a highlighted row Delete is
+ * not the list's (nothing is forgotten by accident). */
+static int web_offer_drop(char *out, int out_max) {
+    char m[96], gone[WE_FSTATE_VAL];
+    int left, sel = g_offer_sel;
+    if (g_offer_ctl < 0 || g_offer_ctl != g_web_forms.focus || g_offer_n <= 0 || !g_offer_taken) return 0;
+    if (!g_wops || !g_wops->page_offer_drop) return 0;
+    scpy(gone, WE_FSTATE_VAL, g_offer_list[sel]);
+    scpy(m, (int)sizeof(m), " name=");
+    scat(m, (int)sizeof(m), g_offer_name);
+    left = g_wops->page_offer_drop(g_web_file, g_offer_name, gone);
+    if (left < 0) {
+        app_out(out, out_max, "osui web autofill remove failed", m);
+        return 1;
+    }
+    scat(m, (int)sizeof(m), " row ");
+    gui_cat_u(m, (int)sizeof(m), (unsigned)(sel + 1));
+    scat(m, (int)sizeof(m), " left ");
+    gui_cat_u(m, (int)sizeof(m), (unsigned)left);
+    if (web_offer_collect(g_offer_orig) <= 0) {
+        (void)we_form_set_text(&g_web, g_offer_ctl, g_offer_orig);
+        (void)web_form_render();
+        scat(m, (int)sizeof(m), " closed");
+        app_out(out, out_max, "osui web autofill removed", m);
+        web_offer_clear();
+        return 1;
+    }
+    if (sel >= g_offer_n) sel = g_offer_n - 1;
+    g_offer_sel = sel;
+    scpy(g_offer_val, WE_FSTATE_VAL, g_offer_list[0]);
+    if (we_form_set_text(&g_web, g_offer_ctl, g_offer_list[sel]) == 0) (void)web_form_render();
+    scat(m, (int)sizeof(m), " pick ");
+    gui_cat_u(m, (int)sizeof(m), (unsigned)(sel + 1));
+    scat(m, (int)sizeof(m), "/");
+    gui_cat_u(m, (int)sizeof(m), (unsigned)g_offer_n);
+    app_out(out, out_max, "osui web autofill removed", m);
+    return 1;
+}
 
 /* Lot 87: the list keys. Esc closes an open list first (the field keeps
  * its focus and text); a second Esc goes to the page as before. */
@@ -2463,6 +2516,7 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
         /* Lot 74: the focused control of the rendered page first; an arrow
          * a text field does not use still scrolls */
         if (wk >= 0 && web_offer_key(wk, out, out_max)) return 0;
+        if (key == OS_TERM_KEY_DEL && !g_web_mobile && web_offer_drop(out, out_max)) return 0;
         if (wk >= 0) {
             int fr = we_form_key(&g_web, wk);
             if (fr > 0 || (fr == 0 && key != OS_VGA_KEY_UP && key != OS_VGA_KEY_DOWN && key != OS_VGA_KEY_LEFT && key != OS_VGA_KEY_RIGHT)) { web_form_result(fr, out, out_max); return 0; }

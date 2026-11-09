@@ -14,7 +14,8 @@ stylesheets and one @import level and applies a larger bounded sheet.
 Script walls are named with a fallback URL. Google, measured again on
 2026-11-09, is still the enablejs page (93419 bytes); no JavaScript VM.
 Autofill works on the rendered page: click, a drawn list of up to three
-values, Down/Up/Esc. The boot EDID CEA extension is parsed (no DDC). A
+values, Down/Up/Esc, Delete forgets the highlighted value. The boot EDID
+CEA extension is parsed and reported by display-info (no DDC). A
 delay-gradient detector caps the P2P pacer on the probe path. US-068/073,
 US-076, US-080 and US-081 stay partial. US-078 and US-097 stay simule. See
 docs/lot87_plan.md.

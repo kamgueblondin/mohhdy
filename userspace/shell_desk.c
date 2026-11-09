@@ -28,6 +28,14 @@ static int pre(const char *s, const char *p) {
     return 1;
 }
 static void skip(const char **s) { while (**s == ' ') (*s)++; }
+static void print_int(int v) {
+    char b[12];
+    int k = 11;
+    unsigned u = v < 0 ? 0u : (unsigned)v;
+    b[k] = 0;
+    do { b[--k] = (char)('0' + u % 10u); u /= 10u; } while (u && k > 0);
+    print_string(b + k);
+}
 
 static void ready(void) {
     char buf[512];
@@ -94,6 +102,17 @@ int shell_desk_offer_at(const char *url, const char *name, int idx, char *out, i
     if (wf_autofill_get_at(&g_fill, host, name, idx, out, cap) != 0) { out[0] = 0; return -1; }
     for (n = 0; out[n]; n++) {}
     return n > 0 ? n : -1;
+}
+
+int shell_desk_offer_drop(const char *url, const char *name, const char *value) {
+    char host[64];
+    int left;
+    if (!url || !name || !name[0] || !value) return -1;
+    ready();
+    if (wf_formfill_host(url, host, (int)sizeof(host)) != 0) return -1;
+    left = wf_autofill_drop(&g_fill, host, name, value);
+    if (left >= 0) (void)save_fill();
+    return left;
 }
 
 int shell_desk_offer(const char *url, const char *name, char *out, int cap) {
@@ -234,13 +253,38 @@ int shell_desk_line(const char *line) {
             return 0;
         }
         if (pre(a, "forget")) {
+            /* Lot 87: forget HOST, forget HOST NAME (the key), or forget
+             * HOST NAME VALUE (one value, the rest of the line); saved to
+             * the session file like the desktop's Delete */
+            char host[WF_AF_HOST], name[WF_AF_NAME];
+            int k, r;
             a += 6;
             skip(&a);
-            print_string("autofill forgot\n");
-            (void)wf_autofill_forget(&g_fill, a);
+            for (k = 0; *a && *a != ' ' && k < (int)sizeof(host) - 1; k++) host[k] = *a++;
+            host[k] = 0;
+            skip(&a);
+            for (k = 0; *a && *a != ' ' && k < (int)sizeof(name) - 1; k++) name[k] = *a++;
+            name[k] = 0;
+            skip(&a);
+            if (!name[0]) {
+                r = wf_autofill_forget(&g_fill, host);
+                print_string("autofill forgot keys ");
+                print_int(r);
+                print_string("\n");
+            } else if (!*a) {
+                r = wf_autofill_forget_key(&g_fill, host, name);
+                print_string(r ? "autofill forgot key\n" : "autofill none\n");
+            } else {
+                r = wf_autofill_drop(&g_fill, host, name, a);
+                if (r < 0) { print_string("autofill none\n"); return 1; }
+                print_string("autofill forgot value left ");
+                print_int(r);
+                print_string("\n");
+            }
+            (void)save_fill();
             return 0;
         }
-        print_string("autofill error usage: autofill [list|forget HOST]\n");
+        print_string("autofill error usage: autofill [list|forget HOST [NAME [VALUE]]]\n");
         return 1;
     }
     if (pre(line, "web-back")) return go(1);

@@ -1617,7 +1617,7 @@ static int l87_offer_at(const char *url, const char *name, int idx, char *out, i
 }
 static void test_lot87_offer_list(void) {
     static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request,
-                                             0, 0, 0, 0, l87_offer, l87_offer_at };
+                                             0, 0, 0, 0, l87_offer, l87_offer_at, 0 };
     static os_fb_scene_t scene;
     os_fb_web_item_t it[8];
     char ev[64], st[160];
@@ -1747,9 +1747,108 @@ static void test_lot87_offer_list(void) {
 /* Lot 87: the list rows take a tablet click: the row's value goes in and
  * the list closes; a click on the list padding is swallowed; the field
  * under the list is not clicked through. */
+/* Lot 87: a store the desktop can forget from (Delete on a row) */
+static char g_dq[3][24];
+static int g_dqn, g_drops;
+static int l87d_offer_at(const char *url, const char *name, int idx, char *out, int cap) {
+    (void)url;
+    if (strcmp(name, "q") == 0 && idx >= 0 && idx < g_dqn) return snprintf(out, (size_t)cap, "%s", g_dq[idx]);
+    out[0] = 0;
+    return -1;
+}
+static int l87d_offer(const char *url, const char *name, char *out, int cap) {
+    return l87d_offer_at(url, name, 0, out, cap);
+}
+static int l87d_drop(const char *url, const char *name, const char *value) {
+    int i, k;
+    (void)url;
+    g_drops++;
+    if (strcmp(name, "q") != 0) return -1;
+    for (i = 0; i < g_dqn; i++) {
+        if (strcmp(g_dq[i], value) != 0) continue;
+        for (k = i; k + 1 < g_dqn; k++) memcpy(g_dq[k], g_dq[k + 1], sizeof(g_dq[k]));
+        g_dqn--;
+        return g_dqn;
+    }
+    return -1;
+}
+
+static void test_lot87_offer_delete(void) {
+    static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request,
+                                             0, 0, 0, 0, l87d_offer, l87d_offer_at, l87d_drop };
+    os_fb_web_item_t it[8];
+    char ev[64], st[160];
+    int x, y;
+    setup();
+    snprintf(g_dq[0], sizeof(g_dq[0]), "mohhdy os");
+    snprintf(g_dq[1], sizeof(g_dq[1]), "kernel");
+    snprintf(g_dq[2], sizeof(g_dq[2]), "qemu tablet");
+    g_dqn = 3;
+    g_drops = 0;
+    osui_gui_set_web_fetch(f_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out)));
+    /* Delete without an open list is nobody's */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey del", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 none"));
+    TEST_ASSERT(f_box("q", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "values=3"));
+    /* an open list without a highlighted row: Delete forgets nothing */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey del", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web form2 none"));
+    TEST_ASSERT_EQUAL(0, g_drops);
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_state(st, (int)sizeof(st)));
+    TEST_ASSERT_EQUAL_STRING("3 next 0 mohhdy os|kernel|qemu tablet", st);
+    /* highlight kernel, Delete: the row below takes its place and fills */
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey del", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill removed name=q row 2 left 2 pick 2/2"));
+    TEST_ASSERT_EQUAL(2, g_dqn);
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_state(st, (int)sizeof(st)));
+    TEST_ASSERT_EQUAL_STRING("2 sel 1 mohhdy os|qemu tablet", st);
+    TEST_ASSERT_EQUAL(5, osui_gui_offer_items(it, 8));          /* box, border, highlight, 2 rows */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "value=qemu tablet"));
+    /* the keyboard Delete key (desktop path) on the last row: the
+     * highlight moves up */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_feed_key(OS_TERM_KEY_DEL, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill removed name=q row 2 left 1 pick 1/1"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "value=mohhdy os"));
+    /* the last value: the list closes and the field is empty again */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey del", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill removed name=q row 1 left 0 closed"));
+    TEST_ASSERT_EQUAL(0, g_dqn);
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_items(it, 8));
+    TEST_ASSERT_EQUAL(-1, osui_gui_offer_state(st, (int)sizeof(st)));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NULL(strstr(g_out, "value=mohhdy"));
+    TEST_ASSERT_EQUAL(3, g_drops);
+    /* a new click offers nothing: the store is empty */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NULL(strstr(g_out, "autofill offer"));
+    osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_web_page_ops(0);
+    osui_gui_set_web_fetch(0);
+}
+
 static void test_lot87_offer_click(void) {
     static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request,
-                                             0, 0, 0, 0, l87_offer, l87_offer_at };
+                                             0, 0, 0, 0, l87_offer, l87_offer_at, 0 };
     os_fb_web_item_t it[8];
     char ev[64];
     int x, y, n, lx, ly;
@@ -1804,8 +1903,8 @@ static void test_lot87_offer_click(void) {
 
 static void test_lot87_form2_autofill(void) {
     static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request,
-                                             0, 0, 0, 0, l87_offer, 0 };
-    static const osui_web_page_ops_t no_offer = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request, 0, 0, 0, 0, 0, 0 };
+                                             0, 0, 0, 0, l87_offer, 0, 0 };
+    static const osui_web_page_ops_t no_offer = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request, 0, 0, 0, 0, 0, 0, 0 };
     char ev[64];
     int x, y;
     setup();
@@ -1991,6 +2090,7 @@ int main(void) {
     RUN_TEST(test_lot87_form2_autofill);
     RUN_TEST(test_lot87_offer_list);
     RUN_TEST(test_lot87_offer_click);
+    RUN_TEST(test_lot87_offer_delete);
     RUN_TEST(test_lot74_gui_fragment);
     unity_print_results();
     unity_cleanup();

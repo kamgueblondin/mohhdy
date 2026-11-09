@@ -67,6 +67,69 @@ static void test_history_moves_to_front(void) {
     get_at(&g_a, "ex.am", "q", 0, "c");
 }
 
+static void test_drop_one_value(void) {
+    wf_autofill_init(&g_a);
+    (void)wf_autofill_put(&g_a, "ex.am", "q", "a", "text");
+    (void)wf_autofill_put(&g_a, "ex.am", "q", "b", "text");
+    (void)wf_autofill_put(&g_a, "ex.am", "q", "c", "text");     /* c b a */
+    (void)wf_autofill_put(&g_a, "ex.am", "x", "keep", "text");
+    /* the middle one: a moves up */
+    TEST_ASSERT_EQUAL(2, wf_autofill_drop(&g_a, "ex.am", "q", "b"));
+    get_at(&g_a, "ex.am", "q", 0, "c");
+    get_at(&g_a, "ex.am", "q", 1, "a");
+    get_at(&g_a, "ex.am", "q", 2, 0);
+    /* not there (exact text, case counts for values) */
+    TEST_ASSERT_EQUAL(-1, wf_autofill_drop(&g_a, "ex.am", "q", "b"));
+    TEST_ASSERT_EQUAL(-1, wf_autofill_drop(&g_a, "ex.am", "q", "C"));
+    TEST_ASSERT_EQUAL(-1, wf_autofill_drop(&g_a, "ex.am", "nope", "c"));
+    TEST_ASSERT_EQUAL(-1, wf_autofill_drop(&g_a, "ex.am", "q", 0));
+    /* the newest: the older one becomes the current value */
+    TEST_ASSERT_EQUAL(1, wf_autofill_drop(&g_a, "EX.AM", "q", "c"));
+    get_at(&g_a, "ex.am", "q", 0, "a");
+    TEST_ASSERT_EQUAL(1, wf_autofill_count(&g_a, "ex.am", "q"));
+    /* a slot freed by drop is reused by a new value without old ghosts */
+    TEST_ASSERT_EQUAL(0, wf_autofill_put(&g_a, "ex.am", "q", "d", "text"));
+    get_at(&g_a, "ex.am", "q", 0, "d");
+    get_at(&g_a, "ex.am", "q", 1, "a");
+    TEST_ASSERT_EQUAL(1, wf_autofill_drop(&g_a, "ex.am", "q", "a"));
+    /* the last value takes the key with it */
+    TEST_ASSERT_EQUAL(2, g_a.n);
+    TEST_ASSERT_EQUAL(0, wf_autofill_drop(&g_a, "ex.am", "q", "d"));
+    TEST_ASSERT_EQUAL(1, g_a.n);
+    TEST_ASSERT_EQUAL(0, wf_autofill_count(&g_a, "ex.am", "q"));
+    get_at(&g_a, "ex.am", "q", 0, 0);
+    get_at(&g_a, "ex.am", "x", 0, "keep");
+    /* the freed key can come back */
+    TEST_ASSERT_EQUAL(0, wf_autofill_put(&g_a, "ex.am", "q", "e", "text"));
+    TEST_ASSERT_EQUAL(1, wf_autofill_count(&g_a, "ex.am", "q"));
+}
+
+static void test_forget_key_and_save(void) {
+    static char buf[2048];
+    int n;
+    wf_autofill_init(&g_a);
+    (void)wf_autofill_put(&g_a, "ex.am", "q", "a", "text");
+    (void)wf_autofill_put(&g_a, "ex.am", "q", "b", "text");
+    (void)wf_autofill_put(&g_a, "ex.am", "user", "ada", "text");
+    (void)wf_autofill_put(&g_a, "other.am", "q", "z", "text");
+    TEST_ASSERT_EQUAL(1, wf_autofill_forget_key(&g_a, "Ex.Am", "q"));
+    TEST_ASSERT_EQUAL(0, wf_autofill_forget_key(&g_a, "ex.am", "q"));
+    TEST_ASSERT_EQUAL(0, wf_autofill_forget_key(0, "ex.am", "q"));
+    TEST_ASSERT_EQUAL(2, g_a.n);
+    get_at(&g_a, "ex.am", "user", 0, "ada");
+    get_at(&g_a, "other.am", "q", 0, "z");
+    /* what is forgotten stays forgotten across a save and a load */
+    TEST_ASSERT_EQUAL(0, wf_autofill_drop(&g_a, "other.am", "q", "z"));
+    n = wf_autofill_save(&g_a, buf, (int)sizeof(buf));
+    TEST_ASSERT(n > 0);
+    TEST_ASSERT_NULL(strstr(buf, "other.am"));
+    wf_autofill_init(&g_b);
+    TEST_ASSERT(wf_autofill_load(&g_b, buf, n) >= 0);
+    TEST_ASSERT_EQUAL(1, g_b.n);
+    get_at(&g_b, "ex.am", "user", 0, "ada");
+    TEST_ASSERT_EQUAL(0, wf_autofill_count(&g_b, "ex.am", "q"));
+}
+
 static void test_save_load_keeps_order(void) {
     static char blob[4096], again[4096];
     int n, m;
@@ -168,6 +231,8 @@ int main(void) {
     unity_init();
     RUN_TEST(test_history_order);
     RUN_TEST(test_history_moves_to_front);
+    RUN_TEST(test_drop_one_value);
+    RUN_TEST(test_forget_key_and_save);
     RUN_TEST(test_save_load_keeps_order);
     RUN_TEST(test_formfill_offers_newest_first);
     RUN_TEST(test_remember_builds_history);
