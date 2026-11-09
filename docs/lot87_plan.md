@@ -50,6 +50,6 @@ partial. US-078 and US-097 stay simule.
 Hand-written host tests: tests/unit/userspace/test_lot87_css.c (13), test_lot87_layer.c (13), test_lot87_revert.c (15), test_lot87_link.c (5), test_lot87_web.c (8), test_lot87_fill.c (7), test_p2p_trend.c (8), tests/unit/kernel/test_edid_cea.c (12), test_lot87_display.c (3), test_osui_gui.c (test_lot87_form2_autofill, test_lot87_offer_list, test_lot87_offer_click, test_lot87_offer_delete), test_p2p.c (trend line), test_arm_portable.c (trend and cea).
 QEMU: scripts/lot67_web_server.py /lot87/ routes, tests/scripts/test_qemu_lot87.py, `make qemu-lot87`, CI job lot87-layout. ARM: tests/integration/test_qemu_arm_boot.py expects the two new lines.
 
-## Gates on the box (2026-11-09)
+## Gates on the box (2026-11-10)
 
-See the PR body for the final list; filled in when the gates ran.
+Run on the box on 2026-11-10 at a13150f: make test-all (15666 passed, 0 failed), make qemu-lot87 (ok, about 208 s), roadmap-check, tree-clean-check, strict-image-check, secrets-check all OK. make qemu-gui-mesh passed locally after one CI failure of that job on 83af6e5 (a timeout waiting for "osui panel armed cmd=collab-work solo 2"; the code path is not touched by lot 87 and the same job passed on 8a0d8a2).
