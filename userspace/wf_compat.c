@@ -272,22 +272,22 @@ int wf_compat_advice(const wf_compat_t *c, char *out, int cap) {
     if (!c || !out || cap < 16) return -1;
     switch (c->wall_kind) {
     case WF_WALL_ENABLEJS:
-        msg = "needs JavaScript; Mohhdy does not run site scripts. Use web-search (lite engines) or the fallback";
+        msg = "needs JavaScript, which the reader does not run; try web-search or the fallback";
         break;
     case WF_WALL_NOSCRIPT:
-        msg = "only a noscript notice without scripts. Open the fallback link if it is a plain page";
+        msg = "only a noscript notice; the fallback link may be a plain page";
         break;
     case WF_WALL_CHALLENGE:
-        msg = "bot challenge page; it cannot be solved without scripts. Not retried";
+        msg = "bot challenge, not solvable without scripts. Not retried";
         break;
     case WF_WALL_BLOCKED:
-        msg = "the site refused this client (block page). Not retried";
+        msg = "the site refused this client. Not retried";
         break;
     case WF_WALL_SPA:
-        msg = "empty app shell filled by scripts; the reader shows only the static text";
+        msg = "empty app shell filled by scripts; static text only";
         break;
     case WF_WALL_BROWSER:
-        msg = "the site asks for a newer browser; the reader shows only the static text";
+        msg = "asks for a newer browser; static text only";
         break;
     default:
         msg = 0;

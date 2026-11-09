@@ -319,7 +319,7 @@ int osui_gui_web_load(const char *file, char *status, int max) {
     g_web_final[0] = 0;
     if (osui_gui_web_is_url(file) || web_is_search(file)) {
         /* Lot 67: real network page (shell_fetch_page), reader view */
-        static char fst[512];
+        static char fst[640];
         if (!g_web_fetch) {
             if (status) scpy(status, max, "osui web error=no_network_loader (url refused)");
             return -1;
@@ -439,7 +439,7 @@ static int web_go(const char *file, int push, char *out, int out_max) {
 }
 
 static int web_go_page(const char *file, int push, char *out, int out_max) {
-    char status[320];
+    char status[640];   /* Lot 87: the fetch line plus a web-compat line */
     g_web_errpage = 0;
     we_forms_init(&g_web_forms);   /* lot 74: a new page, new controls */
     web_offer_clear();
@@ -1084,7 +1084,7 @@ static void web_event(const char *p, char *out, int out_max) {
 
 static void web_open_line(const char *line, char *out, int out_max) {
     const char *f = line + 4;
-    char status[320];
+    char status[640];
     while (*f == ' ') f++;
     if (!*f || slen(f) >= (int)sizeof(g_web_file)) {
         if (out) scpy(out, out_max, "osui web error=usage web FILE\n");
