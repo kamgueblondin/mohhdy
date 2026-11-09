@@ -88,8 +88,18 @@ typedef struct {
      * (form2 controls), by page URL and field name; length > 0 when one
      * is remembered. Secrets are never remembered, so never offered. */
     int (*page_offer)(const char *url, const char *name, char *out, int cap);
+    /* Lot 87: value idx (0 the newest, as page_offer) of the same key; the
+     * desktop lists them under the field. Length > 0, or -1. */
+    int (*page_offer_at)(const char *url, const char *name, int idx, char *out, int cap);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
+/* Lot 87: the autofill list drawn under the focused field: up to max
+ * display items (page pixels, like the page). Returns the count, 0 when no
+ * list is open. Used by the scene and by host tests. */
+#define OSUI_OFFER_MAX 3
+int osui_gui_offer_items(os_fb_web_item_t *it, int max);
+/* Lot 87: "n sel value|value|..." of the open list, for tests; 0 or -1. */
+int osui_gui_offer_state(char *out, int cap);
 /* "web-open URL|FILE", "web-forms", "web-section N|next|prev", "web-input N TEXT", "web-submit [N]",
  * "web-find TEXT" / "web-find" (next match): the
  * console and the GUI input line run the same code. 1 when handled. */

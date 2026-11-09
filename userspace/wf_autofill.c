@@ -37,6 +37,28 @@ static int host_ok(const char *h) {
     return dots >= 1;
 }
 
+static int seq(const char *a, const char *b) {
+    int i = 0;
+    while (a[i] && a[i] == b[i]) i++;
+    return a[i] == b[i];
+}
+
+/* Lot 87: the new value goes first; the one it replaces moves into the
+ * older list (newest first, the oldest falls off). A value already in the
+ * list moves to the front instead of being kept twice. */
+static void push_value(wf_af_ent_t *e, const char *value) {
+    int k, at = -1;
+    if (seq(e->value, value)) return;
+    for (k = 0; k < e->nold; k++) if (seq(e->old[k], value)) { at = k; break; }
+    if (at < 0) {
+        at = e->nold < WF_AF_HIST - 1 ? e->nold++ : WF_AF_HIST - 2;
+    }
+    /* close the gap at 'at', then shift the rest down by one */
+    for (k = at; k > 0; k--) acpy(e->old[k], WF_AF_VALUE, e->old[k - 1], 0);
+    if (WF_AF_HIST > 1) acpy(e->old[0], WF_AF_VALUE, e->value, 0);
+    acpy(e->value, WF_AF_VALUE, value, 0);
+}
+
 int wf_autofill_put(wf_autofill_t *a, const char *host, const char *name, const char *value, const char *type) {
     int i, free_i = -1;
     if (!a || !host_ok(host) || !name || !name[0] || alen(name) >= WF_AF_NAME) { if (a) a->refused++; return -1; }
@@ -46,7 +68,7 @@ int wf_autofill_put(wf_autofill_t *a, const char *host, const char *name, const 
     for (i = 0; i < WF_AF_MAX; i++) {
         if (!a->e[i].used) { if (free_i < 0) free_i = i; continue; }
         if (aeq(a->e[i].host, host) && aeq(a->e[i].name, name)) {
-            acpy(a->e[i].value, WF_AF_VALUE, value, 0);
+            push_value(&a->e[i], value);
             a->stored++;
             return 0;
         }
@@ -76,6 +98,30 @@ int wf_autofill_get(wf_autofill_t *a, const char *host, const char *name, char *
     return -1;
 }
 
+static const wf_af_ent_t *find_ent(const wf_autofill_t *a, const char *host, const char *name) {
+    int i;
+    if (!a || !host || !name) return 0;
+    for (i = 0; i < WF_AF_MAX; i++)
+        if (a->e[i].used && aeq(a->e[i].host, host) && aeq(a->e[i].name, name)) return &a->e[i];
+    return 0;
+}
+
+int wf_autofill_get_at(wf_autofill_t *a, const char *host, const char *name, int idx, char *out, int cap) {
+    const wf_af_ent_t *e;
+    if (!out || cap < 2) return -1;
+    out[0] = 0;
+    e = find_ent(a, host, name);
+    if (!e || idx < 0 || idx > e->nold) return -1;
+    acpy(out, cap, idx == 0 ? e->value : e->old[idx - 1], 0);
+    a->hits++;
+    return 0;
+}
+
+int wf_autofill_count(const wf_autofill_t *a, const char *host, const char *name) {
+    const wf_af_ent_t *e = find_ent(a, host, name);
+    return e ? 1 + e->nold : 0;
+}
+
 int wf_autofill_forget(wf_autofill_t *a, const char *host) {
     int i, n = 0;
     if (!a) return 0;
@@ -100,17 +146,22 @@ int wf_autofill_save(const wf_autofill_t *a, char *out, int cap) {
     if (!a || !out || cap < 16) return -1;
     p = app(out, cap, p, "MOHHDY-AUTOFILL 1\n");
     if (p < 0) return -1;
+    /* Lot 87: the older values first, oldest first, so a load that puts
+     * the lines in order rebuilds the same list */
     for (i = 0; i < WF_AF_MAX; i++) if (a->e[i].used) {
-        if (p >= cap - 1) return -1;
-        p = app(out, cap, p, a->e[i].host);
-        if (p < 0 || p >= cap - 1) return -1;
-        out[p++] = '\t';
-        p = app(out, cap, p, a->e[i].name);
-        if (p < 0 || p >= cap - 1) return -1;
-        out[p++] = '\t';
-        p = app(out, cap, p, a->e[i].value);
-        if (p < 0 || p >= cap - 1) return -1;
-        out[p++] = '\n';
+        int k;
+        for (k = a->e[i].nold; k >= 0; k--) {
+            if (p >= cap - 1) return -1;
+            p = app(out, cap, p, a->e[i].host);
+            if (p < 0 || p >= cap - 1) return -1;
+            out[p++] = '\t';
+            p = app(out, cap, p, a->e[i].name);
+            if (p < 0 || p >= cap - 1) return -1;
+            out[p++] = '\t';
+            p = app(out, cap, p, k == 0 ? a->e[i].value : a->e[i].old[k - 1]);
+            if (p < 0 || p >= cap - 1) return -1;
+            out[p++] = '\n';
+        }
     }
     out[p] = 0;
     return p;
@@ -163,6 +214,11 @@ int wf_autofill_text(const wf_autofill_t *a, char *out, int cap) {
         out[p++] = ' ';
         p = app(out, cap, p, a->e[i].name);
         if (p < 0 || p >= cap - 1) return -1;
+        if (a->e[i].nold > 0) {
+            p = app(out, cap, p, " values ");
+            if (p < 0 || p >= cap - 2) return -1;
+            out[p++] = (char)('1' + a->e[i].nold);
+        }
         out[p++] = '\n';
     }
     out[p] = 0;

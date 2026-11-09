@@ -1486,7 +1486,7 @@ static int l86_css(const char *line, char *out, int cap) {
 }
 static void test_lot86_shell_page_ops_routing(void) {
     static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                             l86_load, l86_preview, l86_fill, l86_css, 0 };
+                                             l86_load, l86_preview, l86_fill, l86_css, 0, 0 };
     static const osui_web_page_ops_t none = { 0 };
     setup();
     /* without the shell entries every command answers, nothing crashes */
@@ -1549,7 +1549,7 @@ static int l86_form_key(int key) {
 static void test_lot86_focus_offers_and_down(void) {
     static const osui_web_page_ops_t ops = { m_sections, m_current, m_section, m_form_link, l86_form_key,
                                              m_form_set, m_submit, m_flist, 0, 0, 0, 0, 0,
-                                             0, 0, l86_fill_offers, 0, 0 };
+                                             0, 0, l86_fill_offers, 0, 0, 0 };
     char ev[64];
     int x, y;
     setup();
@@ -1603,10 +1603,209 @@ static int l87_offer(const char *url, const char *name, char *out, int cap) {
     out[0] = 0;
     return -1;
 }
+
+/* Lot 87: three remembered values for q, newest first; "v w" is what p
+ * already holds, so p lists the other two only. */
+static int l87_offer_at(const char *url, const char *name, int idx, char *out, int cap) {
+    static const char *const q[] = { "mohhdy os", "kernel", "qemu tablet" };
+    static const char *const pv[] = { "v w", "old p" };
+    (void)url;
+    if (strcmp(name, "q") == 0 && idx >= 0 && idx < 3) return snprintf(out, (size_t)cap, "%s", q[idx]);
+    if (strcmp(name, "p") == 0 && idx >= 0 && idx < 2) return snprintf(out, (size_t)cap, "%s", pv[idx]);
+    out[0] = 0;
+    return -1;
+}
+static void test_lot87_offer_list(void) {
+    static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request,
+                                             0, 0, 0, 0, l87_offer, l87_offer_at };
+    static os_fb_scene_t scene;
+    os_fb_web_item_t it[8];
+    char ev[64], st[160];
+    int x, y, n, i, texts = 0, hi = 0;
+    setup();
+    osui_gui_set_web_fetch(f_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_items(it, 8));          /* no focus, no list */
+    TEST_ASSERT_EQUAL(-1, osui_gui_offer_state(st, (int)sizeof(st)));
+    TEST_ASSERT(f_box("q", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill offer name=q key=Down values=3"));
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_state(st, (int)sizeof(st)));
+    TEST_ASSERT_EQUAL_STRING("3 next 0 mohhdy os|kernel|qemu tablet", st);
+    /* the drawn list: a white box, its border, one highlight, three rows */
+    n = osui_gui_offer_items(it, 8);
+    TEST_ASSERT_EQUAL(6, n);
+    TEST_ASSERT_EQUAL(OS_FB_WEB_RECT, it[0].kind);
+    TEST_ASSERT_EQUAL(OS_FB_WEB_BORDER, it[1].kind);
+    TEST_ASSERT_EQUAL(it[0].x, it[1].x);
+    TEST_ASSERT(it[0].w >= 11 * 8);                              /* "qemu tablet" fits */
+    TEST_ASSERT_EQUAL(3 * 12 + 4, it[0].h);
+    for (i = 2; i < n; i++) {
+        if (it[i].kind == OS_FB_WEB_TEXT) {
+            TEST_ASSERT(it[i].y > it[0].y && it[i].y < it[0].y + (int)it[0].h);
+            TEST_ASSERT(it[i].x > it[0].x);
+            texts++;
+        } else if (it[i].kind == OS_FB_WEB_RECT) hi++;
+    }
+    TEST_ASSERT_EQUAL(3, texts);
+    TEST_ASSERT_EQUAL(1, hi);
+    TEST_ASSERT_EQUAL_STRING("mohhdy os", it[3].text);
+    TEST_ASSERT_EQUAL(1, it[3].bold);                            /* the next pick */
+    /* the list sits under the field (or above it at the page end) */
+    TEST_ASSERT(it[0].y > y - 40);
+    /* too small a buffer draws nothing rather than half a list */
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_items(it, 2));
+    /* the scene carries it after the page items */
+    memset(&scene, 0, sizeof(scene));
+    osui_gui_fill_scene(&scene);
+    TEST_ASSERT(scene.nweb >= 6);
+    TEST_ASSERT_EQUAL(OS_FB_WEB_RECT, scene.web[scene.nweb - 6].kind);
+    TEST_ASSERT_EQUAL_STRING("qemu tablet", scene.web[scene.nweb - 1].text);
+    /* Down fills the newest, the list stays; Down again the next one */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill applied name=q pick 1/3"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "pick 2/3"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "value=kernel"));
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_state(st, (int)sizeof(st)));
+    TEST_ASSERT_EQUAL_STRING("3 sel 1 mohhdy os|kernel|qemu tablet", st);
+    n = osui_gui_offer_items(it, 8);
+    for (i = 0; i < n; i++) if (it[i].kind == OS_FB_WEB_TEXT && it[i].bold) break;
+    TEST_ASSERT(i < n);
+    TEST_ASSERT_EQUAL_STRING("kernel", it[i].text);
+    /* Down past the end wraps, Up goes back */
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "pick 1/3"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey up", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "pick 3/3"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "value=qemu tablet"));
+    /* Esc closes the list, the field keeps its text and the focus */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill closed name=q"));
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_items(it, 8));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "value=qemu tablet"));
+    /* Down after Esc is the field's own key again */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NULL(strstr(g_out, "autofill applied"));
+    /* Up on a fresh list (nothing taken yet) is not the list's */
+    osui_gui_web_command("web-fkey tab", g_out, (int)sizeof(g_out));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey stab", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "autofill offer name=q"));
+    /* the text "qemu tablet" the field holds is left out of the list */
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "values=2"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey up", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NULL(strstr(g_out, "autofill applied"));
+    /* the open list covers p (it is drawn over the page and takes the
+     * clicks there): Esc closes it first */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "autofill closed name=q"));
+    /* p holds "v w": only the older value is offered, alone, so Down
+     * fills it and closes the list as in the one-value case */
+    TEST_ASSERT(f_box("p", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "autofill offer name=p key=Down"));
+    TEST_ASSERT_NULL(strstr(g_out, "values="));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "autofill applied name=p"));
+    TEST_ASSERT_NULL(strstr(g_out, "pick"));
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_items(it, 8));
+    /* a new page drops the list */
+    TEST_ASSERT(f_box("q", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT(osui_gui_offer_items(it, 8) > 0);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_items(it, 8));
+    osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_web_page_ops(0);
+    osui_gui_set_web_fetch(0);
+}
+
+/* Lot 87: the list rows take a tablet click: the row's value goes in and
+ * the list closes; a click on the list padding is swallowed; the field
+ * under the list is not clicked through. */
+static void test_lot87_offer_click(void) {
+    static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request,
+                                             0, 0, 0, 0, l87_offer, l87_offer_at };
+    os_fb_web_item_t it[8];
+    char ev[64];
+    int x, y, n, lx, ly;
+    setup();
+    osui_gui_set_web_fetch(f_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT(f_box("q", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    n = osui_gui_offer_items(it, 8);
+    TEST_ASSERT_EQUAL(6, n);
+    lx = it[0].x + 10;
+    ly = it[0].y;
+    /* the top padding (above the first row): swallowed, the list stays */
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", lx, ly);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NULL(strstr(g_out, "applied"));
+    TEST_ASSERT_NULL(strstr(g_out, "form2"));
+    TEST_ASSERT_EQUAL(6, osui_gui_offer_items(it, 8));
+    /* the third row through the desktop event path */
+    snprintf(ev, sizeof(ev), "web click %d %d", lx, ly + 2 + 2 * 12 + 5);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_event(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill applied name=q pick 3/3 click"));
+    TEST_ASSERT_EQUAL(0, osui_gui_offer_items(it, 8));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "value=qemu tablet"));
+    /* the same place again, the list closed: the page gets the click */
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_event(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NULL(strstr(g_out, "autofill applied"));
+    /* reopen (Tab away and back), the first row by the console command */
+    osui_gui_web_command("web-fkey tab", g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-fkey stab", g_out, (int)sizeof(g_out));
+    n = osui_gui_offer_items(it, 8);
+    TEST_ASSERT(n > 0);
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", it[0].x + 10, it[0].y + 2 + 5);
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web autofill applied name=q pick 1/2 click"));
+    memset(g_out, 0, sizeof(g_out));
+    osui_gui_web_command("web-fstate", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "value=mohhdy os"));
+    osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_web_page_ops(0);
+    osui_gui_set_web_fetch(0);
+}
+
 static void test_lot87_form2_autofill(void) {
     static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request,
-                                             0, 0, 0, 0, l87_offer };
-    static const osui_web_page_ops_t no_offer = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request, 0, 0, 0, 0, 0 };
+                                             0, 0, 0, 0, l87_offer, 0 };
+    static const osui_web_page_ops_t no_offer = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request, 0, 0, 0, 0, 0, 0 };
     char ev[64];
     int x, y;
     setup();
@@ -1790,6 +1989,8 @@ int main(void) {
     RUN_TEST(test_lot86_shell_page_ops_routing);
     RUN_TEST(test_lot86_focus_offers_and_down);
     RUN_TEST(test_lot87_form2_autofill);
+    RUN_TEST(test_lot87_offer_list);
+    RUN_TEST(test_lot87_offer_click);
     RUN_TEST(test_lot74_gui_fragment);
     unity_print_results();
     unity_cleanup();

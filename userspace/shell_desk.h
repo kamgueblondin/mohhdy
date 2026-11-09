@@ -22,4 +22,6 @@ int shell_desk_fill_key(wf_form_page_t *p, int field, const char *url);
 /* Lot 87: remembered value of field NAME for the host of URL (the GUI
  * form2 controls); length, or -1 when nothing is remembered. */
 int shell_desk_offer(const char *url, const char *name, char *out, int cap);
+/* Lot 87: value idx of the same key (0 the newest). Length, or -1. */
+int shell_desk_offer_at(const char *url, const char *name, int idx, char *out, int cap);
 #endif
