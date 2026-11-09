@@ -42,6 +42,40 @@ static void ready(void) {
     if (n > 0) { buf[n] = 0; (void)desk_cfg_load(&g_cfg, buf, n); }
     n = osui_gui_persist_read("/persist/nav.txt", buf, (int)sizeof(buf) - 1);
     if (n > 0) (void)wf_nav_load(&g_nav, buf, n);
+    {
+        static char fillb[4096];
+        n = osui_gui_persist_read("/persist/autofill.txt", fillb, (int)sizeof(fillb) - 1);
+        if (n > 0) (void)wf_autofill_load(&g_fill, fillb, n);
+    }
+}
+
+static int save_fill(void) {
+    static char buf[4096];
+    int n = wf_autofill_save(&g_fill, buf, (int)sizeof(buf));
+    if (n < 0) return -1;
+    return osui_gui_persist_write("/persist/autofill.txt", buf, n);
+}
+
+int shell_desk_remember_form(const wf_form_page_t *p, int form, const char *url) {
+    int n;
+    ready();
+    n = wf_formfill_remember(&g_fill, p, form, url);
+    if (n > 0) (void)save_fill();
+    return n;
+}
+
+int shell_desk_offers(const wf_form_page_t *p, int field, const char *url, wf_fill_offer_t *o, int cap) {
+    ready();
+    return wf_formfill_offers(&g_fill, p, field, url, o, cap);
+}
+
+int shell_desk_apply_offer(wf_form_page_t *p, int field, int offer, const char *url) {
+    wf_fill_offer_t o[WF_FILL_OFFERS];
+    int n;
+    ready();
+    n = wf_formfill_offers(&g_fill, p, field, url, o, WF_FILL_OFFERS);
+    if (offer < 0 || offer >= n) return -1;
+    return wf_formfill_apply(p, field, &o[offer]);
 }
 
 desk_cfg_t *shell_desk_cfg(void) { ready(); return &g_cfg; }

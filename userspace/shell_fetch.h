@@ -27,6 +27,12 @@ int shell_page_request(const char* url, const char* body, int body_len, const ch
                        char* src, int src_max, char* final_url, int url_max,
                        char* status, int st_max);
 int shell_page_submit(int n, char* src, int src_max, char* final_url, int url_max, char* status, int st_max);
+/* Lot 86: open a saved page against a base URL (stylesheet on), show the
+ * request a field would submit, offer remembered values, toggle site CSS. */
+int shell_page_load(const char* path, const char* url, char* status, int st_max);
+int shell_page_preview(int field, char* out, int cap);
+int shell_page_fill_cmd(const char* line, char* out, int cap);
+int shell_page_css_cmd(const char* line, char* out, int cap);
 /* Lot 72: images of the fetched page (wf_webimg): the atlas for the
  * compositor, slot sizes for the engine, on / off ("web-images") and the
  * counters of the last section. */

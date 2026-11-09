@@ -12,7 +12,9 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 US-031 partial, phase3_complete=false. Page 5 draws the 16 Vietnamese
 double marks and 72 more Latin letters. History, bookmarks, eight tabs,
 cookie expiry and persistence, HTTP Age/Vary, a settings panel for scale,
-net and search engine, and a reader table. Google, measured again on
+net and search engine, and a reader table. web-fill offers a remembered
+value, web-preview builds the GET or POST request, and the reader can
+apply a bounded stylesheet. Google, measured again on
 2026-11-09, is still the enablejs page (92874 bytes). US-068/073, US-076,
 US-080 and US-081 stay partial. US-078 and US-097 stay simule. See
 docs/lot86_plan.md.

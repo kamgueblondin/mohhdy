@@ -148,6 +148,7 @@ int edid_parse(const uint8_t *b, int len, edid_info_t *e) {
         uint32_t d2 = (uint32_t)(e->size_mm_w * e->size_mm_w + e->size_mm_h * e->size_mm_h);
         e->diag_tenths = (int)((edid_isqrt(d2 * 100u) * 10u + 127u) / 254u);
     }
+    e->ext_blocks = b[126];
     e->ok = 1;
     return 0;
 }
@@ -179,6 +180,41 @@ int edid_established_mode(int bit, int *w, int *h) {
     if (bit < 0 || bit > 16 || !w || !h) return -1;
     *w = ew[bit];
     *h = eh[bit];
+    return 0;
+}
+
+int edid_established_hz(int bit, int *hz) {
+    static const int ez[17] = {
+        70, 88, 60, 67, 72, 75, 56, 60,
+        72, 75, 75, 87, 60, 70, 75, 75, 75
+    };
+    if (bit < 0 || bit > 16 || !hz) return -1;
+    *hz = ez[bit];
+    return 0;
+}
+
+int edid_best_mode(const edid_info_t *e, int *w, int *h, int *hz) {
+    int bit, best = -1, area = 0, bw = 0, bh = 0, bz = 0;
+    if (!e || !e->ok || !w || !h || !hz) return -1;
+    if (e->native_w > 0 && e->native_h > 0) {
+        *w = e->native_w;
+        *h = e->native_h;
+        *hz = e->refresh_hz;
+        return 0;
+    }
+    for (bit = 0; bit < 17; bit++) {
+        int mw, mh, mz, a;
+        if ((e->established & (1 << bit)) == 0) continue;
+        if (edid_established_mode(bit, &mw, &mh) != 0) continue;
+        if (edid_established_hz(bit, &mz) != 0) continue;
+        a = mw * mh;
+        if (a > area) { area = a; best = bit; bw = mw; bh = mh; bz = mz; }
+    }
+    if (best < 0) return -1;
+    *w = bw;
+    *h = bh;
+    *hz = bz;
+    (void)best;
     return 0;
 }
 

@@ -15,6 +15,7 @@
 #include "osui_panes.h"
 #include "osui_files.h"
 #include "osui_parity.h"
+#include "shell_fetch.h"
 
 #define COLS OS_VGA_COLS
 #define ROWS OS_VGA_ROWS
@@ -471,6 +472,9 @@ void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops) {
     g_wops_atlas_dims = ops ? ops->atlas_dims : 0;
 }
 static int web_nsections(void) { return (g_wops && g_wops->sections && osui_gui_web_is_url(g_web_file)) ? g_wops->sections() : 0; }
+/* The shell page (web-load, a finished fetch) is enough for the console.
+ * The GUI pane adopts it only once g_web_file is an http(s) URL. */
+static int web_shell_sections(void) { return (g_wops && g_wops->sections) ? g_wops->sections() : 0; }
 
 /* Shows section k of the kept page; keep: the scroll offset stays (a
  * field edit), else top (or bottom when to_end). */
@@ -633,7 +637,7 @@ int osui_gui_web_command(const char *line, char *out, int out_max) {
     }
     if (scmp(line, "web-forms") == 0) {
         static char fl[2048];
-        if (!g_wops || !g_wops->forms_list || web_nsections() <= 0) { app_out(out, out_max, "osui web forms none", 0); return 1; }
+        if (!g_wops || !g_wops->forms_list || web_shell_sections() <= 0) { app_out(out, out_max, "osui web forms none", 0); return 1; }
         (void)g_wops->forms_list(fl, (int)sizeof(fl));
         if (out) scat(out, out_max, fl);
         return 1;
@@ -687,12 +691,46 @@ int osui_gui_web_command(const char *line, char *out, int out_max) {
         while (*a == ' ') a++;
         while (*a >= '0' && *a <= '9' && n < 1000) n = n * 10 + (*a++ - '0');
         if (*a == ' ') a++;
-        if (!g_wops || !g_wops->form_set || web_nsections() <= 0 || g_wops->form_set(n, a) != 0) {
+        if (!g_wops || !g_wops->form_set || web_shell_sections() <= 0 || g_wops->form_set(n, a) != 0) {
             app_out(out, out_max, "osui web input error=no_field usage web-input N TEXT (N from the page links)", 0);
             return 1;
         }
-        (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
+        if (web_nsections() > 0) (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
         app_out(out, out_max, "osui web input ok", 0);
+        return 1;
+    }
+    if (sncmp(line, "web-load", 8) == 0 && (line[8] == ' ' || !line[8])) {
+        char path[160], url[200];
+        int i = 0;
+        a = line + 8;
+        while (*a == ' ') a++;
+        while (*a && *a != ' ' && i < (int)sizeof(path) - 1) path[i++] = *a++;
+        path[i] = 0;
+        while (*a == ' ') a++;
+        i = 0;
+        while (*a && i < (int)sizeof(url) - 1) url[i++] = *a++;
+        url[i] = 0;
+        (void)shell_page_load(path, url, out, out_max);
+        return 1;
+    }
+    if (sncmp(line, "web-preview", 11) == 0 && (line[11] == ' ' || !line[11])) {
+        int field = -1, any = 0;
+        a = line + 11;
+        while (*a == ' ') a++;
+        while (*a >= '0' && *a <= '9') {
+            if (!any) field = 0;
+            any = 1;
+            field = field * 10 + (*a++ - '0');
+        }
+        (void)shell_page_preview(any ? field : -1, out, out_max);
+        return 1;
+    }
+    if (sncmp(line, "web-fill", 8) == 0 && (line[8] == ' ' || !line[8])) {
+        (void)shell_page_fill_cmd(line, out, out_max);
+        return 1;
+    }
+    if (sncmp(line, "web-css", 7) == 0 && (line[7] == ' ' || !line[7])) {
+        (void)shell_page_css_cmd(line, out, out_max);
         return 1;
     }
     if (sncmp(line, "web-f", 5) == 0) {

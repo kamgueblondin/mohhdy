@@ -173,6 +173,27 @@ static void test_lot86_week_serial_white(void) {
     TEST_ASSERT_EQUAL(1024, e.native_w);
     TEST_ASSERT_EQUAL(800, e.dtd_w[1]);
     TEST_ASSERT_EQUAL(600, e.dtd_h[1]);
+    TEST_ASSERT_EQUAL(0, e.ext_blocks);
+    g_b[126] = 1;
+    fix_sum(g_b);
+    TEST_ASSERT_EQUAL(0, edid_parse(g_b, EDID_BLOCK, &e));
+    TEST_ASSERT_EQUAL(1, e.ext_blocks);
+    TEST_ASSERT_EQUAL(1024, e.native_w);
+    {
+        int w = 0, h = 0, hz = 0;
+        TEST_ASSERT_EQUAL(0, edid_best_mode(&e, &w, &h, &hz));
+        TEST_ASSERT_EQUAL(1024, w);
+        TEST_ASSERT_EQUAL(768, h);
+        TEST_ASSERT_EQUAL(0, edid_established_hz(16, &hz));
+        TEST_ASSERT_EQUAL(75, hz);
+        e.native_w = 0;
+        e.native_h = 0;
+        e.established = 1 << 7;   /* 800x600@60 */
+        TEST_ASSERT_EQUAL(0, edid_best_mode(&e, &w, &h, &hz));
+        TEST_ASSERT_EQUAL(800, w);
+        TEST_ASSERT_EQUAL(600, h);
+        TEST_ASSERT_EQUAL(60, hz);
+    }
 }
 
 static void test_isqrt(void) {

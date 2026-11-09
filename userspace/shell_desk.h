@@ -12,4 +12,9 @@ int shell_desk_nav_held(void);
 desk_cfg_t *shell_desk_cfg(void);
 /* Apply scale, net and engine to the live shell. 0 ok. */
 int shell_desk_apply(void);
+#include "wf_formfill.h"
+/* Remember non-secret fields of a form (form < 0: all). Returns how many. */
+int shell_desk_remember_form(const wf_form_page_t *p, int form, const char *url);
+int shell_desk_offers(const wf_form_page_t *p, int field, const char *url, wf_fill_offer_t *o, int cap);
+int shell_desk_apply_offer(wf_form_page_t *p, int field, int offer, const char *url);
 #endif
