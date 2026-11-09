@@ -58,6 +58,8 @@ static int add_ref(wf_cssl_ref_t *out, int cap, int *count, const char *url, con
     copyn(out[*count].url, WF_CSSL_URL, url, slen(url));
     copyn(out[*count].media, (int)sizeof(out[0].media), media ? media : "", media ? mn : 0);
     out[*count].from_import = from_import;
+    out[*count].layered = 0;
+    out[*count].layer[0] = 0;
     (*count)++;
     return 0;
 }
@@ -94,6 +96,15 @@ static int css_imports(const char *css, int n, const char *base, wf_cssl_ref_t *
             continue;
         }
         if (i + 7 < n && at_word(css, n, i, "@charset")) { while (i < n && css[i] != ';') i++; i++; continue; }
+        if (i + 6 < n && at_word(css, n, i, "@layer")) {
+            /* Lot 87: a layer statement may precede @import; a layer block
+             * ends the import section */
+            int j = i;
+            while (j < n && css[j] != ';' && css[j] != '{') j++;
+            if (j >= n || css[j] == '{') break;
+            i = j + 1;
+            continue;
+        }
         if (i + 7 > n || !at_word(css, n, i, "@import")) break;
         i += 7;
         while (i < n && is_sp(css[i])) i++;
@@ -126,14 +137,24 @@ static int css_imports(const char *css, int n, const char *base, wf_cssl_ref_t *
         }
         while (i < n && is_sp(css[i])) i++;
         {
-            int m = i, me;
+            int m = i, me, mat = 0, layered = 0, before = *count;
+            char layer[32];
             while (i < n && css[i] != ';') i++;
             me = i;
             while (me > m && is_sp(css[me - 1])) me--;
             if (i < n) i++;
             copyn(href, (int)sizeof(href), css + a, b - a);
             if (resolve(base, href, url, (int)sizeof(url)) != 0) { if (st) st->refused++; continue; }
-            if (add_ref(out, cap, count, url, css + m, me - m, 1, st) == 0) got++;
+            /* Lot 87: layer(...) and supports(...) before the media list */
+            if (!wf_site_import_conds(css + m, me - m, &mat, layer, (int)sizeof(layer), &layered)) {
+                if (st) st->unsupported++;
+                continue;
+            }
+            if (add_ref(out, cap, count, url, css + m + mat, me - m - mat, 1, st) == 0) got++;
+            if (*count > before) {
+                out[*count - 1].layered = layered;
+                copyn(out[*count - 1].layer, (int)sizeof(out[0].layer), layer, slen(layer));
+            }
         }
     }
     return got;
@@ -245,6 +266,15 @@ static int sheet_body_start(const char *css, int n) {
             last = i;
             continue;
         }
+        if (i + 6 <= n && at_word(css, n, i, "@layer")) {
+            /* Lot 87: a leading layer statement was written in front */
+            int j = i;
+            while (j < n && css[j] != ';' && css[j] != '{') j++;
+            if (j >= n || css[j] == '{') break;
+            i = j + 1;
+            last = i;
+            continue;
+        }
         if (i + 7 <= n && (at_word(css, n, i, "@import") || at_word(css, n, i, "@charset"))) {
             int q = 0;
             while (i < n && (q || css[i] != ';')) {
@@ -260,15 +290,75 @@ static int sheet_body_start(const char *css, int n) {
     return last < n ? last : n;
 }
 
-static int append_sheet(char *out, int cap, int n, const char *media, const char *css, int len) {
-    int m = slen(media), start = sheet_body_start(css, len), save = n;
-    if (m) {
-        if ((n = put(out, cap, n, "@media ", 7)) < 0) return -1;
-        if ((n = put(out, cap, n, media, m)) < 0) return -1;
-        if ((n = put(out, cap, n, " {\n", 3)) < 0) return -1;
+/* Lot 87: the "@layer a, b;" statements among the leading rules of a
+ * sheet, copied to out (they must precede the imported sheets) */
+static int leading_layers(char *out, int cap, int n, const char *css, int len) {
+    int i = 0;
+    while (i < len) {
+        while (i < len && is_sp(css[i])) i++;
+        if (i + 1 < len && css[i] == '/' && css[i + 1] == '*') {
+            i += 2;
+            while (i + 1 < len && !(css[i] == '*' && css[i + 1] == '/')) i++;
+            i += 2;
+            continue;
+        }
+        if (i + 6 <= len && at_word(css, len, i, "@layer")) {
+            int j = i;
+            while (j < len && css[j] != ';' && css[j] != '{') j++;
+            if (j >= len || css[j] == '{') break;
+            if ((n = put(out, cap, n, css + i, j + 1 - i)) < 0) return -1;
+            if ((n = put(out, cap, n, "\n", 1)) < 0) return -1;
+            i = j + 1;
+            continue;
+        }
+        if (i + 7 <= len && (at_word(css, len, i, "@import") || at_word(css, len, i, "@charset"))) {
+            int q = 0;
+            while (i < len && (q || css[i] != ';')) {
+                if (css[i] == '"' || css[i] == '\'') q = q == css[i] ? 0 : (q ? q : css[i]);
+                i++;
+            }
+            i++;
+            continue;
+        }
+        break;
     }
+    return n;
+}
+
+/* "@media M {" and/or "@layer L {" around what follows; the count of
+ * braces opened, or -1 when out is full */
+static int open_wrap(char *out, int cap, int *n, const char *media, int layered, const char *layer) {
+    int opened = 0, m = slen(media), l = slen(layer);
+    if (m) {
+        if ((*n = put(out, cap, *n, "@media ", 7)) < 0) return -1;
+        if ((*n = put(out, cap, *n, media, m)) < 0) return -1;
+        if ((*n = put(out, cap, *n, " {\n", 3)) < 0) return -1;
+        opened++;
+    }
+    if (layered) {
+        if ((*n = put(out, cap, *n, "@layer", 6)) < 0) return -1;
+        if (l) {
+            if ((*n = put(out, cap, *n, " ", 1)) < 0) return -1;
+            if ((*n = put(out, cap, *n, layer, l)) < 0) return -1;
+        }
+        if ((*n = put(out, cap, *n, " {\n", 3)) < 0) return -1;
+        opened++;
+    }
+    return opened;
+}
+
+static int close_wrap(char *out, int cap, int n, int opened) {
+    while (opened-- > 0) if ((n = put(out, cap, n, "\n}", 2)) < 0) return -1;
+    return n;
+}
+
+static int append_sheet(char *out, int cap, int n, const char *media, int layered, const char *layer,
+                        const char *css, int len) {
+    int start = sheet_body_start(css, len), save = n, opened;
+    opened = open_wrap(out, cap, &n, media, layered, layer);
+    if (opened < 0) { out[save] = 0; return -1; }
     if ((n = put(out, cap, n, css + start, len - start)) < 0) { out[save] = 0; return -1; }
-    if (m && (n = put(out, cap, n, "\n}", 2)) < 0) { out[save] = 0; return -1; }
+    if ((n = close_wrap(out, cap, n, opened)) < 0) { out[save] = 0; return -1; }
     if ((n = put(out, cap, n, "\n", 1)) < 0) { out[save] = 0; return -1; }
     return n;
 }
@@ -285,7 +375,7 @@ int wf_csslink_collect(const char *html, int n, const char *base_url, int vw, in
     out[0] = 0;
     nrefs = wf_csslink_scan(html, n, base_url, refs, WF_CSSL_FOUND, st);
     for (r = 0; r < nrefs; r++) {
-        int len, k, nsub;
+        int len, k, nsub, save, opened, nw;
         if (refs[r].media[0] && !wf_site_media_ok(refs[r].media, slen(refs[r].media), vw, vh)) {
             st->skipped_media++;
             continue;
@@ -296,11 +386,22 @@ int wf_csslink_collect(const char *html, int n, const char *base_url, int vw, in
         st->fetched++;
         if (len > WF_CSSL_SHEET_MAX) { len = WF_CSSL_SHEET_MAX; st->truncated++; }
         sheet[len] = 0;
+        if (refs[r].layered) st->layered++;
+        /* the sheet, its layer statements and its imports share the
+         * sheet's media and layer: one wrapper around all of them */
+        save = w;
+        opened = open_wrap(out, cap, &w, refs[r].media, refs[r].layered, refs[r].layer);
+        if (opened < 0) { w = save; out[w] = 0; st->dropped++; continue; }
+        nw = leading_layers(out, cap, w, sheet, len);
+        if (nw < 0) { w = save; out[w] = 0; st->dropped++; continue; }
+        w = nw;
         /* one level of @import inside the fetched sheet, placed before it */
-        nsub = wf_csslink_imports(sheet, len, refs[r].url, sub, WF_CSSL_FOUND);
+        /* the stats see supports() imports that are not fetched */
+        nsub = 0;
+        (void)css_imports(sheet, len, refs[r].url, sub, WF_CSSL_FOUND, &nsub, st);
         st->found += nsub;
         for (k = 0; k < nsub; k++) {
-            int il, nw;
+            int il;
             if (sub[k].media[0] && !wf_site_media_ok(sub[k].media, slen(sub[k].media), vw, vh)) { st->skipped_media++; continue; }
             if (st->fetched + st->failed >= WF_CSSL_SHEETS) { st->dropped++; continue; }
             il = get(ctx, sub[k].url, inner, WF_CSSL_SHEET_MAX + 1);
@@ -308,15 +409,16 @@ int wf_csslink_collect(const char *html, int n, const char *base_url, int vw, in
             st->fetched++;
             if (il > WF_CSSL_SHEET_MAX) { il = WF_CSSL_SHEET_MAX; st->truncated++; }
             inner[il] = 0;
-            nw = append_sheet(out, cap, w, sub[k].media[0] ? sub[k].media : refs[r].media, inner, il);
+            if (sub[k].layered) st->layered++;
+            nw = append_sheet(out, cap, w, sub[k].media, sub[k].layered, sub[k].layer, inner, il);
             if (nw < 0) { st->dropped++; continue; }
             w = nw;
         }
-        {
-            int nw = append_sheet(out, cap, w, refs[r].media, sheet, len);
-            if (nw < 0) { st->dropped++; continue; }
-            w = nw;
-        }
+        nw = append_sheet(out, cap, w, "", 0, "", sheet, len);
+        if (nw >= 0) nw = close_wrap(out, cap, nw, opened);
+        if (nw < 0) { w = save; out[w] = 0; st->dropped++; continue; }
+        w = nw;
+        if ((nw = put(out, cap, w, "\n", 1)) >= 0) w = nw;
     }
     st->bytes = w;
     return w;
@@ -345,6 +447,8 @@ int wf_csslink_stats_text(const wf_cssl_stats_t *st, char *out, int cap) {
     if (n >= 0) n = put_num(out, cap, n, " refused ", st->refused);
     if (n >= 0) n = put_num(out, cap, n, " dropped ", st->dropped);
     if (n >= 0) n = put_num(out, cap, n, " bytes ", st->bytes);
+    if (n >= 0 && st->layered) n = put_num(out, cap, n, " layered ", st->layered);
+    if (n >= 0 && st->unsupported) n = put_num(out, cap, n, " unsupported ", st->unsupported);
     if (n >= 0) n = put(out, cap, n, "\n", 1);
     return n < 0 ? slen(out) : n;
 }

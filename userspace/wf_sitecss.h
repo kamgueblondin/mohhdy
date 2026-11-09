@@ -31,6 +31,10 @@
 #define WF_SITE_VARS 16
 #define WF_SITE_LINKS 6
 #define WF_SITE_HREF 160
+/* Lot 87: cascade layers (@layer). Names in order of first appearance;
+ * a nested layer is "outer.inner"; an anonymous block gets its own. */
+#define WF_SITE_LAYERS 12
+#define WF_SITE_LAYER_NAME 32
 
 enum {
     WF_SITE_DISP_NONE = 3,
@@ -146,6 +150,7 @@ typedef struct {
     uint8_t box_n;
     uint32_t color;
     int spec, order;
+    uint8_t layer;                /* Lot 87: 0 unlayered, else layer index + 1 */
 } wf_site_rule_t;
 
 typedef struct {
@@ -157,6 +162,8 @@ typedef struct {
     char href[WF_SITE_HREF];
     char media[32];
     uint8_t from_import;
+    uint8_t layered;              /* Lot 87: @import ... layer or layer(name) */
+    char layer[WF_SITE_LAYER_NAME];
 } wf_site_link_t;
 
 typedef struct {
@@ -174,6 +181,9 @@ typedef struct {
     wf_site_link_t link[WF_SITE_LINKS];
     int nlinks, dropped_links;
     int ext_n;                    /* bytes of css[] that came from outside */
+    char layer[WF_SITE_LAYERS][WF_SITE_LAYER_NAME];   /* Lot 87 */
+    int nlayers, dropped_layers, anon_layers;
+    uint8_t layer_rank[WF_SITE_LAYERS];   /* cascade position, 1 = weakest */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */
@@ -201,6 +211,14 @@ const wf_site_link_t *wf_site_link_at(const wf_site_t *d, int i);
 int wf_site_media_ok(const char *q, int n, int vw, int vh);
 /* 1 when an @supports condition holds for the reader and the engine. */
 int wf_site_supports(const char *cond, int n);
+/* Lot 87: the conditions after the URL of an @import: "layer",
+ * "layer(name)" and "supports(cond)", in that order, then the media list.
+ * *media_at receives the offset of the media list in s. layer_out gets
+ * the layer name ("" for an anonymous layer) and *layered 1 when there was
+ * a layer. Returns 1 when supports() holds or is absent, 0 when not. */
+int wf_site_import_conds(const char *s, int n, int *media_at, char *layer_out, int cap, int *layered);
+/* Lot 87: the layer order of the last prepare, "a,b.c,#anon1"; length. */
+int wf_site_layers_text(const wf_site_t *d, char *out, int cap);
 /* Custom property value after the cascade of :root/html/body, or 0. */
 const char *wf_site_var(const wf_site_t *d, const char *name);
 #endif

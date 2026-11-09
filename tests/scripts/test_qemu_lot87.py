@@ -4,14 +4,22 @@ guest reaches it as 10.0.2.2 (slirp).
 
   * EDID: the boot log says what the first extension block is (a CEA-861
     summary, "tag 0x.. not parsed", or "none"); whatever QEMU gives.
+    display-info (SYS_DISPLAY_INFO) reports the same revision, SVD count
+    and best mode on its "display cea" line.
   * external stylesheets: web-css on, web-open /lot87/page.html fetches
     main.css and its @import base.css, never print.css; the missing
     @import fails; web-read no longer shows the banner and the side note.
+  * cascade layers: /lot87/layers.html imports reset.css into a layer and
+    skips gone.css (supports() false); the unlayered rule keeps the block
+    the more specific layered rule hides.
   * script walls: /lot87/wall.html is named an enablejs wall with its
     noscript fallback; /lot87/blocked (403) is named a block page.
-  * GUI form2 autofill: a value remembered from the console (web-fill
-    remember) is offered when the tablet clicks the field of the rendered
-    page, Down takes it, Enter posts it (the server log shows the body).
+  * GUI form2 autofill: two values remembered from the console (web-fill
+    remember, grace then ada) are offered when the tablet clicks the field
+    of the rendered page; the list is drawn under the field (its highlight
+    row is found in a screendump); Down fills ada, Down grace, Up ada
+    again; a tablet click on the second row picks grace and closes the
+    list; Enter posts it (the server log shows the body).
 """
 from __future__ import print_function
 
@@ -34,6 +42,21 @@ from test_qemu_gui_windows import W, H, BAR_H  # noqa: E402
 
 ROOT = g.ROOT
 SRV_LOG = os.path.join(g.LOG_DIR, "lot87-web-server.log")
+
+
+def list_highlight(rgb, cx, cy):
+    """Lot 87: the list highlight (0xCCE4FF) in the band under a field
+    centred at cx, cy (screen pixels): (pixels, x0, y0, x1, y1)."""
+    n = 0
+    x0 = y0 = 1 << 30
+    x1 = y1 = -1
+    for y in range(max(0, cy - 60), min(H, cy + 90)):
+        for x in range(max(0, cx - 260), min(W, cx + 320)):
+            i = (y * W + x) * 3
+            if abs(rgb[i] - 0xCC) <= 10 and abs(rgb[i + 1] - 0xE4) <= 10 and abs(rgb[i + 2] - 0xFF) <= 10:
+                n += 1
+                x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
+    return n, x0, y0, x1, y1
 
 
 def say(msg):
@@ -116,6 +139,20 @@ def main():
             time.sleep(0.5)
             u = "http://10.0.2.2:%d" % hp
 
+            # ---- the same EDID extension through SYS_DISPLAY_INFO (display-info)
+            di = lw.run(mon, proc, "display-info", "display cea", 20)
+            cea = [ln for ln in g.normalized_log(di).splitlines() if "display cea" in ln]
+            if not cea:
+                raise RuntimeError("display-info without a cea line: %r" % di[-600:])
+            if line.startswith("edid ext cea ok rev "):
+                rev_svd = " ".join(line.split()[4:8])          # "rev R svd N"
+                need(cea[-1], ["display cea " + rev_svd, " sink "], "display-info cea")
+                best = line.split(" best ", 1)[1].split()[0]
+                need(cea[-1], [" best " + best], "display-info best mode")
+            elif line == "edid ext none":
+                need(cea[-1], ["display cea none"], "display-info cea")
+            say("display-info: %s" % cea[-1].strip())
+
             # ---- external stylesheets
             lw.run(mon, proc, "web-css on", "web-css on", 20)
             lw.run(mon, proc, "web-open %s/lot87/page.html" % u, "osui web page sections", fail=["error="])
@@ -126,8 +163,18 @@ def main():
             refuse(server_text(), ["CSS print.css"], "print sheet")
             read = lw.run(mon, proc, "web-read", "Texte garde", 30)
             refuse(read, ["banner87", "sidenote87"], "web-read with sheets")
-            lw.run(mon, proc, "web-css off", "web-css off", 20)
             say("external sheets: main.css + @import base.css applied, print.css not fetched, missing.css failed")
+            # ---- cascade layers: @import layer(reset), supports() false
+            lw.run(mon, proc, "web-open %s/lot87/layers.html" % u, "osui web page sections", fail=["error="])
+            wait_server("CSS reset.css")
+            css = lw.run(mon, proc, "web-css", "css-links found", 30)
+            need(css, ["css-links found 2 fetched 2 failed 0 media 0", "layered 1 unsupported 1"], "web-css layers")
+            refuse(server_text(), ["CSS gone.css"], "supports() false sheet")
+            read = lw.run(mon, proc, "web-read", "fin87", 30)
+            need(read, ["layerkeep87"], "web-read layers")
+            refuse(read, ["layergone87"], "web-read layers")
+            lw.run(mon, proc, "web-css off", "web-css off", 20)
+            say("layers: the unlayered rule beat the more specific layered one, gone.css not fetched")
 
             # ---- script wall and block page
             wall = lw.run(mon, proc, "web-open %s/lot87/wall.html" % u, "web-compat", 60)
@@ -138,11 +185,18 @@ def main():
 
             # ---- remember a value from the console
             lw.run(mon, proc, "web-open %s/form.html" % u, "osui web page sections 1", fail=["error"])
+            # two values for the same field: grace first, then ada (newest)
+            lw.run(mon, proc, "web-input 3 grace", "osui web input ok", 30)
+            rem = lw.run(mon, proc, "web-fill remember", "web-fill remembered", 20)
+            refuse(rem, ["remembered 0"], "web-fill remember")
             lw.run(mon, proc, "web-input 3 ada", "osui web input ok", 30)
             rem = lw.run(mon, proc, "web-fill remember", "web-fill remembered", 20)
             refuse(rem, ["remembered 0"], "web-fill remember")
             listed = lw.run(mon, proc, "autofill list", "autofill ", 20)
-            need(listed, ["10.0.2.2 user"], "autofill list")
+            need(listed, ["10.0.2.2 user values 2"], "autofill list")
+            # the console editor lists both, newest first (same store)
+            offers = lw.run(mon, proc, "web-fill 3", "web-fill field", 20)
+            need(offers, ["offers 2", "offer 0 user ada", "offer 1 user grace"], "web-fill offers")
 
             # ---- GUI: click the field, Down takes the value, Enter posts it
             g.send_command_until(mon, "gui", "osui gui live", proc, wait_prompt=False)
@@ -166,22 +220,45 @@ def main():
                 except RuntimeError:
                     continue
                 time.sleep(0.6)
-                if "osui web autofill offer name=user" in g.normalized_log(g.log_text()[start:]):
+                if "osui web autofill offer name=user key=Down values=2" in g.normalized_log(g.log_text()[start:]):
                     offered = (fx, fy)
                     break
             if not offered:
                 raise RuntimeError("no autofill offer for the user field; boxes %r tail %r" %
                                    (boxes, g.log_text()[-1500:]))
-            say("GUI: click at %d,%d offered the remembered user value" % offered)
+            say("GUI: click at %d,%d offered the two remembered user values" % offered)
+            # the list is drawn under the field: its highlight row is there
+            time.sleep(1.0)
+            _, _, rgb = g.screendump_rgb(mon, "qemu-lot87-list.ppm")
+            hl, hx0, hy0, hx1, hy1 = list_highlight(rgb, offered[0], offered[1])
+            if hl < 200:
+                raise RuntimeError("autofill list not drawn under the field (%d highlight px)" % hl)
+            say("GUI: the list is drawn under the field (%d highlight px)" % hl)
             start = len(g.log_text())
             g.send_key(mon, "down")
-            g.wait_for(proc, "osui web autofill applied name=user", g.CMD_TIMEOUT, start)
+            g.wait_for(proc, "osui web autofill applied name=user pick 1/2", g.CMD_TIMEOUT, start)
+            time.sleep(0.6)
+            start = len(g.log_text())
+            g.send_key(mon, "down")
+            g.wait_for(proc, "osui web autofill applied name=user pick 2/2", g.CMD_TIMEOUT, start)
+            time.sleep(0.6)
+            start = len(g.log_text())
+            g.send_key(mon, "up")
+            g.wait_for(proc, "osui web autofill applied name=user pick 1/2", g.CMD_TIMEOUT, start)
+            time.sleep(0.8)
+            # the tablet picks the second row: the highlight band is the
+            # first row, the second is just under it
+            row_h = hy1 - hy0 + 1
+            start = len(g.log_text())
+            g.click_tablet(qmp, (hx0 + hx1) // 2, hy1 + row_h // 2 + 1, W, H)
+            g.wait_for(proc, "osui web autofill applied name=user pick 2/2 click", g.CMD_TIMEOUT, start)
+            say("GUI: the tablet picked the second row (grace)")
             time.sleep(0.8)
             start = len(g.log_text())
             g.send_key(mon, "ret")
             g.wait_for(proc, "osui web form2 submit POST", lw.FETCH_TIMEOUT, start)
-            wait_server("ECHO POST q='' body=b'user=ada&msg=bonjour'")
-            say("GUI: Down took the value, Enter posted user=ada")
+            wait_server("ECHO POST q='' body=b'user=grace&msg=bonjour'")
+            say("GUI: Down ada, Down grace, Up ada, click grace; Enter posted user=grace")
             g.send_key(mon, "esc")
             time.sleep(0.5)
             say("lot87 qemu ok in %.1fs" % (time.monotonic() - t0))

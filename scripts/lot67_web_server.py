@@ -240,6 +240,13 @@ class H(http.server.BaseHTTPRequestHandler):
             "/lot87/main.css": "@import url(base.css);\n.side { display: none }\nh1 { text-decoration: underline }\n",
             "/lot87/base.css": "p.ad { display: none }\nem.k { font-style: italic }\n",
             "/lot87/print.css": "body { display: none }\n",
+            # cascade layers: reset is a layer, so its more specific rule
+            # loses to the unlayered one; gone.css is never fetched
+            "/lot87/layers.css": ("@layer reset, site;\n@import url(reset.css) layer(reset);\n"
+                                  "@import url(gone.css) supports(not (display: block));\n"
+                                  ".keep87 { display: block }\n"),
+            "/lot87/reset.css": "div.keep87 { display: none }\n.gone87 { display: none }\n",
+            "/lot87/gone.css": "body { display: none }\n",
         }
         if p in sheets:
             print("CSS %s" % p.rsplit("/", 1)[1], flush=True)
@@ -253,6 +260,13 @@ class H(http.server.BaseHTTPRequestHandler):
                     "<h1>Feuilles externes</h1><p class=\"ad\">banner87</p>"
                     "<p class=\"keep\">Texte garde <em class=\"k\">important</em></p>"
                     "<div class=\"side\">sidenote87</div></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot87/layers.html":
+            page = ("<!doctype html><html><head><title>Lot 87 layers</title>"
+                    "<link rel=\"stylesheet\" href=\"layers.css\"></head><body>"
+                    "<h1>Couches</h1><div class=\"keep87\">layerkeep87 visible</div>"
+                    "<p class=\"gone87\">layergone87</p><p>fin87</p></body></html>")
             self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot87/wall.html":

@@ -661,9 +661,34 @@ static int specificity(const wf_site_rule_t *r) {
     return s;
 }
 
+/* Lot 87: the specificity packed so that order never outweighs it (Lot 86
+ * added order & 1023 to spec * 10, so a later rule beat one more type
+ * selector): ids 0..7, classes 0..31, types 0..31 -> 0..8191. */
+static int spec_packed(int spec) {
+    int ids = spec / 10000, cls = (spec / 100) % 100, tags = spec % 100;
+    if (ids > 7) ids = 7;
+    if (cls > 31) cls = 31;
+    if (tags > 31) tags = 31;
+    return ids * 1024 + cls * 32 + tags;
+}
+
+/* Lot 87: the layer step of the cascade (CSS Cascade 5). Normal
+ * declarations: later layers beat earlier ones and unlayered beats every
+ * layer. Important ones: the reverse, earlier layers win and every layer
+ * beats unlayered. 0..15. */
+static int layer_step(const wf_site_rule_t *r) {
+    int k = r->layer;                  /* 0 unlayered, else 1..WF_SITE_LAYERS */
+    if (k > 14) k = 14;
+    if (!r->imp) return k ? k : 15;
+    return k ? 15 - k : 0;
+}
+
 static int rank_of(const wf_site_rule_t *r) {
-    /* important, then origin (inline > author > ua), then specificity, then order */
-    return r->imp * 1000000000 + (int)r->origin * 1000000 + r->spec * 10 + (r->order & 1023);
+    /* important, then origin (inline > author > ua), then layer, then
+     * specificity, then order; fits in 31 bits:
+     * ((imp * 4 + origin) * 16 + layer) * 8192 * 1024 < 2^30 */
+    int top = ((int)r->imp * 4 + (int)r->origin) * 16 + layer_step(r);
+    return (top * 8192 + spec_packed(r->spec)) * 1024 + (r->order & 1023);
 }
 
 static void paint_rule(wf_site_t *d, int idx, const wf_site_rule_t *r) {
@@ -894,6 +919,7 @@ static int add_rule(wf_site_t *d, const wf_site_rule_t *src) {
     r->box[2] = src->box[2];
     r->box[3] = src->box[3];
     r->color = src->color;
+    r->layer = src->layer;
     r->order = d->nrules;
     for (p = 0; p < src->nparts && p < WF_SITE_PARTS; p++) {
         const unsigned char *a = (const unsigned char *)&src->part[p];
@@ -1259,6 +1285,7 @@ static int parse_selector(wf_site_t *d, const char *s, int n, const wf_site_rule
         rule.color = proto->color;
         rule.imp = proto->imp;
         rule.origin = proto->origin;
+        rule.layer = proto->layer;
         i = skip_noise(s, n, i);
         while (i < n && s[i] != ',') {
             wf_site_part_t part;
@@ -1552,9 +1579,20 @@ static void take_import(wf_site_t *d, const char *s, int n) {
     } else return;
     while (i < n && is_sp(s[i])) i++;
     {
-        int me = n;
+        int me = n, mat = 0, layered = 0, before;
+        char layer[WF_SITE_LAYER_NAME];
         while (me > i && (is_sp(s[me - 1]) || s[me - 1] == ';')) me--;
-        add_link(d, s + a, b - a, s + i, me - i, 1);
+        /* Lot 87: layer / layer(name) / supports() come before the media */
+        if (!wf_site_import_conds(s + i, me - i, &mat, layer, (int)sizeof(layer), &layered)) return;
+        before = d->nlinks;
+        add_link(d, s + a, b - a, s + i + mat, me - i - mat, 1);
+        if (layered && d->nlinks > before) {
+            wf_site_link_t *l = &d->link[d->nlinks - 1];
+            int k = 0;
+            l->layered = 1;
+            while (layer[k] && k < WF_SITE_LAYER_NAME - 1) { l->layer[k] = layer[k]; k++; }
+            l->layer[k] = 0;
+        }
     }
 }
 
@@ -1609,6 +1647,179 @@ static void take_vars(wf_site_t *d, const char *sel, int sn, const char *body, i
     }
 }
 
+/* ---- @layer ----------------------------------------------------------- */
+
+/* index + 1 of a layer name, registering it at the end of the order when
+ * it is new; 0 when the table is full (its rules then count as unlayered,
+ * and dropped_layers says so) */
+static int layer_id(wf_site_t *d, const char *name, int n) {
+    int k;
+    char low[WF_SITE_LAYER_NAME];
+    if (n <= 0) return 0;
+    if (n >= WF_SITE_LAYER_NAME) { d->dropped_layers++; return 0; }
+    /* "a.b" first makes "a" exist (its parent is placed where the child
+     * first appears) */
+    for (k = n - 1; k > 0; k--) if (name[k] == '.') { (void)layer_id(d, name, k); break; }
+    slower(low, (int)sizeof(low), name, n);
+    for (k = 0; k < d->nlayers; k++) if (eq(d->layer[k], low)) return k + 1;
+    if (d->nlayers >= WF_SITE_LAYERS) { d->dropped_layers++; return 0; }
+    scopy(d->layer[d->nlayers], WF_SITE_LAYER_NAME, low, slen(low));
+    d->nlayers++;
+    return d->nlayers;
+}
+
+/* "outer.inner" for a layer named inside another one */
+static int layer_join(const wf_site_t *d, int outer, const char *name, int n, char *out, int cap) {
+    int m = 0, k;
+    out[0] = 0;
+    if (outer > 0 && outer <= d->nlayers) {
+        const char *o = d->layer[outer - 1];
+        for (k = 0; o[k] && m < cap - 1; k++) out[m++] = o[k];
+        if (m < cap - 1) out[m++] = '.';
+    }
+    for (k = 0; k < n && m < cap - 1; k++) out[m++] = name[k];
+    out[m] = 0;
+    return (outer > 0 ? slen(d->layer[outer - 1]) + 1 : 0) + n < cap ? m : -1;
+}
+
+static int layer_name_char(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+           c == '-' || c == '_' || c == '.';
+}
+
+/* "@layer a, b.c;" declares the order; returns how many names */
+static int layer_statement(wf_site_t *d, int outer, const char *s, int n) {
+    int i = 6, got = 0;   /* after "@layer" */
+    while (i < n) {
+        int a;
+        char full[WF_SITE_LAYER_NAME];
+        while (i < n && (is_sp(s[i]) || s[i] == ',')) i++;
+        a = i;
+        while (i < n && layer_name_char(s[i])) i++;
+        if (i == a) { if (i < n) i++; continue; }
+        if (layer_join(d, outer, s + a, i - a, full, (int)sizeof(full)) < 0) { d->dropped_layers++; continue; }
+        if (layer_id(d, full, slen(full))) got++;
+    }
+    return got;
+}
+
+/* "@layer name {" or "@layer {": the layer of the block (0 when the
+ * table is full) */
+static int layer_block(wf_site_t *d, int outer, const char *s, int n) {
+    int i = 6, a;
+    char full[WF_SITE_LAYER_NAME];
+    while (i < n && is_sp(s[i])) i++;
+    a = i;
+    while (i < n && layer_name_char(s[i])) i++;
+    if (i == a) {
+        /* anonymous: a layer nobody else can name */
+        char anon[12];
+        int k = 0, v = ++d->anon_layers;
+        char t[8];
+        int tn = 0;
+        anon[k++] = '#'; anon[k++] = 'a'; anon[k++] = 'n'; anon[k++] = 'o'; anon[k++] = 'n';
+        while (v && tn < 7) { t[tn++] = (char)('0' + v % 10); v /= 10; }
+        while (tn && k < 11) anon[k++] = t[--tn];
+        anon[k] = 0;
+        if (layer_join(d, outer, anon, k, full, (int)sizeof(full)) < 0) { d->dropped_layers++; return 0; }
+        return layer_id(d, full, slen(full));
+    }
+    if (layer_join(d, outer, s + a, i - a, full, (int)sizeof(full)) < 0) { d->dropped_layers++; return 0; }
+    return layer_id(d, full, slen(full));
+}
+
+static int at_is(const char *s, int n, int at, const char *w) {
+    int k = 0;
+    while (w[k]) { if (at + 1 + k >= n || lc(s[at + 1 + k]) != w[k]) return 0; k++; }
+    return at + 1 + k >= n || !layer_name_char(s[at + 1 + k]);
+}
+
+int wf_site_import_conds(const char *s, int n, int *media_at, char *layer_out, int cap, int *layered) {
+    int i = 0, ok = 1;
+    if (layer_out && cap > 0) layer_out[0] = 0;
+    if (layered) *layered = 0;
+    if (media_at) *media_at = 0;
+    if (!s || n <= 0) return 1;
+    while (i < n && is_sp(s[i])) i++;
+    if (i + 5 <= n && lc(s[i]) == 'l' && lc(s[i + 1]) == 'a' && lc(s[i + 2]) == 'y' && lc(s[i + 3]) == 'e' &&
+        lc(s[i + 4]) == 'r' && (i + 5 == n || s[i + 5] == '(' || is_sp(s[i + 5]) || s[i + 5] == ';')) {
+        i += 5;
+        if (layered) *layered = 1;
+        if (i < n && s[i] == '(') {
+            int a = ++i, k = 0;
+            while (i < n && s[i] != ')') i++;
+            if (layer_out) {
+                int b = i;
+                while (a < b && is_sp(s[a])) a++;
+                while (b > a && is_sp(s[b - 1])) b--;
+                while (a < b && k < cap - 1) layer_out[k++] = lc(s[a++]);
+                layer_out[k] = 0;
+            }
+            if (i < n) i++;
+        }
+        while (i < n && is_sp(s[i])) i++;
+    }
+    if (i + 9 <= n && lc(s[i]) == 's' && lc(s[i + 1]) == 'u' && lc(s[i + 2]) == 'p' && lc(s[i + 3]) == 'p' &&
+        lc(s[i + 4]) == 'o' && lc(s[i + 5]) == 'r' && lc(s[i + 6]) == 't' && lc(s[i + 7]) == 's' && s[i + 8] == '(') {
+        int a = i + 8, depth = 0;
+        i = a;
+        do {
+            if (s[i] == '(') depth++;
+            else if (s[i] == ')') depth--;
+            i++;
+        } while (i < n && depth > 0);
+        /* the condition is given with its parentheses, as after @supports */
+        ok = wf_site_supports(s + a, i - a);
+        while (i < n && is_sp(s[i])) i++;
+    }
+    if (media_at) *media_at = i;
+    return ok;
+}
+
+/* parent index of layer k ("a" for "a.b"), -1 for a top-level layer */
+static int layer_parent(const wf_site_t *d, int k) {
+    const char *nm = d->layer[k];
+    int n = slen(nm), cut = -1, j;
+    for (j = n - 1; j > 0; j--) if (nm[j] == '.') { cut = j; break; }
+    if (cut < 0) return -1;
+    for (j = 0; j < d->nlayers; j++) {
+        int i = 0;
+        while (i < cut && d->layer[j][i] == nm[i]) i++;
+        if (i == cut && d->layer[j][i] == 0) return j;
+    }
+    return -1;
+}
+
+static void layer_visit(wf_site_t *d, int k, int *next, int depth) {
+    int j;
+    if (depth > WF_SITE_LAYERS) return;
+    /* the sublayers first, in order of appearance, then the layer's own
+     * rules: inside "a", "a.b" is weaker than the rules written in "a" */
+    for (j = 0; j < d->nlayers; j++) if (j != k && layer_parent(d, j) == k) layer_visit(d, j, next, depth + 1);
+    d->layer_rank[k] = (uint8_t)(++*next);
+}
+
+/* Lot 87: cascade position of every layer (CSS Cascade 5, 6.4.3) */
+static void layer_ranks(wf_site_t *d) {
+    int k, next = 0;
+    for (k = 0; k < d->nlayers; k++) d->layer_rank[k] = 0;
+    for (k = 0; k < d->nlayers; k++) if (layer_parent(d, k) < 0) layer_visit(d, k, &next, 0);
+    for (k = 0; k < d->nlayers; k++) if (!d->layer_rank[k]) d->layer_rank[k] = (uint8_t)(++next);
+}
+
+int wf_site_layers_text(const wf_site_t *d, char *out, int cap) {
+    int k, m = 0, j;
+    if (!out || cap <= 0) return 0;
+    out[0] = 0;
+    if (!d) return 0;
+    for (k = 0; k < d->nlayers; k++) {
+        if (k && m < cap - 1) out[m++] = ',';
+        for (j = 0; d->layer[k][j] && m < cap - 1; j++) out[m++] = d->layer[k][j];
+    }
+    out[m] = 0;
+    return m;
+}
+
 /* Pass 1 over a sheet: custom properties and @import, including those in
  * applying @media / @supports blocks. */
 static void scan_sheet(wf_site_t *d, const char *s, int n, int depth) {
@@ -1629,6 +1840,8 @@ static void scan_sheet(wf_site_t *d, const char *s, int n, int depth) {
                     keep = media_ok(s + prelude, body - 1 - prelude, d->vw, d->vh);
                 else if (prelude + 9 <= n && lc(s[prelude + 1]) == 's' && lc(s[prelude + 2]) == 'u')
                     keep = wf_site_supports(s + prelude + 9, body - 1 - prelude - 9);
+                else if (at_is(s, n, prelude, "layer"))
+                    keep = 1;   /* Lot 87: variables and imports inside a layer count */
                 if (keep && depth < 4 && after - 1 > body) scan_sheet(d, s + body, after - 1 - body, depth + 1);
                 i = after;
             }
@@ -1643,7 +1856,7 @@ static void scan_sheet(wf_site_t *d, const char *s, int n, int depth) {
     }
 }
 
-static int parse_sheet(wf_site_t *d, const char *s, int n, uint8_t origin) {
+static int parse_sheet_in(wf_site_t *d, const char *s, int n, uint8_t origin, int layer, int depth) {
     int i = 0;
     while (i < n) {
         int sel, brace;
@@ -1652,17 +1865,29 @@ static int parse_sheet(wf_site_t *d, const char *s, int n, uint8_t origin) {
         if (s[i] == '@') {
             int prelude = i;
             while (i < n && s[i] != '{' && s[i] != ';') i++;
-            if (i < n && s[i] == ';') { i++; continue; }
+            if (i < n && s[i] == ';') {
+                /* Lot 87: "@layer a, b;" fixes the order before any rule */
+                if (at_is(s, n, prelude, "layer")) (void)layer_statement(d, layer, s + prelude, i - prelude);
+                i++;
+                continue;
+            }
+            if (i < n && s[i] == '{' && at_is(s, n, prelude, "layer")) {
+                int body = i + 1, after = skip_block(s, n, i), blen = after - 1 - body;
+                int inner = layer_block(d, layer, s + prelude, i - prelude);
+                /* a full table: the block still applies, unlayered (counted) */
+                if (blen > 0 && depth < 6) parse_sheet_in(d, s + body, blen, origin, inner ? inner : layer, depth + 1);
+                i = after;
+                continue;
+            }
             if (i < n && s[i] == '{' &&
                 ((prelude + 6 <= n && lc(s[prelude + 1]) == 'm' && lc(s[prelude + 2]) == 'e' &&
                   media_ok(s + prelude, i - prelude, d->vw, d->vh)) ||
                  (prelude + 9 <= n && lc(s[prelude + 1]) == 's' && lc(s[prelude + 2]) == 'u' &&
-                  wf_site_supports(s + prelude + 9, i - prelude - 9)) ||
-                 (prelude + 6 <= n && lc(s[prelude + 1]) == 'l' && lc(s[prelude + 2]) == 'a'))) {
+                  wf_site_supports(s + prelude + 9, i - prelude - 9)))) {
                 int body = i + 1;
                 int after = skip_block(s, n, i);
                 int blen = after - 1 - body;
-                if (blen > 0) parse_sheet(d, s + body, blen, origin);
+                if (blen > 0 && depth < 6) parse_sheet_in(d, s + body, blen, origin, layer, depth + 1);
                 i = after;
             } else i = skip_block(s, n, i);
             continue;
@@ -1677,8 +1902,6 @@ static int parse_sheet(wf_site_t *d, const char *s, int n, uint8_t origin) {
             int body = brace + 1;
             int body_n = i - 1 - body;
             if (body_n < 0) body_n = 0;
-            clear(&proto, (int)sizeof(proto));
-            proto.origin = origin;
             /* one declaration per rule keeps the cascade table small; a
              * block with several properties becomes several selectors */
             {
@@ -1688,6 +1911,7 @@ static int parse_sheet(wf_site_t *d, const char *s, int n, uint8_t origin) {
                     while (semi < body_n && s[body + semi] != ';') semi++;
                     clear(&proto, (int)sizeof(proto));
                     proto.origin = origin;
+                    proto.layer = (uint8_t)layer;
                     if (parse_decl(d, s + body + p, semi - p, &proto) && proto.kind)
                         parse_selector(d, s + sel, brace - sel, &proto);
                     p = semi < body_n ? semi + 1 : body_n;
@@ -1696,6 +1920,10 @@ static int parse_sheet(wf_site_t *d, const char *s, int n, uint8_t origin) {
         }
     }
     return 0;
+}
+
+static int parse_sheet(wf_site_t *d, const char *s, int n, uint8_t origin) {
+    return parse_sheet_in(d, s, n, origin, 0, 0);
 }
 
 static void add_ua(wf_site_t *d, const char *sel, int disp) {
@@ -1740,6 +1968,11 @@ int wf_site_apply(wf_site_t *d) {
         scan_sheet(d, d->css, d->css_n, 0);
         parse_sheet(d, d->css, d->css_n, 2);
     }
+    /* Lot 87: the rules carry the layer index until every layer is known;
+     * then the position in the cascade */
+    layer_ranks(d);
+    for (r = 0; r < d->nrules; r++)
+        if (d->rule[r].layer > 0 && d->rule[r].layer <= d->nlayers) d->rule[r].layer = d->layer_rank[d->rule[r].layer - 1];
     for (r = 0; r < d->nrules; r++) {
         for (i = 0; i < d->nnodes; i++) if (sel_match(d, i, &d->rule[r])) paint_rule(d, i, &d->rule[r]);
     }
