@@ -262,7 +262,12 @@ def main():
             start_q = cmd(a, "p2p-bwe", "p2p bwe state ")
             bwe = re.search(r"p2p bwe state (\w+) btlbw_bps (\d+) min_rtt_ms (\d+) bdp (\d+) pacing_bps (\d+) cwnd (\d+) "
                             r"samples (\d+) probes_sent (\d+) acked (\d+) lost (\d+) left (\d+)", log(a, start_q))
-            if bwe and int(bwe.group(11)) == 0 and int(bwe.group(9)) + int(bwe.group(10)) >= 24:
+            # Lot 84: do not treat a full loss count as completion. On a
+            # busy host the peer guest is not scheduled within the 2 s
+            # timeout, every probe is marked lost, and the pongs arrive on
+            # the next poll. Completion is 20 acks and a real estimate.
+            if (bwe and int(bwe.group(11)) == 0 and int(bwe.group(9)) >= 20
+                    and int(bwe.group(2)) > 0 and int(bwe.group(3)) > 0):
                 break
             if time.monotonic() > deadline:
                 raise RuntimeError("probe train did not finish: %s" % log(a, start_q)[-400:])

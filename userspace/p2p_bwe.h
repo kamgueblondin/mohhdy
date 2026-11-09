@@ -87,6 +87,12 @@ typedef struct {
     /* counters */
     uint32_t samples, samples_app_limited, losses, sent, acked, paced_wait;
     uint32_t last_sample_bps;
+    /* Lot 84: probes declared lost after the 2 s timeout stay here so a
+     * late ack (the peer guest had not been scheduled yet) still produces
+     * a delivery-rate sample. Inflight was already released. late_hit is
+     * set by p2p_bwe_on_ack when the match came from this table. */
+    p2p_bwe_pkt_t late[P2P_BWE_INFLIGHT];
+    uint8_t late_hit;
 } p2p_bwe_t;
 
 void p2p_bwe_init(p2p_bwe_t* b, uint32_t mss, uint32_t initial_bps, uint32_t now_ms);
@@ -96,9 +102,12 @@ int p2p_bwe_on_send(p2p_bwe_t* b, uint32_t seq, uint32_t bytes, uint32_t now_ms)
 /* The sender has nothing more to send: the next samples are app limited
  * (they must not lower the bandwidth estimate). */
 void p2p_bwe_on_app_limited(p2p_bwe_t* b);
-/* Ack of `seq`. Returns the delivery-rate sample (bytes/s) or 0. */
+/* Ack of `seq`. Returns the delivery-rate sample (bytes/s) or 0.
+ * A seq already declared lost still samples if it is in the late table;
+ * b->late_hit is 1 in that case and 0 otherwise. */
 uint32_t p2p_bwe_on_ack(p2p_bwe_t* b, uint32_t seq, uint32_t now_ms);
-/* `seq` is declared lost (timeout). */
+/* `seq` is declared lost (timeout). The packet stays recoverable for a
+ * late ack until the late table reuses its slot. */
 void p2p_bwe_on_loss(p2p_bwe_t* b, uint32_t seq, uint32_t now_ms);
 /* A RTT sample from another source (PING/PONG). */
 void p2p_bwe_on_rtt(p2p_bwe_t* b, uint32_t rtt_ms, uint32_t now_ms);

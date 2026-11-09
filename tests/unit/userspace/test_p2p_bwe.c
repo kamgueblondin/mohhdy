@@ -164,7 +164,18 @@ static void test_loss_and_table_bounds(void) {
     p2p_bwe_on_loss(&g_b, 3U, 5U);
     TEST_ASSERT_EQUAL(1U, g_b.losses);
     TEST_ASSERT_EQUAL((P2P_BWE_INFLIGHT - 1U) * MSS, g_b.inflight_bytes);
-    TEST_ASSERT_EQUAL(0U, p2p_bwe_on_ack(&g_b, 3U, 6U));    /* already gone */
+    /* Lot 84: the timeout releases inflight, but a late ack still samples.
+     * A second ack of the same seq, and an unknown seq, do not. */
+    {
+        uint32_t rate = p2p_bwe_on_ack(&g_b, 3U, 6U);
+        TEST_ASSERT_TRUE(rate > 0U);
+        TEST_ASSERT_EQUAL(1U, g_b.late_hit);
+        TEST_ASSERT_EQUAL(1U, g_b.samples);
+        TEST_ASSERT_TRUE(p2p_bwe_btlbw(&g_b) > 0U);
+        TEST_ASSERT_EQUAL((P2P_BWE_INFLIGHT - 1U) * MSS, g_b.inflight_bytes);
+        TEST_ASSERT_EQUAL(0U, p2p_bwe_on_ack(&g_b, 3U, 7U));
+        TEST_ASSERT_EQUAL(0U, g_b.late_hit);
+    }
     TEST_ASSERT_EQUAL(0U, p2p_bwe_on_ack(&g_b, 12345U, 6U)); /* unknown */
     TEST_ASSERT_EQUAL(0, p2p_bwe_on_send(&g_b, 999U, MSS, 1U));
     TEST_ASSERT_TRUE(strcmp(p2p_bwe_state_name(P2P_BWE_DRAIN), "drain") == 0);

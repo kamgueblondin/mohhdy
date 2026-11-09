@@ -4,6 +4,7 @@
 #include "edid.h"
 #include "p2p_flow.h"
 #include "p2p_rtx.h"
+#include "p2p_bwe.h"
 #include "os_charset.h"
 #include "wf_aead.h"
 
@@ -145,6 +146,22 @@ int arm_port_pages(void) {
     return same((const uint8_t*)back, (const uint8_t*)in, (int)sizeof(in));
 }
 
+/* Lot 84 (US-068/073, US-076): a probe declared lost still yields a
+ * delivery-rate sample when its ack arrives late. 256 bytes over the
+ * 2000 ms between send and the late ack is 128 B/s. */
+int arm_port_bwe(void) {
+    p2p_bwe_t b;
+    uint32_t rate;
+    p2p_bwe_init(&b, 256, 20000U, 0U);
+    if (p2p_bwe_on_send(&b, 1U, 256U, 0U) != 0) return 0;
+    p2p_bwe_on_loss(&b, 1U, 2000U);
+    if (b.inflight_bytes != 0U || b.losses != 1U) return 0;
+    rate = p2p_bwe_on_ack(&b, 1U, 2000U);
+    if (!b.late_hit || rate != 128U || b.samples != 1U || p2p_bwe_btlbw(&b) == 0U) return 0;
+    if (p2p_bwe_on_ack(&b, 1U, 2001U) != 0U || b.late_hit) return 0;
+    return p2p_bwe_on_ack(&b, 99U, 2001U) == 0U;
+}
+
 uint32_t arm_port_selftest(void) {
     uint32_t m = 0;
     if (arm_port_aes_gcm()) m |= ARM_PORT_AES_GCM;
@@ -154,5 +171,6 @@ uint32_t arm_port_selftest(void) {
     if (arm_port_charset()) m |= ARM_PORT_CHARSET;
     if (arm_port_aead()) m |= ARM_PORT_AEAD;
     if (arm_port_pages()) m |= ARM_PORT_PAGES;
+    if (arm_port_bwe()) m |= ARM_PORT_BWE;
     return m;
 }

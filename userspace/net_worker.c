@@ -559,32 +559,46 @@ void main(void) {
         } else {
             reply.result = relay_execute(&req, &reply);
         }
-        rc = relay_reply(&reply);
-        relayed++;
-        /* Phase 5 P2P pumps relay several datagram polls per second: keep
-         * them out of the serial log (counted in p2p-stats instead). */
-        if (req.op == SYS_PEER_DATA && (bulk_in[0] == OS_PEER_P2P_SEND || bulk_in[0] == OS_PEER_P2P_RECV) && rc == 0) {
-            if (nic_owned) stack_publish();
-            continue;
-        }
-        puts("net-driver relay op ");
-        put_uint(req.op);
-        puts(" rc ");
-        put_int(reply.result);
-        puts(" reply ");
-        put_int(rc);
-        puts(" total ");
-        put_uint(relayed);
-        if (wire_calls) { puts(" wire "); put_uint(wire_calls); }
-        if (reply.result < 0 && net_llm_tls_fail_stage) {
-            puts(net_llm_tls_fail_stage == NET_LLM_TLS_FAIL_CLOCK ? " tls-fail clock" : " tls-fail handshake");
-            net_llm_tls_fail_stage = 0;
-        }
-        putc('\n');
-        if (nic_owned) {
-            stack_publish();
-            if (req.op == SYS_SOCKET_CONNECT || (stack.report.wire_ops != last_wire_ops)) nic_report();
-            last_wire_ops = stack.report.wire_ops;
+        /* Lot 84: print the stack report before unblocking the client.
+         * qemu-net-wire reads the log as soon as the client prints
+         * "netwire done". That line is written only after relay_reply, so
+         * a report printed afterwards is often not in the snapshot yet and
+         * the last visible wire_ops is 3 instead of 4 (close missing). */
+        {
+            int quiet = req.op == SYS_PEER_DATA &&
+                (bulk_in[0] == OS_PEER_P2P_SEND || bulk_in[0] == OS_PEER_P2P_RECV);
+            if (nic_owned && !quiet) {
+                stack_publish();
+                if (req.op == SYS_SOCKET_CONNECT || stack.report.wire_ops != last_wire_ops) nic_report();
+                last_wire_ops = stack.report.wire_ops;
+            }
+            rc = relay_reply(&reply);
+            relayed++;
+            /* Phase 5 P2P pumps relay several datagram polls per second: keep
+             * them out of the serial log (counted in p2p-stats instead). */
+            if (quiet && rc == 0) {
+                if (nic_owned) stack_publish();
+                continue;
+            }
+            puts("net-driver relay op ");
+            put_uint(req.op);
+            puts(" rc ");
+            put_int(reply.result);
+            puts(" reply ");
+            put_int(rc);
+            puts(" total ");
+            put_uint(relayed);
+            if (wire_calls) { puts(" wire "); put_uint(wire_calls); }
+            if (reply.result < 0 && net_llm_tls_fail_stage) {
+                puts(net_llm_tls_fail_stage == NET_LLM_TLS_FAIL_CLOCK ? " tls-fail clock" : " tls-fail handshake");
+                net_llm_tls_fail_stage = 0;
+            }
+            putc('\n');
+            if (nic_owned && quiet) {
+                stack_publish();
+                if (req.op == SYS_SOCKET_CONNECT || stack.report.wire_ops != last_wire_ops) nic_report();
+                last_wire_ops = stack.report.wire_ops;
+            }
         }
     }
     (void)ignored;
