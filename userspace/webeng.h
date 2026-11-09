@@ -232,7 +232,8 @@ enum { WE_WRAP_NORMAL, WE_WRAP_BREAK_WORD, WE_WRAP_ANYWHERE };
 #define WE_MATH_DEPTH_MAX 4
 #define WE_MATH_LITERAL_MAX 2000
 #define WE_MATH_VALUE_MAX 1000000
-#define WE_TRACK_POOL_MAX 32
+#define WE_TRACK_POOL_MAX 64
+#define WE_SPACING_MATH (-30000)
 #define WE_TRACK_POOLED (-32768)
 #define WE_DOCUMENT_MAX (1024 * 1024)
 enum { WE_LEN_WIDTH, WE_LEN_HEIGHT, WE_LEN_MIN_W, WE_LEN_MAX_W, WE_LEN_MIN_H, WE_LEN_MAX_H,
@@ -289,6 +290,7 @@ typedef struct {
     uint8_t span_refused, colspan;
     /* computed style */
     uint8_t display, bold, align, has_bg;
+    uint8_t masonry_next;      /* lot 83: masonry-auto-flow next (0 pack) */
     uint8_t inline_outer;      /* lot 81: inline-flex / inline-grid (display keeps FLEX/GRID) */
     uint8_t masonry;           /* lot 81: grid-template-rows: masonry */
     uint8_t flex_dir;          /* 0 row, 1 column (display:flex) */

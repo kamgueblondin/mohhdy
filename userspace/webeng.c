@@ -1134,6 +1134,10 @@ static int parse_len(const char* v, int n, int* px, int* pct) {
 }
 
 /* split value into up to 4 space separated tokens */
+/* Lot 82/83: the document whose pool holds the math track and spacing values. */
+static we_doc_t *track_pool_doc;
+static int math_eval(const we_length_t *expr, int basis, int *out);
+
 static int tokens(const char* v, int n, int a[4], int l[4]) {
     int i = 0, c = 0;
     while (i < n && c < 4) {
@@ -1180,6 +1184,8 @@ static void spacing_set(we_node_t *n, int box, int side, int tenths) {
     if (box) n->padding[side] = 0; else n->margin[side] = 0;
 }
 
+/* Lot 83: one margin/padding value: a length, a percentage or math. */
+static int spacing_token(const char *v, int len, int box, int *px, int *pct);
 static void box4(we_node_t *node, int box, const char* v, int n, int16_t out[4]) {
     int a[4], l[4], px[4], pct[4], c, k;
     static const int8_t from[4][4] = { {0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3} };
@@ -1187,8 +1193,7 @@ static void box4(we_node_t *node, int box, const char* v, int n, int16_t out[4])
     if (c < 1) return;
     for (k = 0; k < c; k++) {
         pct[k] = WE_NO_PCT;
-        if (spacing_percent(v + a[k], l[k], !box, &pct[k]) == 0) px[k] = 0;
-        else { pct[k] = WE_NO_PCT; if (parse_len(v + a[k], l[k], &px[k], 0) != 0) px[k] = 0; }
+        if (spacing_token(v + a[k], l[k], box, &px[k], &pct[k])) { px[k] = 0; pct[k] = WE_NO_PCT; }
     }
     for (k = 0; k < 4; k++) {
         out[k] = (int16_t)px[from[c - 1][k]];
@@ -1205,6 +1210,14 @@ static void spacing_node(we_node_t *n, int cw) {
     if (cw < 0) cw = 0;
     for (bit = 0; bit < 8; bit++) if (n->spacing_pct & (1u << bit)) {
         int t = n->spacing_value[bit], v = t < 0 ? -((-t * cw) / 1000) : (t * cw) / 1000;
+        if (t <= WE_SPACING_MATH) {
+            /* Lot 83: a pooled min()/max()/clamp()/calc() with a percentage. */
+            int idx = WE_SPACING_MATH - t;
+            v = 0;
+            if (!track_pool_doc || idx >= track_pool_doc->ntrack_pool ||
+                math_eval(&track_pool_doc->track_pool[idx], cw, &v)) v = 0;
+            if (bit >= 4 && v < 0) v = 0;
+        }
         if (v > 2000) v = 2000;
         if (v < -2000) v = -2000;
         if (bit < 4) n->margin[bit] = (int16_t)v; else n->padding[bit - 4] = (int16_t)v;
@@ -1529,7 +1542,47 @@ static int parse_placement(const char *v, int len, uint8_t *start, uint8_t *span
 /* Lot 81: calc() tracks of one declaration are staged here; the declaration
  * copies them into its region of the node table only when it is accepted. */
 static int16_t calc_stage[12][2];
-static we_doc_t *track_pool_doc;
+
+/* Lot 83: add an expression to the document pool; an identical one already
+ * there is shared, so repeated rules do not use up the WE_TRACK_POOL_MAX slots. */
+static int w_cmp_bytes(const void *a, const void *b, int n) {
+    const uint8_t *x = (const uint8_t *)a, *y = (const uint8_t *)b;
+    int i;
+    for (i = 0; i < n; i++) if (x[i] != y[i]) return 1;
+    return 0;
+}
+
+static int pool_add(const we_length_t *e) {
+    int k;
+    if (!track_pool_doc) return -1;
+    for (k = 0; k < track_pool_doc->ntrack_pool; k++)
+        if (!w_cmp_bytes(&track_pool_doc->track_pool[k], e, sizeof(*e))) return k;
+    if (track_pool_doc->ntrack_pool >= WE_TRACK_POOL_MAX) return -1;
+    track_pool_doc->track_pool[track_pool_doc->ntrack_pool] = *e;
+    return track_pool_doc->ntrack_pool++;
+}
+
+static int spacing_token(const char *v, int len, int box, int *px, int *pct) {
+    *pct = WE_NO_PCT;
+    if (math_function(v, len)) {
+        we_length_t e;
+        int fixed, idx;
+        if (parse_math(v, len, &e) || math_eval(&e, 0, &fixed)) return -1;
+        if (!e.percent) {
+            if (box && fixed < 0) fixed = 0;
+            *px = fixed > 2000 ? 2000 : fixed < -2000 ? -2000 : fixed;
+            return 0;
+        }
+        idx = pool_add(&e);
+        if (idx < 0) return -1;
+        *pct = WE_SPACING_MATH - idx; *px = 0;
+        return 0;
+    }
+    if (spacing_percent(v, len, !box, pct) == 0) { *px = 0; return 0; }
+    *pct = WE_NO_PCT;
+    if (parse_len(v, len, px, 0) || (box && *px < 0)) return -1;
+    return 0;
+}
 static int calc_stage_n, calc_stage_cap, calc_stage_base;
 
 static void calc_stage_open(int base, int cap) { calc_stage_n = 0; calc_stage_base = base; calc_stage_cap = cap; }
@@ -1560,9 +1613,9 @@ static int track_math(const char *v, int len, int16_t *out) {
     if (f2 - f1 != f1 - f0 || f0 < -2000 || f0 > 2000 || f1 - f0 < -20000 || f1 - f0 > 20000) {
         /* Lot 82: min()/max()/clamp() of a percentage is not linear: the
          * whole expression goes to the document pool. */
-        if (!track_pool_doc || track_pool_doc->ntrack_pool >= WE_TRACK_POOL_MAX) return -1;
-        track_pool_doc->track_pool[track_pool_doc->ntrack_pool] = e;
-        calc_stage[calc_stage_n][0] = (int16_t)track_pool_doc->ntrack_pool++;
+        int idx = pool_add(&e);
+        if (idx < 0) return -1;
+        calc_stage[calc_stage_n][0] = (int16_t)idx;
         calc_stage[calc_stage_n][1] = WE_TRACK_POOLED;
         *out = (int16_t)(WE_TRACK_CALC - (calc_stage_base + calc_stage_n));
         calc_stage_n++;
@@ -1599,7 +1652,7 @@ static int track_token(const char *v, int len, int16_t *size) {
 }
 
 static int track_value(const char *v, int len, int16_t *size, int16_t *low, int16_t *cap) {
-    int start, end, number, percent;
+    int start, end;
     *low = *cap = -1;
     if (w_ieq_n(v, len, "minmax(")) {
         start = 7;
@@ -2197,12 +2250,10 @@ static void subgrid_validate(we_doc_t *d) {
             int a = axis ? 0 : 3, b = axis ? 2 : 1;
             if (!n->subgrid[axis]) continue;
             /* Lot 82: padding, border and margin are edge offsets (CSS Grid 2,
-             * 9.3); auto margins still have no inherited track to absorb. */
+             * 9.3). Lot 83: auto margins are no longer refused: a subgrid
+             * always fills its area on a subgridded axis (the subgrid layout
+             * never reads margin_auto there), so they compute to zero. */
             (void)a; (void)b;
-            if (n->margin_auto & (axis ? (WE_AUTO_TOP | WE_AUTO_BOTTOM) : (WE_AUTO_LEFT | WE_AUTO_RIGHT))) {
-                diag(d, "subgrid box offsets refused", (int)i);
-                continue;
-            }
             subgrid_ok[i] |= (uint8_t)(1 << axis);
         }
     }
@@ -2573,8 +2624,7 @@ static int margin_auto_box(we_node_t *n, const char *v, int vl) {
     for (k = 0; k < c; k++) {
         pcts[k] = WE_NO_PCT;
         if (value_is(v + a[k], l[k], "auto")) { autos[k] = 1; vals[k] = 0; }
-        else if (spacing_percent(v + a[k], l[k], 1, &pcts[k]) == 0) { autos[k] = 0; vals[k] = 0; }
-        else if (parse_len(v + a[k], l[k], &px, 0) == 0) { autos[k] = 0; vals[k] = px; pcts[k] = WE_NO_PCT; }
+        else if (spacing_token(v + a[k], l[k], 0, &px, &pcts[k]) == 0) { autos[k] = 0; vals[k] = px; }
         else return 0;
     }
     n->margin_auto = 0;
@@ -4228,8 +4278,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (!mode_pass) diag(d, "text orientation refused", -1);   /* sideways needs rotated glyphs */
     } else if (w_eq(prop, "padding-top") || w_eq(prop, "padding-right") || w_eq(prop, "padding-bottom")) {
         int side = w_eq(prop, "padding-top") ? 0 : w_eq(prop, "padding-right") ? 1 : 2;
-        if (spacing_percent(v, vl, 0, &pct) == 0) spacing_set(n, 1, side, pct);
-        else if (parse_len(v, vl, &px, 0) == 0 && px >= 0) { n->padding[side] = (int16_t)px; spacing_set(n, 1, side, WE_NO_PCT); }
+        if (spacing_token(v, vl, 1, &px, &pct) == 0) { n->padding[side] = (int16_t)px; spacing_set(n, 1, side, pct); }
         else diag(d, "padding refused", -1);
     } else if (w_eq(prop, "display")) {
         if (value_is(v, vl, "none")) n->display = WE_DISP_NONE;
@@ -4747,6 +4796,20 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             if (is_min) { n->min_width = (int16_t)px; n->min_pct = (int16_t)pct; }
             else { n->max_width = (int16_t)px; n->max_pct = (int16_t)pct; }
         } else diag(d, "width constraint refused", -1);
+    } else if (w_eq(prop, "masonry-auto-flow")) {
+        /* Lot 83: pack | next, optionally with definite-first | ordered
+         * (document order is already the placement order). A blank value
+         * never reaches here; a third keyword always repeats a class. */
+        int a[4], l[4], c = tokens(v, vl, a, l), k, mode = -1, order = 0, ok = 1;
+        for (k = 0; ok && k < c; k++) {
+            const char *t = v + a[k];
+            if (mode < 0 && (value_is(t, l[k], "pack") || value_is(t, l[k], "next"))) mode = value_is(t, l[k], "next");
+            else if (!order && (value_is(t, l[k], "definite-first") || value_is(t, l[k], "ordered"))) order = 1;
+            else ok = 0;
+        }
+        if (ok && mode < 0) mode = 0;
+        if (ok) n->masonry_next = (uint8_t)mode;
+        else diag(d, "masonry auto flow refused", -1);
     } else if (w_eq(prop, "gap")) {
         if (gap_declaration(n, v, vl)) diag(d, "gap refused", -1);
     } else if (w_eq(prop, "grid-template-columns") || w_eq(prop, "grid-template-rows")) {
@@ -4844,27 +4907,26 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     else if (w_eq(prop, "padding")) box4(n, 1, v, vl, n->padding);
     else if (w_eq(prop, "margin-top")) {
         if (value_is(v, vl, "auto")) { n->margin[0] = 0; n->margin_auto |= WE_AUTO_TOP; spacing_set(n, 0, 0, WE_NO_PCT); }
-        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 0, pct); n->margin_auto &= (uint8_t)~WE_AUTO_TOP; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[0] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_TOP; spacing_set(n, 0, 0, WE_NO_PCT); }
+        else if (spacing_token(v, vl, 0, &px, &pct) == 0) { n->margin[0] = (int16_t)px; spacing_set(n, 0, 0, pct); n->margin_auto &= (uint8_t)~WE_AUTO_TOP; }
+        else if (math_function(v, vl)) diag(d, "math length refused", -1);
     }
     else if (w_eq(prop, "margin-right")) {
         if (value_is(v, vl, "auto")) { n->margin[1] = 0; n->margin_auto |= WE_AUTO_RIGHT; spacing_set(n, 0, 1, WE_NO_PCT); }
-        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 1, pct); n->margin_auto &= (uint8_t)~WE_AUTO_RIGHT; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[1] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_RIGHT; spacing_set(n, 0, 1, WE_NO_PCT); }
+        else if (spacing_token(v, vl, 0, &px, &pct) == 0) { n->margin[1] = (int16_t)px; spacing_set(n, 0, 1, pct); n->margin_auto &= (uint8_t)~WE_AUTO_RIGHT; }
+        else if (math_function(v, vl)) diag(d, "math length refused", -1);
     }
     else if (w_eq(prop, "margin-bottom")) {
         if (value_is(v, vl, "auto")) { n->margin[2] = 0; n->margin_auto |= WE_AUTO_BOTTOM; spacing_set(n, 0, 2, WE_NO_PCT); }
-        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 2, pct); n->margin_auto &= (uint8_t)~WE_AUTO_BOTTOM; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[2] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_BOTTOM; spacing_set(n, 0, 2, WE_NO_PCT); }
+        else if (spacing_token(v, vl, 0, &px, &pct) == 0) { n->margin[2] = (int16_t)px; spacing_set(n, 0, 2, pct); n->margin_auto &= (uint8_t)~WE_AUTO_BOTTOM; }
+        else if (math_function(v, vl)) diag(d, "math length refused", -1);
     }
     else if (w_eq(prop, "margin-left")) {
         if (value_is(v, vl, "auto")) { n->margin[3] = 0; n->margin_auto |= WE_AUTO_LEFT; spacing_set(n, 0, 3, WE_NO_PCT); }
-        else if (spacing_percent(v, vl, 1, &pct) == 0) { spacing_set(n, 0, 3, pct); n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; }
-        else if (parse_len(v, vl, &px, 0) == 0) { n->margin[3] = (int16_t)px; n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; spacing_set(n, 0, 3, WE_NO_PCT); }
+        else if (spacing_token(v, vl, 0, &px, &pct) == 0) { n->margin[3] = (int16_t)px; spacing_set(n, 0, 3, pct); n->margin_auto &= (uint8_t)~WE_AUTO_LEFT; }
+        else if (math_function(v, vl)) diag(d, "math length refused", -1);
     }
     else if (w_eq(prop, "padding-left")) {
-        if (spacing_percent(v, vl, 0, &pct) == 0) spacing_set(n, 1, 3, pct);
-        else if (parse_len(v, vl, &px, 0) == 0 && px >= 0) { n->padding[3] = (int16_t)px; spacing_set(n, 1, 3, WE_NO_PCT); }
+        if (spacing_token(v, vl, 1, &px, &pct) == 0) { n->padding[3] = (int16_t)px; spacing_set(n, 1, 3, pct); }
         else diag(d, "padding refused", -1);
     }
     else if (w_eq(prop, "width")) {
@@ -5083,7 +5145,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->sub_names[0][0] = n->sub_names[1][0] = 0;
         n->auto_mode[0] = n->auto_mode[1] = n->tpl_count[0] = n->tpl_count[1] = 0;
         n->subgrid[0] = n->subgrid[1] = 0;
-        n->inline_outer = 0; n->masonry = 0;
+        n->inline_outer = 0; n->masonry = 0; n->masonry_next = 0;
         n->sub_gap[0] = n->sub_gap[1] = 0;
         n->track_base[0] = n->track_base[1] = -1;
         n->gap_pct[0] = n->gap_pct[1] = 0;
@@ -9350,6 +9412,29 @@ static void subgrid_share(we_doc_t *d, int s, int start, int gap, const we_grid_
     }
 }
 
+/* Lot 83: the masonry track window of one item. An explicit start wins;
+ * else masonry-auto-flow:pack takes the window whose longest running edge
+ * is shortest (first on ties) and next takes the window after the previous
+ * item (*cursor), wrapping to the first track. Returns the start track and
+ * sets *edge to the window's running edge. */
+static int masonry_pick(const int *running, int tracks, int span, int start, int next, int *cursor, int *edge) {
+    int best = 0, top = -1, c, j;
+    if (start && start - 1 + span <= tracks) {
+        best = start - 1;
+        for (j = best; j < best + span; j++) if (running[j] > top) top = running[j];
+    } else if (next) {
+        best = *cursor + span <= tracks ? *cursor : 0;
+        for (j = best; j < best + span; j++) if (running[j] > top) top = running[j];
+    } else for (c = 0; c + span <= tracks; c++) {
+        int e = 0;
+        for (j = c; j < c + span; j++) if (running[j] > e) e = running[j];
+        if (top < 0 || e < top) { top = e; best = c; }
+    }
+    *cursor = best + span >= tracks ? 0 : best + span;
+    *edge = top < 0 ? 0 : top;
+    return best;
+}
+
 /* Lot 81: masonry rows. In document order each item takes the column window
  * (its span, or its explicit start) whose tallest running edge is lowest,
  * leftmost on ties; it gets its own row at that edge, sized to its content.
@@ -9357,23 +9442,15 @@ static void subgrid_share(we_doc_t *d, int s, int start, int gap, const we_grid_
 static int masonry_rows(we_doc_t *d, int idx, we_track_work_t *items, we_grid_work_t *work,
                         int count, int cols, int cy, int gy, int depth) {
     const we_node_t *n = &d->nodes[idx];
-    int running[WE_TRACKS_MAX], k, c, bottom = 0, rows = 0;
+    int running[WE_TRACKS_MAX], k, c, bottom = 0, rows = 0, cursor = 0;
     for (c = 0; c < WE_TRACKS_MAX; c++) running[c] = 0;
     if (cols < 1) cols = 1;
     for (k = 0; k < count && rows < WE_GRID_ROWS_MAX - 1; k++) {
         we_node_t *child = &d->nodes[items->node[k]];
-        int span = child->grid_col_span < 1 ? 1 : child->grid_col_span, best = 0, top = -1, width, height, j;
+        int span = child->grid_col_span < 1 ? 1 : child->grid_col_span, best, top, width, height, j;
         if (work->row[k] < 0) continue;
         if (span > cols) span = cols;
-        if (child->grid_col_start && child->grid_col_start - 1 + span <= cols) {
-            best = child->grid_col_start - 1;
-            for (j = best; j < best + span; j++) if (running[j] > top) top = running[j];
-        } else for (c = 0; c + span <= cols; c++) {
-            int edge = 0;
-            for (j = c; j < c + span; j++) if (running[j] > edge) edge = running[j];
-            if (top < 0 || edge < top) { top = edge; best = c; }
-        }
-        if (top < 0) top = 0;
+        best = masonry_pick(running, cols, span, child->grid_col_start, n->masonry_next, &cursor, &top);
         child->grid_row_span = 1;
         child->grid_col_span = (uint8_t)span;
         work->col[k] = best;
@@ -9404,7 +9481,7 @@ static int masonry_rows(we_doc_t *d, int idx, we_track_work_t *items, we_grid_wo
 static int masonry_columns(we_doc_t *d, int idx, we_track_work_t *items, we_grid_work_t *work,
                            int count, int cx, int cy, int cw, int gx, int gy, int depth) {
     const we_node_t *n = &d->nodes[idx];
-    int running[WE_TRACKS_MAX], fixed[WE_TRACKS_MAX], rows = n->grid_rows ? n->grid_rows : 1, k, r, y, widest = 0;
+    int running[WE_TRACKS_MAX], fixed[WE_TRACKS_MAX], rows = n->grid_rows ? n->grid_rows : 1, k, r, y, widest = 0, cursor = 0;
     if (rows > WE_TRACKS_MAX) rows = WE_TRACKS_MAX;
     for (r = 0; r < rows; r++) {
         int spec = grid_spec(n, 1, r);
@@ -9414,17 +9491,9 @@ static int masonry_columns(we_doc_t *d, int idx, we_track_work_t *items, we_grid
     }
     for (k = 0; k < count; k++) {
         we_node_t *child = &d->nodes[items->node[k]];
-        int span = child->grid_row_span < 1 ? 1 : child->grid_row_span, best = 0, left = -1, j, width, height, room, fit, child_w;
+        int span = child->grid_row_span < 1 ? 1 : child->grid_row_span, best, left, j, width, height, room, fit, child_w;
         if (span > rows) span = rows;
-        if (child->grid_row_start && child->grid_row_start - 1 + span <= rows) {
-            best = child->grid_row_start - 1;
-            for (j = best; j < best + span; j++) if (running[j] > left) left = running[j];
-        } else for (r = 0; r + span <= rows; r++) {
-            int edge = 0;
-            for (j = r; j < r + span; j++) if (running[j] > edge) edge = running[j];
-            if (left < 0 || edge < left) { left = edge; best = r; }
-        }
-        if (left < 0) left = 0;
+        best = masonry_pick(running, rows, span, child->grid_row_start, n->masonry_next, &cursor, &left);
         spacing_node(child, cw);
         room = cw - node_border_extra(child) - child->margin[1] - child->margin[3];
         fit = child->max_content;
@@ -10525,12 +10594,41 @@ static void subgrid_intrinsic_at(we_doc_t *d, const we_node_t *g, int s, int sta
         }
 }
 
+/* Lot 83: a masonry-columns container's intrinsic widths: max-content packs
+ * every item at its max-content width (longest row), min-content is the
+ * widest single item at its min-content width. */
+static void masonry_intrinsic(we_doc_t *d, int idx, int *minimum, int *maximum) {
+    const we_node_t *n = &d->nodes[idx];
+    we_track_work_t *items = &track_work[0];
+    int running[WE_TRACKS_MAX], rows = n->grid_rows ? n->grid_rows : 1, count, k, j, cursor = 0, gap = axis_gap(n, 0);
+    if (rows > WE_TRACKS_MAX) rows = WE_TRACKS_MAX;
+    for (k = 0; k < WE_TRACKS_MAX; k++) running[k] = 0;
+    count = collect_items(d, idx, items);
+    *minimum = *maximum = 0;
+    for (k = 0; k < count; k++) {
+        const we_node_t *child = &d->nodes[items->node[k]];
+        int extra = node_border_extra(child) + child->margin[1] + child->margin[3], low, high, left, best;
+        int span = child->grid_row_span < 1 ? 1 : child->grid_row_span;
+        if (span > rows) span = rows;
+        intrinsic_contribution(child, &low, &high);
+        low = constrained_width(child, low, 0) + extra;
+        high = constrained_width(child, high, 0) + extra;
+        if (low > *minimum) *minimum = low;
+        best = masonry_pick(running, rows, span, child->grid_row_start, n->masonry_next, &cursor, &left);
+        for (j = best; j < best + span; j++) running[j] = left + high + gap;
+        if (left + high > *maximum) *maximum = left + high;
+    }
+    *minimum = limit_coord(*minimum);
+    *maximum = limit_coord(*maximum);
+}
+
 static void intrinsic_track_sizes(we_doc_t *d, int idx, int *minimum, int *maximum) {
     const we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[0];
     we_grid_work_t *work = &grid_work[0];
     int grid = n->display == WE_DISP_GRID, count, cols = grid ? n->grid_cols : 0;
     int gap = grid ? axis_gap(n, 0) : 0, k, pass, rows = 0;
+    if (grid && n->masonry == 2) { masonry_intrinsic(d, idx, minimum, maximum); return; }
     w_zero(work, sizeof(*work));
     if (grid) {
         count = collect_items(d, idx, items);
