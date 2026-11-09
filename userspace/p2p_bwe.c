@@ -254,6 +254,9 @@ uint32_t p2p_bwe_on_ack(p2p_bwe_t* b, uint32_t seq, uint32_t now_ms) {
         if (!p) return 0U;
         late = 1;
         b->late_hit = 1U;
+        /* Lot 85: the timeout was provisional. A packet that arrives is
+         * not a loss, so the confirmed-loss count drops. */
+        if (b->losses) b->losses--;
     }
     b->acked++;
     b->delivered += p->bytes;

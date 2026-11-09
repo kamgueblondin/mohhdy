@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 85 (masonry auto columns, reader root, composed letters, local search)
+
+- Masonry rows: an `auto` column is sized from the items masonry placed in that column, then the items are placed again. `top`/`bottom` percentages of an auto-height masonry grid use the packed height (`50%` of 80 px is 40). The border cap stays 8 px per side.
+- Reader: when the page has an `article`, `main`, `role=main` or a content id that holds the text, the reader keeps that interior and skips toc, navbox, catlinks and cookie banners. Fetch body 384 KiB, reduced page 256 KiB, still static buffers. 78 Vietnamese and horn letters are drawn as the base glyph plus an accent; 16 rarer combinations stay the base letter. Fullwidth ASCII folds to ASCII. The bitmap fonts are unchanged.
+- Search: Wikipedia is the first fallback. `search-engine local` searches a built-in catalogue and does not open a socket. Not a new live-site campaign.
+- US-080 stays partial: the EDID base block also yields gamma, the monitor name, range limits, standard timings, established modes and the refresh when blanking is present. No DDC. US-081 stays partial: after the profile's idle time the refresh is halved; the battery stays simulated. US-068/US-073 stay partial: a late probe ack is not a confirmed loss. US-076 stays partial: ARM self-test of the composed letters. US-031 stays partial. `phase3_complete` stays false. US-078 and US-097 stay simule. Proof `make qemu-lot85`. Details: [lot85_plan.md](lot85_plan.md).
+
 ## Lot 84 (definite-first masonry, packed row height, border percentage math, estimator late ack)
 
 - Masonry: `masonry-auto-flow: definite-first` places items with an explicit grid-axis start first, then the others (`pack` or `next`; the next cursor continues). `ordered` clears it. Masonry rows keep the declared columns when `grid-auto-flow` is `column`; the used height is the tallest packed column. `height:min-content` and `height:max-content` select that height for a masonry-rows grid.

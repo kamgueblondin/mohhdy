@@ -169,6 +169,27 @@ static void test_physical_changes_plan(void) {
     TEST_ASSERT_TRUE(b.form != PF_DESKTOP || b.ui_q > a.ui_q);
 }
 
+static void test_idle_dims_the_refresh(void) {
+    plat_energy_t e;
+    char out[256];
+    plat_energy_init(&e);
+    TEST_ASSERT_EQUAL(0, plat_energy_apply(&e, PLAT_PWR_BALANCED));
+    TEST_ASSERT_EQUAL(30U, e.refresh_hz);
+    TEST_ASSERT_EQUAL(0, plat_energy_idle(&e, 1000U));
+    TEST_ASSERT_EQUAL(0, e.dim);
+    TEST_ASSERT_EQUAL(30U, e.refresh_hz);
+    TEST_ASSERT_EQUAL(1, plat_energy_idle(&e, 300000U));
+    TEST_ASSERT_EQUAL(1, e.dim);
+    TEST_ASSERT_EQUAL(15U, e.refresh_hz);
+    TEST_ASSERT_EQUAL(0, plat_energy_idle(&e, 0));
+    TEST_ASSERT_EQUAL(30U, e.refresh_hz);
+    TEST_ASSERT_EQUAL(0, plat_energy_apply(&e, PLAT_PWR_PERFORMANCE));
+    TEST_ASSERT_EQUAL(0, plat_energy_idle(&e, 1000000U));
+    TEST_ASSERT_TRUE(plat_energy_report(&e, out, (int)sizeof(out)) > 0);
+    TEST_ASSERT_TRUE(strstr(out, "dim 0") != 0);
+    TEST_ASSERT_TRUE(strstr(out, "simule") != 0 || strstr(out, "battery none") != 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_isqrt);
@@ -179,6 +200,7 @@ int main(void) {
     RUN_TEST(test_battery_sim);
     RUN_TEST(test_physical_from_display_info);
     RUN_TEST(test_physical_changes_plan);
+    RUN_TEST(test_idle_dims_the_refresh);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

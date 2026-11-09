@@ -7,6 +7,7 @@
 #include "shell_search.h"
 #include "wsearch.h"
 #include "wsearch_api.h"
+#include "wsearch_local.h"
 #include "wf_guest.h"
 #include "osui_gui.h"
 
@@ -52,7 +53,7 @@ static const char* layout_name(int l) {
     return l == WSEARCH_LAYOUT_DDG_HTML ? "ddg-html" : l == WSEARCH_LAYOUT_DDG_LITE ? "ddg-lite"
          : l == WSEARCH_LAYOUT_GENERIC ? "generic-links" : l == WSEARCH_LAYOUT_SEARX ? "searx-html"
          : l == WSEARCH_LAYOUT_JSON ? "json-api" : l == WSEARCH_LAYOUT_GOOGLE ? "google-html"
-         : l == WSEARCH_LAYOUT_WIKI ? "wikipedia-api" : "none";
+         : l == WSEARCH_LAYOUT_WIKI ? "wikipedia-api" : l == WSEARCH_LAYOUT_LOCAL ? "local" : "none";
 }
 
 static void cfg_load(void) {
@@ -76,7 +77,8 @@ static int cfg_save(void) {
 
 static const char* kind_name(int k) {
     return k == WSEARCH_KIND_SEARX ? "searx" : k == WSEARCH_KIND_BRAVE ? "brave-api" : k == WSEARCH_KIND_GOOGLE_API ? "google-api"
-         : k == WSEARCH_KIND_GOOGLE ? "google" : k == WSEARCH_KIND_URL ? "url" : k == WSEARCH_KIND_WIKI ? "wikipedia" : "ddg";
+         : k == WSEARCH_KIND_GOOGLE ? "google" : k == WSEARCH_KIND_URL ? "url" : k == WSEARCH_KIND_WIKI ? "wikipedia"
+         : k == WSEARCH_KIND_LOCAL ? "local" : "ddg";
 }
 
 /* one engine try; 0 when the page was received (any result count) */
@@ -84,6 +86,16 @@ static int try_kind(int kind, const char* engine, const char* q, char* err, int 
     wf_fetch_req_t rq;
     int rc;
     g_extra[0] = 0;
+    if (kind == WSEARCH_KIND_LOCAL) {
+        if (g_tried[0]) s_cat(g_tried, (int)sizeof(g_tried), ",");
+        s_cat(g_tried, (int)sizeof(g_tried), "local");
+        s_cpy(g_used, (int)sizeof(g_used), "local:");
+        wsearch_local_query(q, &g_page);
+        g_sres.status = 200;
+        g_sres.body_len = 0;
+        g_sres.err[0] = 0;
+        return 0;
+    }
     if (kind == WSEARCH_KIND_DDG || kind == WSEARCH_KIND_URL) rc = wsearch_build_url(engine, q, g_used, (int)sizeof(g_used));
     else rc = wsearch_api_request(&g_cfg, kind, q, g_used, (int)sizeof(g_used), g_extra, (int)sizeof(g_extra));
     if (g_tried[0]) s_cat(g_tried, (int)sizeof(g_tried), ",");
@@ -114,15 +126,15 @@ static int try_kind(int kind, const char* engine, const char* q, char* err, int 
     return 0;
 }
 
-/* runs the query; fills g_page; status line in st. Lot 71: the chosen
- * engine first, then the fallbacks that need no key: DuckDuckGo html,
- * DuckDuckGo lite, the Google basic results page (today it asks for
- * JavaScript: reported "blocked js-required"), the Wikipedia search API. */
+/* runs the query; fills g_page; status line in st. Lot 85: the chosen
+ * engine first, then Wikipedia (no key, no JavaScript), then DuckDuckGo
+ * html and lite, then the Google basic page (it answers "update your
+ * browser": reported "blocked js-required"). */
 static int run_search(const char* q, char* st, int st_max) {
     static char err[160];
     int rc, fell = 0, kind, i;
-    static const int chain[4] = { WSEARCH_KIND_DDG, WSEARCH_KIND_DDG, WSEARCH_KIND_GOOGLE, WSEARCH_KIND_WIKI };
-    static const char* const chain_eng[4] = { "ddg", "ddg-lite", "google", "wikipedia" };
+    static const int chain[4] = { WSEARCH_KIND_WIKI, WSEARCH_KIND_DDG, WSEARCH_KIND_DDG, WSEARCH_KIND_GOOGLE };
+    static const char* const chain_eng[4] = { "wikipedia", "ddg", "ddg-lite", "google" };
     cfg_load();
     g_page.n = 0;
     g_tried[0] = 0;
@@ -134,9 +146,9 @@ static int run_search(const char* q, char* st, int st_max) {
     rc = try_kind(kind, g_engine, q, err, (int)sizeof(err));
     /* a user template (a test server) has no fallback; names do */
     for (i = 0; i < 4 && (rc != 0 || g_page.n == 0) && kind != WSEARCH_KIND_URL; i++) {
-        if ((kind == WSEARCH_KIND_DDG && s_eq(chain_eng[i], g_engine)) || (kind == WSEARCH_KIND_DDG && i == 0 && s_eq(g_engine, "ddg-html")))
+        if ((kind == WSEARCH_KIND_DDG && s_eq(chain_eng[i], g_engine)) || (kind == WSEARCH_KIND_DDG && i == 1 && s_eq(g_engine, "ddg-html")))
             continue;
-        if ((kind == WSEARCH_KIND_GOOGLE && i == 2) || (kind == WSEARCH_KIND_WIKI && i == 3)) continue;
+        if ((kind == WSEARCH_KIND_GOOGLE && i == 3) || (kind == WSEARCH_KIND_WIKI && i == 0)) continue;
         rc = try_kind(chain[i], chain_eng[i], q, err, (int)sizeof(err));
         fell = 1;
     }
@@ -258,7 +270,7 @@ int shell_search_line(const char* line) {
             int kd = wsearch_kind(a);
             if (s_len(a) >= (int)sizeof(g_engine) || kd < 0 ||
                 ((kd == WSEARCH_KIND_DDG || kd == WSEARCH_KIND_URL) && wsearch_build_url(a, "x", test, (int)sizeof(test)) != 0)) {
-                print_string("search-engine error usage: search-engine [ddg|ddg-html|ddg-lite|searx|brave-api|google-api|google|wikipedia|URL with %s or ending with =]\n");
+                print_string("search-engine error usage: search-engine [local|ddg|ddg-html|ddg-lite|searx|brave-api|google-api|google|wikipedia|URL with %s or ending with =]\n");
                 return 1;
             }
             s_cpy(g_engine, (int)sizeof(g_engine), a);
@@ -267,7 +279,7 @@ int shell_search_line(const char* line) {
         print_string("search-engine ok ");
         print_string(g_engine);
         if (wsearch_engine_template(g_engine)) { print_string(" "); print_string(wsearch_engine_template(g_engine)); }
-        print_string(wsearch_kind(g_engine) == WSEARCH_KIND_URL ? "\n" : " (fallback ddg, ddg-lite, google, wikipedia)\n");
+        print_string(wsearch_kind(g_engine) == WSEARCH_KIND_URL ? "\n" : " (fallback wikipedia, ddg, ddg-lite, google)\n");
         return 0;
     }
     if (s_pre(line, "search-open")) {

@@ -16,12 +16,14 @@
 
 void print_string(const char* s);
 
-static uint8_t g_body[256 * 1024];
+/* Lot 85: 384 KiB, still one static buffer (no heap). A longer article
+ * fits; the reader then keeps the main text inside the node budget. */
+static uint8_t g_body[384 * 1024];
 static wf_fetch_result_t g_res;
 static char g_text[8192];
 /* Lot 71: the whole reduced page of the GUI (shown by sections) and its
  * forms. Bounded: 192 KiB of reduced HTML, WF_SECTION_MAX sections. */
-#define PAGE_FULL_MAX (192 * 1024)
+#define PAGE_FULL_MAX (256 * 1024)
 #define PAGE_NODE_BUDGET 6000
 static char g_full[PAGE_FULL_MAX];
 static int g_full_n;

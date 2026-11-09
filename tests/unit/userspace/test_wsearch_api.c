@@ -6,6 +6,7 @@
  * markup of each engine (no secret, no saved personal data). */
 #include "../../framework/unity.h"
 #include "../../../userspace/wsearch_api.h"
+#include "../../../userspace/wsearch_local.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -267,6 +268,18 @@ static void test_results_glyph_pages(void) {
     TEST_ASSERT_NOT_NULL(strstr(o, "<div class=s>\x90\xbc\xde\xe1\xda\xd2\xd0 \x8f\xe1\x81\xe9!</div>"));
 }
 
+static void test_local_catalogue(void) {
+    TEST_ASSERT_EQUAL(WSEARCH_KIND_LOCAL, wsearch_kind("local"));
+    TEST_ASSERT_EQUAL(1, wsearch_local_query("fetch https", &g_pg));
+    TEST_ASSERT_EQUAL(WSEARCH_LAYOUT_LOCAL, g_pg.layout);
+    TEST_ASSERT_EQUAL_STRING("fetch", g_pg.r[0].title);
+    TEST_ASSERT_EQUAL_STRING("local:fetch", g_pg.r[0].url);
+    TEST_ASSERT_TRUE(strstr(g_pg.r[0].snippet, "bounded") != 0);
+    TEST_ASSERT_EQUAL(0, wsearch_local_query("zzzz-not-a-word", &g_pg));
+    TEST_ASSERT_TRUE(wsearch_local_query("masonry columns", &g_pg) >= 1);
+    TEST_ASSERT_EQUAL_STRING("masonry", g_pg.r[0].title);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_cfg);
@@ -284,6 +297,7 @@ int main(void) {
     RUN_TEST(test_json_bounds);
     RUN_TEST(test_html_text);
     RUN_TEST(test_wiki);
+    RUN_TEST(test_local_catalogue);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

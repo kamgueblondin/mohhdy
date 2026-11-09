@@ -88,8 +88,18 @@ static void test_tables_consistent(void) {
             unsigned g = os_glyph_index_page(p, (unsigned char)i);
             unsigned char b = 0;
             int q;
-            TEST_ASSERT_TRUE(g < OS_GLYPH_TOTAL);
             if (os_page_of_sel((unsigned char)i) >= 0) { TEST_ASSERT_EQUAL(0, (int)cp); continue; }
+            /* Lot 85: a composed letter lives past the font and round-trips. */
+            if (os_mark_index_byte(p, (unsigned)i) >= 0) {
+                TEST_ASSERT_TRUE(g >= OS_GLYPH_TOTAL);
+                TEST_ASSERT_EQUAL(os_mark_rec[g - OS_GLYPH_TOTAL].cp, cp);
+                q = os_cp_page(cp, &b);
+                TEST_ASSERT_EQUAL((int)p, q);
+                TEST_ASSERT_EQUAL((int)i, (int)b);
+                defined++;
+                continue;
+            }
+            TEST_ASSERT_TRUE(g < OS_GLYPH_TOTAL);
             if (!cp) { TEST_ASSERT_EQUAL(OS_GLYPH_QMARK, g); continue; }
             defined++;
             q = os_cp_page(cp, &b);
@@ -207,7 +217,7 @@ static void test_utf8_out(void) {
     TEST_ASSERT_EQUAL_MEMORY("\xd0\x96", u, 2);
     TEST_ASSERT_EQUAL(3, os_display_to_utf8_page(4, 0x83, u, 4));
     TEST_ASSERT_EQUAL_MEMORY("\xe2\x86\x92", u, 3);
-    TEST_ASSERT_EQUAL(1, os_display_to_utf8_page(2, 0xFF, u, 4));   /* undefined in ISO-8859-7 */
+    TEST_ASSERT_EQUAL(1, os_display_to_utf8_page(1, 0xFF, u, 4));   /* still undefined */
     TEST_ASSERT_EQUAL('?', u[0]);
     TEST_ASSERT_EQUAL(2, os_display_to_utf8_page(0, 0xE9, u, 4));
     TEST_ASSERT_EQUAL_MEMORY("\xc3\xa9", u, 2);
@@ -236,8 +246,11 @@ static void test_stream_cp(void) {
     TEST_ASSERT_EQUAL(0x3B1, cp);
     TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 'x', &cp));
     TEST_ASSERT_EQUAL('x', cp);
-    TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 0xFF, &cp));   /* undefined in page 2 */
+    TEST_ASSERT_EQUAL(0, os_display_stream_cp(&page, 0x81, &cp));   /* selector, before the old undefined check */
+    page = 1;
+    TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 0xFF, &cp));   /* page 1 still has an undefined byte */
     TEST_ASSERT_EQUAL('?', cp);
+    page = 2;
     TEST_ASSERT_EQUAL(0, os_display_stream_cp(&page, 0x81, &cp));
     TEST_ASSERT_EQUAL(0, page);
     TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 0x81 + 1, &cp));
@@ -289,6 +302,31 @@ static void test_fonts(void) {
     TEST_ASSERT_EQUAL(0xFFF, gfx_font_hd12[hline][5] | gfx_font_hd12[hline][6]);
 }
 
+static void test_composed_vietnamese(void) {
+    char o[8], u[8];
+    int page = 0, row, ink = 0;
+    uint8_t rows[8];
+    unsigned base;
+    TEST_ASSERT_EQUAL(2, os_display_put(0x1EA0, &page, o, 8));
+    TEST_ASSERT_EQUAL(2, page);
+    TEST_ASSERT_EQUAL(0x8F, (unsigned char)o[0]);
+    TEST_ASSERT_EQUAL(0x80, (unsigned char)o[1]);
+    TEST_ASSERT_EQUAL(3, os_display_str_to_utf8(o, 2, u, 8));
+    TEST_ASSERT_EQUAL_MEMORY("\xE1\xBA\xA0", u, 3);
+    TEST_ASSERT_EQUAL('A', os_mark_ascii_base(0x1EB2));   /* no free byte: base letter */
+    TEST_ASSERT_EQUAL('A', os_cp1252_from_cp(0x1EB2));
+    TEST_ASSERT_EQUAL('A', os_cp1252_from_cp(0xFF21));    /* fullwidth A */
+    TEST_ASSERT_EQUAL('e', os_cp1252_from_cp(0x0259));
+    base = os_glyph_index('A');
+    for (row = 0; row < 8; row++) {
+        rows[row] = (uint8_t)os_mark_compose_row(gfx_font8[base], row, OS_MARK_DOTB, 0);
+        if (rows[row]) ink = 1;
+    }
+    TEST_ASSERT_TRUE(ink);
+    TEST_ASSERT_EQUAL(0x08, rows[7]);   /* dot below, centre pixel */
+    TEST_ASSERT_EQUAL('A', os_cp437_from_cp(0x1EA0));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_selectors);
@@ -301,6 +339,7 @@ int main(void) {
     RUN_TEST(test_cp437);
     RUN_TEST(test_stream_cp);
     RUN_TEST(test_fonts);
+    RUN_TEST(test_composed_vietnamese);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

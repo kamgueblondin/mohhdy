@@ -325,6 +325,7 @@ void arm_main(void) {
         kputs((m & ARM_PORT_AEAD) ? "arm aead self-test ok aes-256-gcm chacha20-poly1305 (userspace/wf_aead.c)\n" : "arm aead self-test FAILED\n");
         kputs((m & ARM_PORT_PAGES) ? "arm glyph pages self-test ok greek cyrillic symbols (include/os_charset_pages.h)\n" : "arm glyph pages self-test FAILED\n");
         kputs((m & ARM_PORT_BWE) ? "arm p2p bwe self-test ok late sample 128 (userspace/p2p_bwe.c)\n" : "arm p2p bwe self-test FAILED\n");
+        kputs((m & ARM_PORT_MARKS) ? "arm marks self-test ok vietnamese base letter (include/os_marks.h)\n" : "arm marks self-test FAILED\n");
     }
     gic_init();
     timer_arm();

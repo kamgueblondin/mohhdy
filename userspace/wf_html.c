@@ -2,6 +2,7 @@
 #include "wf_html.h"
 #include "wf_srcset.h"
 #include "wf_entity.h"
+#include "wf_read.h"
 #include "../include/os_charset.h"
 
 static char lc(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
@@ -102,9 +103,14 @@ static int chrome_block(const char* in, int s, int e) {
     /* language pickers (Wikipedia lists 300+ languages before the content) */
     if (get_attr(in, s, e, "hreflang", v, (int)sizeof(v)) > 0) return 1;
     {
-        static char cl[160];
+        static char cl[160], idv[48];
         int k;
-        if (get_attr(in, s, e, "class", cl, (int)sizeof(cl)) > 0)
+        if (get_attr(in, s, e, "class", cl, (int)sizeof(cl)) <= 0) cl[0] = 0;
+        else for (k = 0; cl[k]; k++) cl[k] = lc(cl[k]);
+        if (get_attr(in, s, e, "id", idv, (int)sizeof(idv)) <= 0) idv[0] = 0;
+        else for (k = 0; idv[k]; k++) idv[k] = lc(idv[k]);
+        if (wf_read_chrome(idv, cl)) return 1;
+        if (cl[0])
             for (k = 0; cl[k]; k++)
                 if (seq_pre(cl + k, "interlanguage") || seq_pre(cl + k, "language-list") || seq_pre(cl + k, "skip-link") ||
                     seq_pre(cl + k, "visually-hidden") || seq_pre(cl + k, "sr-only") || seq_pre(cl + k, "vector-menu"))
@@ -551,7 +557,7 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
     static wf_url_t link;
     static char href[WF_URL_PATH_MAX], abs_url[WF_URL_HOST_MAX + WF_URL_PATH_MAX + 16];
     ob_t b;
-    int i = 0, last_sp = 1, pre = 0, in_title = 0, tn = 0, k, body_seen = 0;
+    int i = 0, last_sp = 1, pre = 0, in_title = 0, tn = 0, k, body_seen = 0, span_hi;
     wf_html_stats_t dummy;
     if (!st) st = &dummy;
     for (k = 0; k < (int)sizeof(*st); k++) ((char*)st)[k] = 0;
@@ -593,6 +599,15 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
         }
     }
     if (g_images) find_icon(in, n, base, st);
+    /* Lot 85: when the page has a clear article root, the reader keeps
+     * that interior and leaves the surrounding chrome out of the node
+     * budget. A page with no such root is unchanged. */
+    {
+        int span_lo = 0;
+        span_hi = n;
+        (void)wf_read_root(in, n, &span_lo, &span_hi, 0);
+        if (span_lo > 0 && span_lo < n) i = span_lo;
+    }
     ob_s(&b, "<html><head><title>");
     if (!st->title[0]) ob_s(&b, "(untitled)");
     for (k = 0; st->title[k]; k++) {
@@ -601,7 +616,7 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
     }
     ob_s(&b, "</title></head><body>");
     (void)in_title;
-    while (i < n && !b.full) {
+    while (i < span_hi && i < n && !b.full) {
         if (b.nodes >= node_budget) { b.full = 1; break; }
         if (in[i] == '<') {
             char name[16];

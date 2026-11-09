@@ -9623,6 +9623,77 @@ static int masonry_columns(we_doc_t *d, int idx, we_track_work_t *items, we_grid
     return rows;
 }
 
+/* Resolve column widths already stored as max-content contributions:
+ * shrink autos to the container, give fr tracks their share, stretch
+ * uncapped autos, then write column_x. Returns the used inline size. */
+static int column_geometry(we_doc_t *d, int idx, we_grid_work_t *work, int cols, int cw, int cx, int gx) {
+    we_node_t *n = &d->nodes[idx];
+    int k, used_width, position, seen = 0;
+    fit_auto_columns(n, cols, cw, gx, work->minimum, work->column);
+    used_width = grid_track_sizes(n, 0, cols, cw, gx, work->column, work->collapsed[0]);
+    if (used_width > cw) diag(d, "grid width overflow", idx);
+    if (n->justify_content == WE_PACK_STRETCH && cw > used_width) {
+        int receivers = 0, remaining = cw - used_width;
+        for (k = 0; k < cols; k++)
+            if (!work->collapsed[0][k] && grid_spec(n, 0, k) == WE_TRACK_AUTO && grid_cap(n, 0, k) < 0) receivers++;
+        for (k = 0; k < cols && receivers; k++)
+            if (!work->collapsed[0][k] && grid_spec(n, 0, k) == WE_TRACK_AUTO && grid_cap(n, 0, k) < 0) {
+                int extra = remaining / receivers + (remaining % receivers != 0);
+                work->column[k] += extra; remaining -= extra; used_width += extra; receivers--;
+            }
+    }
+    position = cx;
+    for (k = 0; k < cols; k++) {
+        if (seen && !work->collapsed[0][k]) position += gx;
+        work->column_x[k] = limit_coord(position + pack_distance(n->justify_content, cw - used_width, k, cols));
+        position += work->column[k];
+        if (!work->collapsed[0][k]) seen = 1;
+    }
+    return used_width;
+}
+
+static int column_is_auto(const we_node_t *n, int k) {
+    return grid_spec(n, 0, k) == WE_TRACK_AUTO;
+}
+
+/* Lot 85: auto columns of a masonry-rows grid take the min-content and
+ * max-content of the items masonry actually put in that column, not the
+ * column the ordinary row-major placement would have used. One provisional
+ * placement (fixed heights do not depend on the width) sizes the tracks;
+ * up to two further placements cover a wrap that moves an item. */
+static int masonry_resize_autos(we_doc_t *d, int idx, we_track_work_t *items, we_grid_work_t *work,
+                                int count, int cols, int cx, int cy, int cw, int gx, int gy, int depth) {
+    const we_node_t *n = &d->nodes[idx];
+    int prev[WE_MAX_NODES], pass, k, rows = 0, any = 0;
+    for (k = 0; k < cols; k++) if (column_is_auto(n, k)) any = 1;
+    if (!any) return masonry_rows(d, idx, items, work, count, cols, cy, gy, depth);
+    /* Provisional widths (ordinary contributions) only choose the first
+     * column. The contributions below replace them. */
+    rows = masonry_rows(d, idx, items, work, count, cols, cy, gy, depth);
+    for (pass = 0; pass < 3; pass++) {
+        for (k = 0; k < count; k++) prev[k] = work->col[k];
+        for (k = 0; k < cols; k++) if (column_is_auto(n, k)) { work->column[k] = 0; work->minimum[k] = 0; }
+        for (k = 0; k < count; k++) {
+            const we_node_t *child = &d->nodes[items->node[k]];
+            int col = work->col[k], span;
+            if (col < 0) continue;
+            span = child->grid_col_span < 1 ? 1 : child->grid_col_span;
+            if (col + span > cols) span = cols - col;
+            if (span < 1) continue;
+            grid_span_minimum(n, 0, col, span, preferred_outer(child, cw, child->max_content), gx, cw, work->column);
+            grid_span_minimum(n, 0, col, span, preferred_outer(child, cw, child->min_content), gx, cw, work->minimum);
+        }
+        (void)column_geometry(d, idx, work, cols, cw, cx, gx);
+        rows = masonry_rows(d, idx, items, work, count, cols, cy, gy, depth);
+        {
+            int same = 1;
+            for (k = 0; k < count; k++) if (work->col[k] != prev[k]) same = 0;
+            if (same) break;
+        }
+    }
+    return rows;
+}
+
 static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) {
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[depth];
@@ -9676,31 +9747,15 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
         grid_span_minimum(n, 0, work->col[k], child->grid_col_span,
                          preferred_outer(child, cw, child->min_content), gx, cw, work->minimum);
     }
-    fit_auto_columns(n, cols, cw, gx, work->minimum, work->column);
-    used_width = grid_track_sizes(n, 0, cols, cw, gx, work->column, work->collapsed[0]);
-    if (used_width > cw) diag(d, "grid width overflow", idx);
-    /* Lot 80: justify-content:stretch grows auto-max columns equally. */
-    if (n->justify_content == WE_PACK_STRETCH && cw > used_width) {
-        int receivers = 0, remaining = cw - used_width;
-        for (k = 0; k < cols; k++)
-            if (!work->collapsed[0][k] && grid_spec(n, 0, k) == WE_TRACK_AUTO && grid_cap(n, 0, k) < 0) receivers++;
-        for (k = 0; k < cols && receivers; k++)
-            if (!work->collapsed[0][k] && grid_spec(n, 0, k) == WE_TRACK_AUTO && grid_cap(n, 0, k) < 0) {
-                int extra = remaining / receivers + (remaining % receivers != 0);
-                work->column[k] += extra; remaining -= extra; used_width += extra; receivers--;
-            }
-    }
-    position = cx; seen = 0;
-    for (k = 0; k < cols; k++) {
-        if (seen && !work->collapsed[0][k]) position += gx;
-        work->column_x[k] = limit_coord(position + pack_distance(n->justify_content, cw - used_width, k, cols));
-        position += work->column[k];
-        if (!work->collapsed[0][k]) seen = 1;
-    }
+    used_width = column_geometry(d, idx, work, cols, cw, cx, gx);
+    (void)used_width;
     for (k = 0; k < count; k++)
         if (work->row[k] >= 0 && subgrid_on(items->node[k], 0))
             subgrid_tracks(&d->nodes[items->node[k]], 0, work->column, work->column_x, work->col[k], gx);
-    if (n->masonry) return masonry_rows(d, idx, items, work, count, cols, cy, gy, depth);
+    /* Lot 85: masonry rows re-size auto columns from the column each item
+     * occupies, then place again. Fixed and fr tracks stay on the geometry
+     * above when no column is auto. */
+    if (n->masonry) return masonry_resize_autos(d, idx, items, work, count, cols, cx, cy, cw, gx, gy, depth);
     /* Lot 61: first-baseline groups share the start row and last-baseline
      * groups the end row, spanning items included. A spanning item adds the
      * shift its group imposes to its span contribution. */
@@ -11489,11 +11544,25 @@ static int clip_rectangle(os_fb_web_item_t *item, int left, int top, int right, 
  * the kernel font (bit k at x + k, bold also at x + k + 1, rows 0..7),
  * merged down identical columns. Invisible glyphs and spaces emit nothing. */
 #define WE_CLIP_FRAGMENTS 64
-static unsigned glyph_mask(char ch, int row, int bold) {
-    unsigned bits;
-    if ((unsigned char)ch < 32 || (unsigned char)ch == 127 || (unsigned char)ch > 254) ch = '?';
-    bits = gfx_font8[(unsigned char)ch - 32u][row];
-    return bold ? bits | (bits << 1) : bits;
+static int text_page(const os_fb_web_item_t *it) { return (it->pad >> 8) & 7; }
+
+/* Lot 85: page bytes that are composed letters use the same accent row
+ * as the desktop. Other bytes stay on the font slot of their page. */
+static unsigned glyph_mask(const os_fb_web_item_t *it, int k, int row) {
+    unsigned char ch = (unsigned char)it->text[k];
+    int page = text_page(it);
+    int mi = os_mark_index_byte((unsigned)page, ch);
+    unsigned bits, idx;
+    if (mi >= 0) {
+        idx = os_glyph_index(os_mark_rec[mi].base);
+        bits = os_mark_compose_row(gfx_font8[idx], row, os_mark_rec[mi].m1, os_mark_rec[mi].m2);
+    } else {
+        if (ch < 32u || ch == 127u) ch = '?';
+        idx = os_glyph_index_page((unsigned)page, ch);
+        if (idx >= OS_GLYPH_TOTAL) idx = (unsigned)OS_GLYPH_QMARK;
+        bits = gfx_font8[idx][row];
+    }
+    return it->bold ? bits | (bits << 1) : bits;
 }
 
 /* Lot 69: the glyph cell of a TEXT item is square, it->h px (8 at the
@@ -11509,7 +11578,7 @@ static int glyph_inside(const os_fb_web_item_t *it, int k, int left, int top, in
     int row, bit, x = it->x + k * WE_CHAR_W;
     if (it->h > 8) return cell_inside(it, k, left, top, right, bottom);
     for (row = 0; row < 8; row++) {
-        unsigned m = glyph_mask(it->text[k], row, it->bold);
+        unsigned m = glyph_mask(it, k, row);
         if (!m) continue;
         if (it->y + row < top || it->y + row >= bottom) return 0;
         for (bit = 0; bit < 9; bit++)
@@ -11524,7 +11593,7 @@ static int glyph_rects(const os_fb_web_item_t *it, int k, int left, int top, int
     int row, bit, x = it->x + k * WE_CHAR_W, first = used;
     if (it->h > 8) return 0;
     for (row = 0; row < 8; row++) {
-        unsigned m = glyph_mask(it->text[k], row, it->bold);
+        unsigned m = glyph_mask(it, k, row);
         int y = it->y + row;
         if (!m || y < top || y >= bottom) continue;
         for (bit = 0; bit < 9; bit++) {
@@ -11666,7 +11735,7 @@ static int glyph_in_bands(const os_fb_web_item_t *it, int k, int band[][4], int 
         return 0;
     }
     for (row = 0; row < 8; row++) {
-        unsigned m = glyph_mask(it->text[k], row, it->bold);
+        unsigned m = glyph_mask(it, k, row);
         int y = it->y + row;
         if (!m) continue;
         for (b = 0; b < count && !(y >= band[b][0] && y < band[b][1]); b++) {}

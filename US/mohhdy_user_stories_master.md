@@ -117,6 +117,8 @@ Etat Phase 2 (17 octobre 2026, lot 9; inventaire dans `docs/lot9_plan.md`). US-0
 - US-044 : Création du système d'accessibilité web
 - US-045 : Implémentation du débogueur web intégré
 
+Etat Phase 3 (9 November 2026, lot 85). US-031 partial, phase3_complete=false. Masonry-rows auto columns are sized from the column each item occupies after packing. The reader keeps an article or main root and skips boilerplate. 78 Vietnamese and horn letters are drawn from the base glyph plus an accent (16 rarer forms stay the base letter). Fetch body is 384 KiB, still one static buffer. Wikipedia is the first search fallback; search-engine local does not use the network. No JavaScript VM. US-068/US-073 stay partial (a late ack is not a confirmed loss). US-076 stays partial (ARM self-test of the composed letters). US-080 stays partial (more of the EDID base block; no DDC). US-081 stays partial (idle dim; battery still simulated). US-078 and US-097 stay simule. Roadmap statuses unchanged. Details: docs/lot85_plan.md.
+
 Etat Phase 3 (9 November 2026, lot 84). US-031 partial, phase3_complete=false. The guest engine places masonry definite-first in two passes, keeps masonry-row height as the tallest packed column when grid-auto-flow is column, and resolves percentage min()/max()/clamp()/calc() border widths (capped at 8 px) and absolute insets against a masonry grid. No JavaScript VM. US-068/US-073 stay partial (a late probe ack still samples). US-076 stays partial (ARM self-test of p2p_bwe.c). US-078 and US-097 stay simule. Roadmap statuses unchanged. Details: docs/lot84_plan.md.
 
 Etat Phase 3 (1 November 2026, lot 73). US-031 partial, phase3_complete=false. The guest browser plays animated GIFs (frames composed in Ring 3, advanced into the image atlas, no ABI change; web-anim), cuts paragraphs between columns (orphans, widows, break-inside), clamps lines (line-clamp, -webkit-line-clamp), and adds flow-root, inside list markers, small-caps (as capitals) and text-underline-offset. AES in TLS and in the kernel GCM is table-free (bitsliced S-box) against cache timing. No JavaScript VM. Roadmap statuses unchanged. Details: docs/lot73_plan.md.
@@ -201,6 +203,8 @@ Etat Phase 4 (28 octobre 2026, lot 49). US-055 reste partiel : `pm-cross FILE` r
 
 Etat Phase 5 (28 octobre 2026, lot 49). US-063 et US-074 inchanges. US-063 : vecteur de distances, au plus 3 sauts, reseau de laboratoire. US-074 : codec STUN RFC 5389 reel dans le lien ; le NAT et `p2p-punch` restent simules. Pas de NAT materiel.
 
+Etat Phase 5 (9 November 2026, lot 85). US-068/US-073 stay partial. A probe ack that arrives after the loss timeout is no longer counted as a confirmed loss. Still not a WAN and not cross traffic. Details: docs/lot85_plan.md.
+
 Etat Phase 5 (9 November 2026, lot 84). US-068/US-073 stay partial. A probe the estimator declared lost after 2 s still yields a delivery-rate sample when the ack arrives (the peer guest may not have been scheduled yet). The three-guest QEMU check waits for 20 acks and a non-zero estimate. Not a WAN, and not cross traffic. Details: docs/lot84_plan.md.
 
 Etat Phase 5 (31 octobre 2026, lot 66). US-069 et US-070 restent fermes, deux defauts corriges : le cache pouvait garder deux lignes pour une cle et perdait les lignes Raft a chaque pair tombe (LRU, expiration sans debordement, compteurs `evictions` `expired`) ; une partition guerie lance seule l'anti-entropie dans les deux sens (`heal_syncs`), prouve par `make qemu-p2p` 2c sans `p2p-sync`. US-068/US-073 restent partiels.
@@ -242,6 +246,8 @@ Etat Phase 5 (15 octobre 2026, lot 2; detail and limits in `docs/p2p.md` and `do
 - US-088 : Intégration du système de migration de données
 - US-089 : Développement de l'interface d'administration unifiée
 - US-090 : Création du système de déploiement automatisé
+
+Etat Phase 6 (9 November 2026, lot 85). US-076 stays partial: the ARM boot self-test checks the composed letter U+1EA0 and the base-letter fallback. US-080 stays partial: EDID standard timings, established modes, range limits, gamma and monitor name, still the base block only. US-081 stays partial: idle time halves the refresh; the battery line still says simule. US-078 stays simule.
 
 Etat Phase 6 (9 November 2026, lot 84). US-076 stays partial: the ARM boot self-test compiles userspace/p2p_bwe.c unchanged and checks the late-ack sample (128 B/s). US-080 and US-081 unchanged. US-078 stays simule (no sensor hardware).
 

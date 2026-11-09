@@ -7,6 +7,14 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 85 (9 November 2026)
+
+US-031 partial, phase3_complete=false. Masonry-rows auto columns follow the
+packed column. The reader keeps an article root. Vietnamese letters are
+composed on the existing font. search-engine local needs no network.
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097 stay
+simule. See docs/lot85_plan.md.
+
 ### Lot 66 (31 October 2026)
 
 US-G23 done: deploy apply/verify, refused apply, rollback and named

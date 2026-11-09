@@ -170,6 +170,7 @@ static void test_loss_and_table_bounds(void) {
         uint32_t rate = p2p_bwe_on_ack(&g_b, 3U, 6U);
         TEST_ASSERT_TRUE(rate > 0U);
         TEST_ASSERT_EQUAL(1U, g_b.late_hit);
+        TEST_ASSERT_EQUAL(0U, g_b.losses);   /* Lot 85: the late ack cancels the provisional loss */
         TEST_ASSERT_EQUAL(1U, g_b.samples);
         TEST_ASSERT_TRUE(p2p_bwe_btlbw(&g_b) > 0U);
         TEST_ASSERT_EQUAL((P2P_BWE_INFLIGHT - 1U) * MSS, g_b.inflight_bytes);

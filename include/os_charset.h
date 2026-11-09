@@ -28,6 +28,7 @@
 #define OS_CHARSET_H
 #include <stdint.h>
 #include "os_charset_pages.h"
+#include "os_marks.h"
 
 #define OS_GLYPH_COUNT 223      /* 95 ASCII + 32 CP1252 0x80..0x9F + 96 Latin-1 */
 #define OS_GLYPH_QMARK ('?' - 32)
@@ -76,6 +77,7 @@ static inline unsigned char os_cp1252_exact(uint32_t cp) {
  * (dropped). */
 static inline unsigned char os_cp1252_from_cp(uint32_t cp) {
     unsigned char b;
+    if (cp >= 0xFF01u && cp <= 0xFF5Eu) cp -= 0xFEE0u;   /* Lot 85: fullwidth ASCII */
     if (cp < 0x20u) return (cp == '\t' || cp == '\n') ? (unsigned char)cp : 0;
     if (cp == 0x7Fu || (cp >= 0x80u && cp < 0xA0u)) return 0;
     b = os_cp1252_exact(cp);
@@ -93,7 +95,17 @@ static inline unsigned char os_cp1252_from_cp(uint32_t cp) {
     case 0x2264: return '<';
     case 0x2265: return '>';
     case 0x00A0: return 0xA0;
-    default: return '?';
+    /* Lot 85: IPA letters that real pages use, as the Latin letter they
+     * stand in for. A full phonetic alphabet is not in the fonts. */
+    case 0x0259: case 0x025B: case 0x025C: return 'e';
+    case 0x0254: case 0x0252: return 'o';
+    case 0x0268: case 0x026A: return 'i';
+    case 0x0261: return 'g';
+    case 0x02B9: case 0x02BB: return '\'';
+    default:
+        b = os_mark_ascii_base(cp);
+        if (b) return b;
+        return '?';
     }
 }
 
@@ -142,6 +154,11 @@ static inline int os_page_of_sel(unsigned char c) {
 
 /* Glyph slot of display byte c in page p (page 0 = os_glyph_index). */
 static inline unsigned os_glyph_index_page(unsigned page, unsigned char c) {
+    int mi = os_mark_index_byte(page, c);
+    /* Lot 85: a composed letter is not a font slot. Callers paint it with
+     * os_mark_compose_row. The index is past the font so it cannot be
+     * confused with a shared base glyph. */
+    if (mi >= 0) return (unsigned)OS_GLYPH_TOTAL + (unsigned)mi;
     if (page == 0u || page >= (unsigned)OS_PAGE_COUNT || c < 0x80u) return os_glyph_index(c);
     return os_page_glyph[page - 1u][c - 0x80u];
 }
@@ -149,7 +166,10 @@ static inline unsigned os_glyph_index_page(unsigned page, unsigned char c) {
 /* Code point of display byte c in page p; 0 for a selector or a byte the
  * page leaves undefined. */
 static inline uint32_t os_display_cp(unsigned page, unsigned char c) {
+    int mi;
     if (os_page_of_sel(c) >= 0) return 0;
+    mi = os_mark_index_byte(page, c);
+    if (mi >= 0) return os_mark_rec[mi].cp;
     if (c < 0x80u) return c;
     if (page == 0u || page >= (unsigned)OS_PAGE_COUNT) return c >= 0xA0u ? c : os_cp1252_high[c - 0x80u];
     return os_page_cp[page - 1u][c - 0x80u];
@@ -158,8 +178,10 @@ static inline uint32_t os_display_cp(unsigned page, unsigned char c) {
 /* Page and byte of a code point: 0 when CP1252 has it, 1..4 from the
  * page tables, -1 when no page has it. */
 static inline int os_cp_page(uint32_t cp, unsigned char *byte) {
-    unsigned char b = os_cp1252_exact(cp);
-    int lo = 0, hi = OS_PAGE_REV_COUNT - 1;
+    unsigned char b;
+    int lo = 0, hi = OS_PAGE_REV_COUNT - 1, mi;
+    if (cp >= 0xFF01u && cp <= 0xFF5Eu) cp -= 0xFEE0u;
+    b = os_cp1252_exact(cp);
     if (cp >= 0x20u && cp != 0x7Fu && (b || cp < 0x80u)) { *byte = b; return 0; }
     while (lo <= hi) {
         int mid = (lo + hi) / 2;
@@ -167,6 +189,8 @@ static inline int os_cp_page(uint32_t cp, unsigned char *byte) {
         if (c == cp) { *byte = (unsigned char)(os_page_rev[mid] & 0xFFu); return (int)((os_page_rev[mid] >> 8) & 0xFFu); }
         if (c < cp) lo = mid + 1; else hi = mid - 1;
     }
+    mi = os_mark_index(cp);
+    if (mi >= 0) { *byte = os_mark_rec[mi].byte; return (int)os_mark_rec[mi].page; }
     return -1;
 }
 

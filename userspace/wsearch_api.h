@@ -28,6 +28,7 @@ enum {
     WSEARCH_KIND_GOOGLE = 4,
     WSEARCH_KIND_URL = 5,          /* a user template (Lot 69) */
     WSEARCH_KIND_WIKI = 6,         /* Wikipedia full text search API (no key, no JavaScript) */
+    WSEARCH_KIND_LOCAL = 7,        /* Lot 85: the guest catalogue, no network */
 };
 enum { WSEARCH_LAYOUT_SEARX = 10, WSEARCH_LAYOUT_JSON = 11, WSEARCH_LAYOUT_GOOGLE = 12, WSEARCH_LAYOUT_WIKI = 13 };
 

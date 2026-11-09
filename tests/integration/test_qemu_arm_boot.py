@@ -28,6 +28,7 @@ NEEDLES = (
     "arm aead self-test ok aes-256-gcm chacha20-poly1305 (userspace/wf_aead.c)",
     "arm glyph pages self-test ok greek cyrillic symbols (include/os_charset_pages.h)",
     "arm p2p bwe self-test ok late sample 128 (userspace/p2p_bwe.c)",
+    "arm marks self-test ok vietnamese base letter (include/os_marks.h)",
     "arm gic + generic timer armed at 100 Hz",
     "arm tasks spawned 5 (USR mode)",
     "arm user reporter pid 0x00000001 running in USR mode via svc",

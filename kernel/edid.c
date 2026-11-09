@@ -42,15 +42,73 @@ int edid_parse(const uint8_t *b, int len, edid_info_t *e) {
     e->revision = b[19];
     /* bytes 21/22: size in cm; both 0 = unknown; one 0 = aspect only (1.4) */
     if (b[21] && b[22]) { e->cm_w = b[21]; e->cm_h = b[22]; }
-    /* first detailed descriptor (54..71) with a pixel clock is the preferred timing */
+    e->digital = (b[20] & 0x80u) ? 1 : 0;
+    /* gamma: stored 0 and 255 mean "not stated" (EDID 1.4) */
+    if (b[23] && b[23] != 255) e->gamma_100 = 100 + b[23];
+    /* established timings, bytes 35..37, the 17 VESA modes in bit order */
+    {
+        unsigned bits = (unsigned)b[35] << 9 | (unsigned)b[36] << 1 | ((b[37] >> 7) & 1u);
+        int bit;
+        e->established = 0;
+        for (bit = 0; bit < 17; bit++) if (bits & (1u << (16 - bit))) {
+            e->established |= 1 << bit;
+            e->established_n++;
+        }
+    }
+    /* standard timings, 8 entries of 2 bytes at offset 38. 00 00 and 01 01 are unused. */
+    for (k = 0; k < 8; k++) {
+        const uint8_t *s = b + 38 + 2 * k;
+        int aspect, hz, w, h;
+        if ((s[0] == 0 && s[1] == 0) || (s[0] == 1 && s[1] == 1)) continue;
+        w = ((int)s[0] + 31) * 8;
+        aspect = s[1] >> 6;
+        hz = (s[1] & 0x3Fu) + 60;
+        if (aspect == 0) h = w * 10 / 16;
+        else if (aspect == 1) h = w * 3 / 4;
+        else if (aspect == 2) h = w * 4 / 5;
+        else h = w * 9 / 16;
+        if (w < 256 || w > 4096 || h < 160 || hz < 60 || hz > 123) continue;
+        e->standard_w[e->standard_n] = w;
+        e->standard_h[e->standard_n] = h;
+        e->standard_hz[e->standard_n] = hz;
+        e->standard_n++;
+    }
+    /* detailed descriptors: a pixel clock is a timing; 0xFC name, 0xFD range */
     for (k = 0; k < 4; k++) {
         const uint8_t *d = b + 54 + 18 * k;
-        if (d[0] == 0 && d[1] == 0) continue;
+        unsigned clock;
+        int ha, va, t;
+        if (d[0] == 0 && d[1] == 0) {
+            if (d[3] == 0xFC && !e->name[0]) {
+                int p = 0, c;
+                for (c = 5; c < 18 && p < 13; c++) {
+                    if (d[c] == 0x0A || d[c] == 0) break;
+                    if (d[c] >= 32 && d[c] < 127) e->name[p++] = (char)d[c];
+                }
+                e->name[p] = 0;
+            } else if (d[3] == 0xFD) {
+                e->range_vmin = d[5];
+                e->range_vmax = d[6];
+                e->range_hmin = d[7];
+                e->range_hmax = d[8];
+                e->range_clock = d[9] * 10;
+            }
+            continue;
+        }
+        if (e->native_w) continue;   /* the first timing stays the preferred one */
+        clock = (unsigned)d[0] | ((unsigned)d[1] << 8);
         e->native_w = d[2] | ((d[4] & 0xF0) << 4);
         e->native_h = d[5] | ((d[7] & 0xF0) << 4);
         e->mm_w = d[12] | ((d[14] & 0xF0) << 4);
         e->mm_h = d[13] | ((d[14] & 0x0F) << 8);
-        break;
+        ha = e->native_w + (d[3] | ((d[4] & 0x0F) << 8));
+        va = e->native_h + (d[6] | ((d[7] & 0x0F) << 8));
+        t = ha > e->native_w && va > e->native_h ? ha * va : 0;
+        if (clock && t) {
+            /* clock is in 10 kHz units */
+            unsigned hz = (clock * 10000u) / (unsigned)t;
+            if (hz >= 24u && hz <= 360u) e->refresh_hz = (int)hz;
+        }
     }
     /* sizes under 3 cm are placeholders (projectors report 0, some 1x1) */
     if (e->mm_w >= 30 && e->mm_h >= 30) { e->size_mm_w = e->mm_w; e->size_mm_h = e->mm_h; }
@@ -76,6 +134,21 @@ static int put_u(char *o, int cap, int n, unsigned v) {
     while (i > 0 && n < cap - 1) o[n++] = t[--i];
     o[n] = 0;
     return n;
+}
+
+int edid_established_mode(int bit, int *w, int *h) {
+    static const int ew[17] = {
+        720, 720, 640, 640, 640, 640, 800, 800,
+        800, 800, 832, 1024, 1024, 1024, 1024, 1280, 1152
+    };
+    static const int eh[17] = {
+        400, 400, 480, 480, 480, 480, 600, 600,
+        600, 600, 624, 768, 768, 768, 768, 1024, 870
+    };
+    if (bit < 0 || bit > 16 || !w || !h) return -1;
+    *w = ew[bit];
+    *h = eh[bit];
+    return 0;
 }
 
 int edid_describe(const edid_info_t *e, char *o, int cap) {

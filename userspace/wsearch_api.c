@@ -150,6 +150,7 @@ int wsearch_kind(const char *e) {
     if (a_eq(e, "google-api")) return WSEARCH_KIND_GOOGLE_API;
     if (a_eq(e, "google")) return WSEARCH_KIND_GOOGLE;
     if (a_eq(e, "wikipedia") || a_eq(e, "wiki")) return WSEARCH_KIND_WIKI;
+    if (a_eq(e, "local")) return WSEARCH_KIND_LOCAL;
     if (a_pre_ci(e, n, "https://") || a_pre_ci(e, n, "http://")) return WSEARCH_KIND_URL;
     return -1;
 }

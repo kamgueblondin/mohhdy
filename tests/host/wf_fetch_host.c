@@ -64,7 +64,7 @@ static void h_log(void* n, const char* l) { (void)n; printf("[fetch] %s\n", l); 
 static wf_trust_t g_trust;
 static uint8_t g_der[256 * 1024];
 static char g_pem[320 * 1024];
-static uint8_t g_body[256 * 1024];
+static uint8_t g_body[384 * 1024];
 static char g_red[192 * 1024];
 static char g_sec[64 * 1024];
 static char g_txt[16 * 1024];

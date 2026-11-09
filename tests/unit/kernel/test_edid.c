@@ -119,6 +119,38 @@ static void test_describe(void) {
     TEST_ASSERT_EQUAL(7, (int)strlen(out));
 }
 
+static void test_standard_and_established(void) {
+    edid_info_t e;
+    int w = 0, h = 0;
+    make_block(1024, 768, 260, 195, 26, 20);
+    g_b[20] = 0x80;                 /* digital */
+    g_b[23] = 120;                  /* gamma 2.20 */
+    g_b[35] = 0x20;                 /* bit 5 of byte 35: 640x480@60, mode index 2 */
+    /* one standard timing: 1920 (byte = 1920/8 - 31 = 209), 16:9 (aspect 3), 60 Hz (hz bits 0) */
+    g_b[38] = 209;
+    g_b[39] = (uint8_t)(3u << 6);
+    /* range descriptor in slot 2 */
+    g_b[72] = 0; g_b[73] = 0; g_b[74] = 0; g_b[75] = 0xFD;
+    g_b[77] = 50; g_b[78] = 75; g_b[79] = 30; g_b[80] = 80; g_b[81] = 15;
+    fix_sum(g_b);
+    TEST_ASSERT_EQUAL(0, edid_parse(g_b, EDID_BLOCK, &e));
+    TEST_ASSERT_EQUAL(1, e.digital);
+    TEST_ASSERT_EQUAL(220, e.gamma_100);
+    TEST_ASSERT_EQUAL(1, e.established_n);
+    TEST_ASSERT_TRUE(e.established & (1 << 2));
+    TEST_ASSERT_EQUAL(0, edid_established_mode(2, &w, &h));
+    TEST_ASSERT_EQUAL(640, w);
+    TEST_ASSERT_EQUAL(480, h);
+    TEST_ASSERT_EQUAL(1, e.standard_n);
+    TEST_ASSERT_EQUAL(1920, e.standard_w[0]);
+    TEST_ASSERT_EQUAL(1080, e.standard_h[0]);
+    TEST_ASSERT_EQUAL(60, e.standard_hz[0]);
+    TEST_ASSERT_EQUAL(50, e.range_vmin);
+    TEST_ASSERT_EQUAL(75, e.range_vmax);
+    TEST_ASSERT_EQUAL(150, e.range_clock);
+    TEST_ASSERT_EQUAL(1024, e.native_w);
+}
+
 static void test_isqrt(void) {
     TEST_ASSERT_EQUAL(0, edid_isqrt(0));
     TEST_ASSERT_EQUAL(1, edid_isqrt(3));
@@ -134,6 +166,7 @@ int main(void) {
     RUN_TEST(test_refusals);
     RUN_TEST(test_descriptor_skips_display_descriptors);
     RUN_TEST(test_describe);
+    RUN_TEST(test_standard_and_established);
     RUN_TEST(test_isqrt);
     unity_print_results();
     unity_cleanup();
