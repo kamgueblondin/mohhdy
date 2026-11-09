@@ -967,7 +967,11 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
     case P2P_I_PONG:
         if (len >= 12 && get32(m + 4) == P2P_PROBE_MAGIC) {
             if (n->qos.bwe_ready) {
+                /* Lot 84: a pong that arrives after the 2 s loss timeout
+                 * still feeds the estimator. The loss count drops so the
+                 * probe is delivered once. */
                 (void)p2p_bwe_on_ack(&n->qos.bwe, get32(m + 8), now(h) * (1000U / P2P_HZ));
+                if (n->qos.bwe.late_hit && n->qos.probe_lost) n->qos.probe_lost--;
                 n->qos.probe_acked++;
             }
             break;

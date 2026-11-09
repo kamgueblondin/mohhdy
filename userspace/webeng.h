@@ -291,6 +291,8 @@ typedef struct {
     /* computed style */
     uint8_t display, bold, align, has_bg;
     uint8_t masonry_next;      /* lot 83: masonry-auto-flow next (0 pack) */
+    uint8_t masonry_definite;  /* lot 84: masonry-auto-flow definite-first (two passes) */
+    uint8_t height_intrinsic;  /* lot 84: height min-content (1) or max-content (2) */
     uint8_t inline_outer;      /* lot 81: inline-flex / inline-grid (display keeps FLEX/GRID) */
     uint8_t masonry;           /* lot 81: grid-template-rows: masonry */
     uint8_t flex_dir;          /* 0 row, 1 column (display:flex) */
@@ -427,6 +429,12 @@ typedef struct {
     /* Lot 61 border edges, top right bottom left. edge_w -1 and style 0
      * mean "use border / border_style". Only collapsed tables read them. */
     int8_t edge_w[4];
+    /* Lot 84: percentage or pooled math border widths, one bit per side.
+     * border_spec is percent tenths, or WE_SPACING_MATH minus a pool index.
+     * Resolved in spacing_node against the containing block width, then
+     * clamped to the existing 0..8 paint cap. */
+    uint8_t border_pct;
+    int16_t border_spec[4];
     uint8_t edge_style[4], border_style, edge_color_set, collapse_cell;
     uint8_t transparency;       /* lot 61: 100 - opacity%, non-zero forms a stacking context */
     uint8_t cin[4];             /* lot 61: collapsed cell content insets, layout time */

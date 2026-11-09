@@ -16,7 +16,8 @@
 #define ARM_PORT_CHARSET 16U /* Lot 71: include/os_charset.h */
 #define ARM_PORT_AEAD    32U /* Lot 72: userspace/wf_aead.c */
 #define ARM_PORT_PAGES   64U /* Lot 72: glyph pages, include/os_charset.h */
-#define ARM_PORT_ALL     127U
+#define ARM_PORT_BWE     128U /* Lot 84: userspace/p2p_bwe.c late-ack sample */
+#define ARM_PORT_ALL     255U
 
 int arm_port_aes_gcm(void);   /* 1 ok */
 int arm_port_edid(void);
@@ -25,6 +26,7 @@ int arm_port_rtx(void);
 int arm_port_charset(void);
 int arm_port_aead(void);
 int arm_port_pages(void);
+int arm_port_bwe(void);
 /* bit mask of the checks that passed */
 uint32_t arm_port_selftest(void);
 #endif

@@ -234,18 +234,31 @@ static void state_step(p2p_bwe_t* b, int round_start, uint32_t now_ms) {
     }
 }
 
+static p2p_bwe_pkt_t* find_late(p2p_bwe_t* b, uint32_t seq) {
+    uint32_t i;
+    for (i = 0; i < P2P_BWE_INFLIGHT; i++)
+        if (b->late[i].used && b->late[i].seq == seq) return &b->late[i];
+    return 0;
+}
+
 uint32_t p2p_bwe_on_ack(p2p_bwe_t* b, uint32_t seq, uint32_t now_ms) {
     p2p_bwe_pkt_t* p;
     uint32_t send_iv, ack_iv, iv, rate = 0U;
     uint64_t dd;
-    int round_start = 0;
+    int round_start = 0, late = 0;
     if (!b) return 0U;
+    b->late_hit = 0U;
     p = find(b, seq);
-    if (!p) return 0U;
+    if (!p) {
+        p = find_late(b, seq);
+        if (!p) return 0U;
+        late = 1;
+        b->late_hit = 1U;
+    }
     b->acked++;
     b->delivered += p->bytes;
     b->delivered_ms = now_ms;
-    b->inflight_bytes = b->inflight_bytes >= p->bytes ? b->inflight_bytes - p->bytes : 0U;
+    if (!late) b->inflight_bytes = b->inflight_bytes >= p->bytes ? b->inflight_bytes - p->bytes : 0U;
     if (b->app_limited_until && (uint32_t)b->delivered >= b->app_limited_until) b->app_limited_until = 0U;
     /* round trip counting: a round ends when a packet sent after the
      * previous round end is acked */
@@ -277,11 +290,20 @@ uint32_t p2p_bwe_on_ack(p2p_bwe_t* b, uint32_t seq, uint32_t now_ms) {
 
 void p2p_bwe_on_loss(p2p_bwe_t* b, uint32_t seq, uint32_t now_ms) {
     p2p_bwe_pkt_t* p;
+    uint32_t i, slot = 0;
     if (!b) return;
     p = find(b, seq);
     if (!p) return;
     b->losses++;
     b->inflight_bytes = b->inflight_bytes >= p->bytes ? b->inflight_bytes - p->bytes : 0U;
+    for (i = 0; i < P2P_BWE_INFLIGHT; i++) if (!b->late[i].used) { slot = i; break; }
+    if (i == P2P_BWE_INFLIGHT) {
+        slot = 0;
+        for (i = 1; i < P2P_BWE_INFLIGHT; i++)
+            if (b->late[i].sent_ms < b->late[slot].sent_ms) slot = i;
+    }
+    b->late[slot] = *p;
+    b->late[slot].used = 1U;
     p->used = 0U;
     (void)now_ms;
     update_outputs(b);
