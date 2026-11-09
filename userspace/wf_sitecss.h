@@ -12,6 +12,8 @@
  * Selectors: type, .class, #id, [attr], [attr=value], [attr~=word],
  * descendant, child, adjacent and general sibling, :first-child,
  * :last-child, :link, :not(type), :nth-child(an+b) for a small an+b.
+ * Lot 87: revert-layer and revert on any of these properties (the value
+ * of the previous layer, or of the previous origin).
  * Cascade: user-agent, then author, then the style attribute. !important
  * beats normal. Specificity then source order. The reader uses display:none
  * to skip a subtree and copies color, font-weight and text-align onto the
@@ -86,7 +88,14 @@ enum {
     WF_SITE_K_PADDING = 6,
     WF_SITE_K_STYLE = 7,      /* font-style: 1 normal, 2 italic */
     WF_SITE_K_DECO = 8,       /* text-decoration: 1 none, 2 underline, 3 line-through */
-    WF_SITE_K_VIS = 9         /* visibility: 1 visible, 2 hidden */
+    WF_SITE_K_VIS = 9,        /* visibility: 1 visible, 2 hidden */
+    WF_SITE_K_MAX = 9
+};
+/* Lot 87: CSS-wide keywords a declaration may carry instead of a value */
+enum {
+    WF_SITE_RV_NONE = 0,
+    WF_SITE_RV_LAYER = 1,     /* revert-layer: as if this layer had no rule for it */
+    WF_SITE_RV_ORIGIN = 2     /* revert: as if this origin had no rule for it */
 };
 
 typedef struct {
@@ -118,6 +127,9 @@ typedef struct {
     uint32_t color;               /* 0xRRGGBB */
     uint8_t margin[4], pad[4];    /* top right bottom left, px */
     uint8_t margin_set, pad_set;  /* bit i set when that side was assigned */
+    /* Lot 87: the winning declaration of kind k was revert-layer (1) or
+     * revert (2); wf_site_apply rolls it back before it returns */
+    uint8_t rv[WF_SITE_K_MAX + 1];
 } wf_site_node_t;
 
 typedef struct {
@@ -151,6 +163,7 @@ typedef struct {
     uint32_t color;
     int spec, order;
     uint8_t layer;                /* Lot 87: 0 unlayered, else layer index + 1 */
+    uint8_t revert;               /* Lot 87: WF_SITE_RV_* (kind set, no value) */
 } wf_site_rule_t;
 
 typedef struct {
@@ -184,6 +197,7 @@ typedef struct {
     char layer[WF_SITE_LAYERS][WF_SITE_LAYER_NAME];   /* Lot 87 */
     int nlayers, dropped_layers, anon_layers;
     uint8_t layer_rank[WF_SITE_LAYERS];   /* cascade position, 1 = weakest */
+    int reverts;                  /* Lot 87: revert-layer / revert rolled back */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */

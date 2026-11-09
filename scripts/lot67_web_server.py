@@ -244,8 +244,9 @@ class H(http.server.BaseHTTPRequestHandler):
             # loses to the unlayered one; gone.css is never fetched
             "/lot87/layers.css": ("@layer reset, site;\n@import url(reset.css) layer(reset);\n"
                                   "@import url(gone.css) supports(not (display: block));\n"
-                                  ".keep87 { display: block }\n"),
-            "/lot87/reset.css": "div.keep87 { display: none }\n.gone87 { display: none }\n",
+                                  ".keep87 { display: block }\n"
+                                  ".back87 { display: block }\np.back87 { display: revert-layer }\n"),
+            "/lot87/reset.css": "div.keep87 { display: none }\n.gone87 { display: none }\n.back87 { display: none }\n",
             "/lot87/gone.css": "body { display: none }\n",
         }
         if p in sheets:
@@ -266,7 +267,7 @@ class H(http.server.BaseHTTPRequestHandler):
             page = ("<!doctype html><html><head><title>Lot 87 layers</title>"
                     "<link rel=\"stylesheet\" href=\"layers.css\"></head><body>"
                     "<h1>Couches</h1><div class=\"keep87\">layerkeep87 visible</div>"
-                    "<p class=\"gone87\">layergone87</p><p>fin87</p></body></html>")
+                    "<p class=\"gone87\">layergone87</p><p class=\"back87\">layerback87</p><p>fin87</p></body></html>")
             self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot87/wall.html":

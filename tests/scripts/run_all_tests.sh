@@ -261,7 +261,7 @@ run_test() {
             extra_src="$extra_src $BASE_DIR/userspace/wf_compat.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
-        test_lot87_link.c|test_lot87_layer.c)
+        test_lot87_link.c|test_lot87_layer.c|test_lot87_revert.c)
             extra_src="$extra_src $BASE_DIR/userspace/wf_csslink.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_http.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;

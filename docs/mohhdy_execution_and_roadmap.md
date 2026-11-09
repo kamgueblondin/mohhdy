@@ -10,7 +10,8 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Lot 87 (9 November 2026)
 
 US-031 partial, phase3_complete=false. The reader fetches external
-stylesheets and one @import level and applies a larger bounded sheet.
+stylesheets and one @import level and applies a larger bounded sheet
+(cascade layers, revert-layer and revert).
 Script walls are named with a fallback URL. Google, measured again on
 2026-11-09, is still the enablejs page (93419 bytes); no JavaScript VM.
 Autofill works on the rendered page: click, a drawn list of up to three

@@ -691,9 +691,58 @@ static int rank_of(const wf_site_rule_t *r) {
     return (top * 8192 + spec_packed(r->spec)) * 1024 + (r->order & 1023);
 }
 
+/* the cascade step of a rule without its specificity and order:
+ * importance, origin and layer */
+static int top_of(const wf_site_rule_t *r) {
+    return ((int)r->imp * 4 + (int)r->origin) * 16 + layer_step(r);
+}
+
+static int *kind_rank(wf_site_node_t *nd, int kind) {
+    switch (kind) {
+    case 1: return &nd->disp_rank;
+    case 2: return &nd->weight_rank;
+    case 3: return &nd->align_rank;
+    case 4: return &nd->color_rank;
+    case 5: return &nd->margin_rank;
+    case 6: return &nd->pad_rank;
+    case WF_SITE_K_STYLE: return &nd->italic_rank;
+    case WF_SITE_K_DECO: return &nd->deco_rank;
+    case WF_SITE_K_VIS: return &nd->vis_rank;
+    default: return 0;
+    }
+}
+
+/* Lot 87: forget what the cascade gave one property of a node */
+static void reset_kind(wf_site_node_t *nd, int kind) {
+    int k;
+    switch (kind) {
+    case 1: nd->disp = 0; nd->disp_imp = 0; break;
+    case 2: nd->weight = 0; nd->weight_imp = 0; break;
+    case 3: nd->align = 0; nd->align_imp = 0; break;
+    case 4: nd->color = 0; nd->color_set = 0; nd->color_imp = 0; break;
+    case 5: for (k = 0; k < 4; k++) nd->margin[k] = 0; nd->margin_set = 0; break;
+    case 6: for (k = 0; k < 4; k++) nd->pad[k] = 0; nd->pad_set = 0; break;
+    case WF_SITE_K_STYLE: nd->italic = 0; break;
+    case WF_SITE_K_DECO: nd->deco = 0; break;
+    case WF_SITE_K_VIS: nd->vis = 0; break;
+    default: return;
+    }
+    if (kind_rank(nd, kind)) *kind_rank(nd, kind) = 0;
+    nd->rv[kind] = 0;
+}
+
 static void paint_rule(wf_site_t *d, int idx, const wf_site_rule_t *r) {
     wf_site_node_t *nd = &d->node[idx];
     int rank = rank_of(r);
+    if (r->revert && r->kind >= 1 && r->kind <= WF_SITE_K_MAX) {
+        /* Lot 87: a winning revert-layer / revert keeps its rank (later
+         * weaker rules still lose to it) and is rolled back at the end */
+        int *rr = kind_rank(nd, r->kind);
+        if (rr && rank >= *rr) { *rr = rank; nd->rv[r->kind] = r->revert; }
+        return;
+    }
+    if (r->kind >= 1 && r->kind <= WF_SITE_K_MAX && kind_rank(nd, r->kind) && rank >= *kind_rank(nd, r->kind))
+        nd->rv[r->kind] = 0;
     if (r->kind == 1) {
         if (rank >= nd->disp_rank) { nd->disp = r->val; nd->disp_imp = r->imp; nd->disp_rank = rank; }
     } else if (r->kind == 2) {
@@ -920,6 +969,7 @@ static int add_rule(wf_site_t *d, const wf_site_rule_t *src) {
     r->box[3] = src->box[3];
     r->color = src->color;
     r->layer = src->layer;
+    r->revert = src->revert;
     r->order = d->nrules;
     for (p = 0; p < src->nparts && p < WF_SITE_PARTS; p++) {
         const unsigned char *a = (const unsigned char *)&src->part[p];
@@ -1064,9 +1114,24 @@ static int expand_var(const wf_site_t *d, char *val, int cap) {
     return 1;
 }
 
+/* Lot 87: the property names the reader keeps, by rule kind */
+static int prop_kind(const char *prop) {
+    if (eq(prop, "display")) return 1;
+    if (eq(prop, "font-weight")) return 2;
+    if (eq(prop, "text-align")) return 3;
+    if (eq(prop, "color")) return 4;
+    if (eq(prop, "margin")) return 5;
+    if (eq(prop, "padding")) return 6;
+    if (eq(prop, "font-style")) return WF_SITE_K_STYLE;
+    if (eq(prop, "text-decoration") || eq(prop, "text-decoration-line")) return WF_SITE_K_DECO;
+    if (eq(prop, "visibility")) return WF_SITE_K_VIS;
+    return 0;
+}
+
 static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_t *proto) {
     int i = 0;
     proto->kind = 0;
+    proto->revert = WF_SITE_RV_NONE;
     while (i < n) {
         char prop[24], val[48];
         int a, b, imp = 0, vs, ve;
@@ -1084,6 +1149,13 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
         trim_word(body + vs, ve - vs, val, (int)sizeof(val), &imp);
         proto->imp = (uint8_t)imp;
         if (d && expand_var(d, val, (int)sizeof(val)) < 0) { if (i < n && body[i] == ';') i++; continue; }
+        if ((eq(val, "revert-layer") || eq(val, "revert")) && prop_kind(prop)) {
+            proto->kind = (uint8_t)prop_kind(prop);
+            proto->revert = (uint8_t)(eq(val, "revert") ? WF_SITE_RV_ORIGIN : WF_SITE_RV_LAYER);
+            proto->val = 0;
+            proto->box_n = 0;
+            return 1;
+        }
         if (eq(prop, "display")) {
             int v = display_val(val);
             if (v) { proto->kind = 1; proto->val = (uint8_t)v; return 1; }
@@ -1286,6 +1358,7 @@ static int parse_selector(wf_site_t *d, const char *s, int n, const wf_site_rule
         rule.imp = proto->imp;
         rule.origin = proto->origin;
         rule.layer = proto->layer;
+        rule.revert = proto->revert;
         i = skip_noise(s, n, i);
         while (i < n && s[i] != ',') {
             wf_site_part_t part;
@@ -1936,24 +2009,67 @@ static void add_ua(wf_site_t *d, const char *sel, int disp) {
 }
 
 /* Every declaration of a style attribute (Lot 86 took only the first). */
+/* the style attribute of node i, one declaration at a time; kind 0 every
+ * kind, ceiling: only declarations whose cascade step is below it */
+static void inline_node(wf_site_t *d, int i, int kind, int ceiling) {
+    const char *st = d->node[i].style;
+    int n = slen(st), p = 0;
+    while (p < n) {
+        wf_site_rule_t proto;
+        int semi = p;
+        while (semi < n && st[semi] != ';') semi++;
+        clear(&proto, (int)sizeof(proto));
+        proto.origin = 3;
+        if (parse_decl(d, st + p, semi - p, &proto) && proto.kind && (!kind || proto.kind == kind) &&
+            top_of(&proto) < ceiling) {
+            proto.spec = 100000;
+            proto.order = 1000 + i;
+            proto.nparts = 0;
+            paint_rule(d, i, &proto);
+        }
+        p = semi < n ? semi + 1 : n;
+    }
+}
+
 static void apply_inline(wf_site_t *d) {
     int i;
+    for (i = 0; i < d->nnodes; i++) inline_node(d, i, 0, 1 << 30);
+}
+
+/* Lot 87: revert-layer and revert. The property of the node gets the
+ * value it would have without the declarations of that layer (revert-
+ * layer: every cascade step from that one up goes) or of that origin
+ * (revert: an author revert, the style attribute included, leaves the
+ * user-agent sheet only; a user-agent revert leaves nothing). The cascade
+ * runs again for that property alone with what is left; a revert-layer
+ * found there rolls back again (each round goes strictly lower, at most
+ * WF_SITE_LAYERS + 3 rounds). */
+static int keep_rule(int top, int origin, int ceiling, int max_origin) {
+    if (max_origin) return origin < max_origin;
+    return top < ceiling;
+}
+
+static void resolve_reverts(wf_site_t *d) {
+    int i, k, r, round;
     for (i = 0; i < d->nnodes; i++) {
-        const char *st = d->node[i].style;
-        int n = slen(st), p = 0;
-        while (p < n) {
-            wf_site_rule_t proto;
-            int semi = p;
-            while (semi < n && st[semi] != ';') semi++;
-            clear(&proto, (int)sizeof(proto));
-            proto.origin = 3;
-            if (parse_decl(d, st + p, semi - p, &proto) && proto.kind) {
-                proto.spec = 100000;
-                proto.order = 1000 + i;
-                proto.nparts = 0;
-                paint_rule(d, i, &proto);
+        wf_site_node_t *nd = &d->node[i];
+        for (k = 1; k <= WF_SITE_K_MAX; k++) {
+            for (round = 0; nd->rv[k] && round < WF_SITE_LAYERS + 3; round++) {
+                int top = *kind_rank(nd, k) / (8192 * 1024);
+                int origin = (top / 16) % 4, ceiling = top, max_origin = 0;
+                if (nd->rv[k] == WF_SITE_RV_ORIGIN) max_origin = origin >= 2 ? 2 : 1;
+                reset_kind(nd, k);
+                d->reverts++;
+                for (r = 0; r < d->nrules; r++) {
+                    const wf_site_rule_t *ru = &d->rule[r];
+                    if (ru->kind != k || !keep_rule(top_of(ru), ru->origin, ceiling, max_origin)) continue;
+                    if (sel_match(d, i, ru)) paint_rule(d, i, ru);
+                }
+                /* the style attribute is author origin: an author revert
+                 * drops it as well */
+                if (!max_origin) inline_node(d, i, k, ceiling);
             }
-            p = semi < n ? semi + 1 : n;
+            if (nd->rv[k]) reset_kind(nd, k);
         }
     }
 }
@@ -1977,6 +2093,8 @@ int wf_site_apply(wf_site_t *d) {
         for (i = 0; i < d->nnodes; i++) if (sel_match(d, i, &d->rule[r])) paint_rule(d, i, &d->rule[r]);
     }
     apply_inline(d);
+    d->reverts = 0;
+    resolve_reverts(d);
     d->ready = 1;
     return 0;
 }

@@ -11,7 +11,8 @@ guest reaches it as 10.0.2.2 (slirp).
     @import fails; web-read no longer shows the banner and the side note.
   * cascade layers: /lot87/layers.html imports reset.css into a layer and
     skips gone.css (supports() false); the unlayered rule keeps the block
-    the more specific layered rule hides.
+    the more specific layered rule hides; an unlayered revert-layer goes
+    back to the reset layer.
   * script walls: /lot87/wall.html is named an enablejs wall with its
     noscript fallback; /lot87/blocked (403) is named a block page.
   * autofill forget HOST NAME VALUE forgets one value; the GUI's Delete
@@ -174,9 +175,13 @@ def main():
             refuse(server_text(), ["CSS gone.css"], "supports() false sheet")
             read = lw.run(mon, proc, "web-read", "fin87", 30)
             need(read, ["layerkeep87"], "web-read layers")
-            refuse(read, ["layergone87"], "web-read layers")
+            # layerback87: the unlayered revert-layer goes back to the reset
+            # layer, which hides it (without revert-layer the block shows)
+            refuse(read, ["layergone87", "layerback87"], "web-read layers")
+            need(css, ["node p .back87 display none"], "web-css revert-layer")
             lw.run(mon, proc, "web-css off", "web-css off", 20)
-            say("layers: the unlayered rule beat the more specific layered one, gone.css not fetched")
+            say("layers: the unlayered rule beat the more specific layered one, revert-layer went back to "
+                "the reset layer, gone.css not fetched")
 
             # ---- script wall and block page
             wall = lw.run(mon, proc, "web-open %s/lot87/wall.html" % u, "web-compat", 60)
