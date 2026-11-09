@@ -11,6 +11,7 @@
 #define MOHHDY_P2P_H
 #include "p2p_bwe.h"
 #include "p2p_pace.h"
+#include "p2p_trend.h"
 #include "p2p_flow.h"
 #include "p2p_rtx.h"
 #include <stdint.h>
@@ -246,6 +247,9 @@ typedef struct {
     p2p_pace_t pace;
     uint32_t pace_ready;
     uint32_t paced_put_queued;
+    /* Lot 87 (US-068/US-073): delay-gradient overuse detector on the same
+     * probe acks; its cap bounds the pacing rate. Lab path only. */
+    p2p_trend_t trend;
 } p2p_qos_t;
 #define P2P_SHAPE_Q 8
 #define P2P_SHAPE_BODY 404

@@ -29,6 +29,8 @@ NEEDLES = (
     "arm glyph pages self-test ok greek cyrillic symbols (include/os_charset_pages.h)",
     "arm p2p bwe self-test ok late sample 128 (userspace/p2p_bwe.c)",
     "arm marks self-test ok vietnamese base letter (include/os_marks.h)",
+    "arm p2p trend self-test ok overuse cap 15515 (userspace/p2p_trend.c)",
+    "arm edid cea self-test ok 1920x1080@60 hdmi 1.0.0.0 (kernel/edid.c)",
     "arm gic + generic timer armed at 100 Hz",
     "arm tasks spawned 5 (USR mode)",
     "arm user reporter pid 0x00000001 running in USR mode via svc",

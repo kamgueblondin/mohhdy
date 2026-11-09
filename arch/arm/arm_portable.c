@@ -2,6 +2,7 @@
 #include "arm_portable.h"
 #include "aes_gcm.h"
 #include "edid.h"
+#include "p2p_trend.h"
 #include "p2p_flow.h"
 #include "p2p_rtx.h"
 #include "p2p_bwe.h"
@@ -191,6 +192,45 @@ int arm_port_marks(void) {
     return 1;
 }
 
+/* Lot 87: the delay-gradient detector. 100 probes on a steady path, then
+ * 60 whose queue grows 1 ms each: overuse once, and the cap is 85 % of
+ * the acked rate, 15515 B/s on i386 and x86-64 with the same source. */
+int arm_port_trend(void) {
+    p2p_trend_t t;
+    uint32_t i;
+    p2p_trend_init(&t, 0U);
+    for (i = 0; i < 100U; i++) p2p_trend_on_packet(&t, i * 10U, i * 10U + 20U, 200U);
+    if (t.state != P2P_TREND_NORMAL || t.overuses != 0U) return 0;
+    for (i = 0; i < 60U; i++) p2p_trend_on_packet(&t, 1000U + i * 10U, 1000U + i * 10U + 20U + i, 200U);
+    if (t.state != P2P_TREND_OVERUSE || t.overuses != 1U) return 0;
+    if (p2p_trend_cap(&t) != 15515U || t.acked_bps != 18253U) return 0;
+    return p2p_trend_limit(&t, 1000000U, t.last_update_ms + 10U) == 15515U;
+}
+
+/* Lot 87: a CEA-861 block with a native 1080p SVD and an HDMI vendor
+ * block; the parse picks 1920x1080@60 and physical address 1.0.0.0. */
+int arm_port_cea(void) {
+    static uint8_t b[EDID_BLOCK];
+    static const uint8_t body[] = { 0x02, 0x03, 0x00, 0xE0,
+                                    0x43, 0x90, 0x04, 0x03,          /* SVD: 16 native, 4, 3 */
+                                    0x65, 0x03, 0x0C, 0x00, 0x10, 0x00 }; /* HDMI 1.0.0.0 */
+    edid_cea_t c;
+    unsigned i, s = 0;
+    int w = 0, h = 0, hz = 0;
+    for (i = 0; i < EDID_BLOCK; i++) b[i] = 0;
+    for (i = 0; i < sizeof(body); i++) b[i] = body[i];
+    b[2] = (uint8_t)sizeof(body);
+    for (i = 0; i < EDID_BLOCK - 1; i++) s += b[i];
+    b[EDID_BLOCK - 1] = (uint8_t)((256u - (s & 0xFFu)) & 0xFFu);
+    if (edid_cea_parse(b, EDID_BLOCK, &c) != 0 || !c.ok) return 0;
+    if (c.svd_n != 3 || !c.svd_native[0] || c.vic[0] != 16 || !c.hdmi || c.phys_addr != 0x1000u) return 0;
+    if (!c.underscan || !c.basic_audio || !c.ycbcr444 || c.ycbcr422) return 0;
+    if (edid_cea_best(&c, &w, &h, &hz) != 0) return 0;
+    if (w != 1920 || h != 1080 || hz != 60) return 0;
+    b[5] ^= 1u;   /* a damaged block is refused */
+    return edid_cea_parse(b, EDID_BLOCK, &c) == -2;
+}
+
 uint32_t arm_port_selftest(void) {
     uint32_t m = 0;
     if (arm_port_aes_gcm()) m |= ARM_PORT_AES_GCM;
@@ -202,5 +242,7 @@ uint32_t arm_port_selftest(void) {
     if (arm_port_pages()) m |= ARM_PORT_PAGES;
     if (arm_port_bwe()) m |= ARM_PORT_BWE;
     if (arm_port_marks()) m |= ARM_PORT_MARKS;
+    if (arm_port_trend()) m |= ARM_PORT_TREND;
+    if (arm_port_cea()) m |= ARM_PORT_CEA;
     return m;
 }

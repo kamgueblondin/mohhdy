@@ -10,6 +10,8 @@ static void test_flow_reference(void) { TEST_ASSERT_EQUAL(1, arm_port_flow()); }
 static void test_aead_reference(void) { TEST_ASSERT_EQUAL(1, arm_port_aead()); }     /* Lot 72 */
 static void test_pages_reference(void) { TEST_ASSERT_EQUAL(1, arm_port_pages()); }   /* Lot 72 */
 static void test_bwe_reference(void) { TEST_ASSERT_EQUAL(1, arm_port_bwe()); }     /* Lot 84 */
+static void test_trend_reference(void) { TEST_ASSERT_EQUAL(1, arm_port_trend()); } /* Lot 87 */
+static void test_cea_reference(void) { TEST_ASSERT_EQUAL(1, arm_port_cea()); }     /* Lot 87 */
 static void test_mask(void) {
     TEST_ASSERT_EQUAL(ARM_PORT_ALL, arm_port_selftest());
     TEST_ASSERT_EQUAL(ARM_PORT_ALL, arm_port_selftest());   /* repeatable */
@@ -23,6 +25,8 @@ int main(void) {
     RUN_TEST(test_aead_reference);
     RUN_TEST(test_pages_reference);
     RUN_TEST(test_bwe_reference);
+    RUN_TEST(test_trend_reference);
+    RUN_TEST(test_cea_reference);
     RUN_TEST(test_mask);
     unity_print_results();
     unity_cleanup();
