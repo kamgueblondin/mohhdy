@@ -20,9 +20,25 @@ SRV=$!
 trap 'kill $SRV 2>/dev/null' EXIT
 i=0; while ! grep -q READY server.log 2>/dev/null; do i=$((i+1)); [ $i -gt 50 ] && { echo "FAIL: server"; cat server.log; exit 1; }; sleep 0.1; done
 pass=0; fail=0
+# 30 s bound without timeout(1): the Rust coreutils timeout on newer CI
+# runners refuses non-UTF-8 argv ("invalid UTF-8 was detected"), and the
+# form checks pass raw Latin-1 bytes (caf\351) on purpose.
+bounded() {
+    ./wf_fetch_host "$@" &
+    bp=$!
+    ( trap 'kill $bs 2>/dev/null; exit 0' TERM
+      sleep 30 & bs=$!
+      wait $bs && kill -9 $bp 2>/dev/null ) >/dev/null 2>&1 &
+    bw=$!
+    wait $bp
+    brc=$?
+    kill $bw 2>/dev/null
+    wait $bw 2>/dev/null
+    return $brc
+}
 check() {  # name expect-regex args...
     name=$1; want=$2; shift 2
-    out=$(timeout 30 ./wf_fetch_host "$@" 2>&1)
+    out=$(bounded "$@" 2>&1)
     if printf '%s\n' "$out" | grep -Eq "$want"; then pass=$((pass+1)); echo "  ok   $name"
     else fail=$((fail+1)); echo "  FAIL $name"; printf '%s\n' "$out" | sed 's/^/       /' | head -20; fi
 }
