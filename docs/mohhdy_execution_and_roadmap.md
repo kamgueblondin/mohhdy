@@ -7,6 +7,18 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 87 (9 November 2026)
+
+US-031 partial, phase3_complete=false. The reader fetches external
+stylesheets and one @import level and applies a larger bounded sheet.
+Script walls are named with a fallback URL. Google, measured again on
+2026-11-09, is still the enablejs page (93419 bytes); no JavaScript VM.
+Autofill works on the rendered page: click, a drawn list of up to three
+values, Down/Up/Esc. The boot EDID CEA extension is parsed (no DDC). A
+delay-gradient detector caps the P2P pacer on the probe path. US-068/073,
+US-076, US-080 and US-081 stay partial. US-078 and US-097 stay simule. See
+docs/lot87_plan.md.
+
 ### Lot 86 (9 November 2026)
 
 US-031 partial, phase3_complete=false. Page 5 draws the 16 Vietnamese

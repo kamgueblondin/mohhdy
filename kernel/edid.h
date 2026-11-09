@@ -112,4 +112,36 @@ int edid_vic_mode(int vic, int *w, int *h, int *hz, int *interlaced);
 int edid_cea_best(const edid_cea_t *c, int *w, int *h, int *hz);
 /* "cea ok rev 3 svd 4 best 1920x1080@60 audio 1 hdmi 1.0.0.0 dtd 1" */
 int edid_cea_describe(const edid_cea_t *c, char *out, int cap);
+
+/* Lot 87 (US-080): the CEA facts a user task may read (SYS_DISPLAY_INFO),
+ * in fixed-width fields. status: 0 parsed, 1 no extension, 2 an
+ * extension that is not CEA-861, 3 a CEA block that failed to parse. */
+#define EDID_SUM_VICS 8
+#define EDID_SUM_UNDERSCAN 0x01u
+#define EDID_SUM_AUDIO 0x02u
+#define EDID_SUM_YCC444 0x04u
+#define EDID_SUM_YCC422 0x08u
+#define EDID_SUM_HDMI 0x10u
+#define EDID_SUM_HF 0x20u
+#define EDID_SUM_HDR 0x40u
+#define EDID_SUM_VCDB 0x80u
+typedef struct {
+    uint8_t status, rev, flags, svd_n;
+    uint8_t native_vic;          /* first SVD with the native bit, 0 none */
+    uint8_t sad_n, sad_max_ch;   /* audio descriptors, most channels */
+    uint8_t dtd_n, y420_n, speakers, hdr_eotf;
+    uint8_t ext_tag;             /* first extension tag when status is 2 */
+    uint16_t best_w, best_h;
+    uint8_t best_hz;
+    uint8_t best_from;           /* 1 native SVD, 2 DTD, 3 largest VIC, 0 none */
+    uint16_t phys_addr;          /* HDMI a.b.c.d, 0 when no HDMI block */
+    uint16_t tmds_mhz;           /* HDMI or HF max TMDS clock, 0 not given */
+    uint8_t vic[EDID_SUM_VICS];  /* first SVDs, in block order */
+} edid_cea_sum_t;
+/* status as above; tag is the extension tag edid_parse_ext reported */
+void edid_cea_summarize(const edid_cea_t *c, int parse_rc, int tag, edid_cea_sum_t *s);
+/* 1 when the sink looks like a television: an HDMI block, and a TV-only
+ * hint (underscan, a native VIC among the CTA TV formats, or no
+ * physical size in the base block). */
+int edid_cea_is_tv(const edid_cea_sum_t *s, int size_mm_w);
 #endif

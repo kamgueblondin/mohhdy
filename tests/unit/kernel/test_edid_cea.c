@@ -133,6 +133,118 @@ static void test_tv_block(void) {
     TEST_ASSERT_EQUAL(60, hz);
 }
 
+
+/* Lot 87: the summary SYS_DISPLAY_INFO carries */
+static void test_summary_tv(void) {
+    edid_cea_t c;
+    edid_info_t e;
+    edid_cea_sum_t s;
+    int tag = 0, rc;
+    tv_block();
+    rc = edid_parse_ext(g_x, (int)sizeof(g_x), &e, &c, &tag);
+    TEST_ASSERT_EQUAL(0, rc);
+    edid_cea_summarize(&c, rc, tag, &s);
+    TEST_ASSERT_EQUAL(0, s.status);
+    TEST_ASSERT_EQUAL(3, s.rev);
+    TEST_ASSERT_EQUAL(EDID_SUM_UNDERSCAN | EDID_SUM_AUDIO | EDID_SUM_YCC444 | EDID_SUM_YCC422 |
+                      EDID_SUM_HDMI | EDID_SUM_HF | EDID_SUM_HDR | EDID_SUM_VCDB, s.flags);
+    TEST_ASSERT_EQUAL(5, s.svd_n);
+    TEST_ASSERT_EQUAL(16, s.native_vic);
+    TEST_ASSERT_EQUAL(16, s.vic[0]);
+    TEST_ASSERT_EQUAL(97, s.vic[4]);
+    TEST_ASSERT_EQUAL(0, s.vic[5]);
+    TEST_ASSERT_EQUAL(2, s.sad_n);
+    TEST_ASSERT_EQUAL(6, s.sad_max_ch);
+    TEST_ASSERT_EQUAL(1, s.dtd_n);
+    TEST_ASSERT_EQUAL(2, s.y420_n);
+    TEST_ASSERT_EQUAL(0x0F, s.speakers);
+    TEST_ASSERT_EQUAL(5, s.hdr_eotf);
+    TEST_ASSERT_EQUAL(1920, s.best_w);
+    TEST_ASSERT_EQUAL(1080, s.best_h);
+    TEST_ASSERT_EQUAL(60, s.best_hz);
+    TEST_ASSERT_EQUAL(1, s.best_from);
+    TEST_ASSERT_EQUAL(0x1000, s.phys_addr);
+    TEST_ASSERT_EQUAL(600, s.tmds_mhz);            /* the HF block's clock is higher */
+    TEST_ASSERT_EQUAL(1, edid_cea_is_tv(&s, 600));  /* underscan */
+}
+
+static void test_summary_monitor_and_sources(void) {
+    static const uint8_t svd[] = { 4, 16, 97 };    /* no native bit */
+    static const uint8_t hdmi[] = { 0x03, 0x0C, 0x00, 0x21, 0x00 };   /* 2.1.0.0 */
+    edid_cea_t c;
+    edid_info_t e;
+    edid_cea_sum_t s;
+    int tag = 0, rc;
+    /* a DTD and no native SVD: best is the DTD */
+    base(1);
+    cea_begin(3, 0x40);
+    blk(2, svd, (int)sizeof(svd));
+    blk(3, hdmi, (int)sizeof(hdmi));
+    cea_end(1);
+    rc = edid_parse_ext(g_x, (int)sizeof(g_x), &e, &c, &tag);
+    TEST_ASSERT_EQUAL(0, rc);
+    edid_cea_summarize(&c, rc, tag, &s);
+    TEST_ASSERT_EQUAL(0, s.native_vic);
+    TEST_ASSERT_EQUAL(1920, s.best_w);
+    TEST_ASSERT_EQUAL(2, s.best_from);
+    TEST_ASSERT_EQUAL(0x2100, s.phys_addr);
+    TEST_ASSERT_EQUAL(EDID_SUM_AUDIO | EDID_SUM_HDMI, s.flags);
+    TEST_ASSERT_EQUAL(0, s.tmds_mhz);
+    /* HDMI, no underscan, no native TV VIC, a physical size: a monitor */
+    TEST_ASSERT_EQUAL(0, edid_cea_is_tv(&s, 600));
+    /* the same sink without a physical size (a TV or a projector) */
+    TEST_ASSERT_EQUAL(1, edid_cea_is_tv(&s, 0));
+    /* no DTD either: the largest VIC (2160p) */
+    base(1);
+    cea_begin(3, 0x40);
+    blk(2, svd, (int)sizeof(svd));
+    cea_end(0);
+    rc = edid_parse_ext(g_x, (int)sizeof(g_x), &e, &c, &tag);
+    edid_cea_summarize(&c, rc, tag, &s);
+    TEST_ASSERT_EQUAL(3840, s.best_w);
+    TEST_ASSERT_EQUAL(3, s.best_from);
+    TEST_ASSERT_EQUAL(0, s.phys_addr);
+    /* without an HDMI block nothing is a TV */
+    TEST_ASSERT_EQUAL(0, edid_cea_is_tv(&s, 0));
+}
+
+static void test_summary_status(void) {
+    edid_cea_t c;
+    edid_info_t e;
+    edid_cea_sum_t s;
+    int tag = 0, rc;
+    /* no extension at all */
+    base(0);
+    rc = edid_parse_ext(g_x, (int)sizeof(g_x), &e, &c, &tag);
+    TEST_ASSERT_EQUAL(-1, rc);
+    edid_cea_summarize(&c, rc, tag, &s);
+    TEST_ASSERT_EQUAL(1, s.status);
+    TEST_ASSERT_EQUAL(0, edid_cea_is_tv(&s, 0));
+    /* an extension with another tag (0x70 DisplayID) */
+    base(1);
+    memset(g_x + EDID_BLOCK, 0, EDID_BLOCK);
+    g_x[EDID_BLOCK] = 0x70;
+    sum_fix(g_x + EDID_BLOCK);
+    rc = edid_parse_ext(g_x, (int)sizeof(g_x), &e, &c, &tag);
+    TEST_ASSERT_EQUAL(1, rc);
+    edid_cea_summarize(&c, rc, tag, &s);
+    TEST_ASSERT_EQUAL(2, s.status);
+    TEST_ASSERT_EQUAL(0x70, s.ext_tag);
+    /* a CEA block with a bad checksum: refused */
+    tv_block();
+    g_x[EDID_BLOCK + 127] ^= 0x55;
+    rc = edid_parse_ext(g_x, (int)sizeof(g_x), &e, &c, &tag);
+    TEST_ASSERT_EQUAL(1, rc);
+    edid_cea_summarize(&c, rc, tag, &s);
+    TEST_ASSERT_EQUAL(3, s.status);
+    TEST_ASSERT_EQUAL(0, s.best_w);
+    /* null arguments do not crash */
+    edid_cea_summarize(0, 0, 0, &s);
+    TEST_ASSERT_EQUAL(2, s.status);
+    edid_cea_summarize(&c, 0, 0, 0);
+    TEST_ASSERT_EQUAL(0, edid_cea_is_tv(0, 0));
+}
+
 static void test_describe(void) {
     edid_cea_t c;
     edid_info_t e;
@@ -336,6 +448,9 @@ static void test_unknown_blocks(void) {
 int main(void) {
     unity_init();
     RUN_TEST(test_tv_block);
+    RUN_TEST(test_summary_tv);
+    RUN_TEST(test_summary_monitor_and_sources);
+    RUN_TEST(test_summary_status);
     RUN_TEST(test_describe);
     RUN_TEST(test_best_without_native);
     RUN_TEST(test_vic_table);

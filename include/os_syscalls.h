@@ -2131,7 +2131,28 @@ typedef struct {
     uint16_t serial_lo, serial_hi;  /* binary serial, little endian halves */
     uint16_t chroma_wx, chroma_wy;  /* white point 0..1023, 0 if the bytes were 0 */
     char serial_text[14];
+    /* Lot 87: the CEA-861 extension of the same boot read (kernel/edid.h
+     * edid_cea_sum_t). cea_status 0 parsed, 1 no extension, 2 not CEA,
+     * 3 CEA block refused. The mode is not applied; DDC is not driven. */
+    uint8_t cea_status, cea_rev, cea_flags, cea_svd_n;
+    uint8_t cea_native_vic, cea_sad_n, cea_sad_max_ch, cea_dtd_n;
+    uint8_t cea_y420_n, cea_speakers, cea_hdr_eotf, cea_ext_tag;
+    uint16_t cea_best_w, cea_best_h;
+    uint8_t cea_best_hz, cea_best_from;   /* 1 native SVD, 2 DTD, 3 largest VIC */
+    uint16_t cea_phys_addr;               /* HDMI a.b.c.d nibbles */
+    uint16_t cea_tmds_mhz;
+    uint8_t cea_vic[8];
+    uint8_t cea_tv;                       /* edid_cea_is_tv */
+    uint8_t cea_pad[3];
 } os_display_info_t;
+#define OS_DISPLAY_CEA_UNDERSCAN 0x01u
+#define OS_DISPLAY_CEA_AUDIO 0x02u
+#define OS_DISPLAY_CEA_YCC444 0x04u
+#define OS_DISPLAY_CEA_YCC422 0x08u
+#define OS_DISPLAY_CEA_HDMI 0x10u
+#define OS_DISPLAY_CEA_HF 0x20u
+#define OS_DISPLAY_CEA_HDR 0x40u
+#define OS_DISPLAY_CEA_VCDB 0x80u
 #define OS_OUTCAP_BAD (-1)
 #define OS_OUTCAP_BUSY (-2)
 typedef struct {

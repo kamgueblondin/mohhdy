@@ -498,3 +498,72 @@ int edid_cea_describe(const edid_cea_t *c, char *o, int cap) {
     n = put_u(o, cap, n, (unsigned)c->dtd_n);
     return n;
 }
+
+/* ---- Lot 87: the summary SYS_DISPLAY_INFO carries -------------------- */
+
+static uint8_t clamp8(int v) { return (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v); }
+
+void edid_cea_summarize(const edid_cea_t *c, int parse_rc, int tag, edid_cea_sum_t *s) {
+    int i, w = 0, h = 0, hz = 0;
+    uint8_t *b = (uint8_t *)s;
+    if (!s) return;
+    for (i = 0; i < (int)sizeof(*s); i++) b[i] = 0;
+    s->ext_tag = clamp8(tag);
+    if (parse_rc < 0) { s->status = 1; return; }
+    if (parse_rc > 0 || !c || !c->ok) { s->status = (uint8_t)(tag == 0x02 ? 3 : 2); return; }
+    s->status = 0;
+    s->rev = clamp8(c->revision);
+    if (c->underscan) s->flags |= EDID_SUM_UNDERSCAN;
+    if (c->basic_audio) s->flags |= EDID_SUM_AUDIO;
+    if (c->ycbcr444) s->flags |= EDID_SUM_YCC444;
+    if (c->ycbcr422) s->flags |= EDID_SUM_YCC422;
+    if (c->hdmi) s->flags |= EDID_SUM_HDMI;
+    if (c->hf) s->flags |= EDID_SUM_HF;
+    if (c->hdr) s->flags |= EDID_SUM_HDR;
+    if (c->vcdb) s->flags |= EDID_SUM_VCDB;
+    s->svd_n = clamp8(c->svd_n);
+    for (i = 0; i < c->svd_n && i < EDID_CEA_SVD; i++) {
+        if (i < EDID_SUM_VICS) s->vic[i] = c->vic[i];
+        if (c->svd_native[i] && !s->native_vic) s->native_vic = c->vic[i];
+    }
+    s->sad_n = clamp8(c->sad_n);
+    for (i = 0; i < c->sad_n && i < EDID_CEA_SAD; i++)
+        if (c->sad_channels[i] > s->sad_max_ch) s->sad_max_ch = clamp8(c->sad_channels[i]);
+    s->dtd_n = clamp8(c->dtd_n);
+    s->y420_n = clamp8(c->y420_n);
+    s->speakers = clamp8(c->speakers);
+    s->hdr_eotf = clamp8(c->hdr_eotf);
+    if (c->hdmi) s->phys_addr = c->phys_addr;
+    {
+        int t = c->hf_tmds_mhz > c->hdmi_tmds_mhz ? c->hf_tmds_mhz : c->hdmi_tmds_mhz;
+        s->tmds_mhz = (uint16_t)(t < 0 ? 0 : t > 65535 ? 65535 : t);
+    }
+    if (edid_cea_best(c, &w, &h, &hz) == 0) {
+        s->best_w = (uint16_t)w;
+        s->best_h = (uint16_t)h;
+        s->best_hz = clamp8(hz);
+        /* the same order edid_cea_best uses */
+        s->best_from = 3;
+        if (s->native_vic) {
+            int nw = 0, nh = 0, nz = 0, il = 0;
+            if (edid_vic_mode(s->native_vic, &nw, &nh, &nz, &il) == 0 && !il && nw == w && nh == h && nz == hz)
+                s->best_from = 1;
+        }
+        if (s->best_from == 3 && c->dtd_n > 0 && c->dtd_w[0] == w && c->dtd_h[0] == h && c->dtd_hz[0] == hz)
+            s->best_from = 2;
+    }
+}
+
+int edid_cea_is_tv(const edid_cea_sum_t *s, int size_mm_w) {
+    if (!s || s->status != 0 || !(s->flags & EDID_SUM_HDMI)) return 0;
+    if (s->flags & EDID_SUM_UNDERSCAN) return 1;
+    /* CTA TV formats: 480p/576p, 720p, 1080i/p, 2160p families */
+    switch (s->native_vic) {
+    case 2: case 3: case 4: case 5: case 16: case 17: case 18: case 19: case 20: case 31:
+    case 93: case 94: case 95: case 96: case 97:
+        return 1;
+    default:
+        break;
+    }
+    return size_mm_w == 0;
+}

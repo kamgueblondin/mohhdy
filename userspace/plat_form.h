@@ -52,4 +52,14 @@ int plat_form_physical(const os_display_info_t* d, int* diag_tenths, char* out, 
  * Writes nothing and returns 0 when every extra field is zero, so a
  * display with only the old size line stays on that one line. */
 int plat_form_edid_detail(const os_display_info_t* d, char* out, int cap);
+/* Lot 87 (US-080): the CEA-861 line of display-info.
+ * "display cea rev 3 svd 6 vics 16,4,... best 1920x1080@60 (native) audio
+ *  2ch hdmi 1.0.0.0 tmds 340 hdr ycc444 underscan sink tv|monitor"
+ * or "display cea none" / "display cea not-cea tag 0xNN" /
+ * "display cea refused". Returns the length. */
+int plat_form_cea_line(const os_display_info_t* d, char* out, int cap);
+/* Lot 87: the UI scale hint for a television sink (10-foot viewing):
+ * 0 when the sink is not a TV or nothing is known, else a quarter-step
+ * scale (4 = 1.0) at least 6 (1.5x) and larger for a 4K panel. */
+int plat_form_tv_scale_q(const os_display_info_t* d);
 #endif
