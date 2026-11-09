@@ -59,8 +59,11 @@ ALL_TEST_BINS = $(KERNEL_TEST_BINS) $(USERSPACE_TEST_BINS) $(FS_TEST_BINS) \
 all: $(ALL_TEST_BINS)
 	@echo "All test binaries compiled successfully"
 
-# Cible par défaut
-test: all
+# The runner recompiles each test and executes that copy (see
+# scripts/run_all_tests.sh). Building $(ALL_TEST_BINS) first only repeated
+# that compile. On the coverage job the extra pass pushed qemu-platform
+# past the 15 minute limit after the line count had already passed.
+test:
 	@echo "Running complete test suite..."
 	@bash ./scripts/run_all_tests.sh
 
