@@ -20,6 +20,7 @@
 #include "wf_formfill.h"
 #include "fsops.h"
 #include "wf_csslink.h"
+#include "wf_compat.h"
 #include "wf_sitecss.h"
 
 extern const fsops_io_t shell_fs_io;
@@ -238,6 +239,8 @@ static char g_extcss[WF_SITE_CSS];
 static wf_cssl_stats_t g_css_st;
 static int g_css_ran;
 static char g_load_dir[96];
+/* Lot 87: script wall / block page reading of the presented page */
+static wf_compat_t g_compat;
 
 /* wf_csslink callback: web-load reads a linked sheet from the directory of
  * the saved page (same file name); a fetched page gets it from the network
@@ -329,6 +332,7 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
                                      PAGE_NODE_BUDGET, &g_forms);
         wf_html_set_sitecss(0);
         wf_html_set_extcss(0, 0);
+        wf_compat_scan_ex((const char *)g_body, g_res.body_len, g_res.status, &g_compat);
         if (g_full_n > 0 && wf_section_index(g_full, g_full_n, &g_sec) > 0) {
             g_page_ok = 1;
             g_cur = 0;
@@ -350,6 +354,7 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
             wf_html_set_sitecss(0);
         }
     } else {
+        for (i = 0; i < (int)sizeof(g_compat); i++) ((char *)&g_compat)[i] = 0;
         /* text/plain and others: shown escaped in a <pre> */
         int k = 0, lim = g_res.body_len;
         const char* head = "<html><head><title>texte</title></head><body><pre>";
@@ -382,6 +387,16 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
                 scat(status, st_max, " images "); scat_int(status, st_max, g_img_st.shown);
                 scat(status, st_max, "/"); scat_int(status, st_max, g_img_st.found);
                 scat(status, st_max, " favicon "); scat(status, st_max, g_wi.atlas.slot[0].w ? "ok" : "none");
+            }
+        }
+        /* Lot 87: a script wall or block page is said, never shown as a working page */
+        if (g_compat.wall_kind) {
+            char adv[300];
+            scat(status, st_max, " wall ");
+            scat(status, st_max, wf_compat_wall_name(g_compat.wall_kind));
+            if (wf_compat_advice(&g_compat, adv, (int)sizeof(adv)) > 0) {
+                scat(status, st_max, "\n");
+                scat(status, st_max, adv);
             }
         }
     }
