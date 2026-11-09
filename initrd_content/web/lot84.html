@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Lot 84</title>
+<style>
+body{margin:8px;font-family:monospace}
+#df{display:grid;width:90px;grid-template-columns:30px 30px 30px;grid-template-rows:masonry;masonry-auto-flow:definite-first next}
+#df div{background:#888}
+#cf{display:grid;width:60px;grid-auto-flow:column;grid-template-columns:30px 30px;grid-template-rows:masonry;margin-top:8px}
+#cf div{background:#666}
+#bw{width:200px;margin-top:8px}
+#ba{border-left:min(2%, 6px) solid #000}
+#bb{height:10px;background:#ccc}
+#ig{position:relative;display:grid;width:200px;height:40px;grid-template-columns:100px 100px;grid-template-rows:masonry;margin-top:8px}
+#ia{position:absolute;left:min(10%, 30px);top:max(10%, 2px);width:8px;height:8px;background:#000}
+#ic{height:10px;background:#aaa}
+</style></head>
+<body>
+<!-- Lot 84: definite-first masonry, packed row height under column flow, border percentage math, absolute inset math. -->
+<h1>Lot 84</h1>
+<div id="df"><div id="d0" style="height:10px;grid-column:2"></div><div id="d1" style="height:10px"></div><div id="d2" style="height:14px;grid-column:1"></div><div id="d3" style="height:6px"></div></div>
+<div id="cf"><div id="f0" style="height:10px"></div><div id="f1" style="height:10px"></div><div id="f2" style="height:10px"></div><div id="f3" style="height:10px"></div></div>
+<div id="bw"><div id="ba"><div id="bb"></div></div></div>
+<div id="ig"><div id="ia"></div><div id="ic"></div></div>
+</body></html>

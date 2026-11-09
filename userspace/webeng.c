@@ -1222,6 +1222,23 @@ static void spacing_node(we_node_t *n, int cw) {
         if (v < -2000) v = -2000;
         if (bit < 4) n->margin[bit] = (int16_t)v; else n->padding[bit - 4] = (int16_t)v;
     }
+    /* Lot 84: border widths with a percentage or pooled math. The 0..8 cap
+     * is the same one edge_w already applies to px widths. */
+    if (n->border_pct) {
+        int side;
+        for (side = 0; side < 4; side++) if (n->border_pct & (1u << side)) {
+            int t = n->border_spec[side], v = 0;
+            if (t <= WE_SPACING_MATH) {
+                int idx = WE_SPACING_MATH - t;
+                if (!track_pool_doc || idx >= track_pool_doc->ntrack_pool ||
+                    math_eval(&track_pool_doc->track_pool[idx], cw, &v)) v = 0;
+            } else v = t < 0 ? -((-t * cw) / 1000) : (t * cw) / 1000;
+            if (v < 0) v = 0;
+            if (v > 8) v = 8;
+            n->edge_w[side] = (int8_t)v;
+        }
+        n->own_edges = 1;
+    }
 }
 
 /* Lot 62 round 2: grid items resolve against their grid area width
@@ -2969,42 +2986,56 @@ static int border_value_index(int count, int side) {
     return side;
 }
 
+static int border_width_token(const char *v, int len, int *px, int *spec);
+static void border_width_apply(we_node_t *n, int side, int px, int spec);
+
 static int border_edge_decl(we_node_t *n, int side, const char *v, int vl) {
-    int a[4], l[4], c = tokens(v, vl, a, l), k, px, w = -1, style = 0, has_color = 0;
+    int a[4], l[4], c = tokens(v, vl, a, l), k, px, spec = WE_NO_PCT, w = -1, style = 0, has_color = 0;
     uint32_t col = 0;
     if (c < 1 || c > 3 || tokens_more(v, vl, a, l, c)) return -1;
     for (k = 0; k < c; k++) {
         int code = border_style_code(v + a[k], l[k]);
+        int tw, ts;
         if (code) { if (style) return -1; style = code; }
         else if (parse_color(v + a[k], l[k], &col) == 0) { if (has_color) return -1; has_color = 1; }
-        else if (parse_len(v + a[k], l[k], &px, 0) == 0 && px >= 0 && px <= 64) { if (w >= 0) return -1; w = px; }
+        else if (border_width_token(v + a[k], l[k], &tw, &ts) == 0) { if (w >= 0) return -1; w = tw; spec = ts; px = tw; }
         else return -1;
     }
-    n->edge_w[side] = (int8_t)(w < 0 ? -1 : w > 8 ? 8 : w);
+    if (w >= 0) border_width_apply(n, side, px, spec);
+    else { n->edge_w[side] = -1; n->border_pct = (uint8_t)(n->border_pct & ~(1u << side)); }
     n->edge_style[side] = (uint8_t)style;
     if (has_color) { n->edge_color[side] = col; n->edge_color_set = (uint8_t)(n->edge_color_set | (1u << side)); }
     else n->edge_color_set = (uint8_t)(n->edge_color_set & ~(1u << side));
+    (void)px;
     return 0;
 }
 
 /* kind 0 style, 1 width, 2 color; one value sets the uniform property. */
 static int border_list_decl(we_node_t *n, int kind, const char *v, int vl) {
-    int a[4], l[4], c = tokens(v, vl, a, l), k, side, vals[4];
+    int a[4], l[4], c = tokens(v, vl, a, l), k, side, vals[4], specs[4];
     uint32_t cols[4];
     if (c < 1 || tokens_more(v, vl, a, l, c)) return -1;
     for (k = 0; k < c; k++) {
+        specs[k] = WE_NO_PCT;
         if (kind == 0) { vals[k] = border_style_code(v + a[k], l[k]); if (!vals[k]) return -1; }
-        else if (kind == 1) { if (parse_len(v + a[k], l[k], &vals[k], 0) || vals[k] < 0 || vals[k] > 64) return -1; }
+        else if (kind == 1) { if (border_width_token(v + a[k], l[k], &vals[k], &specs[k])) return -1; }
         else if (parse_color(v + a[k], l[k], &cols[k])) return -1;
+    }
+    if (kind == 1 && c == 1 && specs[0] == WE_NO_PCT) {
+        /* Uniform px keeps the historical border field (paint caps at 8). */
+        n->border = (int16_t)vals[0];
+        n->border_pct = 0;
+        for (side = 0; side < 4; side++) n->edge_w[side] = -1;
+        return 0;
     }
     for (side = 0; side < 4; side++) {
         k = border_value_index(c, side);
         if (c == 1) {
             if (kind == 0) { n->border_style = (uint8_t)vals[0]; n->edge_style[side] = 0; }
-            else if (kind == 1) { n->border = (int16_t)vals[0]; n->edge_w[side] = -1; }
+            else if (kind == 1) { n->border = 0; border_width_apply(n, side, vals[k], specs[k]); }
             else { n->border_color = cols[0]; n->edge_color_set = 0; }
         } else if (kind == 0) n->edge_style[side] = (uint8_t)vals[k];
-        else if (kind == 1) n->edge_w[side] = (int8_t)(vals[k] > 8 ? 8 : vals[k]);
+        else if (kind == 1) border_width_apply(n, side, vals[k], specs[k]);
         else { n->edge_color[side] = cols[k]; n->edge_color_set = (uint8_t)(n->edge_color_set | (1u << side)); }
     }
     return 0;
@@ -3029,8 +3060,9 @@ static int border_edge_part(we_node_t *n, int side, int part, const char *v, int
     int px, code;
     uint32_t col;
     if (part == 1) {
-        if (parse_len(v, vl, &px, 0) || px < 0 || px > 64) return -1;
-        n->edge_w[side] = (int8_t)(px > 8 ? 8 : px);
+        int spec = WE_NO_PCT;
+        if (border_width_token(v, vl, &px, &spec)) return -1;
+        border_width_apply(n, side, px, spec);
     } else if (part == 2) {
         if (!(code = border_style_code(v, vl))) return -1;
         n->edge_style[side] = (uint8_t)code;
@@ -3072,8 +3104,35 @@ static int border_logical_pair(we_node_t *n, const char *prop, const char *v, in
 
 static void border_edges_reset(we_node_t *n) {
     int side;
-    for (side = 0; side < 4; side++) { n->edge_w[side] = -1; n->edge_style[side] = 0; }
+    for (side = 0; side < 4; side++) { n->edge_w[side] = -1; n->edge_style[side] = 0; n->border_spec[side] = 0; }
     n->edge_color_set = 0;
+    n->border_pct = 0;
+}
+
+/* Lot 84: a border width is a length (0..64, stored capped at 8 on a side),
+ * a percentage, or min()/max()/clamp()/calc() with a percentage. */
+static int border_width_token(const char *v, int len, int *px, int *spec) {
+    int pct = WE_NO_PCT;
+    if (spacing_token(v, len, 1, px, &pct)) return -1;
+    if (pct == WE_NO_PCT) {
+        if (*px > 64) return -1;
+        *spec = WE_NO_PCT;
+        return 0;
+    }
+    *px = 0;
+    *spec = pct;
+    return 0;
+}
+
+static void border_width_apply(we_node_t *n, int side, int px, int spec) {
+    if (spec == WE_NO_PCT) {
+        n->border_pct = (uint8_t)(n->border_pct & ~(1u << side));
+        n->edge_w[side] = (int8_t)(px > 8 ? 8 : px);
+    } else {
+        n->border_pct = (uint8_t)(n->border_pct | (1u << side));
+        n->border_spec[side] = (int16_t)spec;
+        n->edge_w[side] = 0;
+    }
 }
 
 /* ---------- Lot 62: transform parsing ----------
@@ -4804,11 +4863,12 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         for (k = 0; ok && k < c; k++) {
             const char *t = v + a[k];
             if (mode < 0 && (value_is(t, l[k], "pack") || value_is(t, l[k], "next"))) mode = value_is(t, l[k], "next");
-            else if (!order && (value_is(t, l[k], "definite-first") || value_is(t, l[k], "ordered"))) order = 1;
+            else if (!order && value_is(t, l[k], "definite-first")) order = 1;
+            else if (!order && value_is(t, l[k], "ordered")) order = 2;
             else ok = 0;
         }
         if (ok && mode < 0) mode = 0;
-        if (ok) n->masonry_next = (uint8_t)mode;
+        if (ok) { n->masonry_next = (uint8_t)mode; n->masonry_definite = (uint8_t)(order == 1); }
         else diag(d, "masonry auto flow refused", -1);
     } else if (w_eq(prop, "gap")) {
         if (gap_declaration(n, v, vl)) diag(d, "gap refused", -1);
@@ -4936,12 +4996,18 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (r == 0) { if (pct) { n->width_pct = (int16_t)pct; n->width = -1; } else { n->width = (int16_t)px; n->width_pct = 0; } }
     } else if (w_eq(prop, "height")) {
         int number, percent;
-        if (value_is(v, vl, "auto")) { n->height = -1; n->height_percent = 0; }
+        if (value_is(v, vl, "auto")) { n->height = -1; n->height_percent = 0; n->height_intrinsic = 0; }
+        else if (value_is(v, vl, "min-content") || value_is(v, vl, "max-content")) {
+            /* Lot 84: content heights. Masonry rows measure the packed column. */
+            n->height = -1; n->height_percent = 0;
+            n->height_intrinsic = (uint8_t)(value_is(v, vl, "min-content") ? 1 : 2);
+        }
         else if (parse_dimension(v, vl, &number, &percent)) diag(d, "height refused", -1);
         else {
             n->height = percent ? -1 : (int16_t)number;
             n->height_pct = (int16_t)number;
             n->height_percent = (uint8_t)percent;
+            n->height_intrinsic = 0;
         }
     } else if (w_eq(prop, "min-height") || w_eq(prop, "max-height")) {
         int number, percent;
@@ -4956,15 +5022,20 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             n->max_height_percent = (uint8_t)percent;
         }
     } else if (w_eq(prop, "border")) {
-        int a[4], l[4], c = tokens(v, vl, a, l);
+        int a[4], l[4], c = tokens(v, vl, a, l), spec = WE_NO_PCT, saw = 0, side;
         for (k = 0; k < c; k++) {
-            int code = border_style_code(v + a[k], l[k]);
+            int code = border_style_code(v + a[k], l[k]), tw, ts;
             if (code) n->border_style = (uint8_t)code;
             else if (parse_color(v + a[k], l[k], &col) == 0) n->border_color = col;
-            else if (parse_len(v + a[k], l[k], &px, 0) == 0) n->border = (int16_t)px;
+            else if (border_width_token(v + a[k], l[k], &tw, &ts) == 0) { px = tw; spec = ts; saw = 1; }
         }
-        if (c == 1 && w_ieq_n(v, vl, "none")) n->border = 0;
+        if (c == 1 && w_ieq_n(v, vl, "none")) { n->border = 0; saw = 0; }
         border_edges_reset(n);
+        if (saw && spec == WE_NO_PCT) n->border = (int16_t)px;
+        else if (saw) {
+            n->border = 0;
+            for (side = 0; side < 4; side++) border_width_apply(n, side, px, spec);
+        }
     } else if (w_eq(prop, "border-top") || w_eq(prop, "border-right") ||
                w_eq(prop, "border-bottom") || w_eq(prop, "border-left")) {
         int side = w_eq(prop, "border-top") ? 0 : w_eq(prop, "border-right") ? 1 : w_eq(prop, "border-bottom") ? 2 : 3;
@@ -5145,7 +5216,8 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->sub_names[0][0] = n->sub_names[1][0] = 0;
         n->auto_mode[0] = n->auto_mode[1] = n->tpl_count[0] = n->tpl_count[1] = 0;
         n->subgrid[0] = n->subgrid[1] = 0;
-        n->inline_outer = 0; n->masonry = 0; n->masonry_next = 0;
+        n->inline_outer = 0; n->masonry = 0; n->masonry_next = 0; n->masonry_definite = 0;
+        n->height_intrinsic = 0;
         n->sub_gap[0] = n->sub_gap[1] = 0;
         n->track_base[0] = n->track_base[1] = -1;
         n->gap_pct[0] = n->gap_pct[1] = 0;
@@ -8642,6 +8714,16 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     content_w = bw - box_edge(n, 1) - box_edge(n, 3) - n->padding[1] - n->padding[3];
     if (content_w < WE_CHAR_W) content_w = WE_CHAR_W;
     spacing_resolve(d, idx, content_w, 0);
+    /* Lot 84: height:min-content / max-content on masonry rows is the packed
+     * column height at that intrinsic inline size, not the sum of items. */
+    if (n->height_intrinsic && n->display == WE_DISP_GRID && n->masonry == 1 && resolved_height[idx] < 0) {
+        int iw = n->height_intrinsic == 1 ? n->min_content : n->max_content, mh;
+        if (iw < 1) iw = content_w;
+        mh = measure_grid(d, idx, iw, depth);
+        if (mh < 0) mh = 0;
+        if (mh > WE_LAYOUT_MAX) mh = WE_LAYOUT_MAX;
+        resolved_height[idx] = (int16_t)mh;
+    }
     {
         int c;
         for (c = n->first; c >= 0; c = d->nodes[c].next)
@@ -9443,12 +9525,18 @@ static int masonry_rows(we_doc_t *d, int idx, we_track_work_t *items, we_grid_wo
                         int count, int cols, int cy, int gy, int depth) {
     const we_node_t *n = &d->nodes[idx];
     int running[WE_TRACKS_MAX], k, c, bottom = 0, rows = 0, cursor = 0;
+    int passes = n->masonry_definite ? 2 : 1, pass;
     for (c = 0; c < WE_TRACKS_MAX; c++) running[c] = 0;
     if (cols < 1) cols = 1;
+    /* Lot 84: definite-first places items with an explicit column start
+     * before the others. The next cursor continues across both passes. */
+    for (pass = 0; pass < passes; pass++)
     for (k = 0; k < count && rows < WE_GRID_ROWS_MAX - 1; k++) {
         we_node_t *child = &d->nodes[items->node[k]];
         int span = child->grid_col_span < 1 ? 1 : child->grid_col_span, best, top, width, height, j;
+        int definite = child->grid_col_start != 0;
         if (work->row[k] < 0) continue;
+        if (passes == 2 && (pass == 0) != definite) continue;
         if (span > cols) span = cols;
         best = masonry_pick(running, cols, span, child->grid_col_start, n->masonry_next, &cursor, &top);
         child->grid_row_span = 1;
@@ -9482,6 +9570,7 @@ static int masonry_columns(we_doc_t *d, int idx, we_track_work_t *items, we_grid
                            int count, int cx, int cy, int cw, int gx, int gy, int depth) {
     const we_node_t *n = &d->nodes[idx];
     int running[WE_TRACKS_MAX], fixed[WE_TRACKS_MAX], rows = n->grid_rows ? n->grid_rows : 1, k, r, y, widest = 0, cursor = 0;
+    int passes = n->masonry_definite ? 2 : 1, pass;
     if (rows > WE_TRACKS_MAX) rows = WE_TRACKS_MAX;
     for (r = 0; r < rows; r++) {
         int spec = grid_spec(n, 1, r);
@@ -9489,9 +9578,12 @@ static int masonry_columns(we_doc_t *d, int idx, we_track_work_t *items, we_grid
         fixed[r] = spec >= 0 ? spec : -1;
         work->height[r] = fixed[r] >= 0 ? fixed[r] : grid_floor(n, 1, r);
     }
+    for (pass = 0; pass < passes; pass++)
     for (k = 0; k < count; k++) {
         we_node_t *child = &d->nodes[items->node[k]];
         int span = child->grid_row_span < 1 ? 1 : child->grid_row_span, best, left, j, width, height, room, fit, child_w;
+        int definite = child->grid_row_start != 0;
+        if (passes == 2 && (pass == 0) != definite) continue;
         if (span > rows) span = rows;
         best = masonry_pick(running, rows, span, child->grid_row_start, n->masonry_next, &cursor, &left);
         spacing_node(child, cw);
@@ -9558,7 +9650,10 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     if (cols > WE_TRACKS_MAX) cols = WE_TRACKS_MAX;
     if (n->area_cols > cols) cols = n->area_cols;
     rows = grid_place(d, items, work, count, cols, 1);
-    if (n->grid_column_flow) for (k = 0; k < count; k++) {
+    /* Lot 84: masonry rows pack into the declared columns. grid-auto-flow:
+     * column must not invent one column per item (that collapsed the
+     * packed height to the tallest single item). */
+    if (n->grid_column_flow && n->masonry != 1) for (k = 0; k < count; k++) {
         int end = work->col[k] + d->nodes[items->node[k]].grid_col_span;
         if (work->col[k] >= 0 && end > cols) cols = end;
     }
@@ -10601,14 +10696,18 @@ static void masonry_intrinsic(we_doc_t *d, int idx, int *minimum, int *maximum) 
     const we_node_t *n = &d->nodes[idx];
     we_track_work_t *items = &track_work[0];
     int running[WE_TRACKS_MAX], rows = n->grid_rows ? n->grid_rows : 1, count, k, j, cursor = 0, gap = axis_gap(n, 0);
+    int passes = n->masonry_definite ? 2 : 1, pass;
     if (rows > WE_TRACKS_MAX) rows = WE_TRACKS_MAX;
     for (k = 0; k < WE_TRACKS_MAX; k++) running[k] = 0;
     count = collect_items(d, idx, items);
     *minimum = *maximum = 0;
+    for (pass = 0; pass < passes; pass++)
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[items->node[k]];
         int extra = node_border_extra(child) + child->margin[1] + child->margin[3], low, high, left, best;
         int span = child->grid_row_span < 1 ? 1 : child->grid_row_span;
+        int definite = child->grid_row_start != 0;
+        if (passes == 2 && (pass == 0) != definite) continue;
         if (span > rows) span = rows;
         intrinsic_contribution(child, &low, &high);
         low = constrained_width(child, low, 0) + extra;
