@@ -202,6 +202,14 @@ static void test_idle_dims_the_refresh(void) {
     TEST_ASSERT_EQUAL(500000U, e.pace_cap_bps);
     TEST_ASSERT_EQUAL(1, plat_energy_idle(&e, 300000U));
     TEST_ASSERT_EQUAL(500000U, e.pace_cap_bps);   /* a second idle does not halve again */
+    TEST_ASSERT_EQUAL(1, plat_energy_idle(&e, 600000U));
+    TEST_ASSERT_EQUAL(2, e.dim);
+    TEST_ASSERT_EQUAL(7U, e.refresh_hz);
+    TEST_ASSERT_EQUAL(250000U, e.pace_cap_bps);
+    TEST_ASSERT_EQUAL(1, plat_energy_idle(&e, 300000U));
+    TEST_ASSERT_EQUAL(1, e.dim);
+    TEST_ASSERT_EQUAL(15U, e.refresh_hz);
+    TEST_ASSERT_EQUAL(500000U, e.pace_cap_bps);
     TEST_ASSERT_EQUAL(0, plat_energy_idle(&e, 0));
     TEST_ASSERT_EQUAL(1000000U, e.pace_cap_bps);
     TEST_ASSERT_EQUAL(0, plat_energy_apply(&e, PLAT_PWR_PERFORMANCE));

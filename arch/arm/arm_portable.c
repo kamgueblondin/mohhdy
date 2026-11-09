@@ -175,6 +175,11 @@ int arm_port_marks(void) {
     os_display_str_to_utf8(out, n, back, (int)sizeof(back));
     if ((unsigned char)back[0] != 0xE1u || (unsigned char)back[1] != 0xBAu || (unsigned char)back[2] != 0xA0u) return 0;
     if (os_mark_ascii_base(0x1EB2u) != 'A') return 0;
+    if (os_cp_page(0x1EB2u, &b) != 5) return 0;
+    page = 0;
+    n = os_display_put(0x1EB2u, &page, out, (int)sizeof(out));
+    if (n != 3 || page != 5 || (unsigned char)out[1] != 0xFFu) return 0;
+    if (os_display_cells(out, n) != 1) return 0;
     if (os_cp1252_from_cp(0xFF21u) != 'A') return 0;
     if (os_cp1252_from_cp(0x0259u) != 'e') return 0;
     return 1;

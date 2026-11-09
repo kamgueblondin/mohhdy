@@ -229,6 +229,29 @@ int plat_form_edid_detail(const os_display_info_t* d, char* out, int cap) {
         }
         if (d->range_clock_mhz) { f_cat(out, cap, " clock "); f_cat_u(out, cap, d->range_clock_mhz); }
     }
+    if (d->week) { f_cat(out, cap, " week "); f_cat_u(out, cap, d->week); }
+    if (d->serial_lo || d->serial_hi) {
+        f_cat(out, cap, " serial ");
+        f_cat_u(out, cap, ((uint32_t)d->serial_hi << 16) | d->serial_lo);
+    }
+    if (d->serial_text[0]) {
+        int i;
+        f_cat(out, cap, " serial_text ");
+        for (i = 0; i < 13 && d->serial_text[i]; i++) {
+            char one[2];
+            char c = d->serial_text[i];
+            if (c < 32 || c > 126) c = '?';
+            one[0] = c; one[1] = 0;
+            f_cat(out, cap, one);
+        }
+    }
+    if (d->chroma_wx || d->chroma_wy) {
+        f_cat(out, cap, " white ");
+        f_cat_u(out, cap, d->chroma_wx);
+        f_cat(out, cap, ",");
+        f_cat_u(out, cap, d->chroma_wy);
+    }
+    if (d->dtd_n > 1) { f_cat(out, cap, " dtd "); f_cat_u(out, cap, d->dtd_n); }
     f_cat(out, cap, "\n");
     return f_len(out);
 }

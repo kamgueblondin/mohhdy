@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 482
+#define MOHHDY_SHELL_COMMAND_COUNT 489
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -55,6 +55,8 @@ static const char * const mohhdy_shell_commands[] = {
     "ata-debug-crash",
     "ata-status",
     "attach",
+    "autofill",
+    "bookmark",
     "browser-back",
     "browser-click",
     "browser-css-demo",
@@ -390,6 +392,7 @@ static const char * const mohhdy_shell_commands[] = {
     "session-status",
     "session-ttl",
     "session-use",
+    "settings",
     "shutdown",
     "sort",
     "spawn",
@@ -471,6 +474,7 @@ static const char * const mohhdy_shell_commands[] = {
     "wc",
     "web-a11y",
     "web-anim",
+    "web-back",
     "web-cache",
     "web-components",
     "web-console",
@@ -480,8 +484,10 @@ static const char * const mohhdy_shell_commands[] = {
     "web-find",
     "web-fkey",
     "web-forms",
+    "web-forward",
     "web-fstate",
     "web-ftype",
+    "web-history",
     "web-images",
     "web-input",
     "web-inspect",
@@ -494,6 +500,7 @@ static const char * const mohhdy_shell_commands[] = {
     "web-section",
     "web-serve",
     "web-submit",
+    "web-tab",
     "web-theme",
     "which",
     "whoami",

@@ -1076,8 +1076,7 @@ static int draw_text_seg(uint32_t *fb, int w, int h, int x, int y, const char *s
     int i, cells = 0;
     if (!s) return 0;
     for (i = 0; s[i] && (nbytes < 0 || i < nbytes); i++) {
-        int k = os_page_of_sel((unsigned char)s[i]);
-        if (k >= 0) { page = k; continue; }
+        if (os_display_skip(&page, (unsigned char)s[i])) continue;
         if (maxc >= 0 && cells >= maxc) break;
         draw_glyph(fb, w, h, x + cells * CW, y, os_glyph_index_page((unsigned)page, (unsigned char)s[i]), c);
         cells++;
@@ -1089,12 +1088,11 @@ static void draw_text(uint32_t *fb, int w, int h, int x, int y, const char *s, u
     int cx = x, page = 0;
     if (!s) return;
     while (*s) {
-        int k = os_page_of_sel((unsigned char)*s);
         if (*s == '\n') {
             y += os_ui_line_h(g_tq);
             cx = x;
-        } else if (k >= 0) {
-            page = k;
+        } else if (os_display_skip(&page, (unsigned char)*s)) {
+            /* selector or the page-5 switch: no cell */
         } else {
             draw_glyph(fb, w, h, cx, y, os_glyph_index_page((unsigned)page, (unsigned char)*s), c);
             cx += CW;
@@ -1131,8 +1129,10 @@ int gfx_text_wrap_take(const char *t, int pos, int len, int maxc) {
     int take = os_display_take(t + pos, len - pos, maxc), k, cells;
     if (pos + take >= len) return len - pos;
     for (k = take, cells = maxc; k > 0 && cells > maxc / 2; k--) {
+        int at = pos + k - 1;
         if (t[pos + k] == ' ') return k;
-        if (os_page_of_sel((unsigned char)t[pos + k - 1]) < 0) cells--;
+        if (os_page_of_sel((unsigned char)t[at]) < 0 &&
+            !(os_display_page_at(t, at) == 1 && (unsigned char)t[at] == 0xFFu)) cells--;
     }
     return take > 0 ? take : 1;
 }
@@ -1381,9 +1381,12 @@ static void draw_input_tail(uint32_t *fb, int w, int h, int x, int y, const char
     if (!s) return;
     while (s[n]) n++;
     cells = os_display_cells(s, n);
-    while (maxc > 0 && cells > maxc && start < n) {
-        if (os_page_of_sel((unsigned char)s[start]) < 0) cells--;
-        start++;
+    {
+        int page = 0;
+        while (maxc > 0 && cells > maxc && start < n) {
+            if (!os_display_skip(&page, (unsigned char)s[start])) cells--;
+            start++;
+        }
     }
     (void)draw_text_seg(fb, w, h, x, y, s + start, -1, maxc, os_display_page_at(s, start), c);
 }

@@ -28,6 +28,8 @@ void strcpy(char* dest, const char* src);
 #include "wf_tls.h"
 #include "wf_fetch.h"
 #include "shell_search.h"
+#include "shell_desk.h"
+#include "wf_store.h"
 int shell_collab_line(const char* line);
 #include "shell_platform.h"
 #include "osui_gui.h"
@@ -3681,7 +3683,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "net-if", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "fetch", "http-get", "search", "search-open", "search-engine", "search-config", "cookies", "web-open", "web-forms", "web-read", "web-section", "web-input", "web-submit", "web-find", "web-fclick", "web-fkey", "web-ftype", "web-fstate", "web-images", "web-anim", "http-cache", "http-keepalive", "tls-suite", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "fetch", "http-get", "search", "search-open", "search-engine", "search-config", "cookies", "bookmark", "web-history", "web-back", "web-forward", "web-tab", "autofill", "settings", "web-open", "web-forms", "web-read", "web-section", "web-input", "web-submit", "web-find", "web-fclick", "web-fkey", "web-ftype", "web-fstate", "web-images", "web-anim", "http-cache", "http-keepalive", "tls-suite", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -7400,7 +7402,21 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         if (arg_count >= 1 && strcmp(args[0], "off") == 0) wf_guest_set_cache(0);
         else if (arg_count >= 1 && strcmp(args[0], "on") == 0) wf_guest_set_cache(1);
         else if (arg_count >= 1 && strcmp(args[0], "clear") == 0) wf_cache_init(wf_guest_cache());
-        else if (arg_count >= 1) { print_string("usage: http-cache [on|off|clear]\n"); return 1; }
+        else if (arg_count >= 1 && strcmp(args[0], "save") == 0) {
+            static char blob[24 * 1024];
+            int n = wf_store_cache_save(wf_guest_cache(), blob, (int)sizeof(blob));
+            if (n < 0 || osui_gui_persist_write("/persist/http-cache.txt", blob, n) != 0) {
+                print_string("http-cache save error\n"); return 1;
+            }
+            print_string("http-cache saved\n");
+        } else if (arg_count >= 1 && strcmp(args[0], "load") == 0) {
+            static char blob[24 * 1024];
+            int n = osui_gui_persist_read("/persist/http-cache.txt", blob, (int)sizeof(blob) - 1);
+            if (n < 0 || wf_store_cache_load(wf_guest_cache(), blob, n) != 0) {
+                print_string("http-cache load error\n"); return 1;
+            }
+            print_string("http-cache loaded\n");
+        } else if (arg_count >= 1) { print_string("usage: http-cache [on|off|clear|save|load]\n"); return 1; }
         wf_cache_text(wf_guest_cache(), text, (int)sizeof(text));
         print_string("http-cache ");
         print_string(wf_guest_cache_on() ? "on " : "off ");
@@ -7816,6 +7832,10 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
         return;
     }
     /* Lot 67: real HTTP/HTTPS GET (same code as the GUI /browser) */
+    if (shell_desk_is(input_buffer)) {
+        ctx->last_rc = shell_desk_line(input_buffer);
+        return;
+    }
     if (shell_search_is(input_buffer)) {
         ctx->last_rc = shell_search_line(input_buffer);
         return;

@@ -567,8 +567,7 @@ static int to_single_byte(const char *s, int cs, char *out, int cap) {
     for (i = 0; s[i] && n < cap - 1; i++) {
         unsigned char c = (unsigned char)s[i], b;
         uint32_t cp;
-        int sel = os_page_of_sel(c);
-        if (sel >= 0) { page = sel; continue; }
+        if (os_display_skip(&page, c)) continue;
         cp = os_display_cp((unsigned)page, c);
         b = wf_charset_byte(cs, cp);
         if (b) { out[n++] = (char)b; continue; }

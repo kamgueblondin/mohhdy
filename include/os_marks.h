@@ -1,10 +1,11 @@
-/* os_marks.h - Lot 85: Vietnamese and horn letters on the bytes the
- * Lot 72 glyph pages leave undefined. The bitmap fonts stay as
- * scripts/gen_bitmap_font.py wrote them (font-check). A letter is the
- * base glyph shifted down one row when an accent sits above it, and
- * the accent is painted into the free row. Sixteen rarer combinations
- * (hook above a circumflex, breve or horn) have no free byte: they
- * become the base letter, which is a letter and not '?'.
+/* os_marks.h - composed letters painted from the base glyph plus
+ * accents. Lot 85 put 78 Vietnamese and horn letters on bytes the
+ * Lot 72 glyph pages leave undefined. Lot 86 puts the 16 combinations
+ * that had no free byte (hook above a circumflex, breve or horn) and
+ * more Latin letters on a virtual page 5. Page 1 byte 0xFF, which no
+ * glyph uses, is a zero-width switch: the next byte is page 5. The
+ * bitmap fonts are unchanged (font-check). A letter is the base glyph
+ * shifted down one row when an accent sits above it.
  * Header only, freestanding, no allocation. */
 #ifndef OS_MARKS_H
 #define OS_MARKS_H
@@ -19,7 +20,13 @@
 #define OS_MARK_HOOK 6
 #define OS_MARK_HORN 7
 #define OS_MARK_DOTB 8
-#define OS_MARK_COUNT 78
+#define OS_MARK_MACRON 9   /* Lot 86 */
+#define OS_MARK_DOTA 10
+#define OS_MARK_DIAER 11
+#define OS_MARK_CARON 12
+#define OS_MARK_RING 13
+#define OS_MARK_CEDIL 14
+#define OS_MARK_COUNT 166
 
 typedef struct {
     uint16_t cp;
@@ -108,43 +115,115 @@ static const os_mark_rec_t os_mark_rec[OS_MARK_COUNT] = {
     { 0x01A1, 0x6F, 7, 0, 4, 0xFE },
     { 0x01AF, 0x55, 7, 0, 4, 0xFF },
     { 0x01B0, 0x75, 7, 0, 1, 0xFE },
+    /* Lot 86: page 5. Byte 0xFF on page 1 switches here and draws nothing. */
+    { 0x1EA8, 0x41, 3, 6, 5, 0x80 },
+    { 0x1EA9, 0x61, 3, 6, 5, 0x82 },
+    { 0x1EB2, 0x41, 5, 6, 5, 0x83 },
+    { 0x1EB3, 0x61, 5, 6, 5, 0x84 },
+    { 0x1EB4, 0x41, 5, 4, 5, 0x85 },
+    { 0x1EB5, 0x61, 5, 4, 5, 0x86 },
+    { 0x1EB6, 0x41, 8, 5, 5, 0x87 },
+    { 0x1EB7, 0x61, 8, 5, 5, 0x88 },
+    { 0x1EC2, 0x45, 3, 6, 5, 0x89 },
+    { 0x1EC3, 0x65, 3, 6, 5, 0x8A },
+    { 0x1ED4, 0x4F, 3, 6, 5, 0x8B },
+    { 0x1ED5, 0x6F, 3, 6, 5, 0x8C },
+    { 0x1EDE, 0x4F, 7, 6, 5, 0x8E },
+    { 0x1EDF, 0x6F, 7, 6, 5, 0x91 },
+    { 0x1EEC, 0x55, 7, 6, 5, 0x92 },
+    { 0x1EED, 0x75, 7, 6, 5, 0x93 },
+    { 0x1E02, 0x42, 10, 0, 5, 0x94 },
+    { 0x1E03, 0x62, 10, 0, 5, 0x95 },
+    { 0x1E04, 0x42, 8, 0, 5, 0x96 },
+    { 0x1E05, 0x62, 8, 0, 5, 0x97 },
+    { 0x1E08, 0x43, 14, 2, 5, 0x98 },
+    { 0x1E09, 0x63, 14, 2, 5, 0x99 },
+    { 0x1E0A, 0x44, 10, 0, 5, 0x9A },
+    { 0x1E0B, 0x64, 10, 0, 5, 0x9B },
+    { 0x1E0C, 0x44, 8, 0, 5, 0x9C },
+    { 0x1E0D, 0x64, 8, 0, 5, 0x9E },
+    { 0x1E10, 0x44, 14, 0, 5, 0x9F },
+    { 0x1E11, 0x64, 14, 0, 5, 0xA0 },
+    { 0x1E14, 0x45, 9, 1, 5, 0xA1 },
+    { 0x1E15, 0x65, 9, 1, 5, 0xA2 },
+    { 0x1E16, 0x45, 9, 2, 5, 0xA3 },
+    { 0x1E17, 0x65, 9, 2, 5, 0xA4 },
+    { 0x1E1C, 0x45, 14, 5, 5, 0xA5 },
+    { 0x1E1D, 0x65, 14, 5, 5, 0xA6 },
+    { 0x1E1E, 0x46, 10, 0, 5, 0xA7 },
+    { 0x1E1F, 0x66, 10, 0, 5, 0xA8 },
+    { 0x1E20, 0x47, 9, 0, 5, 0xA9 },
+    { 0x1E21, 0x67, 9, 0, 5, 0xAA },
+    { 0x1E22, 0x48, 10, 0, 5, 0xAB },
+    { 0x1E23, 0x68, 10, 0, 5, 0xAC },
+    { 0x1E24, 0x48, 8, 0, 5, 0xAD },
+    { 0x1E25, 0x68, 8, 0, 5, 0xAE },
+    { 0x1E26, 0x48, 11, 0, 5, 0xAF },
+    { 0x1E27, 0x68, 11, 0, 5, 0xB0 },
+    { 0x1E28, 0x48, 14, 0, 5, 0xB1 },
+    { 0x1E29, 0x68, 14, 0, 5, 0xB2 },
+    { 0x1E2E, 0x49, 11, 2, 5, 0xB3 },
+    { 0x1E2F, 0x69, 11, 2, 5, 0xB4 },
+    { 0x1E30, 0x4B, 2, 0, 5, 0xB5 },
+    { 0x1E31, 0x6B, 2, 0, 5, 0xB6 },
+    { 0x1E32, 0x4B, 8, 0, 5, 0xB7 },
+    { 0x1E33, 0x6B, 8, 0, 5, 0xB8 },
+    { 0x1E36, 0x4C, 8, 0, 5, 0xB9 },
+    { 0x1E37, 0x6C, 8, 0, 5, 0xBA },
+    { 0x1E38, 0x4C, 8, 9, 5, 0xBB },
+    { 0x1E39, 0x6C, 8, 9, 5, 0xBC },
+    { 0x1E3E, 0x4D, 2, 0, 5, 0xBD },
+    { 0x1E3F, 0x6D, 2, 0, 5, 0xBE },
+    { 0x1E40, 0x4D, 10, 0, 5, 0xBF },
+    { 0x1E41, 0x6D, 10, 0, 5, 0xC0 },
+    { 0x1E42, 0x4D, 8, 0, 5, 0xC1 },
+    { 0x1E43, 0x6D, 8, 0, 5, 0xC2 },
+    { 0x1E44, 0x4E, 10, 0, 5, 0xC3 },
+    { 0x1E45, 0x6E, 10, 0, 5, 0xC4 },
+    { 0x1E46, 0x4E, 8, 0, 5, 0xC5 },
+    { 0x1E47, 0x6E, 8, 0, 5, 0xC6 },
+    { 0x1E4C, 0x4F, 4, 2, 5, 0xC7 },
+    { 0x1E4D, 0x6F, 4, 2, 5, 0xC8 },
+    { 0x1E4E, 0x4F, 4, 11, 5, 0xC9 },
+    { 0x1E4F, 0x6F, 4, 11, 5, 0xCA },
+    { 0x1E50, 0x4F, 9, 1, 5, 0xCB },
+    { 0x1E51, 0x6F, 9, 1, 5, 0xCC },
+    { 0x1E52, 0x4F, 9, 2, 5, 0xCD },
+    { 0x1E53, 0x6F, 9, 2, 5, 0xCE },
+    { 0x1E54, 0x50, 2, 0, 5, 0xCF },
+    { 0x1E55, 0x70, 2, 0, 5, 0xD0 },
+    { 0x1E56, 0x50, 10, 0, 5, 0xD1 },
+    { 0x1E57, 0x70, 10, 0, 5, 0xD2 },
+    { 0x1E58, 0x52, 10, 0, 5, 0xD3 },
+    { 0x1E59, 0x72, 10, 0, 5, 0xD4 },
+    { 0x1E5A, 0x52, 8, 0, 5, 0xD5 },
+    { 0x1E5B, 0x72, 8, 0, 5, 0xD6 },
+    { 0x1E5C, 0x52, 8, 9, 5, 0xD7 },
+    { 0x1E5D, 0x72, 8, 9, 5, 0xD8 },
+    { 0x1E60, 0x53, 10, 0, 5, 0xD9 },
+    { 0x1E61, 0x73, 10, 0, 5, 0xDA },
+    { 0x1E62, 0x53, 8, 0, 5, 0xDB },
+    { 0x1E63, 0x73, 8, 0, 5, 0xDC },
 };
 
-/* No free byte: the reader still shows the base letter. */
-static const struct { uint16_t cp; uint8_t base; } os_mark_fall[] = {
-    { 0x1EA8, 0x41 },
-    { 0x1EA9, 0x61 },
-    { 0x1EB2, 0x41 },
-    { 0x1EB3, 0x61 },
-    { 0x1EB4, 0x41 },
-    { 0x1EB5, 0x61 },
-    { 0x1EB6, 0x41 },
-    { 0x1EB7, 0x61 },
-    { 0x1EC2, 0x45 },
-    { 0x1EC3, 0x65 },
-    { 0x1ED4, 0x4F },
-    { 0x1ED5, 0x6F },
-    { 0x1EDE, 0x4F },
-    { 0x1EDF, 0x6F },
-    { 0x1EEC, 0x55 },
-    { 0x1EED, 0x75 },
-};
 
 static inline int os_mark_above(int m) {
     return m == OS_MARK_GRAVE || m == OS_MARK_ACUTE || m == OS_MARK_CIRC ||
-           m == OS_MARK_TILDE || m == OS_MARK_BREVE || m == OS_MARK_HOOK;
+           m == OS_MARK_TILDE || m == OS_MARK_BREVE || m == OS_MARK_HOOK ||
+           m == OS_MARK_MACRON || m == OS_MARK_DOTA || m == OS_MARK_DIAER ||
+           m == OS_MARK_CARON || m == OS_MARK_RING;
 }
 
 static inline int os_mark_index(uint32_t cp) {
     int i;
-    if (cp < 0x1A0u || cp > 0x1EF9u) return -1;
+    if (cp < 0x180u || cp > 0x1EFFu) return -1;
     for (i = 0; i < OS_MARK_COUNT; i++) if (os_mark_rec[i].cp == cp) return i;
     return -1;
 }
 
 static inline int os_mark_index_byte(unsigned page, unsigned byte) {
     int i;
-    if (page < 1u || page > 4u || byte < 0x80u) return -1;
+    if (page < 1u || page > 5u || byte < 0x80u) return -1;
     for (i = 0; i < OS_MARK_COUNT; i++)
         if (os_mark_rec[i].page == page && os_mark_rec[i].byte == byte) return i;
     return -1;
@@ -152,10 +231,8 @@ static inline int os_mark_index_byte(unsigned page, unsigned byte) {
 
 /* ASCII base of a composed letter (drawn or fallen back), else 0. */
 static inline unsigned char os_mark_ascii_base(uint32_t cp) {
-    int i = os_mark_index(cp), k, n;
+    int i = os_mark_index(cp);
     if (i >= 0) return os_mark_rec[i].base;
-    n = (int)(sizeof(os_mark_fall) / sizeof(os_mark_fall[0]));
-    for (k = 0; k < n; k++) if (os_mark_fall[k].cp == cp) return os_mark_fall[k].base;
     return 0;
 }
 
@@ -168,6 +245,11 @@ static inline unsigned os_mark_above_bits(int m) {
     case OS_MARK_TILDE: return 0x2Au;
     case OS_MARK_BREVE: return 0x22u;
     case OS_MARK_HOOK:  return 0x18u;
+    case OS_MARK_MACRON: return 0x3Cu;
+    case OS_MARK_DOTA:  return 0x08u;
+    case OS_MARK_DIAER: return 0x22u;
+    case OS_MARK_CARON: return 0x0Au;
+    case OS_MARK_RING:  return 0x1Cu;
     default: return 0;
     }
 }
@@ -177,7 +259,9 @@ static inline unsigned os_mark_above_bits(int m) {
  * right of rows 2 and 3. Two above marks share row 0. */
 static inline unsigned os_mark_compose_row(const uint8_t base_rows[8], int row, int m1, int m2) {
     int above = os_mark_above(m1) || os_mark_above(m2);
-    int below = (m1 == OS_MARK_DOTB) || (m2 == OS_MARK_DOTB);
+    int dotb = (m1 == OS_MARK_DOTB) || (m2 == OS_MARK_DOTB);
+    int cedil = (m1 == OS_MARK_CEDIL) || (m2 == OS_MARK_CEDIL);
+    int below = dotb || cedil;
     int horn = (m1 == OS_MARK_HORN) || (m2 == OS_MARK_HORN);
     int src;
     unsigned bits;
@@ -190,7 +274,11 @@ static inline unsigned os_mark_compose_row(const uint8_t base_rows[8], int row, 
     src = above ? row - 1 : row;
     if (below && src >= 7) src = 6;
     bits = (src >= 0 && src < 8) ? base_rows[src] : 0;
-    if (below && row == 7) bits = 0x08u;
+    if (below && row == 7) {
+        bits = 0;
+        if (dotb) bits |= 0x08u;
+        if (cedil) bits |= 0x04u;
+    }
     if (horn && (row == 2 || row == 3)) bits |= 0x03u;
     return bits & 0xFFu;
 }

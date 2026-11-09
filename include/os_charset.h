@@ -101,7 +101,16 @@ static inline unsigned char os_cp1252_from_cp(uint32_t cp) {
     case 0x0254: case 0x0252: return 'o';
     case 0x0268: case 0x026A: return 'i';
     case 0x0261: return 'g';
+    case 0x0283: return 's';   /* esh */
+    case 0x028A: case 0x0289: return 'u';
+    case 0x0272: return 'n';
     case 0x02B9: case 0x02BB: return '\'';
+    case 0x00D7: case 0x2715: return 'x';
+    case 0x00F7: case 0x2044: return '/';
+    case 0x2260: return '#';
+    case 0x2248: return '~';
+    case 0xFB00: case 0xFB01: case 0xFB02: case 0xFB03: case 0xFB04: return 'f';
+    case 0xFB06: return 's';
     default:
         b = os_mark_ascii_base(cp);
         if (b) return b;
@@ -157,8 +166,10 @@ static inline unsigned os_glyph_index_page(unsigned page, unsigned char c) {
     int mi = os_mark_index_byte(page, c);
     /* Lot 85: a composed letter is not a font slot. Callers paint it with
      * os_mark_compose_row. The index is past the font so it cannot be
-     * confused with a shared base glyph. */
+     * confused with a shared base glyph. Lot 86: page 5 is the virtual
+     * page reached by the 0xFF switch; an unused high byte there is '?'. */
     if (mi >= 0) return (unsigned)OS_GLYPH_TOTAL + (unsigned)mi;
+    if (page == 5u) return c < 0x80u ? os_glyph_index(c) : (unsigned)OS_GLYPH_QMARK;
     if (page == 0u || page >= (unsigned)OS_PAGE_COUNT || c < 0x80u) return os_glyph_index(c);
     return os_page_glyph[page - 1u][c - 0x80u];
 }
@@ -170,6 +181,7 @@ static inline uint32_t os_display_cp(unsigned page, unsigned char c) {
     if (os_page_of_sel(c) >= 0) return 0;
     mi = os_mark_index_byte(page, c);
     if (mi >= 0) return os_mark_rec[mi].cp;
+    if (page == 5u) return (c >= 0x20u && c < 0x80u) ? c : 0;
     if (c < 0x80u) return c;
     if (page == 0u || page >= (unsigned)OS_PAGE_COUNT) return c >= 0xA0u ? c : os_cp1252_high[c - 0x80u];
     return os_page_cp[page - 1u][c - 0x80u];
@@ -194,18 +206,59 @@ static inline int os_cp_page(uint32_t cp, unsigned char *byte) {
     return -1;
 }
 
+/* Lot 86: a page selector, or page-1 byte 0xFF (the zero-width switch to
+ * page 5). Returns 1 and updates *page when the byte draws no cell. */
+static inline int os_display_skip(int *page, unsigned char c) {
+    int k = os_page_of_sel(c);
+    if (k >= 0) { if (page) *page = k; return 1; }
+    if (page && *page == 1 && c == 0xFFu) { *page = 5; return 1; }
+    return 0;
+}
+
+/* A few characters expand to more than one ASCII letter (ligatures).
+ * Returns the length, 0 when cp is not one of them. */
+static inline int os_fold_ascii(uint32_t cp, char *out, int cap) {
+    const char *s = 0;
+    int n = 0;
+    switch (cp) {
+    case 0xFB00: s = "ff"; break;
+    case 0xFB01: s = "fi"; break;
+    case 0xFB02: s = "fl"; break;
+    case 0xFB03: s = "ffi"; break;
+    case 0xFB04: s = "ffl"; break;
+    case 0xFB06: s = "st"; break;
+    default: return 0;
+    }
+    while (s[n]) n++;
+    if (n > cap) return -1;
+    { int i; for (i = 0; i < n; i++) out[i] = s[i]; }
+    return n;
+}
+
 /* Writes code point cp as display bytes at out (cap bytes), the selector
  * first when it is not in the current page *page (updated). Returns the
  * bytes written, 0 when cp is dropped (controls, zero width), -1 when it
  * does not fit. A code point no page has takes os_cp1252_from_cp (a
- * close ASCII form or '?'). */
+ * close ASCII form or '?'). Page 5 is selector-of-page-1, 0xFF, then the
+ * byte (0xFF draws nothing). */
 static inline int os_display_put(uint32_t cp, int *page, char *out, int cap) {
     unsigned char b = 0;
-    int p = cp < 0x20u ? -1 : os_cp_page(cp, &b), n = 0;
+    int p = cp < 0x20u ? -1 : os_cp_page(cp, &b), n = 0, o = 0;
     if (p < 0) {
         b = os_cp1252_from_cp(cp);
         if (!b) return 0;
         p = b >= 0x80u ? 0 : *page;
+    }
+    if (p == 5) {
+        int sel = (*page != 1 && *page != 5);
+        int sw = (*page != 5);
+        n = sel + sw + 1;
+        if (n > cap) return -1;
+        if (sel) out[o++] = (char)os_page_sel[1];
+        if (sw) out[o++] = (char)0xFF;
+        out[o++] = (char)b;
+        *page = 5;
+        return n;
     }
     if (b >= 0x80u && p != *page) n = 1;
     if (n + 1 > cap) return -1;
@@ -218,8 +271,7 @@ static inline int os_display_put(uint32_t cp, int *page, char *out, int cap) {
  * sets *page and gives 0 (print nothing); another byte gives 1 and its
  * code point in *cp ('?' when the page leaves it undefined). */
 static inline int os_display_stream_cp(int *page, unsigned char c, uint32_t *cp) {
-    int k = os_page_of_sel(c);
-    if (k >= 0) { *page = k; return 0; }
+    if (os_display_skip(page, c)) return 0;
     *cp = os_display_cp((unsigned)*page, c);
     if (!*cp) *cp = '?';
     return 1;
@@ -227,29 +279,26 @@ static inline int os_display_stream_cp(int *page, unsigned char c, uint32_t *cp)
 
 /* Cells a display string takes (selectors take none). */
 static inline int os_display_cells(const char *s, int n) {
-    int i, c = 0;
+    int i, c = 0, page = 0;
     for (i = 0; i < n && s[i]; i++)
-        if (os_page_of_sel((unsigned char)s[i]) < 0) c++;
+        if (!os_display_skip(&page, (unsigned char)s[i])) c++;
     return c;
 }
 
 /* Page in force at s[pos] (the last selector before it, else 0). */
 static inline int os_display_page_at(const char *s, int pos) {
     int i, p = 0;
-    for (i = 0; i < pos && s[i]; i++) {
-        int k = os_page_of_sel((unsigned char)s[i]);
-        if (k >= 0) p = k;
-    }
+    for (i = 0; i < pos && s[i]; i++) (void)os_display_skip(&p, (unsigned char)s[i]);
     return p;
 }
 
 /* Bytes of s (from byte 0, page 0) that hold at most cells cells: the
  * prefix to draw in a field cells wide. */
 static inline int os_display_take(const char *s, int n, int cells) {
-    int i, c = 0;
+    int i, c = 0, page = 0;
     for (i = 0; i < n && s[i]; i++) {
         if (c == cells) break;
-        if (os_page_of_sel((unsigned char)s[i]) < 0) c++;
+        if (!os_display_skip(&page, (unsigned char)s[i])) c++;
     }
     return i;
 }
@@ -271,7 +320,9 @@ static inline int os_text_to_display(const char *in, int n, char *out, int cap) 
         if (c >= 0x80u && ip == 0 && os_utf8_seq_ok(in, n, i)) {
             int k = i, r;
             uint32_t cp = os_utf8_next(in, n, &k);
-            r = os_display_put(cp, &op, out + o, cap - 1 - o);
+            r = os_fold_ascii(cp, out + o, cap - 1 - o);
+            if (r < 0) break;
+            if (r == 0) r = os_display_put(cp, &op, out + o, cap - 1 - o);
             if (r < 0) break;
             i = k;
             o += r;
@@ -282,6 +333,12 @@ static inline int os_text_to_display(const char *in, int n, char *out, int cap) 
         if (sp >= 0) {
             ip = sp;
             if (op != sp) { out[o++] = (char)c; op = sp; }
+            continue;
+        }
+        if (ip == 1 && c == 0xFFu) {
+            out[o++] = (char)c;
+            ip = 5;
+            op = 5;
             continue;
         }
         if (c < 0x20u && c != '\n' && c != '\t') continue;
@@ -305,10 +362,11 @@ static inline int os_text_to_display_inplace(char *s, int cap) {
         unsigned char c = (unsigned char)s[r];
         int sp;
         if (c >= 0x80u && ip == 0 && os_utf8_seq_ok(s, n, r)) {
-            char tmp[2];
+            char tmp[4];
             int k = r, m, j;
             uint32_t cp = os_utf8_next(s, n, &k);
-            m = os_display_put(cp, &op, tmp, 2);
+            m = os_fold_ascii(cp, tmp, 4);
+            if (m == 0) m = os_display_put(cp, &op, tmp, 4);
             r = k;
             for (j = 0; j < m; j++) s[w++] = tmp[j];
             continue;
@@ -318,6 +376,12 @@ static inline int os_text_to_display_inplace(char *s, int cap) {
         if (sp >= 0) {
             ip = sp;
             if (op != sp) { s[w++] = (char)c; op = sp; }
+            continue;
+        }
+        if (ip == 1 && c == 0xFFu) {
+            s[w++] = (char)c;
+            ip = 5;
+            op = 5;
             continue;
         }
         if (c < 0x20u && c != '\n' && c != '\t') continue;
@@ -397,8 +461,8 @@ static inline int os_display_str_to_utf8(const char *s, int n, char *out, int ca
     int i, o = 0, page = 0;
     if (cap <= 0) return 0;
     for (i = 0; i < n && s[i]; i++) {
-        int k = os_page_of_sel((unsigned char)s[i]), m;
-        if (k >= 0) { page = k; continue; }
+        int m;
+        if (os_display_skip(&page, (unsigned char)s[i])) continue;
         m = os_display_to_utf8_page((unsigned)page, (unsigned char)s[i], out + o, cap - 1 - o);
         if (m == 0) break;
         o += m;

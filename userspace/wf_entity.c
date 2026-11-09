@@ -206,8 +206,8 @@ int wf_display_to_utf8(const char *s, int n, char *out, int cap) {
     if (cap <= 0) return 0;
     for (i = 0; i < n && s[i]; i++) {
         char t[4];
-        int k, j, q = os_page_of_sel((unsigned char)s[i]);
-        if (q >= 0) { page = q; continue; }   /* Lot 72: glyph page selector */
+        int k, j;
+        if (os_display_skip(&page, (unsigned char)s[i])) continue;   /* selector or page-5 switch */
         k = os_display_to_utf8_page((unsigned)page, (unsigned char)s[i], t, 4);
         if (o + k > cap - 1) break;
         for (j = 0; j < k; j++) out[o++] = t[j];

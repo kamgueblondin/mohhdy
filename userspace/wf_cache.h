@@ -39,6 +39,11 @@ typedef struct {
     long max_age;             /* seconds, -1 none */
     char etag[WF_CACHE_TAG];
     char last_modified[WF_CACHE_DATE];
+    /* Lot 86: Age header (seconds already spent), 0 when absent. Vary *
+     * is not stored. Any other Vary is kept and forces revalidation,
+     * because the cache key is the URL alone. */
+    int age;
+    char vary[40];
 } wf_cache_meta_t;
 
 typedef struct {

@@ -248,8 +248,10 @@ static void test_stream_cp(void) {
     TEST_ASSERT_EQUAL('x', cp);
     TEST_ASSERT_EQUAL(0, os_display_stream_cp(&page, 0x81, &cp));   /* selector, before the old undefined check */
     page = 1;
-    TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 0xFF, &cp));   /* page 1 still has an undefined byte */
-    TEST_ASSERT_EQUAL('?', cp);
+    TEST_ASSERT_EQUAL(0, os_display_stream_cp(&page, 0xFF, &cp));   /* Lot 86: switch to page 5, no cell */
+    TEST_ASSERT_EQUAL(5, page);
+    TEST_ASSERT_EQUAL(1, os_display_stream_cp(&page, 0x83, &cp));   /* A with breve and hook */
+    TEST_ASSERT_EQUAL(0x1EB2, cp);
     page = 2;
     TEST_ASSERT_EQUAL(0, os_display_stream_cp(&page, 0x81, &cp));
     TEST_ASSERT_EQUAL(0, page);
@@ -304,6 +306,7 @@ static void test_fonts(void) {
 
 static void test_composed_vietnamese(void) {
     char o[8], u[8];
+    unsigned char b = 0;
     int page = 0, row, ink = 0;
     uint8_t rows[8];
     unsigned base;
@@ -313,8 +316,17 @@ static void test_composed_vietnamese(void) {
     TEST_ASSERT_EQUAL(0x80, (unsigned char)o[1]);
     TEST_ASSERT_EQUAL(3, os_display_str_to_utf8(o, 2, u, 8));
     TEST_ASSERT_EQUAL_MEMORY("\xE1\xBA\xA0", u, 3);
-    TEST_ASSERT_EQUAL('A', os_mark_ascii_base(0x1EB2));   /* no free byte: base letter */
+    TEST_ASSERT_EQUAL('A', os_mark_ascii_base(0x1EB2));   /* base letter of the composed form */
     TEST_ASSERT_EQUAL('A', os_cp1252_from_cp(0x1EB2));
+    page = 0;
+    TEST_ASSERT_EQUAL(5, os_cp_page(0x1EB2, &b));
+    TEST_ASSERT_EQUAL(3, os_display_put(0x1EB2, &page, o, 8));
+    TEST_ASSERT_EQUAL(5, page);
+    TEST_ASSERT_EQUAL(0x8D, (unsigned char)o[0]);
+    TEST_ASSERT_EQUAL(0xFF, (unsigned char)o[1]);
+    TEST_ASSERT_EQUAL(1, os_display_cells(o, 3));
+    TEST_ASSERT_EQUAL(3, os_display_str_to_utf8(o, 3, u, 8));
+    TEST_ASSERT_EQUAL_MEMORY("\xE1\xBA\xB2", u, 3);
     TEST_ASSERT_EQUAL('A', os_cp1252_from_cp(0xFF21));    /* fullwidth A */
     TEST_ASSERT_EQUAL('e', os_cp1252_from_cp(0x0259));
     base = os_glyph_index('A');

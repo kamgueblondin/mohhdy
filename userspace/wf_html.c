@@ -899,8 +899,8 @@ static int html_text(const char* in, int n, char* out, int cap, int display) {
             /* Lot 72: a glyph page selector prints nothing and sets the
              * page of the next bytes (reset at every tag) */
             char u[4];
-            int k, m, sp = os_page_of_sel((unsigned char)in[i]);
-            if (sp >= 0) { dpage = sp; i++; continue; }
+            int k, m;
+            if (os_display_skip(&dpage, (unsigned char)in[i])) { i++; continue; }
             m = os_display_to_utf8_page((unsigned)dpage, (unsigned char)in[i], u, (int)sizeof(u));
             for (k = 0; k < m; k++) ob_c(&b, u[k]);
             i++; nl = 0; last_sp = 0;

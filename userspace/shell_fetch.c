@@ -3,6 +3,9 @@
  * TCP through the networker, TLS 1.2 with certificate checks against the
  * root store in /etc/ca-roots.pem. Offline pages in /web stay local files. */
 #include "shell_fetch.h"
+#include "shell_desk.h"
+#include "wf_blocks.h"
+#include "wf_feed.h"
 #include "wf_guest.h"
 #include "wf_html.h"
 #include "wf_entity.h"
@@ -33,6 +36,8 @@ static wf_sections_t g_sec;
 static wf_form_page_t g_forms;
 static int g_cur;
 static int g_page_ok;
+static char g_blocks[2048];
+static int g_blocks_n;
 
 /* Lot 72: images of the page shown in the GUI (atlas + decode buffers,
  * about 1.7 MiB, see wf_webimg.h) */
@@ -213,6 +218,7 @@ int shell_fetch_line(const char* line) {
         }
         g_text[n] = 0;
     }
+    if (!shell_desk_nav_held()) shell_desk_note(g_res.url[0] ? g_res.url : url, 0);
     print_string("fetch body-begin\n");
     print_string(g_text);
     print_string("\nfetch body-end\n");
@@ -247,6 +253,14 @@ static int page_fetch(const char* url, const wf_fetch_req_t* req, char* src, int
     final_url[i] = 0;
     g_body[g_res.body_len] = 0;
     g_page_ok = 0;
+    g_blocks_n = 0;
+    if (wf_feed_looks((const char *)g_body, g_res.body_len)) {
+        static wf_feed_t feed;
+        if (wf_feed_parse((const char *)g_body, g_res.body_len, &feed) == 0)
+            g_blocks_n = wf_feed_text(&feed, g_blocks, (int)sizeof(g_blocks));
+    }
+    if (g_blocks_n <= 0)
+        g_blocks_n = wf_blocks_text((const char *)g_body, g_res.body_len, g_blocks, (int)sizeof(g_blocks), 0);
     if (wf_url_parse(g_res.url, &base) != 0) return -1;
     if (is_html(&g_res, g_body, g_res.body_len)) {
         wf_html_set_charset(wf_charset_header(g_res.content_type, ctlen(g_res.content_type)));
@@ -256,6 +270,7 @@ static int page_fetch(const char* url, const wf_fetch_req_t* req, char* src, int
         if (g_full_n > 0 && wf_section_index(g_full, g_full_n, &g_sec) > 0) {
             g_page_ok = 1;
             g_cur = 0;
+            if (!shell_desk_nav_held()) shell_desk_note(final_url[0] ? final_url : g_res.url, st.title);
             n = wf_section_render(g_full, g_full_n, &g_sec, 0, &g_forms, src, src_max);
             /* Lot 72: favicon and the images of section 0 */
             if (g_img_on) {
@@ -412,6 +427,12 @@ int shell_page_article(char* out, int cap) {
     n = wf_article_text(g_full, g_full_n, out, cap - 1);
     if (n < 0) n = 0;
     if (n < cap - 1) { out[n++] = '\n'; out[n] = 0; }
+    /* Lot 86: the raw page's tables and lists, kept beside the reader text. */
+    if (g_blocks_n > 0 && n < cap - 1) {
+        int k = 0;
+        while (k < g_blocks_n && n < cap - 1) out[n++] = g_blocks[k++];
+        out[n] = 0;
+    }
     return n;
 }
 

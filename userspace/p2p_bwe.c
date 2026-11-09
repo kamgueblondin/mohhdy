@@ -1,6 +1,9 @@
 /* p2p_bwe.c - Lot 67 (US-068/US-073): see p2p_bwe.h. */
 #include "p2p_bwe.h"
 
+static void loss_note(p2p_bwe_t* b, uint32_t seq);
+static void loss_clear(p2p_bwe_t* b, uint32_t seq);
+
 #define GAIN_HIGH 739U   /* 2/ln2 = 2.885 * 256 */
 #define GAIN_DRAIN 88U   /* 1/2.885 * 256 */
 #define GAIN_UP 320U     /* 1.25 */
@@ -91,6 +94,12 @@ static void update_outputs(p2p_bwe_t* b) {
      * laboratory estimator: no WAN and no cross traffic. */
     if (b->losses && b->pacing_bps > 8U) {
         uint32_t cut = b->pacing_bps / 8U;
+        if (cut) b->pacing_bps -= cut;
+    }
+    /* Lot 86: a run of losses (at least 8 accounted packets, half of them
+     * still open) cuts another quarter. One loss stays at exactly 7/8. */
+    if (p2p_bwe_loss_ppm(b) >= 500000U && b->pacing_bps > 8U) {
+        uint32_t cut = b->pacing_bps / 4U;
         if (cut) b->pacing_bps -= cut;
     }
     if (b->state == P2P_BWE_PROBE_RTT) b->cwnd_bytes = min_cwnd;
@@ -265,6 +274,7 @@ uint32_t p2p_bwe_on_ack(p2p_bwe_t* b, uint32_t seq, uint32_t now_ms) {
         /* Lot 85: the timeout was provisional. A packet that arrives is
          * not a loss, so the confirmed-loss count drops. */
         if (b->losses) b->losses--;
+        loss_clear(b, seq);
     }
     b->acked++;
     b->delivered += p->bytes;
@@ -317,7 +327,29 @@ void p2p_bwe_on_loss(p2p_bwe_t* b, uint32_t seq, uint32_t now_ms) {
     b->late[slot].used = 1U;
     p->used = 0U;
     (void)now_ms;
+    loss_note(b, seq);
     update_outputs(b);
+}
+
+static void loss_note(p2p_bwe_t* b, uint32_t seq) {
+    uint8_t s = b->loss_slot;
+    b->loss_seq[s] = seq;
+    b->loss_open[s] = 1;
+    b->loss_slot = (uint8_t)((s + 1U) & 7U);
+}
+
+static void loss_clear(p2p_bwe_t* b, uint32_t seq) {
+    uint32_t i;
+    for (i = 0; i < 8U; i++) if (b->loss_open[i] && b->loss_seq[i] == seq) b->loss_open[i] = 0;
+}
+
+uint32_t p2p_bwe_loss_ppm(const p2p_bwe_t* b) {
+    uint32_t open = 0, i, denom;
+    if (!b) return 0;
+    for (i = 0; i < 8U; i++) if (b->loss_open[i]) open++;
+    denom = b->samples + open;
+    if (denom < 8U || !open) return 0;
+    return open * 1000000U / denom;
 }
 
 void p2p_bwe_on_rtt(p2p_bwe_t* b, uint32_t rtt_ms, uint32_t now_ms) {

@@ -62,16 +62,20 @@ int plat_energy_idle(plat_energy_t* e, uint32_t idle_ms) {
     e->idle_ms = idle_ms;
     if (!e->bright_hz) e->bright_hz = p.refresh_hz;
     if (p.screen_dim_s && idle_ms >= p.screen_dim_s * 1000U) {
-        uint32_t hz = e->bright_hz / 2U;
-        e->dim = 1;
+        int deep = idle_ms >= p.screen_dim_s * 2000U;
+        uint32_t div = deep ? 4U : 2U;
+        uint32_t hz = e->bright_hz / div;
+        /* Lot 86: a second idle period quarters the refresh. The battery
+         * stays simulated. performance never reaches this (screen_dim_s 0). */
+        e->dim = deep ? 2 : 1;
         e->refresh_hz = hz < 5U ? 5U : hz;
         /* The mesh cap is part of the same idle policy. performance has
          * no cap (bright_pace 0), so this leaves it alone. A second idle
-         * call must not halve the already-halved cap: bright_pace is the
+         * call at the same depth must not cut again: bright_pace is the
          * value apply() stored. */
         if (e->bright_pace) {
-            uint32_t half = e->bright_pace / 2U;
-            e->pace_cap_bps = half < 8000U ? 8000U : half;
+            uint32_t cut = e->bright_pace / div;
+            e->pace_cap_bps = cut < 8000U ? 8000U : cut;
         }
         return 1;
     }
@@ -160,7 +164,7 @@ int plat_energy_report(const plat_energy_t* e, char* out, int cap) {
     } else {
         e_cat(out, cap, " battery none (emulated pc, mains)");
     }
-    e_cat(out, cap, e->dim ? " dim 1" : " dim 0");
+    e_cat(out, cap, " dim "); e_cat_u(out, cap, (uint32_t)e->dim);
     e_cat(out, cap, "\n");
     return e_len(out);
 }

@@ -868,6 +868,11 @@ WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_read.c ../userspace/wf_scor
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_lot85: $(UNIT_DIR)/userspace/test_wf_lot85.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)
+$(BUILD_DIR)/$(UNIT_DIR)/userspace/test_lot86: $(UNIT_DIR)/userspace/test_lot86.c ../userspace/wf_nav.c ../userspace/desk_cfg.c ../userspace/wf_store.c ../userspace/wf_blocks.c ../userspace/wf_cookie.c ../userspace/wf_cache.c ../userspace/wf_fetch.c $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< ../userspace/wf_nav.c ../userspace/desk_cfg.c ../userspace/wf_store.c ../userspace/wf_blocks.c $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)
+	@echo "Compiled userspace test: $(notdir $@)"
+
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_article: $(UNIT_DIR)/userspace/test_wf_article.c ../userspace/wf_article.c ../userspace/wf_article.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -o $@ $< ../userspace/wf_article.c $(FRAMEWORK_SOURCES)

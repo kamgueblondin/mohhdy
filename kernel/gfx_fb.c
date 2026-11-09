@@ -309,6 +309,16 @@ void gfx_fb_display_info(os_display_info_t *o) {
     o->range_clock_mhz = (uint16_t)(g_edid.range_clock > 0 && g_edid.range_clock < 10000 ? g_edid.range_clock : 0);
     for (i = 0; i < 13 && g_edid.name[i]; i++) o->name[i] = g_edid.name[i];
     o->name[i < 13 ? i : 13] = 0;
+    o->week = (uint8_t)(g_edid.week > 0 && g_edid.week <= 54 ? g_edid.week : 0);
+    o->dtd_n = (uint8_t)(g_edid.dtd_n > 4 ? 4 : g_edid.dtd_n);
+    o->serial_lo = (uint16_t)(g_edid.serial & 0xFFFFu);
+    o->serial_hi = (uint16_t)((g_edid.serial >> 16) & 0xFFFFu);
+    if (g_edid.chroma_ok) {
+        o->chroma_wx = (uint16_t)(g_edid.chroma_wx > 1023 ? 1023 : g_edid.chroma_wx);
+        o->chroma_wy = (uint16_t)(g_edid.chroma_wy > 1023 ? 1023 : g_edid.chroma_wy);
+    }
+    for (i = 0; i < 13 && g_edid.serial_text[i]; i++) o->serial_text[i] = g_edid.serial_text[i];
+    o->serial_text[i < 13 ? i : 13] = 0;
 }
 
 static uint32_t pci_vga_bar(void) {
