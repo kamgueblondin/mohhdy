@@ -1128,6 +1128,26 @@ static int prop_kind(const char *prop) {
     return 0;
 }
 
+/* Lot 87: the properties that inherit in CSS */
+static int kind_inherits(int kind) {
+    return kind == 2 || kind == 3 || kind == 4 || kind == WF_SITE_K_STYLE || kind == WF_SITE_K_VIS;
+}
+
+/* Lot 87: initial is a value like any other: inline, normal, start
+ * (left), canvas text (black), 0, normal, none, visible */
+static void initial_value(int kind, wf_site_rule_t *proto) {
+    proto->kind = (uint8_t)kind;
+    proto->revert = WF_SITE_RV_NONE;
+    proto->color = 0;
+    proto->box_n = 0;
+    switch (kind) {
+    case 1: proto->val = WF_SITE_DISP_INLINE; break;
+    case 4: proto->val = 1; proto->color = 0x000000; break;
+    case 5: case 6: proto->val = 0; proto->box_n = 1; proto->box[0] = 0; break;
+    default: proto->val = 1; break;     /* normal, left, normal, none, visible */
+    }
+}
+
 static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_t *proto) {
     int i = 0;
     proto->kind = 0;
@@ -1149,6 +1169,17 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
         trim_word(body + vs, ve - vs, val, (int)sizeof(val), &imp);
         proto->imp = (uint8_t)imp;
         if (d && expand_var(d, val, (int)sizeof(val)) < 0) { if (i < n && body[i] == ';') i++; continue; }
+        if (prop_kind(prop) && (eq(val, "initial") || (eq(val, "unset") && !kind_inherits(prop_kind(prop))))) {
+            initial_value(prop_kind(prop), proto);
+            return 1;
+        }
+        if (prop_kind(prop) && (eq(val, "inherit") || eq(val, "unset"))) {
+            proto->kind = (uint8_t)prop_kind(prop);
+            proto->revert = WF_SITE_RV_INHERIT;
+            proto->val = 0;
+            proto->box_n = 0;
+            return 1;
+        }
         if ((eq(val, "revert-layer") || eq(val, "revert")) && prop_kind(prop)) {
             proto->kind = (uint8_t)prop_kind(prop);
             proto->revert = (uint8_t)(eq(val, "revert") ? WF_SITE_RV_ORIGIN : WF_SITE_RV_LAYER);
@@ -2049,12 +2080,30 @@ static int keep_rule(int top, int origin, int ceiling, int max_origin) {
     return top < ceiling;
 }
 
+/* Lot 87: the parent's value of one property (inherit) */
+static void copy_kind(wf_site_node_t *nd, const wf_site_node_t *par, int kind) {
+    int k;
+    switch (kind) {
+    case 1: nd->disp = par->disp; nd->disp_imp = par->disp_imp; break;
+    case 2: nd->weight = par->weight; nd->weight_imp = par->weight_imp; break;
+    case 3: nd->align = par->align; nd->align_imp = par->align_imp; break;
+    case 4: nd->color = par->color; nd->color_set = par->color_set; nd->color_imp = par->color_imp; break;
+    case 5: for (k = 0; k < 4; k++) nd->margin[k] = par->margin[k]; nd->margin_set = par->margin_set; break;
+    case 6: for (k = 0; k < 4; k++) nd->pad[k] = par->pad[k]; nd->pad_set = par->pad_set; break;
+    case WF_SITE_K_STYLE: nd->italic = par->italic; break;
+    case WF_SITE_K_DECO: nd->deco = par->deco; break;
+    case WF_SITE_K_VIS: nd->vis = par->vis; break;
+    default: break;
+    }
+}
+
 static void resolve_reverts(wf_site_t *d) {
     int i, k, r, round;
     for (i = 0; i < d->nnodes; i++) {
         wf_site_node_t *nd = &d->node[i];
         for (k = 1; k <= WF_SITE_K_MAX; k++) {
-            for (round = 0; nd->rv[k] && round < WF_SITE_LAYERS + 3; round++) {
+            for (round = 0; (nd->rv[k] == WF_SITE_RV_LAYER || nd->rv[k] == WF_SITE_RV_ORIGIN) &&
+                            round < WF_SITE_LAYERS + 3; round++) {
                 int top = *kind_rank(nd, k) / (8192 * 1024);
                 int origin = (top / 16) % 4, ceiling = top, max_origin = 0;
                 if (nd->rv[k] == WF_SITE_RV_ORIGIN) max_origin = origin >= 2 ? 2 : 1;
@@ -2068,6 +2117,15 @@ static void resolve_reverts(wf_site_t *d) {
                 /* the style attribute is author origin: an author revert
                  * drops it as well */
                 if (!max_origin) inline_node(d, i, k, ceiling);
+            }
+            if (nd->rv[k] == WF_SITE_RV_INHERIT) {
+                /* nodes come in document order: the parent is final */
+                int rank = *kind_rank(nd, k);
+                if (nd->parent >= 0 && nd->parent < i) copy_kind(nd, &d->node[nd->parent], k);
+                else reset_kind(nd, k);
+                *kind_rank(nd, k) = rank;
+                nd->rv[k] = 0;
+                d->inherits++;
             }
             if (nd->rv[k]) reset_kind(nd, k);
         }
@@ -2094,6 +2152,7 @@ int wf_site_apply(wf_site_t *d) {
     }
     apply_inline(d);
     d->reverts = 0;
+    d->inherits = 0;
     resolve_reverts(d);
     d->ready = 1;
     return 0;

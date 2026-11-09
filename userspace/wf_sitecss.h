@@ -13,7 +13,9 @@
  * descendant, child, adjacent and general sibling, :first-child,
  * :last-child, :link, :not(type), :nth-child(an+b) for a small an+b.
  * Lot 87: revert-layer and revert on any of these properties (the value
- * of the previous layer, or of the previous origin).
+ * of the previous layer, or of the previous origin); initial, inherit and
+ * unset (color, font-weight, text-align, font-style and visibility
+ * inherit; display, margin, padding and text-decoration do not).
  * Cascade: user-agent, then author, then the style attribute. !important
  * beats normal. Specificity then source order. The reader uses display:none
  * to skip a subtree and copies color, font-weight and text-align onto the
@@ -95,7 +97,9 @@ enum {
 enum {
     WF_SITE_RV_NONE = 0,
     WF_SITE_RV_LAYER = 1,     /* revert-layer: as if this layer had no rule for it */
-    WF_SITE_RV_ORIGIN = 2     /* revert: as if this origin had no rule for it */
+    WF_SITE_RV_ORIGIN = 2,    /* revert: as if this origin had no rule for it */
+    WF_SITE_RV_INHERIT = 3    /* inherit (and unset on an inherited property):
+                               * the parent's value after the cascade */
 };
 
 typedef struct {
@@ -198,6 +202,7 @@ typedef struct {
     int nlayers, dropped_layers, anon_layers;
     uint8_t layer_rank[WF_SITE_LAYERS];   /* cascade position, 1 = weakest */
     int reverts;                  /* Lot 87: revert-layer / revert rolled back */
+    int inherits;                 /* Lot 87: inherit / unset taken from the parent */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */

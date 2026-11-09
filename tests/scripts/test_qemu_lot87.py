@@ -12,7 +12,8 @@ guest reaches it as 10.0.2.2 (slirp).
   * cascade layers: /lot87/layers.html imports reset.css into a layer and
     skips gone.css (supports() false); the unlayered rule keeps the block
     the more specific layered rule hides; an unlayered revert-layer goes
-    back to the reset layer.
+    back to the reset layer; display: initial (inline) beats the layer's
+    none.
   * script walls: /lot87/wall.html is named an enablejs wall with its
     noscript fallback; /lot87/blocked (403) is named a block page.
   * autofill forget HOST NAME VALUE forgets one value; the GUI's Delete
@@ -178,7 +179,8 @@ def main():
             # layerback87: the unlayered revert-layer goes back to the reset
             # layer, which hides it (without revert-layer the block shows)
             refuse(read, ["layergone87", "layerback87"], "web-read layers")
-            need(css, ["node p .back87 display none"], "web-css revert-layer")
+            need(css, ["node p .back87 display none", "node p .ini87 display inline"], "web-css revert-layer, initial")
+            need(read, ["layerinitial87"], "web-read initial")
             lw.run(mon, proc, "web-css off", "web-css off", 20)
             say("layers: the unlayered rule beat the more specific layered one, revert-layer went back to "
                 "the reset layer, gone.css not fetched")
