@@ -1413,7 +1413,7 @@ ARM_IMAGE = $(ARM_DIR)/mohhdy-arm.elf
 ARM_OBJS = $(ARM_DIR)/boot.o $(ARM_DIR)/arm_kernel.o $(ARM_DIR)/arm_mmu.o \
 	$(ARM_DIR)/ipc.o $(ARM_DIR)/sha256.o $(ARM_DIR)/user_tasks.o \
 	$(ARM_DIR)/arm_portable.o $(ARM_DIR)/aes_gcm.o $(ARM_DIR)/edid.o \
-	$(ARM_DIR)/p2p_flow.o $(ARM_DIR)/p2p_pace.o $(ARM_DIR)/p2p_rtx.o \
+	$(ARM_DIR)/p2p_flow.o $(ARM_DIR)/p2p_pace.o $(ARM_DIR)/p2p_rtx.o $(ARM_DIR)/p2p_bwe.o \
 	$(ARM_DIR)/wf_aead.o
 
 $(ARM_DIR)/%.o: arch/arm/%.S
@@ -1429,7 +1429,7 @@ $(ARM_DIR)/sha256.o: kernel/sha256.c kernel/sha256.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
 # Lot 69 (US-076): more portable sources compiled unchanged
-$(ARM_DIR)/arm_portable.o: arch/arm/arm_portable.c arch/arm/arm_portable.h kernel/aes_gcm.h kernel/edid.h userspace/p2p_flow.h userspace/p2p_rtx.h include/os_charset.h include/os_charset_pages.h userspace/wf_aead.h
+$(ARM_DIR)/arm_portable.o: arch/arm/arm_portable.c arch/arm/arm_portable.h kernel/aes_gcm.h kernel/edid.h userspace/p2p_flow.h userspace/p2p_rtx.h userspace/p2p_bwe.h include/os_charset.h include/os_charset_pages.h userspace/wf_aead.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
 $(ARM_DIR)/aes_gcm.o: kernel/aes_gcm.c kernel/aes_gcm.h
@@ -1446,6 +1446,9 @@ $(ARM_DIR)/p2p_rtx.o: userspace/p2p_rtx.c userspace/p2p_rtx.h
 	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
 # Lot 72 (US-076): the TLS AEAD ciphers, compiled unchanged
 $(ARM_DIR)/wf_aead.o: userspace/wf_aead.c userspace/wf_aead.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
+$(ARM_DIR)/p2p_bwe.o: userspace/p2p_bwe.c userspace/p2p_bwe.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
 $(ARM_DIR)/p2p_pace.o: userspace/p2p_pace.c userspace/p2p_pace.h
@@ -1571,6 +1574,10 @@ qemu-lot82: $(OS_IMAGE) pack-initrd disk
 .PHONY: qemu-lot83
 qemu-lot83: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot83.py
+
+.PHONY: qemu-lot84
+qemu-lot84: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot84.py
 
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk

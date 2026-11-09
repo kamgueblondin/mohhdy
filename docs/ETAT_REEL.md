@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 84 (definite-first masonry, packed row height, border percentage math, estimator late ack)
+
+- Masonry: `masonry-auto-flow: definite-first` places items with an explicit grid-axis start first, then the others (`pack` or `next`; the next cursor continues). `ordered` clears it. Masonry rows keep the declared columns when `grid-auto-flow` is `column`; the used height is the tallest packed column. `height:min-content` and `height:max-content` select that height for a masonry-rows grid.
+- Borders: `min()` / `max()` / `clamp()` / `calc()` and percentages in border widths, resolved against the containing block width and capped at 8 px per side (the existing paint cap). Absolute insets of a child of a masonry grid resolve against that grid's padding box.
+- US-068/US-073 stay partial. A probe marked lost after 2 s still produces a delivery-rate sample when the pong arrives (`p2p_bwe` late table). The QEMU three-guest check waits for the acks instead of stopping on the loss count. The networker prints its stack report before unblocking the client, so `make qemu-net-wire` sees `wire_ops` 4 (close included).
+- US-076 stays partial: ARM boot self-test of `p2p_bwe.c` (late sample 128 B/s). US-031 stays partial. `phase3_complete` stays false. US-078 and US-097 stay simule. Proof `make qemu-lot84`. Details: [lot84_plan.md](lot84_plan.md).
+
 ## Lot 73 (animated GIF, constant-time AES, multi-column fragmentation, line clamp, inside list markers, small-caps, underline offset)
 
 - Animated GIF in the browser: frames composed in Ring 3 (delay, disposal, NETSCAPE2.0 loop), advanced at 100 Hz into the image atlas slot (same `SYS_VGA_BLIT` 6 path, no ABI change); `web-anim`, `web-images` animated / frames / anim_cut.

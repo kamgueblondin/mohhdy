@@ -117,6 +117,8 @@ Etat Phase 2 (17 octobre 2026, lot 9; inventaire dans `docs/lot9_plan.md`). US-0
 - US-044 : Création du système d'accessibilité web
 - US-045 : Implémentation du débogueur web intégré
 
+Etat Phase 3 (9 November 2026, lot 84). US-031 partial, phase3_complete=false. The guest engine places masonry definite-first in two passes, keeps masonry-row height as the tallest packed column when grid-auto-flow is column, and resolves percentage min()/max()/clamp()/calc() border widths (capped at 8 px) and absolute insets against a masonry grid. No JavaScript VM. US-068/US-073 stay partial (a late probe ack still samples). US-076 stays partial (ARM self-test of p2p_bwe.c). US-078 and US-097 stay simule. Roadmap statuses unchanged. Details: docs/lot84_plan.md.
+
 Etat Phase 3 (1 November 2026, lot 73). US-031 partial, phase3_complete=false. The guest browser plays animated GIFs (frames composed in Ring 3, advanced into the image atlas, no ABI change; web-anim), cuts paragraphs between columns (orphans, widows, break-inside), clamps lines (line-clamp, -webkit-line-clamp), and adds flow-root, inside list markers, small-caps (as capitals) and text-underline-offset. AES in TLS and in the kernel GCM is table-free (bitsliced S-box) against cache timing. No JavaScript VM. Roadmap statuses unchanged. Details: docs/lot73_plan.md.
 
 Etat Phase 3 (1 November 2026, lot 72). US-031 partial, phase3_complete=false. The guest browser shows images (PNG with transparency, GIF first frame, JPEG baseline/progressive scaled 1/2..1/8, ICO, BMP) decoded in Ring 3 and drawn from a web atlas (OS_FB_WEB_IMAGE, SYS_VGA_BLIT 6), the favicon in the title and the address field, Greek, Cyrillic, Latin Extended-A and symbol text through five glyph pages of the one-byte display charset (616 glyphs, no new font engine), and pages in windows-1251, koi8-r/u, iso-8859-5/7 and windows-1253. TLS adds AES-256-GCM and ChaCha20-Poly1305, a constant-time P-256 ladder and keep-alive. No JavaScript VM; Google basic HTML (gbv=1) is still refused by Google (measured). US-076 partial: ARM self-tests add wf_aead.c and the glyph pages. Roadmap statuses unchanged. Details: docs/lot72_plan.md.
@@ -199,6 +201,8 @@ Etat Phase 4 (28 octobre 2026, lot 49). US-055 reste partiel : `pm-cross FILE` r
 
 Etat Phase 5 (28 octobre 2026, lot 49). US-063 et US-074 inchanges. US-063 : vecteur de distances, au plus 3 sauts, reseau de laboratoire. US-074 : codec STUN RFC 5389 reel dans le lien ; le NAT et `p2p-punch` restent simules. Pas de NAT materiel.
 
+Etat Phase 5 (9 November 2026, lot 84). US-068/US-073 stay partial. A probe the estimator declared lost after 2 s still yields a delivery-rate sample when the ack arrives (the peer guest may not have been scheduled yet). The three-guest QEMU check waits for 20 acks and a non-zero estimate. Not a WAN, and not cross traffic. Details: docs/lot84_plan.md.
+
 Etat Phase 5 (31 octobre 2026, lot 66). US-069 et US-070 restent fermes, deux defauts corriges : le cache pouvait garder deux lignes pour une cle et perdait les lignes Raft a chaque pair tombe (LRU, expiration sans debordement, compteurs `evictions` `expired`) ; une partition guerie lance seule l'anti-entropie dans les deux sens (`heal_syncs`), prouve par `make qemu-p2p` 2c sans `p2p-sync`. US-068/US-073 restent partiels.
 
 Etat Phase 5 (27 octobre 2026, lot 48). US-069 ferme : trois cycles crash/redemarrage (beta, gamma, beta) entre trois invites, cle ecrite pendant le crash recue a chaque fois. US-070 ferme : la cloture (fence) d'invalidation est repoussee a un pair qui revient apres une coupure ; il refuse le remplissage perime. US-075 ferme (statistique, pas d'apprentissage) : rapport automatique `p2p traffic alert peer X` par episode, deux emetteurs nommes, aucun sur les noeuds calmes. US-068/US-073 partiels : la fenetre adaptative recule sous un delai du hub (16 -> 10) et sous une perte, puis remonte a 16 ; pas de charge extreme ni de WAN. Preuve : `make qemu-p2p-phase5`.
@@ -238,6 +242,8 @@ Etat Phase 5 (15 octobre 2026, lot 2; detail and limits in `docs/p2p.md` and `do
 - US-088 : Intégration du système de migration de données
 - US-089 : Développement de l'interface d'administration unifiée
 - US-090 : Création du système de déploiement automatisé
+
+Etat Phase 6 (9 November 2026, lot 84). US-076 stays partial: the ARM boot self-test compiles userspace/p2p_bwe.c unchanged and checks the late-ack sample (128 B/s). US-080 and US-081 unchanged. US-078 stays simule (no sensor hardware).
 
 Etat Phase 6 (17 octobre 2026, lot 9). US-083 ferme : `devsync-pull` entre deux invites par le canal P2P scelle (vecteur de versions, delta, dernier ecrivain gagne, empreintes egales, rien en clair ; `make qemu-p2p` scenario 1b). US-077 ferme : `mobile-ui` tape dans le bureau OS-UI VBE peint l'ecran du telephone par la liste d'affichage du volet web, verifie pixel par pixel (`test_mobile_ui`, `make qemu-osui-gui`) ; entree tactile simule. US-076, US-080, US-081 partiels ; US-078 simule.
 
