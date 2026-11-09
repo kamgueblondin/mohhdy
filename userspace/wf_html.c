@@ -77,12 +77,16 @@ static int in_list(const char* name, const char* const* list) {
 static int g_sitecss;
 static wf_site_t g_site;
 
+static const char *g_extcss;
+static int g_extcss_n;
+
 void wf_html_set_sitecss(int on) { g_sitecss = on ? 1 : 0; }
+void wf_html_set_extcss(const char *css, int n) { g_extcss = (css && n > 0) ? css : 0; g_extcss_n = g_extcss ? n : 0; }
 int wf_html_sitecss_on(void) { return g_sitecss; }
 int wf_html_sitecss_report(char *out, int cap) { return wf_site_report(&g_site, out, cap); }
 
 static void ob_style(ob_t *b, int offset) {
-    char sty[96];
+    char sty[200];
     if (!g_sitecss) return;
     if (wf_site_style_attr(&g_site, offset, sty, (int)sizeof(sty)) > 0) ob_s(b, sty);
 }
@@ -697,7 +701,7 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
     }
     st->charset = g_cs;
     if (forms) forms->charset = g_cs;   /* Lot 72: any page charset (was latin1 only) */
-    if (g_sitecss) (void)wf_site_prepare(&g_site, in, n);
+    if (g_sitecss) (void)wf_site_prepare_ext(&g_site, in, n, 640, 480, g_extcss, g_extcss_n);
     else g_site.ready = 0;
     if (node_budget <= 0) node_budget = WF_HTML_NODE_BUDGET;
     b.o = out; b.cap = cap; b.n = 0; b.full = 0; b.nodes = 0;

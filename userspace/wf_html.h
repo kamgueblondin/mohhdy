@@ -59,6 +59,9 @@ void wf_html_set_charset(int cs);
  * Off by default so earlier callers keep the same bytes. */
 void wf_html_set_sitecss(int on);
 int wf_html_sitecss_on(void);
+/* Lot 87: external sheets (wf_csslink) applied before the page <style>
+ * on the next reduce with sitecss on. 0 clears. The text is not copied. */
+void wf_html_set_extcss(const char *css, int n);
 /* Report of the sheet built by the last reduce that had sitecss on. */
 int wf_html_sitecss_report(char *out, int cap);
 /* Plain text of a page for the console (tags removed, blocks on new

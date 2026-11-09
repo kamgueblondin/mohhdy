@@ -249,6 +249,10 @@ run_test() {
             extra_src="$extra_src $BASE_DIR/userspace/wf_tabs.c $BASE_DIR/userspace/wf_autofill.c $BASE_DIR/userspace/wf_compat.c $BASE_DIR/userspace/wf_feed.c $BASE_DIR/userspace/wf_robots.c"
             cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include"
             ;;
+        test_lot87_link.c)
+            extra_src="$extra_src $BASE_DIR/userspace/wf_csslink.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_http.c"
+            cflags="$cflags -I$BASE_DIR/userspace"
+            ;;
         test_lot87_css.c)
             extra_src="$extra_src $BASE_DIR/userspace/wf_sitecss.c"
             cflags="$cflags -I$BASE_DIR/userspace"

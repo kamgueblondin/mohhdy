@@ -19,6 +19,8 @@
 #include "wf_searchform.h"
 #include "wf_formfill.h"
 #include "fsops.h"
+#include "wf_csslink.h"
+#include "wf_sitecss.h"
 
 extern const fsops_io_t shell_fs_io;
 #include "../include/os_syscalls.h"
@@ -231,6 +233,39 @@ int shell_fetch_line(const char* line) {
 
 /* Lot 86: the reader applies <style> only when this is on, or for web-load. */
 static int g_css_on;
+/* Lot 87: external stylesheets of the presented page */
+static char g_extcss[WF_SITE_CSS];
+static wf_cssl_stats_t g_css_st;
+static int g_css_ran;
+static char g_load_dir[96];
+
+/* wf_csslink callback: web-load reads a linked sheet from the directory of
+ * the saved page (same file name); a fetched page gets it from the network
+ * through the same guest fetch path (settings net off refuses it). */
+static int sheet_get(void *ctx, const char *url, char *buf, int cap) {
+    static wf_fetch_result_t sres;
+    int i;
+    (void)ctx;
+    if (g_load_dir[0]) {
+        static char p[160];
+        int q = 0, last = -1, k = 0, n;
+        for (i = 0; url[i] && url[i] != '?' && url[i] != '#'; i++) if (url[i] == '/') last = i;
+        if (last < 0) return -1;
+        for (i = 0; g_load_dir[i] && k < (int)sizeof(p) - 2; i++) p[k++] = g_load_dir[i];
+        p[k++] = '/';
+        for (q = last + 1; url[q] && url[q] != '?' && url[q] != '#' && k < (int)sizeof(p) - 1; q++) {
+            if (url[q] == '/' || (url[q] == '.' && url[q + 1] == '.')) return -1;
+            p[k++] = url[q];
+        }
+        p[k] = 0;
+        n = fsops_read(&shell_fs_io, p, buf, cap);
+        return n;
+    }
+    for (i = 0; i < (int)sizeof(sres); i++) ((char *)&sres)[i] = 0;
+    if (wf_guest_fetch_ex(url, 0, (uint8_t *)buf, cap, &sres, 0) != 0) return -1;
+    if (sres.status != 200) return -1;
+    return sres.body_len;
+}
 
 static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int src_max, char* final_url, int url_max,
                         char* status, int st_max);
@@ -281,9 +316,19 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
         wf_html_set_charset(wf_charset_header(g_res.content_type, ctlen(g_res.content_type)));
         wf_html_set_images(g_img_on);
         wf_html_set_sitecss(use_css);
+        g_css_ran = 0;
+        if (use_css) {
+            int en = wf_csslink_collect((const char *)g_body, g_res.body_len, g_res.url, 640, 480, sheet_get, 0,
+                                        g_extcss, (int)sizeof(g_extcss), &g_css_st);
+            wf_html_set_extcss(en > 0 ? g_extcss : 0, en > 0 ? en : 0);
+            g_css_ran = 1;
+            /* the sheets use their own buffers; keep the body terminated */
+            g_body[g_res.body_len] = 0;
+        }
         g_full_n = wf_html_reduce_ex((const char*)g_body, g_res.body_len, &base, g_full, (int)sizeof(g_full), &st,
                                      PAGE_NODE_BUDGET, &g_forms);
         wf_html_set_sitecss(0);
+        wf_html_set_extcss(0, 0);
         if (g_full_n > 0 && wf_section_index(g_full, g_full_n, &g_sec) > 0) {
             g_page_ok = 1;
             g_cur = 0;
@@ -558,8 +603,29 @@ int shell_page_load(const char *path, const char *url, char *status, int st_max)
     g_res.status = 200;
     g_res.body_len = n;
     g_body[n] = 0;
+    /* Lot 87: linked sheets come from the same directory as the file */
+    {
+        int last = -1, k;
+        for (k = 0; path[k]; k++) if (path[k] == '/') last = k;
+        for (k = 0; k < last && k < (int)sizeof(g_load_dir) - 1; k++) g_load_dir[k] = path[k];
+        g_load_dir[k] = 0;
+        if (last == 0) { g_load_dir[0] = '/'; g_load_dir[1] = 0; }
+    }
     /* A saved page is opened with its stylesheet. The operator flag is unchanged. */
-    return page_present(0, 1, src, (int)sizeof(src), final_url, (int)sizeof(final_url), status, st_max);
+    {
+        int r = page_present(0, 1, src, (int)sizeof(src), final_url, (int)sizeof(final_url), status, st_max);
+        g_load_dir[0] = 0;
+        if (g_css_ran && status && st_max > 0) {
+            char line[160];
+            int ln = wf_csslink_stats_text(&g_css_st, line, (int)sizeof(line));
+            if (ln > 0) {
+                if (line[ln - 1] == '\n') line[ln - 1] = 0;
+                scat(status, st_max, "\n");
+                scat(status, st_max, line);
+            }
+        }
+        return r;
+    }
 }
 
 int shell_page_preview(int field, char *out, int cap) {
@@ -649,5 +715,9 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
         return 0;
     }
     if (wf_html_sitecss_report(out, cap) <= 0) scat(out, cap, "css none\n");
+    if (g_css_ran) {
+        char line[160];
+        if (wf_csslink_stats_text(&g_css_st, line, (int)sizeof(line)) > 0) scat(out, cap, line);
+    }
     return 0;
 }
