@@ -60,3 +60,11 @@ partial. US-078 and US-097 stay simule.
 Hand-written: tests/unit/userspace/test_lot86.c, test_lot86b.c, test_lot86c.c (wf_formfill_key), test_osui_gui.c (page ops routing, focus offers and Down), the page-5 checks in test_glyph_pages.c, the chrome suite in test_gfx_wm.c, the week/serial/white check in test_edid.c, the deep-idle check in test_plat_form_energy.c, the eight-loss check in test_p2p_bwe.c.
 QEMU: initrd_content/web/lot86.html, tests/scripts/test_qemu_lot86.py, `make qemu-lot86`, CI job lot86-layout.
 ARM: arm_port_marks now round-trips U+1EB2 on page 5.
+
+## Gates on the box (2026-11-09)
+
+make all, make test-all (15601 passed, 0 failed), roadmap-check,
+strict-image-check, secrets-check, tree-clean-check, make qemu-smoke,
+make qemu-production and make qemu-lot86 (173 s) passed locally with
+GCC 14. The kernel and guest also compile with -std=gnu23 (the C23
+default of the GCC 15 runners).
