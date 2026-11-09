@@ -78,6 +78,11 @@ int shell_desk_apply_offer(wf_form_page_t *p, int field, int offer, const char *
     return wf_formfill_apply(p, field, &o[offer]);
 }
 
+int shell_desk_fill_key(wf_form_page_t *p, int field, const char *url) {
+    ready();
+    return wf_formfill_key(&g_fill, p, field, url);
+}
+
 desk_cfg_t *shell_desk_cfg(void) { ready(); return &g_cfg; }
 int shell_desk_nav_held(void) { return g_hold; }
 

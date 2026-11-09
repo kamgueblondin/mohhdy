@@ -18,7 +18,7 @@ partial. US-078 and US-097 stay simule.
 | F7 | Network switch | always on | settings net off makes fetch fail with "network off" before a socket |
 | F8 | Settings | the window was read-only | scale, net and search engine, console and /settings buttons, one path |
 | F9 | Reader tables | cells became paragraphs | web-read also prints an aligned table, a dl, details and a figure |
-| F10 | Autofill | stored, not offered | web-fill lists and applies a remembered value in the form editor. Password and hidden are sent and not stored. The file is /persist/autofill.txt |
+| F10 | Autofill | stored, not offered | web-fill lists and applies a remembered value in the form editor. Password and hidden are sent and not stored. The file is /persist/autofill.txt. When a text field takes the focus the GUI lists its remembered value under the focus line, and Down in that field fills it (wf_formfill_key). With nothing remembered, Down still scrolls |
 | F11 | Chrome | suite only | qemu-lot86 drag-resizes the full-screen web window and the editor with the tablet, then closes each |
 | F12 | US-068/073 | one outstanding loss is 7/8 | eight open losses also cut a quarter. Still a lab estimator |
 | F13 | US-080 | boot EDID extras | week, binary serial, serial text, white point, every detailed timing. Not DDC |
@@ -47,10 +47,16 @@ partial. US-078 and US-097 stay simule.
 3. US-068/US-073 remain a laboratory estimator. No WAN, no cross traffic.
 4. US-080 still reads the EDID block published at boot. DDC/I2C is not driven.
 5. The battery stays simulated. Deep idle does not blank a real panel.
-6. Autofill is offered by web-fill. The form editor does not pop a list up by itself when a field takes the focus.
+6. Autofill offers one value per host and field name, listed as text under the focus line. There is no drawn drop-down list. The Down key is covered by host tests (test_lot86c, test_osui_gui), not by a QEMU click test.
+
+## Build fixes (CI runners moved to GCC 15)
+
+1. interrupt_handler_t now takes the saved cpu_state_t frame. interrupts.c used its own unprototyped typedef, which C23 reads as (void); timer_handler and syscall_handler take the frame. IRQ 1 and IRQ 3 go through adapters, the syscall registration has no cast.
+2. osui_gui.c reaches web-load, web-preview, web-fill and web-css through osui_web_page_ops_t (filled by shell.c), not by calling shell_fetch.c. test_osui_gui and test_osui_p2p_prod_perf link again.
+3. test_lot67_web_host.sh bounds the client with a sh watchdog. The Rust coreutils timeout on the runner refused the raw Latin-1 argv of the form checks.
 
 ## Tests
 
-Hand-written: tests/unit/userspace/test_lot86.c, test_lot86b.c, the page-5 checks in test_glyph_pages.c, the chrome suite in test_gfx_wm.c, the week/serial/white check in test_edid.c, the deep-idle check in test_plat_form_energy.c, the eight-loss check in test_p2p_bwe.c.
+Hand-written: tests/unit/userspace/test_lot86.c, test_lot86b.c, test_lot86c.c (wf_formfill_key), test_osui_gui.c (page ops routing, focus offers and Down), the page-5 checks in test_glyph_pages.c, the chrome suite in test_gfx_wm.c, the week/serial/white check in test_edid.c, the deep-idle check in test_plat_form_energy.c, the eight-loss check in test_p2p_bwe.c.
 QEMU: initrd_content/web/lot86.html, tests/scripts/test_qemu_lot86.py, `make qemu-lot86`, CI job lot86-layout.
 ARM: arm_port_marks now round-trips U+1EB2 on page 5.

@@ -244,6 +244,22 @@ static void test_reader_and_forms(void) {
     TEST_ASSERT_EQUAL_STRING("mohhdy", forms.field[q].value);
     TEST_ASSERT(wf_formfill_preview(&forms, q, prev, (int)sizeof(prev)) > 0);
     TEST_ASSERT(strstr(prev, "q=mohhdy") != 0);
+    /* Lot 86: the editor key (Down) fills an empty focused text field */
+    TEST_ASSERT_EQUAL(0, wf_form_set(&forms, q, ""));
+    forms.focus = -1;
+    TEST_ASSERT_EQUAL(0, wf_formfill_key(&fill, &forms, q, "https://example.com/other"));
+    TEST_ASSERT_EQUAL_STRING("mohhdy", forms.field[q].value);
+    TEST_ASSERT_EQUAL(q, forms.focus);
+    TEST_ASSERT_EQUAL(0, wf_form_insert(&forms, '!'));   /* cursor at the end */
+    TEST_ASSERT_EQUAL_STRING("mohhdy!", forms.field[q].value);
+    /* another host, a password or hidden field, a bad index: nothing */
+    TEST_ASSERT_EQUAL(0, wf_form_set(&forms, q, ""));
+    TEST_ASSERT_EQUAL(-1, wf_formfill_key(&fill, &forms, q, "https://other.example/"));
+    TEST_ASSERT_EQUAL_STRING("", forms.field[q].value);
+    TEST_ASSERT_EQUAL(-1, wf_formfill_key(&fill, &forms, field_named(&forms, "pw"), "https://example.com/"));
+    TEST_ASSERT_EQUAL(-1, wf_formfill_key(&fill, &forms, field_named(&forms, "tok"), "https://example.com/"));
+    TEST_ASSERT_EQUAL(-1, wf_formfill_key(&fill, &forms, forms.nfields, "https://example.com/"));
+    TEST_ASSERT_EQUAL(-1, wf_formfill_key(0, &forms, q, "https://example.com/"));
     TEST_ASSERT_EQUAL(0, wf_html_sitecss_on());
 }
 

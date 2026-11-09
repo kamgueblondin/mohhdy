@@ -17,4 +17,6 @@ int shell_desk_apply(void);
 int shell_desk_remember_form(const wf_form_page_t *p, int form, const char *url);
 int shell_desk_offers(const wf_form_page_t *p, int field, const char *url, wf_fill_offer_t *o, int cap);
 int shell_desk_apply_offer(wf_form_page_t *p, int field, int offer, const char *url);
+/* Form editor Down key: fill the focused text field. 0 filled, -1 none. */
+int shell_desk_fill_key(wf_form_page_t *p, int field, const char *url);
 #endif

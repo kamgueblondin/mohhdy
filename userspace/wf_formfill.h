@@ -21,6 +21,11 @@ int wf_formfill_offers(const wf_autofill_t *a, const wf_form_page_t *p, int fiel
                        const char *host, wf_fill_offer_t *out, int cap);
 /* Copy one offer into the field. 0, or -1. */
 int wf_formfill_apply(wf_form_page_t *p, int field, const wf_fill_offer_t *o);
+/* Lot 86: the form editor key that fills the focused field. Text and
+ * textarea fields only (not toggles, select, password or hidden). The
+ * first offer for the field (exact host and name) goes in, the cursor
+ * sits at its end. 0 filled, -1 nothing to offer (the key goes on). */
+int wf_formfill_key(const wf_autofill_t *a, wf_form_page_t *p, int field, const char *host);
 /* Remember the named, non-secret values of one form (form < 0: every form).
  * Returns how many values were stored. */
 int wf_formfill_remember(wf_autofill_t *a, const wf_form_page_t *p, int form, const char *host);

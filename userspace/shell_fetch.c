@@ -393,6 +393,9 @@ int shell_page_form_key(int key) {
     if (key == OS_TERM_KEY_DEL) { (void)wf_form_delete(&g_forms); return 0; }
     if (key == OS_VGA_KEY_LEFT) { (void)wf_form_move(&g_forms, -1); return 0; }
     if (key == OS_VGA_KEY_RIGHT) { (void)wf_form_move(&g_forms, 1); return 0; }
+    /* Lot 86: Down in a text field takes the remembered value (autofill);
+     * with nothing remembered the key goes on (the page scrolls). */
+    if (key == OS_VGA_KEY_DOWN && shell_desk_fill_key(&g_forms, g_forms.focus, g_res.url) == 0) return 0;
     if (key == OS_TERM_KEY_HOME) { (void)wf_form_move(&g_forms, -1000); return 0; }
     if (key == OS_TERM_KEY_END) { (void)wf_form_move(&g_forms, 1000); return 0; }
     if (key >= 0x20 && key <= 0xff && key != 0x7f) { (void)wf_form_insert(&g_forms, (char)key); return 0; }

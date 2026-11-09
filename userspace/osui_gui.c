@@ -920,6 +920,25 @@ static void web_form_result(int fr, char *out, int out_max) {
     app_out(out, out_max, "osui web form2", m);
 }
 
+/* Lot 86: a text field just took the focus. The remembered values for it
+ * are listed under the focus line (the shell's web-fill answer) with the
+ * key that applies one; nothing is printed when there is no offer. */
+static void web_focus_offers(char *out, int out_max) {
+    static char fo[640];
+    const char *k;
+    int n = 0;
+    if (!g_wops || !g_wops->page_fill) return;
+    fo[0] = 0;
+    if (g_wops->page_fill("web-fill", fo, (int)sizeof(fo)) != 0) return;
+    for (k = fo; *k; k++) if (sncmp(k, " offers ", 8) == 0) break;
+    if (!*k) return;
+    k += 8;
+    while (*k >= '0' && *k <= '9') n = n * 10 + (*k++ - '0');
+    if (n <= 0) return;
+    if (out) scat(out, out_max, fo);
+    app_out(out, out_max, "osui web autofill key=Down", 0);
+}
+
 /* a desktop key for the engine (WE_KEY_*), or -1 */
 static int web_form_keymap(int key) {
     if (key == OS_VGA_KEY_UP) return WE_KEY_UP;
@@ -970,6 +989,7 @@ static void web_event(const char *p, char *out, int out_max) {
             if (t == 0) {
                 (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
                 app_out(out, out_max, "osui web form focus ", href + 12);
+                web_focus_offers(out, out_max);
             } else if (t == 1) {
                 (void)web_submit(-1, out, out_max);
             } else if (t == 2) {

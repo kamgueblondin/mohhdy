@@ -101,6 +101,18 @@ int wf_formfill_apply(wf_form_page_t *p, int field, const wf_fill_offer_t *o) {
     return 0;
 }
 
+int wf_formfill_key(const wf_autofill_t *a, wf_form_page_t *p, int field, const char *host) {
+    wf_fill_offer_t o[1];
+    int t;
+    if (!a || !p || field < 0 || field >= p->nfields) return -1;
+    t = p->field[field].type;
+    if (t != WF_FIELD_TEXT && t != WF_FIELD_TEXTAREA) return -1;
+    if (wf_formfill_offers(a, p, field, host, o, 1) < 1) return -1;
+    if (wf_formfill_apply(p, field, &o[0]) != 0) return -1;
+    (void)wf_form_move(p, 1000);
+    return 0;
+}
+
 int wf_formfill_remember(wf_autofill_t *a, const wf_form_page_t *p, int form, const char *host) {
     int i, n = 0;
     char h[WF_AF_HOST], ty[12];
