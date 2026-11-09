@@ -76,6 +76,14 @@ typedef struct {
     int (*request)(const char *url, const char *body, int body_len, const char *ctype,
                    char *src, int src_max, char *final_url, int url_max,
                    char *status, int st_max);
+    /* Lot 86: shell page commands shared by the console and the GUI
+     * (web-load, web-preview, web-fill, web-css). The shell owns them; the
+     * GUI reaches them only through this table, so osui_gui.c never links
+     * shell_fetch.c. A null entry answers "unavailable". */
+    int (*page_load)(const char *path, const char *url, char *status, int st_max);
+    int (*page_preview)(int field, char *out, int cap);
+    int (*page_fill)(const char *line, char *out, int cap);
+    int (*page_css)(const char *line, char *out, int cap);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
 /* "web-open URL|FILE", "web-forms", "web-section N|next|prev", "web-input N TEXT", "web-submit [N]",

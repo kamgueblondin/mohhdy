@@ -15,7 +15,6 @@
 #include "osui_panes.h"
 #include "osui_files.h"
 #include "osui_parity.h"
-#include "shell_fetch.h"
 
 #define COLS OS_VGA_COLS
 #define ROWS OS_VGA_ROWS
@@ -710,7 +709,8 @@ int osui_gui_web_command(const char *line, char *out, int out_max) {
         i = 0;
         while (*a && i < (int)sizeof(url) - 1) url[i++] = *a++;
         url[i] = 0;
-        (void)shell_page_load(path, url, out, out_max);
+        if (!g_wops || !g_wops->page_load) { app_out(out, out_max, "osui web load unavailable", 0); return 1; }
+        (void)g_wops->page_load(path, url, out, out_max);
         return 1;
     }
     if (sncmp(line, "web-preview", 11) == 0 && (line[11] == ' ' || !line[11])) {
@@ -722,15 +722,18 @@ int osui_gui_web_command(const char *line, char *out, int out_max) {
             any = 1;
             field = field * 10 + (*a++ - '0');
         }
-        (void)shell_page_preview(any ? field : -1, out, out_max);
+        if (!g_wops || !g_wops->page_preview) { app_out(out, out_max, "osui web preview unavailable", 0); return 1; }
+        (void)g_wops->page_preview(any ? field : -1, out, out_max);
         return 1;
     }
     if (sncmp(line, "web-fill", 8) == 0 && (line[8] == ' ' || !line[8])) {
-        (void)shell_page_fill_cmd(line, out, out_max);
+        if (!g_wops || !g_wops->page_fill) { app_out(out, out_max, "osui web fill unavailable", 0); return 1; }
+        (void)g_wops->page_fill(line, out, out_max);
         return 1;
     }
     if (sncmp(line, "web-css", 7) == 0 && (line[7] == ' ' || !line[7])) {
-        (void)shell_page_css_cmd(line, out, out_max);
+        if (!g_wops || !g_wops->page_css) { app_out(out, out_max, "osui web css unavailable", 0); return 1; }
+        (void)g_wops->page_css(line, out, out_max);
         return 1;
     }
     if (sncmp(line, "web-f", 5) == 0) {

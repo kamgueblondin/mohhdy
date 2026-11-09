@@ -1,6 +1,7 @@
 #include "idt.h"
 #include "keyboard.h"
 #include "timer.h"
+#include "interrupts.h"
 
 extern void write_serial(char c);
 extern void serial_panic_mode(void);
@@ -8,8 +9,8 @@ extern void vga_panic_mode(void);
 extern void print_hex_serial(unsigned int n);
 
 // Déclaration pour le nouveau handler
-void keyboard_interrupt_handler();
-void io_delay();
+void keyboard_interrupt_handler(void);
+void io_delay(void);
 
 // Fonctions externes pour les ports I/O (définies dans kernel.c)
 extern unsigned char inb(unsigned short port);
@@ -86,16 +87,13 @@ void fault_handler_c(registers_t *r) {
     for(;;);
 }
 
-// Type pour les handlers d'interruption
-typedef void (*interrupt_handler_t)();
-
 // Table des handlers d'interruption
 static interrupt_handler_t interrupt_handlers[256];
 
 // Fonction pour remapper le PIC
 // Par défaut, les IRQs du PIC (0-15) entrent en conflit avec les exceptions CPU.
 // On les décale vers les entrées IDT 32-47.
-void pic_remap() {
+void pic_remap(void) {
     print_string_serial("PIC: Début du remappage...\n");
     
     // Sauvegarde les masques actuels
@@ -191,10 +189,10 @@ void register_interrupt_handler(unsigned char interrupt, interrupt_handler_t han
 }
 
 // ISR commune pour les interruptions
-void interrupt_handler(unsigned char interrupt_number) {
+void interrupt_handler(unsigned char interrupt_number, cpu_state_t *cpu) {
     // Appelle le handler spécifique s'il existe
     if (interrupt_handlers[interrupt_number]) {
-        interrupt_handlers[interrupt_number]();
+        interrupt_handlers[interrupt_number](cpu);
     }
     
     // Envoie EOI pour les IRQs
@@ -240,8 +238,20 @@ void install_exception_handlers() {
 
 extern void ne2k_irq_handler(void);
 
+/* IRQ 1 and IRQ 3 handlers take no frame; these adapters give them the
+ * interrupt_handler_t signature instead of casting the pointer. */
+static void keyboard_irq_entry(cpu_state_t *cpu) {
+    (void)cpu;
+    keyboard_interrupt_handler();
+}
+
+static void ne2k_irq_entry(cpu_state_t *cpu) {
+    (void)cpu;
+    ne2k_irq_handler();
+}
+
 // Initialise toutes nos interruptions
-void interrupts_init() {
+void interrupts_init(void) {
     print_string_serial("=== INITIALISATION SYSTEME INTERRUPTIONS ===\n");
     
     // 1. Désactiver les interruptions pendant l'initialisation
@@ -266,8 +276,8 @@ void interrupts_init() {
     // 5. Enregistrer les handlers d'IRQ
     print_string_serial("Step 5: Enregistrement des handlers IRQ...\n");
     register_interrupt_handler(32, timer_handler);    // IRQ 0 - Timer
-    register_interrupt_handler(33, keyboard_interrupt_handler); // IRQ 1 - Clavier
-    register_interrupt_handler(35, ne2k_irq_handler); // IRQ 3 - NE2000 ISA
+    register_interrupt_handler(33, keyboard_irq_entry); // IRQ 1 - Clavier
+    register_interrupt_handler(35, ne2k_irq_entry); // IRQ 3 - NE2000 ISA
     print_string_serial("Step 5: Handlers IRQ enregistrés\n");
     
     // 6. Associer les entrées de l'IDT aux routines assembleur
