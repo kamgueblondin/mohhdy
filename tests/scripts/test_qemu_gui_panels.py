@@ -133,19 +133,23 @@ def entry_cmds():
 def run_entry(monitor, proc, cur, idx, arg, mut, cmd):
     """Move from entry cur to idx, type the argument, Enter (twice for a
     state change); returns the log offset before the run."""
-    k = "down" if idx >= cur else "up"
-    for _ in range(abs(idx - cur)):
-        par.key(monitor, k)
+    # Lot 88: each key waits for the guest's trace (no blind typing)
+    step = 1 if idx >= cur else -1
+    for i in range(abs(idx - cur)):
+        par.panel_key(monitor, proc, "down" if step > 0 else "up", cur + step * (i + 1), None)
     if arg:
-        par.type_text(monitor, arg)
+        par.panel_type(monitor, proc, arg, idx)
     built = cmd + (" " + arg if arg else "")
     start = len(g.log_text())
     par.key(monitor, "ret")
+    par.panel_enter_check(proc, start, idx, arg)
     if mut:
         g.wait_for(proc, "osui panel armed cmd=" + built, g.CMD_TIMEOUT, start)
         if ("osui panel run cmd=" + built) in g.log_text()[start:]:
             raise RuntimeError("%s ran without confirmation" % built)
+        start2 = len(g.log_text())
         par.key(monitor, "ret")
+        par.panel_enter_check(proc, start2, idx, arg)
     par.run_marker(proc, start, built)
     return start, built
 
@@ -210,6 +214,7 @@ def main():
             g.wait_for(proc, "OSUI-SNAP", g.CMD_TIMEOUT)
             n = panels(monitor, proc)
             g.screendump_rgb(monitor, "qemu-gui-panels-end.ppm")
+        par.say(par.key_stats_text())
         par.say("QEMU GUI panels contract passed: %d entries of 8 panels run in QEMU." % n)
         return 0
     finally:

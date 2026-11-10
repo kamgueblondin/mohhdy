@@ -94,11 +94,68 @@ static void test_status_lines(void) {
     TEST_ASSERT_EQUAL('Z', g_o[25]);
 }
 
+/* Lot 88 (US-080): the TV scale the desktop may take by itself */
+static void test_lot88_tv_safe_q(void) {
+    const char *why = 0;
+    tv();
+    /* 1080p TV on a 1280x800 framebuffer: 2x leaves 640x400 */
+    TEST_ASSERT_EQUAL(8, plat_form_tv_safe_q(&g_d, &why));
+    TEST_ASSERT_EQUAL_STRING("tv 1080p", why);
+    /* 1024x768: 2x leaves 512 px, 1.5x is taken */
+    g_d.fb_w = 1024; g_d.fb_h = 768;
+    TEST_ASSERT_EQUAL(6, plat_form_tv_safe_q(&g_d, &why));
+    TEST_ASSERT_EQUAL_STRING("stepped down for the framebuffer", why);
+    /* console boot, no framebuffer yet: the desktop's 1024x768 mode
+     * (QEMU run of qemu-lot88-tv: the hint is read before gui) */
+    g_d.fb_w = 0; g_d.fb_h = 0;
+    TEST_ASSERT_EQUAL(6, plat_form_tv_safe_q(&g_d, &why));
+    TEST_ASSERT_EQUAL_STRING("stepped down for the framebuffer", why);
+    /* 800x600: nothing keeps 640 px */
+    g_d.fb_w = 800; g_d.fb_h = 600;
+    TEST_ASSERT_EQUAL(0, plat_form_tv_safe_q(&g_d, &why));
+    TEST_ASSERT_EQUAL_STRING("screen too small", why);
+    /* a 4K TV at 3840x2160: 3x */
+    g_d.cea_best_w = 3840; g_d.cea_best_h = 2160;
+    g_d.fb_w = 3840; g_d.fb_h = 2160;
+    TEST_ASSERT_EQUAL(12, plat_form_tv_safe_q(&g_d, &why));
+    TEST_ASSERT_EQUAL_STRING("tv 4k", why);
+    /* the harness pin wins, a monitor gets nothing */
+    g_d.ui_hint_q = 4;
+    TEST_ASSERT_EQUAL(0, plat_form_tv_safe_q(&g_d, &why));
+    TEST_ASSERT_EQUAL_STRING("pinned", why);
+    g_d.ui_hint_q = 0;
+    g_d.cea_tv = 0;
+    TEST_ASSERT_EQUAL(0, plat_form_tv_safe_q(&g_d, &why));
+    TEST_ASSERT_EQUAL_STRING("not a tv", why);
+    g_d.cea_tv = 1;
+    g_d.cea_status = 3;
+    TEST_ASSERT_EQUAL(0, plat_form_tv_safe_q(&g_d, &why));
+    TEST_ASSERT_EQUAL_STRING("no cea", why);
+    TEST_ASSERT_EQUAL(0, plat_form_tv_safe_q(0, &why));
+}
+
+static void test_lot88_tv_line(void) {
+    tv();
+    g_d.fb_w = 1024; g_d.fb_h = 768;
+    TEST_ASSERT(plat_form_tv_line(&g_d, 6, g_o, (int)sizeof(g_o)) > 0);
+    TEST_ASSERT_EQUAL_STRING("display tv-hint scale_q 8 safe_q 6 (stepped down for the framebuffer, applied 6)\n", g_o);
+    TEST_ASSERT(plat_form_tv_line(&g_d, 0, g_o, (int)sizeof(g_o)) > 0);
+    TEST_ASSERT(strstr(g_o, "not applied: ui.cfg or user scale") != 0);
+    /* no underscan bit: the overscan note */
+    g_d.cea_flags &= ~OS_DISPLAY_CEA_UNDERSCAN;
+    TEST_ASSERT(plat_form_tv_line(&g_d, 0, g_o, (int)sizeof(g_o)) > 0);
+    TEST_ASSERT(strstr(g_o, "display tv-hint overscan likely") != 0);
+    g_d.cea_tv = 0;
+    TEST_ASSERT_EQUAL(0, plat_form_tv_line(&g_d, 0, g_o, (int)sizeof(g_o)));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_tv_line);
     RUN_TEST(test_monitor_line);
     RUN_TEST(test_status_lines);
+    RUN_TEST(test_lot88_tv_safe_q);
+    RUN_TEST(test_lot88_tv_line);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

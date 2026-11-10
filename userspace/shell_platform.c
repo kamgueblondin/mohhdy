@@ -11,6 +11,7 @@
 #include "osui_scale.h"
 #include "plat_form.h"
 #include "plat_energy.h"
+#include "osui_frame.h"
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
@@ -41,7 +42,14 @@ static char g_file[1100];
 static int sys0(int nr) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(nr) : "memory"); return r; }
 static int sys_display(os_display_info_t* d) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(SYS_DISPLAY_INFO), "c"(d) : "memory"); return r; }
 /* Lot 69: fw_cfg first-boot scale pin from the kernel (0 = none) */
-int shell_display_ui_hint(void) { os_display_info_t di; return sys_display(&di) == 0 ? di.ui_hint_q : 0; }
+/* Lot 69: the harness pin; Lot 88 (US-080): else the safe TV scale, which
+ * the desktop takes on a first boot (no /persist/ui.cfg) only */
+int shell_display_ui_hint(void) {
+    os_display_info_t di;
+    if (sys_display(&di) != 0) return 0;
+    if (di.ui_hint_q) return di.ui_hint_q;
+    return plat_form_tv_safe_q(&di, 0);
+}
 static int sys1(int nr, const void* a) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(nr), "b"(a) : "memory"); return r; }
 
 static int s_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }
@@ -81,7 +89,7 @@ static void join(char* d, const char* dir, const char* name, int cap) {
     s_cat(d, name, cap);
 }
 
-static const char* k_cmds[] = { "form-factor", "display-info", "power-apply", "power-sim",
+static const char* k_cmds[] = { "form-factor", "display-info", "power-apply", "power-sim", "power-dim",
     "hal-info", "hal-port", "screen-adapt", "screen-resize", "gesture", "gesture-multi", "power-profile", "power-status", "dev-list",
     "dev-rules", "dev-hotplug", "admin-nodes", "admin-node-add",
     "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
@@ -815,6 +823,77 @@ static int cmd_power_apply(const char* rest) {
     print_string(g_out);
     return 0;
 }
+/* Lot 88 (US-081): power-dim SECONDS|default */
+static int cmd_power_dim(const char* rest) {
+    char a[24];
+    int ok = 1, v;
+    energy_ensure();
+    word(rest, a, (int)sizeof(a));
+    if (s_eq(a, "default")) v = 0;
+    else v = a[0] ? to_int(a, &ok) : -1;
+    if (!a[0] || !ok || v < 0 || plat_energy_set_dim(&g_energy, (uint32_t)v) != 0) {
+        print_string("power-dim error usage: power-dim SECONDS (1..3600) | default\n");
+        return 1;
+    }
+    plat_energy_report(&g_energy, g_out, (int)sizeof(g_out));
+    print_string(g_out);
+    return 0;
+}
+
+/* Lot 88 (US-081): the desktop asks before each paint. The idle time
+ * feeds the energy idle policy (dim, deep dim); the frame pacer keeps an
+ * idle wake from painting faster than the resulting refresh budget. */
+static osui_frame_t g_frame;
+static int g_frame_dim_seen;
+static void fcat(char* d, int cap, const char* s) { s_cat(d, s, cap); }
+static void fcat_u(char* d, int cap, uint32_t v) { cat_u(d, v, cap); }
+int shell_energy_frame(int input, unsigned ticks, char* msg, int cap) {
+    uint32_t now = (uint32_t)ticks * 10U, idle, fps10, a, b;
+    int paint, was_dim;
+    if (!msg || cap < 2) return 1;
+    msg[0] = 0;
+    energy_ensure();
+    if (!g_frame.started) osui_frame_init(&g_frame, now);
+    idle = osui_frame_idle_ms(&g_frame, now);
+    was_dim = g_frame.dim;
+    fps10 = osui_frame_idle_fps10(&g_frame, now);
+    a = g_frame.idle_drawn;
+    b = g_frame.idle_skipped;
+    (void)plat_energy_idle(&g_energy, input ? 0U : idle);
+    paint = osui_frame_due(&g_frame, now, input, g_energy.refresh_hz, g_energy.dim);
+    if (g_energy.dim != g_frame_dim_seen) {
+        /* the idle policy also moved the mesh pace cap */
+        energy_push_pace();
+        if (input && was_dim) {
+            fcat(msg, cap, "osui energy wake after ");
+            fcat_u(msg, cap, idle);
+            fcat(msg, cap, " ms refresh ");
+            fcat_u(msg, cap, g_energy.refresh_hz);
+            fcat(msg, cap, " hz idle_fps10 ");
+            fcat_u(msg, cap, fps10);
+            fcat(msg, cap, " idle_drawn ");
+            fcat_u(msg, cap, a);
+            fcat(msg, cap, " idle_skipped ");
+            fcat_u(msg, cap, b);
+            fcat(msg, cap, "\n");
+        } else if (g_energy.dim) {
+            fcat(msg, cap, "osui energy dim ");
+            fcat_u(msg, cap, (uint32_t)g_energy.dim);
+            fcat(msg, cap, " after ");
+            fcat_u(msg, cap, idle / 1000U);
+            fcat(msg, cap, " s refresh ");
+            fcat_u(msg, cap, g_energy.refresh_hz);
+            fcat(msg, cap, " hz pace_cap_bps ");
+            fcat_u(msg, cap, g_energy.pace_cap_bps);
+            fcat(msg, cap, " idle_fps10 ");
+            fcat_u(msg, cap, fps10);
+            fcat(msg, cap, "\n");
+        }
+        g_frame_dim_seen = g_energy.dim;
+    }
+    return paint;
+}
+
 static int cmd_power_sim(const char* rest) {
     char a[24], b[24], c[24];
     int ok = 1;
@@ -1041,23 +1120,19 @@ int shell_platform_line(const char* line) {
         print_string(g_out);
         /* Lot 85: the EDID extras, on their own line, only when the block had them. */
         if (plat_form_edid_detail(&di, g_out, (int)sizeof(g_out)) > 0) print_string(g_out);
-        /* Lot 87: the CEA-861 extension, and the scale a TV sink would want
-         * (printed as a hint; the scale is not changed) */
+        /* Lot 87: the CEA-861 extension. Lot 88: the TV scale, the safe
+         * one the desktop took on a first boot, and the overscan note */
         if (plat_form_cea_line(&di, g_out, (int)sizeof(g_out)) > 0) print_string(g_out);
         {
-            int q = plat_form_tv_scale_q(&di);
-            if (q > 0) {
-                g_out[0] = 0;
-                s_cat(g_out, "display tv-hint scale_q ", 4096);
-                cat_u(g_out, (uint32_t)q, 4096);
-                s_cat(g_out, " (not applied)\n", 4096);
-                print_string(g_out);
-            }
+            int used = osui_gui_scale_hint_used();
+            if (di.ui_hint_q) used = 0;     /* the harness pin, not the TV */
+            if (plat_form_tv_line(&di, used, g_out, (int)sizeof(g_out)) > 0) print_string(g_out);
         }
         return 0;
     }
     if (s_eq(cmd, "power-apply")) return cmd_power_apply(rest);
     if (s_eq(cmd, "power-sim")) return cmd_power_sim(rest);
+    if (s_eq(cmd, "power-dim")) return cmd_power_dim(rest);
     if (s_eq(cmd, "power-profile")) {
         int p;
         word(rest, a, 64);

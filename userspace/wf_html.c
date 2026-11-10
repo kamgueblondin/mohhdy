@@ -84,9 +84,10 @@ void wf_html_set_sitecss(int on) { g_sitecss = on ? 1 : 0; }
 void wf_html_set_extcss(const char *css, int n) { g_extcss = (css && n > 0) ? css : 0; g_extcss_n = g_extcss ? n : 0; }
 int wf_html_sitecss_on(void) { return g_sitecss; }
 int wf_html_sitecss_report(char *out, int cap) { return wf_site_report(&g_site, out, cap); }
+int wf_html_sitecss_scope(char *out, int cap) { return wf_site_scope_text(&g_site, out, cap); }
 
 static void ob_style(ob_t *b, int offset) {
-    char sty[200];
+    char sty[320];   /* Lot 88: five more properties can be passed on */
     if (!g_sitecss) return;
     if (wf_site_style_attr(&g_site, offset, sty, (int)sizeof(sty)) > 0) ob_s(b, sty);
 }

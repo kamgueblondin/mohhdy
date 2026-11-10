@@ -384,6 +384,38 @@ static int app_cell(const gfx_desktop_layout_t *l, int slot, int x, int y, int *
     return 1;
 }
 
+/* Lot 88: " key=N" on the serial line */
+static void wm_log_num(const char *key, int v) {
+    char t[16];
+    int k = 0, neg = v < 0;
+    unsigned u = neg ? (unsigned)(-(v + 1)) + 1u : (unsigned)v;
+    wm_log(" ");
+    wm_log(key);
+    wm_log("=");
+    if (neg) wm_log("-");
+    if (!u) t[k++] = '0';
+    while (u && k < 15) { t[k++] = (char)('0' + u % 10u); u /= 10u; }
+    while (k) { char c[2]; c[0] = t[--k]; c[1] = 0; wm_log(c); }
+}
+
+/* Lot 88: where the clicked window is before the click acts, with its
+ * title bar height, button side and chrome scale: "gfx wm hit pane x=..
+ * y=.. w=.. h=.. title=30 btn=14 q=4". The QEMU chrome test places its
+ * clicks from this line at any ui-scale instead of a copy of the layout. */
+static void wm_hit_log(const char *who, int slot, const gfx_rect_t *box, int title_h) {
+    wm_log("gfx wm hit ");
+    wm_log(who);
+    if (slot >= 0) wm_log_num("slot", slot);
+    wm_log_num("x", box->x);
+    wm_log_num("y", box->y);
+    wm_log_num("w", box->w);
+    wm_log_num("h", box->h);
+    wm_log_num("title", title_h);
+    wm_log_num("btn", gfx_wm_btn(title_h, g_wm_q));
+    wm_log_num("q", g_wm_q);
+    wm_log("\n");
+}
+
 /* Lot 69: serial proof of a finished move or resize */
 static void wm_done(const char *who, int act) {
     if (act == GFX_WM_ACT_MOVED) { wm_log("gfx wm "); wm_log(who); wm_log(" moved\n"); }
@@ -480,6 +512,7 @@ static void gfx_desktop_handle_click(int x, int y) {
         int act;
         gfx_desktop_full_rect(w, h, &fb_box);
         full_geom(w, h, &base, &area);
+        if (in_rect(x, y, &fb_box)) wm_hit_log("full", -1, &fb_box, GFX_DESKTOP_PANE_TITLE_H);
         if (in_rect(x, y, &layout.pane_win.traffic)) act = GFX_WM_ACT_CLOSE;
         else act = gfx_wm_mouse(&g_wm_full, to_wm(&fb_box), base, GFX_DESKTOP_PANE_TITLE_H, g_wm_q, x, y, 1, 0);
         if (act == GFX_WM_ACT_CLOSE) {
@@ -514,6 +547,9 @@ static void gfx_desktop_handle_click(int x, int y) {
         gfx_rect_t box;
         if (!win_box(&layout, win, &box) || !in_rect(x, y, &box)) continue;
         if (layout.z[GFX_WIN_COUNT - 1] != win) z_raise(win);
+        if (win == GFX_WIN_CHAT) wm_hit_log("chat", -1, &box, GFX_DESKTOP_CHAT_TITLE_H);
+        else if (win == GFX_WIN_PANE) wm_hit_log("pane", -1, &box, GFX_DESKTOP_PANE_TITLE_H);
+        else wm_hit_log("app", win - GFX_WIN_APP0, &box, GFX_DESKTOP_APP_TITLE_H);
         if (win == GFX_WIN_CHAT) {
             act = gfx_wm_mouse(&g_wm_chat, to_wm(&layout.chat_win.box), to_wm(&layout.chat_win.base),
                                GFX_DESKTOP_CHAT_TITLE_H, g_wm_q, x, y, 1, 0);

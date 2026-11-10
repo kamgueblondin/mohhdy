@@ -275,11 +275,12 @@ static const osui_par_entry_t k_p2pmesh[] = {
     { "Percage NAT (simule)", "p2p-punch", A | M, "PAIR" },
     { "Appel gRPC sur le maillage", "p2p-grpc", A | M, "PAIR SERVICE METHODE [CHARGE]" },
     { "Limite de debit", "p2p-limit", A | M, "N (0: aucune)" },
-    { "Rafale lissee", "p2p-burst", A | M, "PAIR N [TEXTE]" },
+    { "Rafale lissee", "p2p-burst", A | M, "PAIR N [-i] [TEXTE]" },
     { "Sonde de debit (estimateur)", "p2p-probe", A | M, "PAIR [N]" },
     { "Estimateur de debit", "p2p-bwe", 0, 0 },
     { "Cadence d'envoi (estimateur)", "p2p-pace", A, "status|on|off|auto|cap BPS|burst N" },
     { "Flux par pair (acks)", "p2p-flow", A, "[PEER|reset]" },
+    { "File de lissage (equite)", "p2p-shape", 0, 0 },
     { "Inondation (test d'analyse)", "p2p-flood", A | M, "PAIR N" },
     { "Bloquer un pair", "p2p-block", A | M, "PAIR" },
     { "Taille du texte (globale)", "ui-scale", A, "auto|1|1.5|2|3|+|-" },
@@ -293,6 +294,7 @@ static const osui_par_entry_t k_p2pmesh[] = {
     { "Moteur de recherche", "search-engine", A, "ddg|ddg-lite|URL" },
     { "Profil d'energie (applique)", "power-apply", A, "performance|balanced|saver|auto|status" },
     { "Batterie simulee", "power-sim", A, "start|tick MS [BUSY]|charge on|off|stop|status" },
+    { "Attenuation apres inactivite", "power-dim", A, "SECONDES 1..3600|default" },   /* Lot 88 */
     { "Debloquer un pair", "p2p-unblock", A | M, "PAIR" },
 };
 

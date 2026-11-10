@@ -358,6 +358,45 @@ static void test_panel_arg_and_confirm(void) {
     TEST_ASSERT(strstr(g_cmds, "ata-status|") != 0);
 }
 
+/* Lot 88: every key a panel takes leaves one trace line, so the QEMU
+ * tests wait for each key; Enter names the entry and the text it saw */
+static void test_panel_key_trace(void) {
+    setup_src();
+    memset(&t, 0, sizeof(t));
+    osui_tool_open(&t, OS_FB_APP_STORE, "", &k_src);
+    TEST_ASSERT_EQUAL_STRING("", t.trace);
+    TEST_ASSERT_EQUAL_STRING("", t.log);
+    osui_tool_key(&t, K_DOWN, &k_src);
+    TEST_ASSERT_EQUAL_STRING("osui panel key sel=1 ilen=0", t.trace);
+    osui_tool_key(&t, K_DOWN, &k_src);
+    osui_tool_key(&t, K_DOWN, &k_src);
+    TEST_ASSERT_EQUAL_STRING("osui panel key sel=3 ilen=0", t.trace);
+    osui_tool_key(&t, '/', &k_src);
+    TEST_ASSERT_EQUAL_STRING("osui panel key sel=3 ilen=1", t.trace);
+    type("tmpx");
+    TEST_ASSERT_EQUAL_STRING("osui panel key sel=3 ilen=5", t.trace);
+    osui_tool_key(&t, '\b', &k_src);
+    TEST_ASSERT_EQUAL_STRING("osui panel key sel=3 ilen=4", t.trace);
+    osui_tool_key(&t, '\n', &k_src);
+    /* the run line in log, what Enter saw in trace (the input is cleared
+     * by the run, the trace still names it) */
+    TEST_ASSERT(strstr(t.log, "osui panel run cmd=ls /tmp ok") != 0);
+    TEST_ASSERT_EQUAL_STRING("osui panel enter sel=3 input=/tmp", t.trace);
+    TEST_ASSERT_EQUAL(0, t.ilen);
+    /* Up at the top is not taken: no trace for it */
+    osui_tool_tool(&t, 1, &k_src);
+    t.log[0] = 0;
+    osui_tool_key(&t, K_UP, &k_src);
+    osui_tool_key(&t, K_UP, &k_src);
+    osui_tool_key(&t, K_UP, &k_src);
+    TEST_ASSERT_EQUAL_STRING("osui panel key sel=0 ilen=0", t.trace);
+    t.log[0] = 0;
+    t.trace[0] = 0;   /* what tool_log does once it printed them */
+    TEST_ASSERT_EQUAL(OSUI_TOOL_NONE, osui_tool_key(&t, K_UP, &k_src));
+    TEST_ASSERT_EQUAL_STRING("", t.trace);
+    TEST_ASSERT_EQUAL_STRING("", t.log);
+}
+
 static void test_search_and_generic_cmd(void) {
     setup_src();
     memset(&t, 0, sizeof(t));
@@ -399,6 +438,7 @@ int main(void) {
     RUN_TEST(test_panel_menu_run_and_back);
     RUN_TEST(test_panel_arg_and_confirm);
     RUN_TEST(test_search_and_generic_cmd);
+    RUN_TEST(test_panel_key_trace);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

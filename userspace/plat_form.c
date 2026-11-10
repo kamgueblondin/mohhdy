@@ -320,6 +320,50 @@ int plat_form_cea_line(const os_display_info_t* d, char* out, int cap) {
     return (int)f_len(out);
 }
 
+int plat_form_tv_safe_q(const os_display_info_t* d, const char **why) {
+    static const int steps[3] = { 12, 8, 6 };
+    int want, k, fw, fh;
+    const char *r;
+    if (!why) why = &r;
+    if (!d) { *why = "no display"; return 0; }
+    if (d->ui_hint_q) { *why = "pinned"; return 0; }
+    if (d->cea_status != 0) { *why = "no cea"; return 0; }
+    if (!d->cea_tv) { *why = "not a tv"; return 0; }
+    /* no framebuffer yet (console boot): the desktop's mode */
+    fw = d->fb_w ? (int)d->fb_w : PLAT_FORM_DESK_W;
+    fh = d->fb_h ? (int)d->fb_h : PLAT_FORM_DESK_H;
+    want = plat_form_tv_scale_q(d);
+    for (k = 0; k < 3; k++) {
+        int q = steps[k];
+        if (q > want) continue;
+        /* the desktop needs a usable logical screen */
+        if (fw * 4 / q < 640 || fh * 4 / q < 360) continue;
+        *why = q == want ? (want >= 12 ? "tv 4k" : want >= 8 ? "tv 1080p" : "tv 720p") : "stepped down for the framebuffer";
+        return q;
+    }
+    *why = "screen too small";
+    return 0;
+}
+
+int plat_form_tv_line(const os_display_info_t* d, int applied_q, char* out, int cap) {
+    const char *why = "";
+    int want, safe;
+    if (!out || cap < 64) return 0;
+    out[0] = 0;
+    want = plat_form_tv_scale_q(d);
+    if (want <= 0) return 0;
+    safe = plat_form_tv_safe_q(d, &why);
+    f_cat(out, cap, "display tv-hint scale_q "); f_cat_u(out, cap, (uint32_t)want);
+    f_cat(out, cap, " safe_q "); f_cat_u(out, cap, (uint32_t)safe);
+    f_cat(out, cap, " ("); f_cat(out, cap, why);
+    if (applied_q > 0) { f_cat(out, cap, ", applied "); f_cat_u(out, cap, (uint32_t)applied_q); }
+    else f_cat(out, cap, safe ? ", not applied: ui.cfg or user scale" : ", not applied");
+    f_cat(out, cap, ")\n");
+    if (!(d->cea_flags & OS_DISPLAY_CEA_UNDERSCAN))
+        f_cat(out, cap, "display tv-hint overscan likely (no underscan bit): keep 5% edges clear, not applied\n");
+    return (int)f_len(out);
+}
+
 int plat_form_tv_scale_q(const os_display_info_t* d) {
     uint32_t w;
     if (!d || d->cea_status != 0 || !d->cea_tv) return 0;

@@ -328,6 +328,10 @@ void arm_main(void) {
         kputs((m & ARM_PORT_MARKS) ? "arm marks self-test ok vietnamese base letter (include/os_marks.h)\n" : "arm marks self-test FAILED\n");
         kputs((m & ARM_PORT_TREND) ? "arm p2p trend self-test ok overuse cap 15515 (userspace/p2p_trend.c)\n" : "arm p2p trend self-test FAILED\n");
         kputs((m & ARM_PORT_CEA) ? "arm edid cea self-test ok 1920x1080@60 hdmi 1.0.0.0 (kernel/edid.c)\n" : "arm edid cea self-test FAILED\n");
+        kputs((m & ARM_PORT_REGDOM) ? "arm regdom self-test ok shop.co.uk github.io apart (userspace/wf_regdom.c)\n" : "arm regdom self-test FAILED\n");
+        kputs((m & ARM_PORT_FRAME) ? "arm frame pacer self-test ok 20 of 40 idle wakes at 5 hz (userspace/osui_frame.c)\n" : "arm frame pacer self-test FAILED\n");
+        kputs((m & ARM_PORT_TVQ) ? "arm tv scale self-test ok 1080p tv 1.5x on 1024x768 (userspace/plat_form.c)\n" : "arm tv scale self-test FAILED\n");
+        kputs((m & ARM_PORT_SHAPE) ? "arm p2p shape self-test ok order x123 after slot reuse (userspace/p2p_shape.c)\n" : "arm p2p shape self-test FAILED\n");
     }
     gic_init();
     timer_arm();

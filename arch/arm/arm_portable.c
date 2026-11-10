@@ -8,6 +8,10 @@
 #include "p2p_bwe.h"
 #include "os_charset.h"
 #include "wf_aead.h"
+#include "wf_regdom.h"
+#include "osui_frame.h"
+#include "plat_form.h"
+#include "p2p_shape.h"
 
 static int same(const uint8_t* a, const uint8_t* b, int n) {
     int i;
@@ -231,6 +235,110 @@ int arm_port_cea(void) {
     return edid_cea_parse(b, EDID_BLOCK, &c) == -2;
 }
 
+static int same_str(const char* a, const char* b) {
+    while (*a && *a == *b) { a++; b++; }
+    return *a == *b;
+}
+
+/* Lot 88: registrable domains (autofill per site). Lower case, a country
+ * second level, a hosting suffix whose subdomains are different owners,
+ * and hosts that have none. */
+int arm_port_regdom(void) {
+    char out[WF_REGDOM_MAX];
+    if (wf_regdom("Login.Example.COM", out, (int)sizeof(out)) != 0 || !same_str(out, "example.com")) return 0;
+    if (wf_regdom("a.b.shop.co.uk", out, (int)sizeof(out)) != 0 || !same_str(out, "shop.co.uk")) return 0;
+    if (wf_regdom("alice.github.io", out, (int)sizeof(out)) != 0 || !same_str(out, "alice.github.io")) return 0;
+    if (wf_regdom("co.uk", out, (int)sizeof(out)) != -1) return 0;
+    if (wf_regdom("10.0.2.2", out, (int)sizeof(out)) != -1 || !wf_regdom_is_ip("10.0.2.2")) return 0;
+    if (wf_regdom("localhost", out, (int)sizeof(out)) != -1) return 0;
+    if (!wf_regdom_same_site("www.example.com", "login.example.com")) return 0;
+    if (wf_regdom_same_site("alice.github.io", "bob.github.io")) return 0;
+    return !wf_regdom_same_site("example.com", "evil-example.com");
+}
+
+/* Lot 88: the desktop frame pacer. 40 idle wakes 100 ms apart at the
+ * deep-dim 5 Hz budget paint 20, a key paints at once and wakes, and the
+ * period holds across the 2^32 wrap of the millisecond clock. */
+int arm_port_frame(void) {
+    osui_frame_t f;
+    uint32_t now = 0xFFFFF800U;   /* 2048 ms before the wrap */
+    int i, painted = 0;
+    osui_frame_init(&f, now);
+    for (i = 0; i < 40; i++) {
+        now += 100U;
+        painted += osui_frame_due(&f, now, 0, 5U, 2);
+    }
+    if (painted != 20 || f.idle_skipped != 20U || osui_frame_idle_fps10(&f, now) != 50U) return 0;
+    if (osui_frame_due(&f, now + 1U, 1, 5U, 0) != 1 || f.wakes != 1U || f.idle_drawn != 0U) return 0;
+    return osui_frame_idle_ms(&f, now + 1U) == 0U && now < 0x1000U;
+}
+
+/* Lot 88 (US-080): the safe TV scale. A 1080p TV wants 2x; on 1024x768 it
+ * steps down to 1.5x, on 1280x800 it keeps 2x, a pin or a monitor gets
+ * nothing, and with no framebuffer yet the desktop's 1024x768 is used. */
+int arm_port_tvq(void) {
+    static os_display_info_t d;
+    const char* why = 0;
+    uint8_t* p = (uint8_t*)&d;
+    unsigned i;
+    for (i = 0; i < sizeof(d); i++) p[i] = 0;
+    d.cea_status = 0;
+    d.cea_tv = 1;
+    d.cea_best_from = 1;
+    d.cea_best_w = 1920; d.cea_best_h = 1080;
+    d.fb_w = 1024; d.fb_h = 768;
+    if (plat_form_tv_safe_q(&d, &why) != 6 || !same_str(why, "stepped down for the framebuffer")) return 0;
+    d.fb_w = 1280; d.fb_h = 800;
+    if (plat_form_tv_safe_q(&d, &why) != 8 || !same_str(why, "tv 1080p")) return 0;
+    d.fb_w = 0; d.fb_h = 0;
+    if (plat_form_tv_safe_q(&d, &why) != 6) return 0;
+    d.ui_hint_q = 4;
+    if (plat_form_tv_safe_q(&d, &why) != 0 || !same_str(why, "pinned")) return 0;
+    d.ui_hint_q = 0;
+    d.cea_tv = 0;
+    return plat_form_tv_safe_q(&d, &why) == 0 && same_str(why, "not a tv");
+}
+
+/* Lot 88 (US-068/US-073): the fair shaping queue. Peer 5 queues x in
+ * slot 0, peer 3 queues 1 and 2 in slots 1 and 2; the first pass refuses
+ * peer 3 (its pacer is closed), so x leaves; 3 then takes the freed slot
+ * 0, and the second pass still sends 1 2 3 in that order (the Lot 6
+ * queue sent slot 0 first). A full queue held by peer 3 makes
+ * room for peer 5 by pushing out peer 3's newest entry. */
+static char g_shape_log[24];
+static int g_shape_open3;
+
+static int shape_cb(void* ctx, uint32_t peer, int inner, const uint8_t* body, int len) {
+    int n = 0;
+    (void)ctx; (void)inner; (void)len;
+    if (peer == 3U && !g_shape_open3) return P2P_SHAPE_WAIT;
+    while (n < 22 && g_shape_log[n]) n++;
+    if (n < 22) { g_shape_log[n] = (char)body[0]; g_shape_log[n + 1] = 0; }
+    return P2P_SHAPE_SENT;
+}
+
+int arm_port_shape(void) {
+    static p2p_shape_t q;
+    uint8_t b[4] = { 0, 0, 0, 0 };
+    int i, d = 0;
+    p2p_shape_init(&q);
+    g_shape_log[0] = 0;
+    g_shape_open3 = 0;
+    b[0] = 'x'; (void)p2p_shape_push(&q, 5U, 0, 1, b, 4, 0);
+    b[0] = '1'; (void)p2p_shape_push(&q, 3U, 0, 1, b, 4, 0);
+    b[0] = '2'; (void)p2p_shape_push(&q, 3U, 0, 1, b, 4, 0);
+    if (p2p_shape_drain(&q, shape_cb, 0, 10, &d) != 1 || !same_str(g_shape_log, "x")) return 0;
+    b[0] = '3'; (void)p2p_shape_push(&q, 3U, 0, 1, b, 4, 20);
+    if (!q.e[0].used || q.e[0].body[0] != '3') return 0;   /* the freed front slot */
+    g_shape_open3 = 1;
+    if (p2p_shape_drain(&q, shape_cb, 0, 50, &d) != 3 || !same_str(g_shape_log, "x123")) return 0;
+    if (q.max_wait_ms != 50U || q.skips != 1U) return 0;
+    for (i = 0; i < P2P_SHAPE_Q; i++) { b[0] = (uint8_t)('a' + i); (void)p2p_shape_push(&q, 3U, 0, 1, b, 4, 60); }
+    if (p2p_shape_push(&q, 3U, 0, 1, b, 4, 60) != P2P_SHAPE_REFUSED) return 0;
+    if (p2p_shape_push(&q, 5U, 1, 2, b, 4, 60) != P2P_SHAPE_QUEUED_EVICT) return 0;
+    return p2p_shape_depth(&q, 3U, -1) == 7 && p2p_shape_depth(&q, 5U, 1) == 1 && d == 0;
+}
+
 uint32_t arm_port_selftest(void) {
     uint32_t m = 0;
     if (arm_port_aes_gcm()) m |= ARM_PORT_AES_GCM;
@@ -244,5 +352,9 @@ uint32_t arm_port_selftest(void) {
     if (arm_port_marks()) m |= ARM_PORT_MARKS;
     if (arm_port_trend()) m |= ARM_PORT_TREND;
     if (arm_port_cea()) m |= ARM_PORT_CEA;
+    if (arm_port_regdom()) m |= ARM_PORT_REGDOM;
+    if (arm_port_frame()) m |= ARM_PORT_FRAME;
+    if (arm_port_tvq()) m |= ARM_PORT_TVQ;
+    if (arm_port_shape()) m |= ARM_PORT_SHAPE;
     return m;
 }

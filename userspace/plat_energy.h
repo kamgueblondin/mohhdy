@@ -36,6 +36,9 @@ typedef struct {
     uint32_t bright_hz;
     uint32_t bright_pace;     /* pace cap before a dim, restored when idle ends */
     int dim;
+    /* Lot 88: the user's dim timeout in seconds (power-dim), 0 = the
+     * profile's screen_dim_s. A profile change keeps it. */
+    uint32_t dim_user_s;
 } plat_energy_t;
 
 void plat_energy_init(plat_energy_t* e);
@@ -56,4 +59,9 @@ int plat_energy_report(const plat_energy_t* e, char* out, int cap);
 /* Note how long the operator has been idle. Returns 1 when the screen
  * should dim. performance never dims (screen_dim_s is 0). */
 int plat_energy_idle(plat_energy_t* e, uint32_t idle_ms);
+/* Lot 88: set the dim timeout, 1..3600 s, 0 = back to the profile's.
+ * Returns 0 or -1. performance still never dims. */
+int plat_energy_set_dim(plat_energy_t* e, uint32_t seconds);
+/* seconds of idle before the first dim, 0 = never (performance) */
+uint32_t plat_energy_dim_after_s(const plat_energy_t* e);
 #endif

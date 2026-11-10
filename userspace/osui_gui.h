@@ -136,6 +136,15 @@ void osui_gui_fill_scene(os_fb_scene_t *scene);
 void osui_gui_ascii_row(const uint16_t *cells, int y, char *dst, int max);
 void osui_gui_write_snap(char *dst, int max);
 void osui_gui_set_scale_hint(int q);  /* Lot 69: first-boot scale pin, 0 = auto */
+/* Lot 88 (US-080): the first-boot hint (pin or safe TV scale) that the
+ * scale took, 0 when a saved ui.cfg won or there was none */
+int osui_gui_scale_hint_used(void);
+/* Lot 88 (US-081): asked before each paint of the desktop loop. input is 1
+ * for a key or a window event (always painted), ticks the 100 Hz tick
+ * count. Returns 1 to paint; may put a line for the serial log in msg.
+ * Without it (or without a tick source) every pass paints, as before. */
+typedef int (*osui_gui_frame_op_t)(int input, unsigned ticks, char *msg, int cap);
+void osui_gui_set_frame_op(osui_gui_frame_op_t op);
 int osui_gui_feed_key(int key, char *out, int out_max);
 /* Lot 68: shared text scale state (console ui-scale / text-size and GUI
  * Ctrl+'+'/'-'/'0'), and the window a zoom key applies to (OS_UI_Z_*). */

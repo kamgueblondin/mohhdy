@@ -42,6 +42,9 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /lot87/wall.html    Lot 87: an enablejs script wall with a noscript link
   /lot87/basic.html   Lot 87: the plain fallback page
   /lot87/blocked      Lot 87: 403 with a block notice
+  /lot88/scope.html   Lot 88: @scope (limit, implicit root, :scope), all
+  /lot88/props.html   Lot 88: background-color, list-style, font-size,
+                      text-indent, letter-spacing in the reader sheet
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -269,6 +272,36 @@ class H(http.server.BaseHTTPRequestHandler):
                     "<link rel=\"stylesheet\" href=\"layers.css\"></head><body>"
                     "<h1>Couches</h1><div class=\"keep87\">layerkeep87 visible</div>"
                     "<p class=\"gone87\">layergone87</p><p class=\"back87\">layerback87</p><p class=\"ini87\">layerinitial87</p><p>fin87</p></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot88/scope.html":
+            # Lot 88: @scope with a limit, an implicit scope (the parent of
+            # the <style> in body), declarations in the block, the all
+            # shorthand and text-transform
+            page = ("<!doctype html><html><head><title>Lot 88 scope</title><style>"
+                    "@scope (.card88) to (.foot88) { p { display: none } :scope { text-transform: uppercase } }\n"
+                    "p.all88 { display: none } p.all88 { all: revert }\n"
+                    "</style></head><body><h1>Portee</h1>"
+                    "<div class=\"card88\"><p>scopehide88</p><div class=\"foot88\"><p>scopekeep88</p></div></div>"
+                    "<p>scopeout88</p><p class=\"all88\">allback88</p>"
+                    "<div class=\"wrap88\"><style>@scope { em { display: none } }</style><em>implhide88</em></div>"
+                    "<p><em>implkeep88</em> fin88</p></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot88/props.html":
+            # Lot 88 (chunk 4): five more properties the reader passes on,
+            # an invalid list-style and an all: initial reset
+            page = ("<!doctype html><html><head><title>Lot 88 props</title><style>"
+                    "#big88 { font-size: 1.5em; letter-spacing: 2px; background: #FFEEDD }\n"
+                    "#ind88 { text-indent: 2em }\n"
+                    "ol.roman88 { list-style: upper-roman inside }\n"
+                    "ul.bad88 { list-style: square sideways }\n"
+                    "p.reset88 { font-size: 30px } p.reset88 { all: initial }\n"
+                    "</style></head><body><h1>Proprietes</h1>"
+                    "<p id=\"big88\">propbig88</p><p id=\"ind88\">propind88</p>"
+                    "<ol class=\"roman88\" id=\"rom88\"><li>romi88</li><li>romii88</li></ol>"
+                    "<ul class=\"bad88\" id=\"bad88\"><li>badli88</li></ul>"
+                    "<p class=\"reset88\" id=\"res88\">propreset88</p><p>fin88p</p></body></html>")
             self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot87/wall.html":

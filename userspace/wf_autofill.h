@@ -48,6 +48,19 @@ int wf_autofill_forget_key(wf_autofill_t *a, const char *host, const char *name)
  * up; the key goes when its last value goes. Returns how many values the
  * key still holds (0 when it went), -1 when that value was not there. */
 int wf_autofill_drop(wf_autofill_t *a, const char *host, const char *name, const char *value);
+/* Lot 88: the values of a field name for a host and then for the other
+ * hosts of its site (same registrable domain, wf_regdom.h): the host's
+ * own values first, newest first, then each other host's, newest first,
+ * without repeats. Value idx of that list: 0, or -1. *other (may be 0)
+ * gets 1 when the value came from another host of the site. */
+int wf_autofill_get_site(wf_autofill_t *a, const char *host, const char *name, int idx, char *out, int cap,
+                         int *other);
+/* Lot 88: how many values get_site lists (at most WF_AF_SITE_MAX). */
+int wf_autofill_count_site(const wf_autofill_t *a, const char *host, const char *name);
+/* Lot 88: forget one value from the host, or else from the host of the
+ * site that holds it. Values left on that key, or -1. */
+int wf_autofill_drop_site(wf_autofill_t *a, const char *host, const char *name, const char *value);
+#define WF_AF_SITE_MAX 8
 int wf_autofill_save(const wf_autofill_t *a, char *out, int cap);
 int wf_autofill_load(wf_autofill_t *a, const char *text, int len);
 int wf_autofill_text(const wf_autofill_t *a, char *out, int cap);

@@ -1,5 +1,6 @@
 /* wf_formfill.c - Lot 86: see wf_formfill.h. */
 #include "wf_formfill.h"
+#include "wf_regdom.h"
 #include "wf_qstring.h"
 
 static char lc(char c) {
@@ -85,16 +86,29 @@ int wf_formfill_offers(const wf_autofill_t *a, const wf_form_page_t *p, int fiel
     /* Lot 87: every slot is read (a forgotten host leaves holes, so the
      * first a->n slots are not the used ones), and a key gives its newest
      * value first, then the older ones it kept. */
-    for (i = 0; i < WF_AF_MAX && n < cap && n < WF_FILL_OFFERS; i++) {
-        int k;
-        if (!a->e[i].used) continue;
-        if (!eq(a->e[i].host, want)) continue;
-        if (!eq(a->e[i].name, p->field[field].name)) continue;
-        for (k = 0; k <= a->e[i].nold && n < cap && n < WF_FILL_OFFERS; k++) {
-            out[n].ent = i;
-            scopy(out[n].name, (int)sizeof(out[n].name), a->e[i].name);
-            scopy(out[n].value, (int)sizeof(out[n].value), k == 0 ? a->e[i].value : a->e[i].old[k - 1]);
-            n++;
+    {
+        int pass;
+        for (pass = 0; pass < 2; pass++) {
+            for (i = 0; i < WF_AF_MAX && n < cap && n < WF_FILL_OFFERS; i++) {
+                int k, mine;
+                if (!a->e[i].used) continue;
+                if (!eq(a->e[i].name, p->field[field].name)) continue;
+                mine = eq(a->e[i].host, want);
+                /* Lot 88: pass 1 takes the other hosts of the site */
+                if (pass == 0 ? !mine : (mine || !wf_regdom_same_site(a->e[i].host, want))) continue;
+                for (k = 0; k <= a->e[i].nold && n < cap && n < WF_FILL_OFFERS; k++) {
+                    const char *v = k == 0 ? a->e[i].value : a->e[i].old[k - 1];
+                    int j, dup = 0;
+                    for (j = 0; j < n; j++) if (eq(out[j].value, v)) dup = 1;
+                    if (dup) continue;
+                    out[n].ent = i;
+                    scopy(out[n].name, (int)sizeof(out[n].name), a->e[i].name);
+                    scopy(out[n].value, (int)sizeof(out[n].value), v);
+                    scopy(out[n].host, (int)sizeof(out[n].host), a->e[i].host);
+                    out[n].site = pass;
+                    n++;
+                }
+            }
         }
     }
     return n;

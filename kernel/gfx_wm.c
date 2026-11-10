@@ -94,6 +94,12 @@ int gfx_wm_mouse(gfx_wm_win_t *s, gfx_wm_rect_t placed, gfx_wm_rect_t base, int 
         return GFX_WM_ACT_DRAG;
     case GFX_WM_HIT_RESIZE:
         if (s->maximized) return GFX_WM_ACT_BODY;
+        /* Lot 88: start from the size on screen. dw/dh kept a grow past
+         * the work area (gfx_wm_place clamps it), so the next shrink
+         * first had to eat that hidden excess and the window did not
+         * move under the pointer (seen by the QEMU chrome test). */
+        s->dw = placed.w - base.w;
+        s->dh = placed.h - base.h;
         s->resize = 1;
         s->grab_x = x;
         s->grab_y = y;

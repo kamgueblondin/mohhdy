@@ -59,6 +59,9 @@ typedef struct {
     int ilen;
     char status[OSUI_TOOL_COLS];
     char log[400];                             /* serial log of the last action (Lot 46: + tail lines) */
+    /* Lot 88: the panel key trace, apart from log so a long run output
+     * never cuts it (it is printed after log) */
+    char trace[OSUI_TOOL_INPUT + 48];
     /* chat */
     int gen;                                   /* 1 generating */
     int steps, cur_len;

@@ -1094,6 +1094,80 @@ jobs:
           path: |
             test_logs/
 
+  lot88-chrome:
+    name: QEMU window chrome at 1x, site autofill, @scope (Lot 88)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generated fonts, glyph pages and GIF fixtures agree with the generators
+        run: make font-check
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 88 (console, chrome at 1x)
+        run: make qemu-lot88-desk
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot88-chrome-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
+  lot88-tv:
+    name: QEMU TV EDID safe scale and window chrome at 1.5x (Lot 88)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generated fonts, glyph pages and GIF fixtures agree with the generators
+        run: make font-check
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 88 (TV EDID boot)
+        run: make qemu-lot88-tv
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot88-tv-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   lot87-layout:
     name: QEMU external sheets, script walls, GUI autofill, EDID CEA (Lot 87)
     runs-on: ubuntu-latest

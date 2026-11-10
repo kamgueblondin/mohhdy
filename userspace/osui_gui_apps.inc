@@ -82,7 +82,14 @@ void osui_gui_set_tool_ops(int (*run)(const char *, char *, int),
 void osui_gui_set_tool_known(int (*known)(const char *)) { g_tool_src.known = known; }
 
 static void tool_log(osui_tool_t *t, char *out, int out_max) {
-    if (t->log[0]) { app_out(out, out_max, t->log, 0); t->log[0] = 0; }
+    if (t->log[0]) app_out(out, out_max, t->log, 0);
+    /* Lot 88: the panel key trace, as its own line after the log */
+    if (t->trace[0]) {
+        if (t->log[0]) app_out(out, out_max, "\n", 0);
+        app_out(out, out_max, t->trace, 0);
+    }
+    t->log[0] = 0;
+    t->trace[0] = 0;
 }
 
 int osui_gui_tool_open(int kind, const char *arg, char *out, int out_max) {
