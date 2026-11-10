@@ -144,13 +144,17 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/stun.c"
     fi
     if [ "$(basename "$test_file")" = "test_p2p.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/stun.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+        extra_src="$extra_src $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/p2p_shape.c $BASE_DIR/userspace/stun.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
     fi
     if [ "$(basename "$test_file")" = "test_mobile_ui.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/mobile_ui.c $BASE_DIR/userspace/platform.c"
     fi
     if [ "$(basename "$test_file")" = "test_devsync.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/devsync.c"
+    fi
+    if [ "$(basename "$test_file")" = "test_lot88_shape.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/p2p_shape.c"
+        cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_lot88_frame.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_frame.c $BASE_DIR/userspace/plat_energy.c $BASE_DIR/userspace/platform.c"
@@ -177,7 +181,7 @@ run_test() {
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_osui_p2p_prod_perf.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/p2p_shape.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
         cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
@@ -273,7 +277,7 @@ run_test() {
             extra_src="$extra_src $BASE_DIR/userspace/wf_autofill.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/wf_formfill.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_qstring.c $BASE_DIR/userspace/wf_entity.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
-        test_lot87_css.c|test_lot88_scope.c)
+        test_lot87_css.c|test_lot88_scope.c|test_lot88_props.c)
             extra_src="$extra_src $BASE_DIR/userspace/wf_sitecss.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
@@ -338,7 +342,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/wsearch.c"
     fi
     if [ "$(basename "$test_file")" = "test_arm_portable.c" ]; then
-        extra_src="$extra_src $BASE_DIR/arch/arm/arm_portable.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/edid.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/osui_frame.c $BASE_DIR/userspace/plat_form.c"
+        extra_src="$extra_src $BASE_DIR/arch/arm/arm_portable.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/edid.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/osui_frame.c $BASE_DIR/userspace/plat_form.c $BASE_DIR/userspace/p2p_shape.c"
         cflags="$cflags -I$BASE_DIR/kernel -I$BASE_DIR/userspace -I$BASE_DIR/include"
     fi
     if [ "$(basename "$test_file")" = "test_edid.c" ] || [ "$(basename "$test_file")" = "test_edid_cea.c" ]; then

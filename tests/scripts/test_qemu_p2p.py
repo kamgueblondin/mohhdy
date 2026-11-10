@@ -233,7 +233,7 @@ def main():
         # pump; beta gets all six. Measured byte rates are non zero.
         cmd(a, "p2p-limit 2", "p2p-limit ok per_second 2")
         start_burst = len(base.log_text(b["log"]))
-        start_q = cmd(a, "p2p-burst beta 6 shaped-msg", "p2p-burst sent ")
+        start_q = cmd(a, "p2p-burst beta 6 -i shaped-msg", "p2p-burst sent ")
         burst = re.search(r"p2p-burst sent (\d+) queued (\d+) refused (\d+)", log(a, start_q))
         if not burst or int(burst.group(2)) < 1 or int(burst.group(3)) != 0:
             raise RuntimeError("alpha burst was not shaped: %s" % log(a, start_q)[-400:])
@@ -251,7 +251,19 @@ def main():
         shaped = re.search(r"meas_tx_bps (\d+) meas_rx_bps (\d+) queued (\d+) shaped_sent (\d+) shaped_dropped (\d+)", log(a, start_q))
         if not shaped or int(shaped.group(1)) == 0 or int(shaped.group(4)) < int(burst.group(2)) or int(shaped.group(5)) != 0:
             raise RuntimeError("alpha qos shaping counters: %s" % log(a, start_q)[-400:])
-        say("scenario 1b ok: burst of 6 shaped (queued %s), all delivered, meas_tx_bps %s" % (burst.group(2), shaped.group(1)))
+        # Lot 88: the queue kept the order (slot reuse no longer reorders)
+        got = re.findall(r"p2p msg from alpha: shaped-msg-(\d+)", log(b, start_burst))
+        if got[:6] != [str(i) for i in range(6)]:
+            raise RuntimeError("beta got the shaped burst out of order: %s" % got)
+        start_q = cmd(a, "p2p-shape", "p2p shape depth ")
+        shape = re.search(r"p2p shape depth (\d+) msg \d+ bulk \d+ queued (\d+) sent (\d+) dropped (\d+) "
+                          r"evicted (\d+) refused (\d+) msg_sent (\d+) bulk_sent \d+ last_wait_ms \d+ max_wait_ms (\d+)",
+                          log(a, start_q))
+        if (not shape or int(shape.group(1)) != 0 or int(shape.group(3)) != int(shaped.group(4))
+                or int(shape.group(4)) != 0 or int(shape.group(5)) != 0 or int(shape.group(8)) == 0):
+            raise RuntimeError("alpha shaping queue: %s" % log(a, start_q)[-400:])
+        say("scenario 1b ok: burst of 6 shaped (queued %s), all delivered in order, meas_tx_bps %s, "
+            "longest wait %s ms" % (burst.group(2), shaped.group(1), shape.group(8)))
         # Lot 67 (US-068/US-073): a paced probe train of 24 to beta feeds the
         # bandwidth estimator (delivery rate of acked probes, min RTT).
         cmd(a, "p2p-probe beta 24", "p2p-probe started to beta count 24")

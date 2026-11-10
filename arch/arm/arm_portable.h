@@ -23,7 +23,8 @@
 #define ARM_PORT_REGDOM  2048U /* Lot 88: userspace/wf_regdom.c registrable domain */
 #define ARM_PORT_FRAME   4096U /* Lot 88: userspace/osui_frame.c frame pacer */
 #define ARM_PORT_TVQ     8192U /* Lot 88: userspace/plat_form.c safe TV scale */
-#define ARM_PORT_ALL     16383U
+#define ARM_PORT_SHAPE   16384U /* Lot 88: userspace/p2p_shape.c fair shaping queue */
+#define ARM_PORT_ALL     32767U
 
 int arm_port_aes_gcm(void);   /* 1 ok */
 int arm_port_edid(void);
@@ -39,6 +40,7 @@ int arm_port_cea(void);
 int arm_port_regdom(void);
 int arm_port_frame(void);
 int arm_port_tvq(void);
+int arm_port_shape(void);
 /* bit mask of the checks that passed */
 uint32_t arm_port_selftest(void);
 #endif

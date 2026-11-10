@@ -34,6 +34,7 @@ NEEDLES = (
     "arm regdom self-test ok shop.co.uk github.io apart (userspace/wf_regdom.c)",
     "arm frame pacer self-test ok 20 of 40 idle wakes at 5 hz (userspace/osui_frame.c)",
     "arm tv scale self-test ok 1080p tv 1.5x on 1024x768 (userspace/plat_form.c)",
+    "arm p2p shape self-test ok order x123 after slot reuse (userspace/p2p_shape.c)",
     "arm gic + generic timer armed at 100 Hz",
     "arm tasks spawned 5 (USR mode)",
     "arm user reporter pid 0x00000001 running in USR mode via svc",

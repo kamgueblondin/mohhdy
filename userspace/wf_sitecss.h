@@ -26,7 +26,12 @@
  * declarations right in the block (on the root, specificity 0) and scope
  * proximity in the cascade (between specificity and order). The all
  * shorthand with initial, inherit, unset, revert and revert-layer.
- * text-transform and white-space, which inherit, with every keyword. */
+ * text-transform and white-space, which inherit, with every keyword.
+ * Lot 88 (chunk 4): background-color (and a background that is one
+ * colour), list-style-type (and the keyword of list-style), font-size,
+ * text-indent and letter-spacing, with every keyword; the last four
+ * inherit. Lengths are kept as a short checked token (12px, 1.5em, 120%)
+ * and passed to the engine, which resolves em and % against the parent. */
 #ifndef WF_SITECSS_H
 #define WF_SITECSS_H
 #include <stdint.h>
@@ -38,6 +43,8 @@
 #define WF_SITE_CLS 4
 #define WF_SITE_ATTR 4
 #define WF_SITE_PCLS 3
+#define WF_SITE_TOK 12            /* Lot 88: a checked value token (font-size: 1.25em) */
+#define WF_SITE_TOKS 4            /* list, font-size, text-indent, letter-spacing */
 #define WF_SITE_ALT 2
 #define WF_SITE_VARS 16
 #define WF_SITE_LINKS 6
@@ -107,8 +114,13 @@ enum {
     /* Lot 88 */
     WF_SITE_K_TRANSFORM = 10, /* text-transform: 1 none, 2 uppercase, 3 lowercase, 4 capitalize */
     WF_SITE_K_WS = 11,        /* white-space: 1 normal, 2 pre, 3 nowrap, 4 pre-wrap, 5 pre-line */
-    WF_SITE_K_MAX = 11,
-    WF_SITE_K_ALL = 12        /* the all shorthand: a CSS-wide keyword on every kind */
+    WF_SITE_K_BG = 12,        /* background-color: 1 transparent, 2 colour */
+    WF_SITE_K_LIST = 13,      /* list-style-type: token, inherits */
+    WF_SITE_K_FSIZE = 14,     /* font-size: token, inherits */
+    WF_SITE_K_INDENT = 15,    /* text-indent: token, inherits */
+    WF_SITE_K_LSPACE = 16,    /* letter-spacing: token, inherits */
+    WF_SITE_K_MAX = 16,
+    WF_SITE_K_ALL = 17        /* the all shorthand: a CSS-wide keyword on every kind */
 };
 /* Lot 88: how a rule inside @scope relates to its scoping root */
 enum {
@@ -161,6 +173,15 @@ typedef struct {
     uint8_t rv[WF_SITE_K_MAX + 1];
     uint8_t transform, ws;        /* Lot 88: WF_SITE_K_TRANSFORM / WF_SITE_K_WS values */
     int transform_rank, ws_rank;
+    /* Lot 88 (chunk 4): background-color, and the token kinds
+     * (WF_SITE_K_LIST + i); tok_val[i] 1 = from initial (not passed on),
+     * 2 = a value the page gave */
+    uint32_t bg;
+    uint8_t bg_set;
+    int bg_rank;
+    char tok[WF_SITE_TOKS][WF_SITE_TOK];
+    uint8_t tok_val[WF_SITE_TOKS];
+    int tok_rank[WF_SITE_TOKS];
 } wf_site_node_t;
 
 typedef struct {
@@ -197,6 +218,7 @@ typedef struct {
     uint8_t revert;               /* Lot 87: WF_SITE_RV_* (kind set, no value) */
     uint8_t scope;                /* Lot 88: 0 unscoped, else scope index + 1 */
     uint8_t scope_rel;            /* Lot 88: WF_SITE_SR_* */
+    char tok[WF_SITE_TOK];        /* Lot 88: the value of a token kind */
 } wf_site_rule_t;
 
 /* Lot 88: one @scope rule. A root is an element that matches start (or,

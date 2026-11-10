@@ -303,8 +303,22 @@ def step_energy(mon, proc):
     if not m:
         raise RuntimeError("energy wake line unreadable")
     idle_ms, hz, fps10, drawn, skipped = (int(v) for v in m.groups())
-    if hz != 15 or idle_ms < 9000 or skipped < 10 or drawn < 1:
+    if hz != 15 or idle_ms < 9000 or drawn < 1:
         raise RuntimeError("energy wake: idle %d ms, %d hz, %d drawn, %d skipped" % (idle_ms, hz, drawn, skipped))
+    # The contract: idle paints stay within the budget of each idle phase
+    # (15 Hz until the 3 s dim, 7 Hz until 6 s, 5 Hz after), one frame of
+    # slack per phase. How many wakes are skipped depends on how fast the
+    # loop wakes: on the box it wakes about 10 times a second and skips
+    # most; on a CI runner the TCG paint itself takes about 250 ms, the loop
+    # wakes about 4 times a second, below every budget, and has nothing to
+    # skip (run 42747597268: 43 drawn, 0 skipped in 10.6 s). So skips are
+    # required only when the loop woke faster than the 7 Hz dim budget.
+    budget = 15 * 3 + 7 * 3 + 5 * max(0, idle_ms - 6000) // 1000 + 3
+    wakes = drawn + skipped
+    if drawn > budget:
+        raise RuntimeError("energy: %d idle frames in %d ms, budget %d" % (drawn, idle_ms, budget))
+    if wakes * 1000 > 7 * idle_ms and skipped < 10:
+        raise RuntimeError("energy: loop woke %d times in %d ms but skipped only %d" % (wakes, idle_ms, skipped))
     # the key painted: the next snapshot carries it
     g.wait_for(proc, "OSUI-SNAP", 20, mark)
     g.send_key(mon, "esc")
@@ -315,8 +329,8 @@ def step_energy(mon, proc):
     need(out, ["dim_after 60s"], "power-dim default")
     lw.run(mon, proc, "power-apply balanced", "power-apply profile balanced", 20)
     say("energy: saver dims the idle desktop at 3 s and 6 s (7 then 5 Hz, mesh cap 32000 then 16000), "
-        "%d idle wakes skipped and %d painted in %.1f s (%.1f fps), a key woke it at 15 Hz" %
-        (skipped, drawn, idle_ms / 1000.0, fps10 / 10.0))
+        "%d idle wakes skipped and %d painted in %.1f s (%.1f fps, budget %d frames), a key woke it at 15 Hz" %
+        (skipped, drawn, idle_ms / 1000.0, fps10 / 10.0, budget))
 
 
 def step_scope(ctx):
@@ -335,8 +349,30 @@ def step_scope(ctx):
         ":scope uppercase, all: revert undid display none")
 
 
+def step_props(ctx):
+    """US-031: background, list-style, font-size, text-indent and
+    letter-spacing from the page's sheet, as the reader keeps them."""
+    mon, proc, u = ctx["mon"], ctx["proc"], ctx["u"]
+    lw.run(mon, proc, "web-css on", "web-css on", 20)
+    lw.run(mon, proc, "web-open %s/lot88/props.html" % u, "osui web page sections", fail=["error="])
+    css = lw.run(mon, proc, "web-css", "css-scope ", 30)
+    need(css, ["node p #big88 display auto bg #ffeedd size 1.5em ls 2px",
+               "node p #ind88 display auto indent 2em",
+               "node ol #rom88 .roman88 display auto list upper-roman"], "web-css properties")
+    for line in css.splitlines():
+        if "#bad88" in line and " list " in line:
+            raise RuntimeError("an invalid list-style was kept: %r" % line)
+        if "#res88" in line and (" size " in line or " bg " in line):
+            raise RuntimeError("all: initial did not reset: %r" % line)
+    read = lw.run(mon, proc, "web-read", "fin88p", 30)
+    need(read, ["propbig88", "propind88", "romi88", "badli88", "propreset88"], "web-read properties")
+    lw.run(mon, proc, "web-css off", "web-css off", 20)
+    say("properties: background, font-size 1.5em, letter-spacing, text-indent and list-style upper-roman kept; "
+        "an invalid list-style dropped; all: initial reset font-size")
+
+
 # later steps of the lot (each takes the context dict)
-STEPS = [step_scope]
+STEPS = [step_scope, step_props]
 
 
 if __name__ == "__main__":

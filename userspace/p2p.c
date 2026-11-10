@@ -388,39 +388,36 @@ int p2p_pace_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, in
 }
 
 /* Lot 6 (US-068/073): a data message over budget is queued (shaping),
- * not dropped. Returns 1 when queued, -2 when the queue is full. */
-static int shape_enqueue(p2p_node_t* n, p2p_peer_t* p, int inner, const uint8_t* body, int len) {
-    int i;
-    if (len > P2P_SHAPE_BODY) return -2;
-    for (i = 0; i < P2P_SHAPE_Q; i++) {
-        if (n->shape_q[i].used) continue;
-        n->shape_q[i].used = 1;
-        n->shape_q[i].peer = p->id;
-        n->shape_q[i].inner = (uint8_t)inner;
-        n->shape_q[i].len = (uint16_t)len;
-        mcopy(n->shape_q[i].body, body, len);
-        n->qos.shaped_queued++;
-        return 1;
-    }
-    n->qos.shaped_dropped++;
-    return -2;
+ * not dropped. Returns 1 when queued, -2 when the queue is full.
+ * Lot 88: the queue is p2p_shape.c (per-peer order, two classes, peers
+ * take turns, a full queue pushes out the busiest peer's newest entry). */
+static int shape_enqueue(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inner, const uint8_t* body, int len) {
+    uint32_t ms = now(h) * (1000U / P2P_HZ);
+    int rc = p2p_shape_push(&n->shape, p->id, p2p_shape_class(inner == P2P_I_PUT), inner, body, len, ms);
+    if (rc == P2P_SHAPE_REFUSED) { n->qos.shaped_dropped++; return -2; }
+    if (rc == P2P_SHAPE_QUEUED_EVICT) n->qos.shaped_dropped++;   /* the entry pushed out */
+    n->qos.shaped_queued++;
+    return 1;
 }
 
-/* FIFO per call order: the lowest slot is not always the oldest, so keep
- * a send pass in slot order; each peer keeps its own order because a slot
- * is reused only after it was sent. */
+typedef struct { p2p_node_t* n; const p2p_host_t* h; } shape_ctx_t;
+
+static int shape_send(void* c, uint32_t peer, int inner, const uint8_t* body, int len) {
+    shape_ctx_t* x = (shape_ctx_t*)c;
+    p2p_peer_t* p = by_id(x->n, peer);
+    if (!p || !p->keyed) return P2P_SHAPE_DROP;
+    if (!admit(x->n, x->h, p, (uint32_t)len)) return P2P_SHAPE_WAIT;
+    return seal_send(x->n, x->h, p, inner, body, len) == 0 ? P2P_SHAPE_SENT : P2P_SHAPE_DROP;
+}
+
 static void shape_drain(p2p_node_t* n, const p2p_host_t* h) {
-    int i;
-    for (i = 0; i < P2P_SHAPE_Q; i++) {
-        p2p_peer_t* p;
-        if (!n->shape_q[i].used) continue;
-        p = by_id(n, n->shape_q[i].peer);
-        if (!p || !p->keyed) { n->shape_q[i].used = 0; n->qos.shaped_dropped++; continue; }
-        if (!admit(n, h, p, n->shape_q[i].len)) continue;
-        if (seal_send(n, h, p, n->shape_q[i].inner, n->shape_q[i].body, n->shape_q[i].len) == 0) n->qos.shaped_sent++;
-        else n->qos.shaped_dropped++;
-        n->shape_q[i].used = 0;
-    }
+    shape_ctx_t x;
+    int sent, drops = 0;
+    if (p2p_shape_depth(&n->shape, 0, -1) == 0) return;
+    x.n = n; x.h = h;
+    sent = p2p_shape_drain(&n->shape, shape_send, &x, now(h) * (1000U / P2P_HZ), &drops);
+    n->qos.shaped_sent += (uint32_t)sent;
+    n->qos.shaped_dropped += (uint32_t)drops;
 }
 
 static void qos_rate(p2p_node_t* n) {
@@ -1956,7 +1953,7 @@ int p2p_send_text(p2p_node_t* n, const p2p_host_t* h, const char* peer, const ch
     if (!n->up || !p) return -1;
     pos = put_str(b, 0, 400, text);
     if (pos < 0) return -1;
-    if (!admit(n, h, p, (uint32_t)pos)) return shape_enqueue(n, p, P2P_I_MSG, b, pos);
+    if (!admit(n, h, p, (uint32_t)pos)) return shape_enqueue(n, h, p, P2P_I_MSG, b, pos);
     return seal_send(n, h, p, P2P_I_MSG, b, pos);
 }
 
@@ -1994,7 +1991,7 @@ int p2p_put(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* val
         if (!p->used || !p->keyed || !p->up) continue;
         if (!admit(n, h, p, (uint32_t)pos)) {
             /* Lot 68: a paced put waits in the shaping queue like a message */
-            if (n->qos.pace.rate_bps && shape_enqueue(n, p, P2P_I_PUT, b, pos) == 1) { n->qos.paced_put_queued++; sent++; }
+            if (n->qos.pace.rate_bps && shape_enqueue(n, h, p, P2P_I_PUT, b, pos) == 1) { n->qos.paced_put_queued++; sent++; }
             continue;
         }
         if (seal_send(n, h, p, P2P_I_PUT, b, pos) == 0) sent++;
@@ -2604,6 +2601,25 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
         s_cat(out, " shaped_sent ", cap); cat_u(out, n->qos.shaped_sent, cap);
         s_cat(out, " shaped_dropped ", cap); cat_u(out, n->qos.shaped_dropped, cap);
         s_cat(out, "\n", cap);
+    } else if (s_eq(what, "shape")) {
+        /* Lot 88: the shaping queue, then one line per peer with entries */
+        int i;
+        out[0] = 0;
+        s_cat(out, "p2p shape ", cap);
+        p2p_shape_status(&n->shape, out + s_len(out), cap - s_len(out));
+        s_cat(out, "\n", cap);
+        for (i = 0; i < P2P_PEERS; i++) {
+            const p2p_peer_t* p = &n->peers[i];
+            int m, k;
+            if (!p->used) continue;
+            m = p2p_shape_depth(&n->shape, p->id, P2P_SHAPE_C_MSG);
+            k = p2p_shape_depth(&n->shape, p->id, P2P_SHAPE_C_BULK);
+            if (!m && !k) continue;
+            s_cat(out, "p2p shape peer ", cap); s_cat(out, p->name, cap);
+            s_cat(out, " msg ", cap); cat_u(out, (uint32_t)m, cap);
+            s_cat(out, " bulk ", cap); cat_u(out, (uint32_t)k, cap);
+            s_cat(out, "\n", cap);
+        }
     } else if (s_eq(what, "bwe")) {
         const p2p_bwe_t* e = &n->qos.bwe;
         out[0] = 0;

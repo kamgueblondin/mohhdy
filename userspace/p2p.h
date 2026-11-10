@@ -14,6 +14,7 @@
 #include "p2p_trend.h"
 #include "p2p_flow.h"
 #include "p2p_rtx.h"
+#include "p2p_shape.h"
 #include <stdint.h>
 
 #define P2P_PORT 7700U
@@ -251,8 +252,7 @@ typedef struct {
      * probe acks; its cap bounds the pacing rate. Lab path only. */
     p2p_trend_t trend;
 } p2p_qos_t;
-#define P2P_SHAPE_Q 8
-#define P2P_SHAPE_BODY 404
+/* P2P_SHAPE_Q and P2P_SHAPE_BODY: p2p_shape.h (lot 88) */
 
 typedef struct {
     uint8_t nat_type; /* STUN_NAT_* (stun.h): mapping behaviour seen so far */
@@ -305,7 +305,7 @@ typedef struct {
     uint32_t solicited_skipped;   /* anomaly windows not counted because solicited */
     uint32_t unshaped_tx;         /* messages sent by p2p_send_unshaped (flood proof) */
     /* Lot 6 (US-068/073): data messages waiting for budget */
-    struct { uint8_t used; uint32_t peer; uint8_t inner; uint16_t len; uint8_t body[P2P_SHAPE_BODY]; } shape_q[P2P_SHAPE_Q];
+    p2p_shape_t shape;            /* Lot 88: fair shaping queue (p2p_shape.c) */
     /* Lot 6 (US-070): cache lines written through the Raft log */
     uint32_t cache_raft_applied;
     char last_msg[P2P_TEXT_MAX];

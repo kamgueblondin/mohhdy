@@ -13,12 +13,15 @@ US-031 partial, phase3_complete=false. Autofill is shared between the
 hosts of one site (registrable domain, short hand-written suffix list).
 Desktop panels trace each key so the panel QEMU tests wait for it.
 The reader stylesheet handles @scope, the all shorthand,
-text-transform and white-space. A QEMU tablet test clicks the chrome
+text-transform and white-space, then background-color, list-style,
+font-size, text-indent and letter-spacing. A QEMU tablet test clicks the chrome
 of every window type at 1x and 1.5x (a resize clamp bug was fixed).
 A CEA TV sink sets a safe first-boot scale (US-080 partial, no DDC).
 The idle desktop paints within the energy refresh budget and dims
 after power-dim seconds (US-081 partial, battery simulated). The ARM
 kernel self-tests three more shared sources (US-076 partial).
+The mesh shaping queue keeps each peer's order, weights messages
+over KV puts and lets peers take turns (US-068/073 partial).
 US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097 stay
 simule. See docs/lot88_plan.md.
 

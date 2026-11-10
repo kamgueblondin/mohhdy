@@ -840,6 +840,9 @@ static int *kind_rank(wf_site_node_t *nd, int kind) {
     case WF_SITE_K_VIS: return &nd->vis_rank;
     case WF_SITE_K_TRANSFORM: return &nd->transform_rank;
     case WF_SITE_K_WS: return &nd->ws_rank;
+    case WF_SITE_K_BG: return &nd->bg_rank;
+    case WF_SITE_K_LIST: case WF_SITE_K_FSIZE: case WF_SITE_K_INDENT: case WF_SITE_K_LSPACE:
+        return &nd->tok_rank[kind - WF_SITE_K_LIST];
     default: return 0;
     }
 }
@@ -859,6 +862,11 @@ static void reset_kind(wf_site_node_t *nd, int kind) {
     case WF_SITE_K_VIS: nd->vis = 0; break;
     case WF_SITE_K_TRANSFORM: nd->transform = 0; break;
     case WF_SITE_K_WS: nd->ws = 0; break;
+    case WF_SITE_K_BG: nd->bg = 0; nd->bg_set = 0; break;
+    case WF_SITE_K_LIST: case WF_SITE_K_FSIZE: case WF_SITE_K_INDENT: case WF_SITE_K_LSPACE:
+        nd->tok[kind - WF_SITE_K_LIST][0] = 0;
+        nd->tok_val[kind - WF_SITE_K_LIST] = 0;
+        break;
     default: return;
     }
     if (kind_rank(nd, kind)) *kind_rank(nd, kind) = 0;
@@ -908,6 +916,15 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
         if (rank >= nd->transform_rank) { nd->transform = r->val; nd->transform_rank = rank; }
     } else if (r->kind == WF_SITE_K_WS) {
         if (rank >= nd->ws_rank) { nd->ws = r->val; nd->ws_rank = rank; }
+    } else if (r->kind == WF_SITE_K_BG) {
+        if (rank >= nd->bg_rank) { nd->bg = r->color; nd->bg_set = (uint8_t)(r->val == 2); nd->bg_rank = rank; }
+    } else if (r->kind >= WF_SITE_K_LIST && r->kind <= WF_SITE_K_LSPACE) {
+        int t = r->kind - WF_SITE_K_LIST;
+        if (rank >= nd->tok_rank[t]) {
+            scopy(nd->tok[t], WF_SITE_TOK, r->tok, slen(r->tok));
+            nd->tok_val[t] = r->val;
+            nd->tok_rank[t] = rank;
+        }
     }
 }
 
@@ -926,6 +943,7 @@ static void all_kind(const wf_site_rule_t *r, int kind, wf_site_rule_t *out) {
     out->nparts = 0;
     out->scope = r->scope;
     out->scope_rel = r->scope_rel;
+    out->tok[0] = 0;
     if (kw == 1 || (kw == 3 && !kind_inherits(kind))) { initial_value(kind, out); return; }
     out->kind = (uint8_t)kind;
     out->val = 0;
@@ -1019,7 +1037,8 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
     out[0] = 0;
     if (!nd) return 0;
     if (!nd->color_set && nd->weight != 2 && nd->align < 2 && !nd->margin_set && !nd->pad_set &&
-        nd->italic != 2 && nd->deco < 2 && nd->transform < 2 && nd->ws < 2) return 0;
+        nd->italic != 2 && nd->deco < 2 && nd->transform < 2 && nd->ws < 2 && !nd->bg_set &&
+        nd->tok_val[0] != 2 && nd->tok_val[1] != 2 && nd->tok_val[2] != 2 && nd->tok_val[3] != 2) return 0;
     n = app(out, cap, n, " style=\"");
     if (nd->color_set) { n = app(out, cap, n, "color:"); n = app_hex(out, cap, n, nd->color); any = 1; }
     if (nd->weight == 2) { if (any) n = app(out, cap, n, ";"); n = app(out, cap, n, "font-weight:bold"); any = 1; }
@@ -1063,6 +1082,24 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
         if (any) n = app(out, cap, n, ";");
         n = app(out, cap, n, "white-space:");
         n = app(out, cap, n, wt[nd->ws]);
+        any = 1;
+    }
+    if (nd->bg_set) {
+        if (any) n = app(out, cap, n, ";");
+        n = app(out, cap, n, "background-color:");
+        n = app_hex(out, cap, n, nd->bg);
+        any = 1;
+    }
+    {
+        static const char *const tp[WF_SITE_TOKS] = { "list-style-type:", "font-size:", "text-indent:", "letter-spacing:" };
+        int t;
+        for (t = 0; t < WF_SITE_TOKS; t++) {
+            if (nd->tok_val[t] != 2 || !nd->tok[t][0]) continue;
+            if (any) n = app(out, cap, n, ";");
+            n = app(out, cap, n, tp[t]);
+            n = app(out, cap, n, nd->tok[t]);
+            any = 1;
+        }
     }
     n = app(out, cap, n, "\"");
     return n;
@@ -1114,6 +1151,16 @@ int wf_site_report(const wf_site_t *d, char *out, int cap) {
         else if (nd->ws == 3) n = app(out, cap, n, " ws-nowrap");
         else if (nd->ws == 4) n = app(out, cap, n, " ws-pre-wrap");
         else if (nd->ws == 5) n = app(out, cap, n, " ws-pre-line");
+        if (nd->bg_set) { n = app(out, cap, n, " bg "); n = app_hex(out, cap, n, nd->bg); }
+        {
+            static const char *const tn[WF_SITE_TOKS] = { " list ", " size ", " indent ", " ls " };
+            int t;
+            for (t = 0; t < WF_SITE_TOKS; t++) {
+                if (nd->tok_val[t] != 2) continue;
+                n = app(out, cap, n, tn[t]);
+                n = app(out, cap, n, nd->tok[t]);
+            }
+        }
         n = app(out, cap, n, "\n");
     }
     return n;
@@ -1190,6 +1237,7 @@ static int add_rule(wf_site_t *d, const wf_site_rule_t *src) {
     r->revert = src->revert;
     r->scope = src->scope;
     r->scope_rel = src->scope_rel;
+    scopy(r->tok, WF_SITE_TOK, src->tok, slen(src->tok));
     r->order = d->nrules;
     for (p = 0; p < src->nparts && p < WF_SITE_PARTS; p++) {
         const unsigned char *a = (const unsigned char *)&src->part[p];
@@ -1375,13 +1423,19 @@ static int prop_kind(const char *prop) {
     if (eq(prop, "visibility")) return WF_SITE_K_VIS;
     if (eq(prop, "text-transform")) return WF_SITE_K_TRANSFORM;
     if (eq(prop, "white-space")) return WF_SITE_K_WS;
+    if (eq(prop, "background-color") || eq(prop, "background")) return WF_SITE_K_BG;
+    if (eq(prop, "list-style-type") || eq(prop, "list-style")) return WF_SITE_K_LIST;
+    if (eq(prop, "font-size")) return WF_SITE_K_FSIZE;
+    if (eq(prop, "text-indent")) return WF_SITE_K_INDENT;
+    if (eq(prop, "letter-spacing")) return WF_SITE_K_LSPACE;
     return 0;
 }
 
 /* Lot 87: the properties that inherit in CSS */
 static int kind_inherits(int kind) {
     return kind == 2 || kind == 3 || kind == 4 || kind == WF_SITE_K_STYLE || kind == WF_SITE_K_VIS ||
-           kind == WF_SITE_K_TRANSFORM || kind == WF_SITE_K_WS;
+           kind == WF_SITE_K_TRANSFORM || kind == WF_SITE_K_WS || kind == WF_SITE_K_LIST ||
+           kind == WF_SITE_K_FSIZE || kind == WF_SITE_K_INDENT || kind == WF_SITE_K_LSPACE;
 }
 
 /* Lot 87: initial is a value like any other: inline, normal, start
@@ -1391,12 +1445,131 @@ static void initial_value(int kind, wf_site_rule_t *proto) {
     proto->revert = WF_SITE_RV_NONE;
     proto->color = 0;
     proto->box_n = 0;
+    proto->tok[0] = 0;
     switch (kind) {
     case 1: proto->val = WF_SITE_DISP_INLINE; break;
+    /* Lot 88: transparent, disc, medium, 0, normal; val 1 marks a value
+     * that came from initial and is not passed to the engine */
+    case WF_SITE_K_BG: proto->val = 1; break;
+    case WF_SITE_K_LIST: proto->val = 1; scopy(proto->tok, WF_SITE_TOK, "disc", 4); break;
+    case WF_SITE_K_FSIZE: proto->val = 1; scopy(proto->tok, WF_SITE_TOK, "medium", 6); break;
+    case WF_SITE_K_INDENT: proto->val = 1; scopy(proto->tok, WF_SITE_TOK, "0", 1); break;
+    case WF_SITE_K_LSPACE: proto->val = 1; scopy(proto->tok, WF_SITE_TOK, "normal", 6); break;
     case 4: proto->val = 1; proto->color = 0x000000; break;
     case 5: case 6: proto->val = 0; proto->box_n = 1; proto->box[0] = 0; break;
     default: proto->val = 1; break;     /* normal, left, normal, none, visible, none, normal */
     }
+}
+
+/* ---- Lot 88 (chunk 4): token properties ---------------------------- */
+
+/* list-style-type keywords the engine draws (webeng list_keyword) */
+static int list_name(const char *s) {
+    static const char *const names[] = { "none", "disc", "circle", "square", "decimal", "decimal-leading-zero",
+                                         "lower-alpha", "upper-alpha", "lower-latin", "upper-latin",
+                                         "lower-roman", "upper-roman", 0 };
+    int i;
+    for (i = 0; names[i]; i++) if (eq(s, names[i])) return 1;
+    return 0;
+}
+
+/* list-style: the first word that is a list-style-type keyword; a word
+ * that is none of type, position or image makes the value invalid */
+static int list_short(const char *s, char *out, int cap) {
+    int i = 0, got = 0;
+    out[0] = 0;
+    while (s[i]) {
+        char w[24];
+        int k = 0;
+        while (s[i] == ' ') i++;
+        while (s[i] && s[i] != ' ' && k < (int)sizeof(w) - 1) w[k++] = s[i++];
+        w[k] = 0;
+        while (s[i] && s[i] != ' ') i++;
+        if (!k) break;
+        if (list_name(w)) { if (!got) { scopy(out, cap, w, k); got = 1; } continue; }
+        if (eq(w, "inside") || eq(w, "outside")) continue;
+        if (k > 4 && w[0] == 'u' && w[1] == 'r' && w[2] == 'l' && w[3] == '(') continue;
+        return 0;
+    }
+    return got;
+}
+
+/* A number with at most two decimals and a unit from units[] (or no unit
+ * for 0); milli gets the value x 1000, signed. Returns the unit index + 1,
+ * 0 for a bare 0, -1 when invalid. */
+static int length_tok(const char *s, const char *const *units, int *milli) {
+    int i = 0, neg = 0, v = 0, frac = 0, fd = 0, digits = 0, u;
+    if (s[i] == '-' || s[i] == '+') { neg = s[i] == '-'; i++; }
+    while (s[i] >= '0' && s[i] <= '9') { if (v < 100000) v = v * 10 + (s[i] - '0'); i++; digits++; }
+    if (s[i] == '.') {
+        i++;
+        while (s[i] >= '0' && s[i] <= '9') { if (fd < 3) { frac = frac * 10 + (s[i] - '0'); fd++; } else return -1; i++; digits++; }
+        if (fd > 2) return -1;
+    }
+    if (!digits) return -1;
+    while (fd < 3) { frac *= 10; fd++; }
+    *milli = (neg ? -1 : 1) * (v * 1000 + frac);
+    if (!s[i]) return *milli == 0 ? 0 : -1;
+    for (u = 0; units[u]; u++) if (eq(s + i, units[u])) return u + 1;
+    return -1;
+}
+
+/* font-size: an absolute or relative keyword, or a positive length in px
+ * (up to 96), pt (72), em or rem (6) or % (600) */
+static int fsize_tok(const char *s) {
+    static const char *const kw[] = { "xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large",
+                                      "xxx-large", "smaller", "larger", 0 };
+    static const char *const units[] = { "px", "pt", "em", "rem", "%", 0 };
+    static const int maxm[] = { 96000, 72000, 6000, 6000, 600000 };
+    int i, m = 0, u;
+    for (i = 0; kw[i]; i++) if (eq(s, kw[i])) return 1;
+    u = length_tok(s, units, &m);
+    return u > 0 && m > 0 && m <= maxm[u - 1];
+}
+
+/* text-indent: 0, px 0..255 or em 0..10 (the engine refuses % here) */
+static int indent_tok(const char *s) {
+    static const char *const units[] = { "px", "em", 0 };
+    int m = 0, u = length_tok(s, units, &m);
+    if (u == 0) return 1;
+    if (u == 1) return m >= 0 && m <= 255000;
+    return u == 2 && m >= 0 && m <= 10000;
+}
+
+/* letter-spacing: normal, 0, px -4..16 (the engine's bounds) or em
+ * -0.25..1 */
+static int lspace_tok(const char *s) {
+    static const char *const units[] = { "px", "em", 0 };
+    int m = 0, u;
+    if (eq(s, "normal")) return 1;
+    u = length_tok(s, units, &m);
+    if (u == 0) return 1;
+    if (u == 1) return m >= -4000 && m <= 16000;
+    return u == 2 && m >= -250 && m <= 1000;
+}
+
+/* one token kind: 1 and proto filled, 0 invalid */
+static int tok_decl(const char *prop, const char *val, wf_site_rule_t *proto) {
+    char t[WF_SITE_TOK];
+    int kind = 0;
+    t[0] = 0;
+    if (slen(val) >= WF_SITE_TOK + 12) return 0;
+    if (eq(prop, "list-style-type")) {
+        if (list_name(val)) { scopy(t, WF_SITE_TOK, val, slen(val)); kind = WF_SITE_K_LIST; }
+    } else if (eq(prop, "list-style")) {
+        if (list_short(val, t, WF_SITE_TOK)) kind = WF_SITE_K_LIST;
+    } else if (slen(val) < WF_SITE_TOK) {
+        if (eq(prop, "font-size") && fsize_tok(val)) kind = WF_SITE_K_FSIZE;
+        else if (eq(prop, "text-indent") && indent_tok(val)) kind = WF_SITE_K_INDENT;
+        else if (eq(prop, "letter-spacing") && lspace_tok(val)) kind = WF_SITE_K_LSPACE;
+        if (kind) scopy(t, WF_SITE_TOK, val, slen(val));
+    }
+    if (!kind) return 0;
+    proto->kind = (uint8_t)kind;
+    proto->val = 2;
+    proto->box_n = 0;
+    scopy(proto->tok, WF_SITE_TOK, t, slen(t));
+    return 1;
 }
 
 static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_t *proto) {
@@ -1481,6 +1654,15 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
         } else if (eq(prop, "white-space")) {
             int v = ws_val(val);
             if (v) { proto->kind = WF_SITE_K_WS; proto->val = (uint8_t)v; return 1; }
+        } else if (eq(prop, "background-color") || eq(prop, "background")) {
+            /* Lot 88: a colour, or transparent; background only when its
+             * whole value is one of those (images and positions are not
+             * passed on) */
+            uint32_t c = 0;
+            if (eq(val, "transparent")) { proto->kind = WF_SITE_K_BG; proto->val = 1; proto->color = 0; return 1; }
+            if (parse_color(val, slen(val), &c)) { proto->kind = WF_SITE_K_BG; proto->val = 2; proto->color = c; return 1; }
+        } else if (tok_decl(prop, val, proto)) {
+            return 1;
         }
         if (i < n && body[i] == ';') i++;
     }
@@ -1673,6 +1855,7 @@ static int parse_selector(wf_site_t *d, const char *s, int n, const wf_site_rule
         rule.layer = proto->layer;
         rule.revert = proto->revert;
         rule.scope = proto->scope;
+        scopy(rule.tok, WF_SITE_TOK, proto->tok, slen(proto->tok));
         {
             uint8_t lead = WF_SITE_REL_DESC;
             int has_scope = 0, q;
@@ -1856,7 +2039,8 @@ static int known_prop(const char *p, const char *v) {
         "text-decoration", "text-decoration-line", "visibility", "background-color", "border",
         "border-radius", "width", "height", "max-width", "min-width", "gap", "grid-template-columns",
         "flex-wrap", "position", "opacity", "box-shadow", "transform", "line-height",
-        "letter-spacing", "column-count", "aspect-ratio", "object-fit", "text-transform", "white-space", "all", 0
+        "letter-spacing", "column-count", "aspect-ratio", "object-fit", "text-transform", "white-space", "all",
+        "background", "list-style-type", "list-style", "font-size", "text-indent", 0
     };
     int i;
     for (i = 0; props[i]; i++) if (eq(props[i], p)) break;
@@ -2514,6 +2698,12 @@ static void copy_kind(wf_site_node_t *nd, const wf_site_node_t *par, int kind) {
     case WF_SITE_K_VIS: nd->vis = par->vis; break;
     case WF_SITE_K_TRANSFORM: nd->transform = par->transform; break;
     case WF_SITE_K_WS: nd->ws = par->ws; break;
+    case WF_SITE_K_BG: nd->bg = par->bg; nd->bg_set = par->bg_set; break;
+    case WF_SITE_K_LIST: case WF_SITE_K_FSIZE: case WF_SITE_K_INDENT: case WF_SITE_K_LSPACE:
+        scopy(nd->tok[kind - WF_SITE_K_LIST], WF_SITE_TOK, par->tok[kind - WF_SITE_K_LIST],
+              slen(par->tok[kind - WF_SITE_K_LIST]));
+        nd->tok_val[kind - WF_SITE_K_LIST] = par->tok_val[kind - WF_SITE_K_LIST];
+        break;
     default: break;
     }
 }

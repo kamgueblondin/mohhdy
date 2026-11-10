@@ -285,6 +285,52 @@ void test_rate_limit_and_stats(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, " queued 11 shaped_sent 11 shaped_dropped 2"));
 }
 
+/* Lot 88 (US-068/US-073): the shaping queue keeps each peer's order and
+ * a busy peer no longer locks a quieter one out of a full queue. */
+void test_lot88_shape_fair_and_ordered(void) {
+    char rep[2048], txt[8];
+    const char* p;
+    int i, last;
+    setup(3, 0);
+    run(3, 300);
+    g_n[0].rate_limit = 1;
+    run(3, 120);
+    memset(g_out, 0, sizeof(g_out));
+    /* one leaves on beta's budget, eight wait and fill the queue */
+    for (i = 0; i < 9; i++) {
+        txt[0] = 'b'; txt[1] = (char)('0' + i); txt[2] = 0;
+        TEST_ASSERT_EQUAL(i == 0 ? 0 : 1, p2p_send_text(&g_n[0], &g_h[0], "beta", txt));
+    }
+    TEST_ASSERT_EQUAL(-2, p2p_send_text(&g_n[0], &g_h[0], "beta", "b9"));
+    /* gamma has its own budget for the first; the second gets a slot from beta */
+    TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "gamma", "g0"));
+    TEST_ASSERT_EQUAL(1, p2p_send_text(&g_n[0], &g_h[0], "gamma", "g1"));
+    p2p_report(&g_n[0], &g_h[0], "shape", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p shape depth 8 msg 8 bulk 0 queued 9 sent 0 dropped 0 evicted 1 refused 1"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p shape peer beta msg 7 bulk 0"));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p shape peer gamma msg 1 bulk 0"));
+    g_n[0].rate_limit = 0;
+    run(3, 300);
+    p2p_report(&g_n[0], &g_h[0], "shape", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p shape depth 0 msg 0 bulk 0 queued 9 sent 8 dropped 0 evicted 1"));
+    TEST_ASSERT_NULL(strstr(rep, "p2p shape peer "));
+    TEST_ASSERT_NOT_NULL(strstr(g_out[2], "p2p msg from alpha: g1"));
+    /* beta got b0..b7 in order (b8 was pushed out for gamma) */
+    last = -1;
+    for (i = 0; i < 8; i++) {
+        char want[32];
+        strcpy(want, "p2p msg from alpha: b0");
+        want[21] = (char)('0' + i);
+        p = strstr(g_out[1], want);
+        TEST_ASSERT_NOT_NULL(p);
+        TEST_ASSERT_TRUE((int)(p - g_out[1]) > last);
+        last = (int)(p - g_out[1]);
+    }
+    TEST_ASSERT_NULL(strstr(g_out[1], "p2p msg from alpha: b8"));
+    p2p_report(&g_n[0], &g_h[0], "qos", rep, sizeof(rep));
+    TEST_ASSERT_NOT_NULL(strstr(rep, " queued 9 shaped_sent 8 shaped_dropped 2"));
+}
+
 void test_traffic_analysis(void) {
     char rep[2048];
     int i;
@@ -2112,6 +2158,7 @@ int main(void) {
     RUN_TEST(test_lot41_p2p_cross_wan_mesh_and_zk_aggregator);
     RUN_TEST(test_lot42_p2p_bft_mesh_and_zk_bulletproofs_batch);
     RUN_TEST(test_lot43_p2p_bft_anti_entropy_and_zk_stark_batch);
+    RUN_TEST(test_lot88_shape_fair_and_ordered);
 
     unity_print_results();
     unity_cleanup();

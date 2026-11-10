@@ -204,6 +204,8 @@ int shell_p2p_line(const char* line) {
     if (s_eq(cmd, "p2p-qos")) { report("qos"); return 0; }
     /* Lot 67 (US-068/US-073): bandwidth estimator */
     if (s_eq(cmd, "p2p-bwe")) { report("bwe"); return 0; }
+    /* Lot 88 (US-068/US-073): fair shaping queue */
+    if (s_eq(cmd, "p2p-shape")) { report("shape"); return 0; }
     if (s_eq(cmd, "p2p-kv")) { report("kv"); return 0; }
     if (s_eq(cmd, "p2p-raft-compact")) {
         rc = p2p_raft_compact(&g_node);
@@ -345,13 +347,30 @@ int shell_p2p_line(const char* line) {
     }
     if (s_eq(cmd, "p2p-burst")) {
         /* Lot 6: N messages at once (shaping and anomaly proofs) */
-        int count, k, sent = 0, queued = 0, refused = 0;
+        int count, k, sent = 0, queued = 0, refused = 0, index = 0;
         rest = word(rest, a, (int)sizeof(a));
         rest = word(rest, b, (int)sizeof(b));
         count = to_int(b);
-        if (!a[0] || count < 1 || count > 64) { print_string("p2p-burst error usage: p2p-burst PEER N [TEXT]\n"); return 1; }
+        if (!a[0] || count < 1 || count > 64) { print_string("p2p-burst error usage: p2p-burst PEER N [-i] [TEXT]\n"); return 1; }
+        /* Lot 88: "-i" appends "-K" (the message index, 0..63) to TEXT, so
+         * the receiver's log shows the order the shaping queue kept */
+        if (rest[0] == '-' && rest[1] == 'i' && (rest[2] == ' ' || rest[2] == 0)) {
+            index = 1;
+            rest += 2;
+            while (*rest == ' ') rest++;
+        }
         for (k = 0; k < count; k++) {
-            rc = p2p_send_text(&g_node, &g_host, a, *rest ? rest : "burst");
+            char t[P2P_TEXT_MAX];
+            const char* src = *rest ? rest : "burst";
+            int i = 0;
+            while (*src && i < P2P_TEXT_MAX - 4) t[i++] = *src++;
+            if (index) {
+                t[i++] = '-';
+                if (k >= 10) t[i++] = (char)('0' + k / 10);
+                t[i++] = (char)('0' + k % 10);
+            }
+            t[i] = 0;
+            rc = p2p_send_text(&g_node, &g_host, a, t);
             if (rc == 0) sent++; else if (rc == 1) queued++; else refused++;
         }
         print_string("p2p-burst sent "); print_int(sent); print_string(" queued "); print_int(queued);
