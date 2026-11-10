@@ -18,7 +18,9 @@
 #define ARM_PORT_PAGES   64U /* Lot 72: glyph pages, include/os_charset.h */
 #define ARM_PORT_BWE     128U /* Lot 84: userspace/p2p_bwe.c late-ack sample */
 #define ARM_PORT_MARKS   256U /* Lot 85: Vietnamese composed letters, os_marks.h */
-#define ARM_PORT_ALL     511U
+#define ARM_PORT_TREND   512U /* Lot 87: userspace/p2p_trend.c overuse and cap */
+#define ARM_PORT_CEA     1024U /* Lot 87: kernel/edid.c CEA-861 extension */
+#define ARM_PORT_ALL     2047U
 
 int arm_port_aes_gcm(void);   /* 1 ok */
 int arm_port_edid(void);
@@ -29,6 +31,8 @@ int arm_port_aead(void);
 int arm_port_pages(void);
 int arm_port_bwe(void);
 int arm_port_marks(void);
+int arm_port_trend(void);
+int arm_port_cea(void);
 /* bit mask of the checks that passed */
 uint32_t arm_port_selftest(void);
 #endif

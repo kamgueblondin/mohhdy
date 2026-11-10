@@ -35,6 +35,13 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                 with a GET form whose field holds Cyrillic text: the
                 browser must send it back in windows-1251 (/echo)
   /lot72/greek.html   Lot 72: an ISO-8859-7 page (charset in a meta tag)
+  /lot87/page.html    Lot 87: a page with two linked stylesheets (one
+                      for print, not fetched) and a <style> @import; the
+                      sheets hide the banner and the side note
+  /lot87/main.css, /lot87/base.css, /lot87/print.css  the sheets ("CSS name")
+  /lot87/wall.html    Lot 87: an enablejs script wall with a noscript link
+  /lot87/basic.html   Lot 87: the plain fallback page
+  /lot87/blocked      Lot 87: 403 with a block notice
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -227,8 +234,63 @@ class H(http.server.BaseHTTPRequestHandler):
         if not self._lot71(self.path, body, post=True):
             self._send(404, b"not found\n", "text/plain")
 
+    def _lot87(self, p):
+        """Lot 87 routes: external stylesheets and script walls."""
+        sheets = {
+            "/lot87/main.css": "@import url(base.css);\n.side { display: none }\nh1 { text-decoration: underline }\n",
+            "/lot87/base.css": "p.ad { display: none }\nem.k { font-style: italic }\n",
+            "/lot87/print.css": "body { display: none }\n",
+            # cascade layers: reset is a layer, so its more specific rule
+            # loses to the unlayered one; gone.css is never fetched
+            "/lot87/layers.css": ("@layer reset, site;\n@import url(reset.css) layer(reset);\n"
+                                  "@import url(gone.css) supports(not (display: block));\n"
+                                  ".keep87 { display: block }\n"
+                                  ".back87 { display: block }\np.back87 { display: revert-layer }\n"
+                                  ".ini87 { display: initial }\n"),
+            "/lot87/reset.css": "div.keep87 { display: none }\n.gone87 { display: none }\n.back87 { display: none }\n.ini87 { display: none }\n",
+            "/lot87/gone.css": "body { display: none }\n",
+        }
+        if p in sheets:
+            print("CSS %s" % p.rsplit("/", 1)[1], flush=True)
+            self._send(200, sheets[p].encode("ascii"), "text/css")
+            return True
+        if p == "/lot87/page.html":
+            page = ("<!doctype html><html><head><title>Lot 87 sheets</title>"
+                    "<link rel=\"stylesheet\" href=\"main.css\">"
+                    "<link rel=\"stylesheet\" href=\"print.css\" media=\"print\">"
+                    "<style>@import \"missing.css\";\n.keep { color: #336699 }</style></head><body>"
+                    "<h1>Feuilles externes</h1><p class=\"ad\">banner87</p>"
+                    "<p class=\"keep\">Texte garde <em class=\"k\">important</em></p>"
+                    "<div class=\"side\">sidenote87</div></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot87/layers.html":
+            page = ("<!doctype html><html><head><title>Lot 87 layers</title>"
+                    "<link rel=\"stylesheet\" href=\"layers.css\"></head><body>"
+                    "<h1>Couches</h1><div class=\"keep87\">layerkeep87 visible</div>"
+                    "<p class=\"gone87\">layergone87</p><p class=\"back87\">layerback87</p><p class=\"ini87\">layerinitial87</p><p>fin87</p></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot87/wall.html":
+            page = ("<!doctype html><html><head><title>Wall</title><script>var x=1;</script></head><body>"
+                    "<noscript><p>Please enable JavaScript or use the "
+                    "<a href=\"/lot87/basic.html\">basic page</a>.</p></noscript></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot87/basic.html":
+            page = "<html><head><title>Basic</title></head><body><p>basic87 plain page</p></body></html>"
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot87/blocked":
+            page = "<html><head><title>Blocked</title></head><body><p>You have been blocked by network security.</p></body></html>"
+            self._send(403, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        return False
+
     def _lot71(self, p, body, post=False):
         """Lot 71 routes: forms, charsets, long page, SearXNG, cookies."""
+        if self._lot87(p):
+            return True
         if p == "/lot72/images.html":
             self._send(200, LOT72_PAGE.encode("utf-8"), "text/html; charset=utf-8")
             return True

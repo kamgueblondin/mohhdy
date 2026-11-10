@@ -201,7 +201,38 @@ static int map_range(uint32_t phys, uint32_t bytes) {
  * at boot, before the Ring 3 pcidriver takes PCI over; afterwards only the
  * parsed facts are kept (SYS_DISPLAY_INFO). */
 static edid_info_t g_edid;
+static edid_cea_t g_cea;
+static edid_cea_sum_t g_cea_sum = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, { 0 } };
 static int g_edid_status = 1;
+
+/* Lot 87: the first extension when byte 126 announces one. QEMU keeps
+ * the blob in the same 4 KiB page; whatever it holds is reported as is. */
+static void probe_edid_ext(uint32_t bar2) {
+    static uint8_t two[2 * EDID_BLOCK];
+    char line[96];
+    int i, tag = 0, r;
+    if (!g_edid.ok || g_edid.ext_blocks <= 0) {
+        edid_cea_summarize(0, -1, 0, &g_cea_sum);
+        print_string_serial("[GFX] edid ext none\n");
+        return;
+    }
+    for (i = 0; i < 2 * EDID_BLOCK; i++) two[i] = ((volatile uint8_t *)bar2)[i];
+    r = edid_parse_ext(two, 2 * EDID_BLOCK, &g_edid, &g_cea, &tag);
+    edid_cea_summarize(&g_cea, r, tag, &g_cea_sum);
+    print_string_serial("[GFX] edid ext ");
+    if (r == 0) {
+        (void)edid_cea_describe(&g_cea, line, (int)sizeof(line));
+        print_string_serial(line);
+    } else {
+        static const char hex[] = "0123456789abcdef";
+        char t[24] = "tag 0x00 not parsed";
+        t[6] = hex[(tag >> 4) & 15];
+        t[7] = hex[tag & 15];
+        print_string_serial(t);
+    }
+    print_string_serial("\n");
+}
+
 int gfx_fb_probe_edid(void) {
     uint8_t slot, function;
     uint8_t blk[EDID_BLOCK];
@@ -226,6 +257,7 @@ int gfx_fb_probe_edid(void) {
                 print_string_serial(line);
                 print_string_serial(g_edid_status == 0 ? "\n" : g_edid_status == 3 ? " (bad header)\n" : " (bad checksum)\n");
             }
+            if (r == 0) probe_edid_ext(bar2);
             return r;
         }
     }
@@ -281,6 +313,28 @@ void gfx_fb_display_info(os_display_info_t *o) {
     if (g_on) { o->fb_w = (uint16_t)g_w; o->fb_h = (uint16_t)g_h; }
     o->edid_status = (uint8_t)g_edid_status;
     o->ui_hint_q = (uint8_t)g_ui_hint_q;
+    /* Lot 87: the CEA summary (status 1 when nothing was read) */
+    o->cea_status = g_cea_sum.status;
+    if (g_cea_sum.status == 0) {
+        o->cea_rev = g_cea_sum.rev;
+        o->cea_flags = g_cea_sum.flags;
+        o->cea_svd_n = g_cea_sum.svd_n;
+        o->cea_native_vic = g_cea_sum.native_vic;
+        o->cea_sad_n = g_cea_sum.sad_n;
+        o->cea_sad_max_ch = g_cea_sum.sad_max_ch;
+        o->cea_dtd_n = g_cea_sum.dtd_n;
+        o->cea_y420_n = g_cea_sum.y420_n;
+        o->cea_speakers = g_cea_sum.speakers;
+        o->cea_hdr_eotf = g_cea_sum.hdr_eotf;
+        o->cea_best_w = g_cea_sum.best_w;
+        o->cea_best_h = g_cea_sum.best_h;
+        o->cea_best_hz = g_cea_sum.best_hz;
+        o->cea_best_from = g_cea_sum.best_from;
+        o->cea_phys_addr = g_cea_sum.phys_addr;
+        o->cea_tmds_mhz = g_cea_sum.tmds_mhz;
+        for (i = 0; i < 8; i++) o->cea_vic[i] = g_cea_sum.vic[i];
+        o->cea_tv = (uint8_t)edid_cea_is_tv(&g_cea_sum, g_edid.ok ? g_edid.size_mm_w : 0);
+    } else o->cea_ext_tag = g_cea_sum.ext_tag;
     if (!g_edid.ok) return;
     o->native_w = (uint16_t)g_edid.native_w;
     o->native_h = (uint16_t)g_edid.native_h;

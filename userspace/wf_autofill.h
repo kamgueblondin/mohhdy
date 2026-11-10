@@ -10,12 +10,17 @@
 #define WF_AF_HOST 96
 #define WF_AF_NAME 48
 #define WF_AF_VALUE 120
+/* Lot 87: values kept per host and field name, newest first (the current
+ * value and two older ones). A key still counts once in n. */
+#define WF_AF_HIST 3
 
 typedef struct {
     int used;
     char host[WF_AF_HOST];
     char name[WF_AF_NAME];
     char value[WF_AF_VALUE];
+    int nold;                                  /* Lot 87: 0..WF_AF_HIST-1 */
+    char old[WF_AF_HIST - 1][WF_AF_VALUE];     /* older values, newest first */
 } wf_af_ent_t;
 
 typedef struct {
@@ -31,7 +36,18 @@ int wf_autofill_secret(const char *type);
 int wf_autofill_put(wf_autofill_t *a, const char *host, const char *name, const char *value, const char *type);
 /* 0 and out receives the value, -1 none. */
 int wf_autofill_get(wf_autofill_t *a, const char *host, const char *name, char *out, int cap);
+/* Lot 87: value idx of a key, 0 the newest. 0, or -1 when there is none. */
+int wf_autofill_get_at(wf_autofill_t *a, const char *host, const char *name, int idx, char *out, int cap);
+/* Lot 87: how many values a key holds (0 when unknown). */
+int wf_autofill_count(const wf_autofill_t *a, const char *host, const char *name);
 int wf_autofill_forget(wf_autofill_t *a, const char *host);
+/* Lot 87: forget one key (host, field name) with all its values: 1 when
+ * it was there, 0 when not. */
+int wf_autofill_forget_key(wf_autofill_t *a, const char *host, const char *name);
+/* Lot 87: forget one value of a key (exact text). The older values move
+ * up; the key goes when its last value goes. Returns how many values the
+ * key still holds (0 when it went), -1 when that value was not there. */
+int wf_autofill_drop(wf_autofill_t *a, const char *host, const char *name, const char *value);
 int wf_autofill_save(const wf_autofill_t *a, char *out, int cap);
 int wf_autofill_load(wf_autofill_t *a, const char *text, int len);
 int wf_autofill_text(const wf_autofill_t *a, char *out, int cap);

@@ -329,6 +329,7 @@ static int admit(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, uint32_t byt
         return 0;
     }
     rate = p2p_pace_rate(&n->qos.pace, &n->qos.bwe, (int)n->qos.bwe_ready);
+    rate = p2p_trend_limit(&n->qos.trend, rate, t * (1000U / P2P_HZ));   /* Lot 87: queue-delay cap */
     if (rate) {
         if (n->rate_limit) {
             if (t - p->bucket_tick >= P2P_HZ) { p->bucket_tick = t; p->bucket_used = 0; }
@@ -447,7 +448,19 @@ void p2p_qos_note_ack(p2p_node_t* n) {
 static void bwe_ensure(p2p_node_t* n, const p2p_host_t* h) {
     if (n->qos.bwe_ready) return;
     p2p_bwe_init(&n->qos.bwe, P2P_PROBE_BYTES, 20000U, now(h) * (1000U / P2P_HZ));
+    p2p_trend_init(&n->qos.trend, now(h) * (1000U / P2P_HZ));
     n->qos.bwe_ready = 1U;
+}
+
+/* Lot 87: send time of a tracked probe (in flight or late), for the
+ * delay-gradient detector. 0 when found. */
+static int probe_sent_ms(const p2p_bwe_t* b, uint32_t seq, uint32_t* ms) {
+    uint32_t i;
+    for (i = 0; i < P2P_BWE_INFLIGHT; i++) {
+        if (b->pkt[i].used && b->pkt[i].seq == seq) { *ms = b->pkt[i].sent_ms; return 0; }
+        if (b->late[i].used && b->late[i].seq == seq) { *ms = b->late[i].sent_ms; return 0; }
+    }
+    return -1;
 }
 
 int p2p_qos_probe(p2p_node_t* n, const p2p_host_t* h, const char* peer, int count) {
@@ -970,7 +983,10 @@ static void on_sealed(p2p_node_t* n, const p2p_host_t* h, p2p_peer_t* p, int inn
                 /* Lot 84: a pong that arrives after the 2 s loss timeout
                  * still feeds the estimator. The loss count drops so the
                  * probe is delivered once. */
-                (void)p2p_bwe_on_ack(&n->qos.bwe, get32(m + 8), now(h) * (1000U / P2P_HZ));
+                uint32_t sent_ms, ack_ms = now(h) * (1000U / P2P_HZ);
+                if (probe_sent_ms(&n->qos.bwe, get32(m + 8), &sent_ms) == 0)
+                    p2p_trend_on_packet(&n->qos.trend, sent_ms, ack_ms, P2P_PROBE_BYTES);
+                (void)p2p_bwe_on_ack(&n->qos.bwe, get32(m + 8), ack_ms);
                 if (n->qos.bwe.late_hit && n->qos.probe_lost) n->qos.probe_lost--;
                 n->qos.probe_acked++;
             }
@@ -2610,6 +2626,12 @@ int p2p_report(const p2p_node_t* n, const p2p_host_t* h, const char* what, char*
             s_cat(out, " deferred ", cap); cat_u(out, n->qos.pace.deferred, cap);
         }
         s_cat(out, "\n", cap);
+        if (n->qos.bwe_ready) {
+            char tl[220];
+            p2p_trend_status(&n->qos.trend, tl, (int)sizeof(tl));
+            s_cat(out, tl, cap);
+            s_cat(out, "\n", cap);
+        }
     } else if (s_eq(what, "cache")) {
         out[0] = 0;
         s_cat(out, "p2p cache hits ", cap); cat_u(out, n->cache.total_hits, cap);

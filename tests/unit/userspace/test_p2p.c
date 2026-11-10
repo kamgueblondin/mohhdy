@@ -1932,6 +1932,10 @@ void test_qos_bwe_probe_train(void) {
     p2p_report(&g_n[0], &g_h[0], "bwe", rep, sizeof(rep));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p bwe state "));
     TEST_ASSERT_NOT_NULL(strstr(rep, " probes_sent 64 acked 64 lost 0 left 0"));
+    /* Lot 87: the delay-gradient detector saw the same acks */
+    TEST_ASSERT_NOT_NULL(strstr(rep, "\np2p trend state "));
+    TEST_ASSERT_TRUE(g_n[0].qos.trend.samples >= 60U);
+    TEST_ASSERT_TRUE(g_n[0].qos.trend.groups > 0U);
     /* cut link: the probes in flight become losses */
     g_cut[1][0] = 1;
     TEST_ASSERT_EQUAL(0, p2p_qos_probe(&g_n[0], &g_h[0], "beta", 8));

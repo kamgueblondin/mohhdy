@@ -82,13 +82,20 @@ int wf_formfill_offers(const wf_autofill_t *a, const wf_form_page_t *p, int fiel
         p->field[field].type == WF_FIELD_SUBMIT || p->field[field].type == WF_FIELD_FILE)
         return 0;
     if (wf_autofill_secret(p->field[field].itype)) return 0;
-    for (i = 0; i < a->n && n < cap && n < WF_FILL_OFFERS; i++) {
+    /* Lot 87: every slot is read (a forgotten host leaves holes, so the
+     * first a->n slots are not the used ones), and a key gives its newest
+     * value first, then the older ones it kept. */
+    for (i = 0; i < WF_AF_MAX && n < cap && n < WF_FILL_OFFERS; i++) {
+        int k;
+        if (!a->e[i].used) continue;
         if (!eq(a->e[i].host, want)) continue;
         if (!eq(a->e[i].name, p->field[field].name)) continue;
-        out[n].ent = i;
-        scopy(out[n].name, (int)sizeof(out[n].name), a->e[i].name);
-        scopy(out[n].value, (int)sizeof(out[n].value), a->e[i].value);
-        n++;
+        for (k = 0; k <= a->e[i].nold && n < cap && n < WF_FILL_OFFERS; k++) {
+            out[n].ent = i;
+            scopy(out[n].name, (int)sizeof(out[n].name), a->e[i].name);
+            scopy(out[n].value, (int)sizeof(out[n].value), k == 0 ? a->e[i].value : a->e[i].old[k - 1]);
+            n++;
+        }
     }
     return n;
 }

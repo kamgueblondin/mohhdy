@@ -326,6 +326,8 @@ void arm_main(void) {
         kputs((m & ARM_PORT_PAGES) ? "arm glyph pages self-test ok greek cyrillic symbols (include/os_charset_pages.h)\n" : "arm glyph pages self-test FAILED\n");
         kputs((m & ARM_PORT_BWE) ? "arm p2p bwe self-test ok late sample 128 (userspace/p2p_bwe.c)\n" : "arm p2p bwe self-test FAILED\n");
         kputs((m & ARM_PORT_MARKS) ? "arm marks self-test ok vietnamese base letter (include/os_marks.h)\n" : "arm marks self-test FAILED\n");
+        kputs((m & ARM_PORT_TREND) ? "arm p2p trend self-test ok overuse cap 15515 (userspace/p2p_trend.c)\n" : "arm p2p trend self-test FAILED\n");
+        kputs((m & ARM_PORT_CEA) ? "arm edid cea self-test ok 1920x1080@60 hdmi 1.0.0.0 (kernel/edid.c)\n" : "arm edid cea self-test FAILED\n");
     }
     gic_init();
     timer_arm();

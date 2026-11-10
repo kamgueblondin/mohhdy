@@ -78,6 +78,39 @@ int wf_url_format(const wf_url_t* u, char* o, int cap) {
     return p < 0 ? slen(o) : p;
 }
 
+/* Lot 87: RFC 3986 5.2.4 on the path part (the query is kept as is).
+ * "/a/b/../c" is "/a/c", "/a/./b" is "/a/b", "/../x" stays at the root. */
+static void remove_dot_segments(char* path) {
+    static char outp[WF_URL_PATH_MAX];
+    int starts[64];
+    int depth = 0, r = 1, w = 0, q, i, trail = 0;
+    for (q = 0; path[q] && path[q] != '?'; q++) {}
+    if (q == 0 || path[0] != '/') return;
+    outp[w++] = '/';
+    while (r <= q) {
+        int seg = r, len;
+        while (seg < q && path[seg] != '/') seg++;
+        len = seg - r;
+        trail = 0;
+        if (len == 1 && path[r] == '.') {
+            trail = 1;
+        } else if (len == 2 && path[r] == '.' && path[r + 1] == '.') {
+            if (depth > 0) w = starts[--depth];
+            trail = 1;
+        } else if (len > 0 || seg < q) {
+            if (depth < 64) starts[depth++] = w;
+            for (i = r; i < seg && w < WF_URL_PATH_MAX - 2; i++) outp[w++] = path[i];
+            if (seg < q) outp[w++] = '/';
+        }
+        r = seg + 1;
+    }
+    /* "." or ".." as the last segment leaves a directory: "/a/b/.." -> "/a/" */
+    (void)trail;
+    for (i = q; path[i] && w < WF_URL_PATH_MAX - 1; i++) outp[w++] = path[i];
+    outp[w] = 0;
+    for (i = 0; i <= w; i++) path[i] = outp[i];
+}
+
 int wf_url_resolve(const wf_url_t* b, const char* loc, wf_url_t* out) {
     static char tmp[WF_URL_HOST_MAX + WF_URL_PATH_MAX + 16];
     int p = 0, i, last = 0;
@@ -110,6 +143,7 @@ int wf_url_resolve(const wf_url_t* b, const char* loc, wf_url_t* out) {
     }
     out->path[p] = 0;
     if (out->path[0] != '/') return -1;
+    remove_dot_segments(out->path);
     return 0;
 }
 

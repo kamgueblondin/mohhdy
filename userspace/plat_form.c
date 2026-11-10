@@ -255,3 +255,77 @@ int plat_form_edid_detail(const os_display_info_t* d, char* out, int cap) {
     f_cat(out, cap, "\n");
     return f_len(out);
 }
+
+/* ---- Lot 87: CEA-861 facts (US-080) --------------------------------- */
+
+static void f_cat_hex2(char* d, int cap, uint32_t v) {
+    static const char hx[] = "0123456789abcdef";
+    char t[3];
+    t[0] = hx[(v >> 4) & 15]; t[1] = hx[v & 15]; t[2] = 0;
+    f_cat(d, cap, t);
+}
+
+int plat_form_cea_line(const os_display_info_t* d, char* out, int cap) {
+    int i, n;
+    if (!out || cap <= 0) return 0;
+    out[0] = 0;
+    if (!d) return 0;
+    f_cat(out, cap, "display cea");
+    if (d->cea_status == 1) { f_cat(out, cap, " none\n"); return (int)f_len(out); }
+    if (d->cea_status == 2) {
+        f_cat(out, cap, " not-cea tag 0x");
+        f_cat_hex2(out, cap, d->cea_ext_tag);
+        f_cat(out, cap, "\n");
+        return (int)f_len(out);
+    }
+    if (d->cea_status != 0) { f_cat(out, cap, " refused\n"); return (int)f_len(out); }
+    f_cat(out, cap, " rev "); f_cat_u(out, cap, d->cea_rev);
+    f_cat(out, cap, " svd "); f_cat_u(out, cap, d->cea_svd_n);
+    n = d->cea_svd_n < 8 ? d->cea_svd_n : 8;
+    if (n > 0) {
+        f_cat(out, cap, " vics ");
+        for (i = 0; i < n; i++) {
+            if (i) f_cat(out, cap, ",");
+            f_cat_u(out, cap, d->cea_vic[i]);
+        }
+        if (d->cea_svd_n > 8) f_cat(out, cap, ",...");
+    }
+    if (d->cea_best_w && d->cea_best_h) {
+        f_cat(out, cap, " best ");
+        f_cat_u(out, cap, d->cea_best_w); f_cat(out, cap, "x"); f_cat_u(out, cap, d->cea_best_h);
+        f_cat(out, cap, "@"); f_cat_u(out, cap, d->cea_best_hz);
+        f_cat(out, cap, d->cea_best_from == 1 ? " (native)" : d->cea_best_from == 2 ? " (dtd)" : " (largest vic)");
+    }
+    if (d->cea_sad_n) {
+        f_cat(out, cap, " audio "); f_cat_u(out, cap, d->cea_sad_max_ch); f_cat(out, cap, "ch");
+    } else if (d->cea_flags & OS_DISPLAY_CEA_AUDIO) f_cat(out, cap, " audio basic");
+    else f_cat(out, cap, " audio 0");
+    if (d->cea_flags & OS_DISPLAY_CEA_HDMI) {
+        uint32_t p = d->cea_phys_addr;
+        f_cat(out, cap, " hdmi ");
+        f_cat_u(out, cap, (p >> 12) & 15); f_cat(out, cap, ".");
+        f_cat_u(out, cap, (p >> 8) & 15); f_cat(out, cap, ".");
+        f_cat_u(out, cap, (p >> 4) & 15); f_cat(out, cap, ".");
+        f_cat_u(out, cap, p & 15);
+    }
+    if (d->cea_flags & OS_DISPLAY_CEA_HF) f_cat(out, cap, " hf");
+    if (d->cea_tmds_mhz) { f_cat(out, cap, " tmds "); f_cat_u(out, cap, d->cea_tmds_mhz); }
+    if (d->cea_flags & OS_DISPLAY_CEA_HDR) f_cat(out, cap, " hdr");
+    if (d->cea_flags & OS_DISPLAY_CEA_YCC444) f_cat(out, cap, " ycc444");
+    if (d->cea_flags & OS_DISPLAY_CEA_YCC422) f_cat(out, cap, " ycc422");
+    if (d->cea_y420_n) { f_cat(out, cap, " y420 "); f_cat_u(out, cap, d->cea_y420_n); }
+    if (d->cea_flags & OS_DISPLAY_CEA_UNDERSCAN) f_cat(out, cap, " underscan");
+    if (d->cea_dtd_n) { f_cat(out, cap, " dtd "); f_cat_u(out, cap, d->cea_dtd_n); }
+    f_cat(out, cap, d->cea_tv ? " sink tv\n" : " sink monitor\n");
+    return (int)f_len(out);
+}
+
+int plat_form_tv_scale_q(const os_display_info_t* d) {
+    uint32_t w;
+    if (!d || d->cea_status != 0 || !d->cea_tv) return 0;
+    /* the panel the TV says it has, else the current mode */
+    w = d->cea_best_from == 1 ? d->cea_best_w : (d->native_w ? d->native_w : d->fb_w);
+    if (w >= 3200) return 12;   /* 3x: a 4K TV seen from the sofa */
+    if (w >= 1800) return 8;    /* 2x for 1080p */
+    return 6;                   /* 1.5x for 720p and below */
+}
