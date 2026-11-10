@@ -19,6 +19,10 @@ runs on the host and the guest reaches it as 10.0.2.2 (slirp).
     Lot 89 the NE2000 ring could be overwritten while nobody read it and the
     driver then refused the same bad header forever: every later connect
     timed out. The worker's ring line must stay well formed.
+    /lot89/stray1.html sends the page and the stray answer in one write:
+    the guest reads them together, counts it (`http-keepalive ...
+    unsolicited N`) and does not keep that connection, so the favicon
+    request after it is not answered by the stray 404.
 """
 from __future__ import print_function
 
@@ -120,6 +124,23 @@ def step_stray_recovery(mon, proc, u):
         raise RuntimeError("worker printed no NE2000 ring line")
     dropped, resyncs = int(rings[-1][0]), int(rings[-1][1])
     say("stray response: next page loaded after 12 s, ring dropped %d resyncs %d" % (dropped, resyncs))
+    before = keepalive_unsolicited(mon, proc)
+    out = lw.run(mon, proc, "web-open %s/lot89/stray1.html" % u, "osui web page sections", fail=["error="])
+    need(out, ["osui web fetch ok status 200", "favicon ok"], "page followed by a stray answer in one read")
+    after = keepalive_unsolicited(mon, proc)
+    if after != before + 1:
+        raise RuntimeError("unsolicited count %d -> %d, want +1" % (before, after))
+    out = lw.run(mon, proc, "web-open %s/lot89/scope.html" % u, "osui web page sections", fail=["error="])
+    need(out, ["osui web fetch ok status 200"], "page after a stray answer read together")
+    say("stray answer read with the page: connection not kept (unsolicited %d -> %d), next page loaded" % (before, after))
+
+
+def keepalive_unsolicited(mon, proc):
+    out = lw.run(mon, proc, "http-keepalive", "http-keepalive on opened", 30)
+    line = out[out.rfind("http-keepalive on opened"):].splitlines()[0]
+    if " unsolicited " not in line:
+        raise RuntimeError("no unsolicited count: %r" % line)
+    return int(line.split(" unsolicited ")[1].split()[0])
 
 
 def step_energy_cost(mon, proc):

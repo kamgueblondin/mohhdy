@@ -7437,6 +7437,7 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         print_string(wf_guest_keepalive() ? "on" : "off");
         print_string(" opened "); print_int(opened);
         print_string(" reused "); print_int(reused);
+        print_string(" unsolicited "); print_int(wf_fetch_unsolicited());
         print_string("\n");
         return 1;
     } else if (strcmp(command, "tls-suite") == 0) {

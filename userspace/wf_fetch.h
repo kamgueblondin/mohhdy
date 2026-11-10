@@ -54,6 +54,7 @@ typedef struct {
     int time_checked;
     int reused;               /* Lot 72: hops sent on a kept-alive connection */
     int connections;          /* Lot 72: new TCP (+TLS) connections opened */
+    int unsolicited;          /* Lot 89: bytes seen after the last answer (connection dropped) */
     int cached;               /* Lot 73: 1 served fresh from the cache (no request),
                                * 2 revalidated (304, cached body), 0 from the network */
     char err[160];
@@ -84,4 +85,7 @@ int wf_fetch_ex(const wf_fetch_env_t* env, const char* url, const wf_fetch_req_t
 void wf_fetch_drop(const wf_fetch_env_t* env);
 /* Lot 72: connections opened / requests sent on a reused connection since start. */
 void wf_fetch_conn_stats(int* opened, int* reused);
+/* Lot 89: answers followed by bytes nobody asked for since start; each such
+ * connection was closed instead of kept. */
+int wf_fetch_unsolicited(void);
 #endif

@@ -47,8 +47,12 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       text-indent, letter-spacing in the reader sheet
   /lot89/scope.html   Lot 89: @scope start and end lists, &:first-child,
                       :scope:last-child
+  /lot89/stray1.html  Lot 89: the same in one write (read together by the
+                      guest, which must drop the connection)
   /lot89/props.html   Lot 89: calc(), min(), clamp() and var() anywhere in
                       a reader length
+  /kastray/N          Lot 89: a keep-alive answer and an unsolicited 404 in
+                      the same write (the client must drop the connection)
   /lot89/stray.html   Lot 89: a page followed by an unsolicited second
                       response on the same keep-alive connection (the
                       server bug that exposed the NE2000 ring stall)
@@ -131,6 +135,17 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/ka/"):
             self._ka_log()
             self._send(200, ("keep-alive answer %s\n" % self.path[4:]).encode(), "text/plain")
+            return
+        if self.path.startswith("/kastray/"):
+            # Lot 89: an answer and a second one nobody asked for, in one
+            # write so the client reads both together; the client must not
+            # reuse this connection (its next request would read the 404)
+            self._ka_log()
+            body = ("keep-alive answer %s\n" % self.path[9:]).encode()
+            stray = b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found"
+            head = ("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n" % len(body)).encode()
+            self.wfile.write(head + body + stray)
+            self.wfile.flush()
             return
         if self.path.startswith("/kaclose/"):
             # answers then closes: the client must open a new connection
@@ -309,6 +324,17 @@ class H(http.server.BaseHTTPRequestHandler):
                              b"Content-Length: 9\r\n\r\nnot found")
             self.wfile.flush()
             print("STRAY sent", flush=True)
+            return True
+        if p == "/lot89/stray1.html":
+            # Lot 89: the page and an unasked 404 in one write, so the guest
+            # reads them together and must not keep the connection
+            page = ("<!doctype html><html><head><title>Lot 89 stray one</title></head>"
+                    "<body><p>strayone89</p></body></html>").encode("utf-8")
+            head = ("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
+                    "Content-Length: %d\r\n\r\n" % len(page)).encode()
+            self.wfile.write(head + page + b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found")
+            self.wfile.flush()
+            print("STRAY1 sent", flush=True)
             return True
         if p == "/lot89/props.html":
             # Lot 89: math functions and var() in the reader's lengths

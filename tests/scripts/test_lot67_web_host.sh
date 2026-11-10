@@ -113,6 +113,10 @@ check "https keep-alive one handshake" 'KA total opened=1 reused=2' "$CA" "https
 check "keep-alive host change" 'KA total opened=2 reused=1' "$CA" "http://127.0.0.1:$HP/ka/1" now 127.0.0.1 "ka:http://127.0.0.1:$HP/ka/2,https://$M:$T13/ka/3"
 check "keep-alive host change new conn" 'KA 2 rc=0 status=200 bytes=[0-9]+ reused=0 conn=1 suite=TLS13-AES256-GCM-SHA384' "$CA" "http://127.0.0.1:$HP/ka/1" now 127.0.0.1 "ka:http://127.0.0.1:$HP/ka/2,https://$M:$T13/ka/3"
 check "server close honoured" 'KA total opened=2 reused=1' "$CA" "http://127.0.0.1:$HP/ka/1" now - "ka:http://127.0.0.1:$HP/kaclose/2,http://127.0.0.1:$HP/ka/3"
+# Lot 89: an answer followed by bytes nobody asked for: the connection is
+# dropped, the next request opens a new one and gets its own answer
+check "unsolicited answer not reused" 'KA total opened=2 reused=0 unsolicited=1' "$CA" "http://127.0.0.1:$HP/kastray/1" now - "ka:http://127.0.0.1:$HP/ka/2"
+check "unsolicited answer next ok" 'KA 1 rc=0 status=200 bytes=20 reused=0 conn=1' "$CA" "http://127.0.0.1:$HP/kastray/1" now - "ka:http://127.0.0.1:$HP/ka/2"
 check "keep-alive redirect"  'KA 0 rc=0 status=200 bytes=[0-9]+ reused=1 conn=1' "$CA" "http://127.0.0.1:$HP/redirect" now - "ka:http://127.0.0.1:$HP/ka/9"
 echo "[lot67-web-host] $pass passed, $fail failed"
 [ $fail -eq 0 ]

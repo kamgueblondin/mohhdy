@@ -16,6 +16,8 @@ static struct {
     bridge_t br;
 } g_conn;
 static int g_opened, g_reused;
+/* Lot 89: responses followed by bytes nobody asked for (connection dropped) */
+static int g_unsolicited;
 /* Lot 86: settings "net off". Refuses before resolve/connect. */
 static int g_offline;
 
@@ -23,6 +25,7 @@ void wf_fetch_set_offline(int on) { g_offline = on ? 1 : 0; }
 int wf_fetch_offline(void) { return g_offline; }
 
 void wf_fetch_conn_stats(int* opened, int* reused) { if (opened) *opened = g_opened; if (reused) *reused = g_reused; }
+int wf_fetch_unsolicited(void) { return g_unsolicited; }
 
 static int seq(const char* a, const char* b) { int i; for (i = 0; a[i] && a[i] == b[i]; i++) {} return a[i] == b[i]; }
 
@@ -216,6 +219,15 @@ connected:
         if (g_resp.truncated && g_resp.status >= 200 && g_resp.status < 300) break;
     }
     keep = env->keepalive && rc == 0 && g_resp.done && !g_resp.conn_close && !g_resp.truncated && (!u->https || !g_tls.peer_closed);
+    if (rc == 0 && g_resp.done && g_resp.trailing > 0) {
+        /* Lot 89: more bytes came after this answer in the same read. The
+         * next request on this connection would take them as its answer
+         * (an HTTP desync), so the connection is never kept. */
+        g_unsolicited++;
+        res->unsolicited = g_resp.trailing;
+        if (keep) logf2(env, "unsolicited bytes after the response: connection not kept, host ", u->host);
+        keep = 0;
+    }
     if (keep) {
         g_conn.open = 1; g_conn.h = h; g_conn.https = u->https; g_conn.port = u->port;
         scopy(g_conn.host, (int)sizeof(g_conn.host), u->host);

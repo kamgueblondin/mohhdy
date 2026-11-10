@@ -384,7 +384,7 @@ int wf_http_feed(wf_http_resp_t* r, const uint8_t* d, int n) {
             if (r->remaining == 0) { r->state = ST_CHUNK_CRLF; r->line_len = 0; }
         }
     }
-    if (r->state == ST_DONE) { r->done = 1; return 1; }
+    if (r->state == ST_DONE) { r->trailing += n - i; r->done = 1; return 1; }
     return 0;
 }
 
