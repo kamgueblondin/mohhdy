@@ -22,6 +22,7 @@ guest reaches it as 10.0.2.2 (slirp).
 from __future__ import print_function
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -268,6 +269,7 @@ def boot_tv(hp):
         need(out, ["sink tv", "display tv-hint scale_q 8 safe_q 6 (stepped down for the framebuffer, applied 6)",
                    "display tv-hint overscan likely"], "display-info TV")
         say("TV EDID: 2x wanted, 1.5x safe on 1024x768 and taken on the first boot")
+        step_energy(mon, proc)
         q2 = chrome.run(qmp, mon, proc, docks=None, want_q=lambda q: q == 6)
         say("window chrome at 1.5x from the TV hint (q=%d): buttons %d px, every window type" %
             (q2, chrome.py_btn(30, q2)))
@@ -275,6 +277,46 @@ def boot_tv(hp):
         stop(proc, mon, qmp)
         keep_log("qemu-lot88-serial-tv.log")
     return None, None, None
+
+
+ENERGY_RE = re.compile(r"osui energy wake after (\d+) ms refresh (\d+) hz idle_fps10 (\d+) "
+                       r"idle_drawn (\d+) idle_skipped (\d+)")
+
+
+def step_energy(mon, proc):
+    """US-081: saver with a 3 s dim timeout. The idle desktop dims at 3 s
+    (7 Hz budget, mesh cap halved) and 6 s (5 Hz, quartered), idle wakes
+    stop painting faster than that, and a key paints at once and wakes."""
+    lw.run(mon, proc, "power-apply saver", "power-apply profile saver", 20)
+    out = lw.run(mon, proc, "power-dim 3", "dim_after", 20)
+    need(out, ["profile saver", "dim_after 3s"], "power-dim")
+    out = lw.run(mon, proc, "power-dim 0x", "power-dim error", 20)
+    start = len(g.log_text())
+    g.send_command_until(mon, "gui", "osui gui live", proc, wait_prompt=False)
+    g.wait_for(proc, "osui energy dim 1 after 3 s refresh 7 hz pace_cap_bps 32000", 60, start)
+    g.wait_for(proc, "osui energy dim 2 after 6 s refresh 5 hz pace_cap_bps 16000", 60, start)
+    time.sleep(4.0)
+    mark = len(g.log_text())
+    g.send_key(mon, "x")
+    g.wait_for(proc, "osui energy wake after ", 30, mark)
+    m = ENERGY_RE.search(g.normalized_log(g.log_text()[mark:]))
+    if not m:
+        raise RuntimeError("energy wake line unreadable")
+    idle_ms, hz, fps10, drawn, skipped = (int(v) for v in m.groups())
+    if hz != 15 or idle_ms < 9000 or skipped < 10 or drawn < 1:
+        raise RuntimeError("energy wake: idle %d ms, %d hz, %d drawn, %d skipped" % (idle_ms, hz, drawn, skipped))
+    # the key painted: the next snapshot carries it
+    g.wait_for(proc, "OSUI-SNAP", 20, mark)
+    g.send_key(mon, "esc")
+    g.wait_for(proc, "osui gui input cleared", 20, mark)
+    g.send_command_until(mon, "/console", "osui gui exit", proc, mode="getc", wait_prompt=False)
+    time.sleep(1.0)
+    out = lw.run(mon, proc, "power-dim default", "dim_after", 20)
+    need(out, ["dim_after 60s"], "power-dim default")
+    lw.run(mon, proc, "power-apply balanced", "power-apply profile balanced", 20)
+    say("energy: saver dims the idle desktop at 3 s and 6 s (7 then 5 Hz, mesh cap 32000 then 16000), "
+        "%d idle wakes skipped and %d painted in %.1f s (%.1f fps), a key woke it at 15 Hz" %
+        (skipped, drawn, idle_ms / 1000.0, fps10 / 10.0))
 
 
 def step_scope(ctx):

@@ -37,6 +37,7 @@ void plat_energy_init(plat_energy_t* e) {
     e->bright_hz = 30;
     e->bright_pace = 0;
     e->dim = 0;
+    e->dim_user_s = 0;
 }
 
 int plat_energy_apply(plat_energy_t* e, int profile) {
@@ -56,13 +57,27 @@ int plat_energy_apply(plat_energy_t* e, int profile) {
     return 0;
 }
 
+int plat_energy_set_dim(plat_energy_t* e, uint32_t seconds) {
+    if (!e || seconds > 3600U) return -1;
+    e->dim_user_s = seconds;
+    return 0;
+}
+
+uint32_t plat_energy_dim_after_s(const plat_energy_t* e) {
+    plat_power_policy_t p;
+    if (!e || plat_power_policy(e->profile, &p) != 0 || !p.screen_dim_s) return 0;
+    return e->dim_user_s ? e->dim_user_s : p.screen_dim_s;
+}
+
 int plat_energy_idle(plat_energy_t* e, uint32_t idle_ms) {
     plat_power_policy_t p;
+    uint32_t after;
     if (!e || plat_power_policy(e->profile, &p) != 0) return -1;
     e->idle_ms = idle_ms;
     if (!e->bright_hz) e->bright_hz = p.refresh_hz;
-    if (p.screen_dim_s && idle_ms >= p.screen_dim_s * 1000U) {
-        int deep = idle_ms >= p.screen_dim_s * 2000U;
+    after = plat_energy_dim_after_s(e);
+    if (after && idle_ms >= after * 1000U) {
+        int deep = idle_ms >= after * 2000U;
         uint32_t div = deep ? 4U : 2U;
         uint32_t hz = e->bright_hz / div;
         /* Lot 86: a second idle period quarters the refresh. The battery
@@ -165,6 +180,7 @@ int plat_energy_report(const plat_energy_t* e, char* out, int cap) {
         e_cat(out, cap, " battery none (emulated pc, mains)");
     }
     e_cat(out, cap, " dim "); e_cat_u(out, cap, (uint32_t)e->dim);
+    e_cat(out, cap, " dim_after "); e_cat_u(out, cap, plat_energy_dim_after_s(e)); e_cat(out, cap, "s");
     e_cat(out, cap, "\n");
     return e_len(out);
 }

@@ -2728,6 +2728,19 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
     return 0;
 }
 
+/* Lot 88 (US-081): the energy frame pacer of the shell (shell_platform.c) */
+static osui_gui_frame_op_t g_frame_op;
+void osui_gui_set_frame_op(osui_gui_frame_op_t op) { g_frame_op = op; }
+static int frame_due(int input) {
+    char msg[192];
+    int paint;
+    if (!g_frame_op || !g_pane_src || !g_pane_src->ticks) return 1;
+    msg[0] = 0;
+    paint = g_frame_op(input, gui_ticks(), msg, (int)sizeof(msg));
+    if (msg[0]) serial_puts(msg);
+    return paint;
+}
+
 static void emit_snap(void) {
     static char snap[OSUI_SNAP_MAX];
     osui_gui_write_snap(snap, OSUI_SNAP_MAX);
@@ -2754,6 +2767,7 @@ void osui_gui_run(void) {
     osui_gui_term_reset();
     osui_gui_ack_enter();
     serial_puts("osui gui live chrome=qemu_fb display_surface=vbe_lfb us031_complete=false\n");
+    (void)frame_due(1);
     osui_gui_fill_scene(&scene);
     sys_vga_blit_scene(&scene);
     emit_snap();
@@ -2773,11 +2787,18 @@ void osui_gui_run(void) {
          * them made a maximize show the old grid for about 2 s. Paint
          * once, when the event line is complete. */
         if (g_evt_on && key != 0 && !stop) continue;
-        osui_gui_fill_scene(&scene);
-        sys_vga_blit_scene(&scene);
+        /* Lot 88 (US-081): an idle wake paints only within the energy
+         * refresh budget (the idle dim lowers it); a key always paints.
+         * The snapshot cadence does not change. */
+        if (frame_due(key != 0 || stop)) {
+            osui_gui_fill_scene(&scene);
+            sys_vga_blit_scene(&scene);
+        }
         if (key != 0 || (g_idle++ % 8) == 0) emit_snap();
         if (stop) break;
         if (key == 0 && osui_gui_idle(out, OSUI_OUT_MAX)) {
+            /* new content (an answer, a tool line) counts as input */
+            (void)frame_due(1);
             if (out[0]) serial_puts(out);
             osui_gui_fill_scene(&scene);
             sys_vga_blit_scene(&scene);

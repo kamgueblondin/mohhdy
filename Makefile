@@ -1414,7 +1414,8 @@ ARM_OBJS = $(ARM_DIR)/boot.o $(ARM_DIR)/arm_kernel.o $(ARM_DIR)/arm_mmu.o \
 	$(ARM_DIR)/ipc.o $(ARM_DIR)/sha256.o $(ARM_DIR)/user_tasks.o \
 	$(ARM_DIR)/arm_portable.o $(ARM_DIR)/aes_gcm.o $(ARM_DIR)/edid.o \
 	$(ARM_DIR)/p2p_flow.o $(ARM_DIR)/p2p_pace.o $(ARM_DIR)/p2p_rtx.o $(ARM_DIR)/p2p_bwe.o \
-	$(ARM_DIR)/wf_aead.o $(ARM_DIR)/p2p_trend.o
+	$(ARM_DIR)/wf_aead.o $(ARM_DIR)/p2p_trend.o \
+	$(ARM_DIR)/wf_regdom.o $(ARM_DIR)/osui_frame.o $(ARM_DIR)/plat_form.o
 
 $(ARM_DIR)/%.o: arch/arm/%.S
 	@mkdir -p $(ARM_DIR)
@@ -1429,7 +1430,7 @@ $(ARM_DIR)/sha256.o: kernel/sha256.c kernel/sha256.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
 # Lot 69 (US-076): more portable sources compiled unchanged
-$(ARM_DIR)/arm_portable.o: arch/arm/arm_portable.c arch/arm/arm_portable.h kernel/aes_gcm.h kernel/edid.h userspace/p2p_flow.h userspace/p2p_rtx.h userspace/p2p_bwe.h include/os_charset.h include/os_charset_pages.h userspace/wf_aead.h userspace/p2p_trend.h
+$(ARM_DIR)/arm_portable.o: arch/arm/arm_portable.c arch/arm/arm_portable.h kernel/aes_gcm.h kernel/edid.h userspace/p2p_flow.h userspace/p2p_rtx.h userspace/p2p_bwe.h include/os_charset.h include/os_charset_pages.h userspace/wf_aead.h userspace/p2p_trend.h userspace/wf_regdom.h userspace/osui_frame.h userspace/plat_form.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
 $(ARM_DIR)/aes_gcm.o: kernel/aes_gcm.c kernel/aes_gcm.h
@@ -1456,6 +1457,17 @@ $(ARM_DIR)/p2p_pace.o: userspace/p2p_pace.c userspace/p2p_pace.h
 	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
 # Lot 87 (US-076): the delay-gradient detector, compiled unchanged
 $(ARM_DIR)/p2p_trend.o: userspace/p2p_trend.c userspace/p2p_trend.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
+# Lot 88 (US-076): registrable domains, the frame pacer and the safe TV
+# scale, compiled unchanged
+$(ARM_DIR)/wf_regdom.o: userspace/wf_regdom.c userspace/wf_regdom.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
+$(ARM_DIR)/osui_frame.o: userspace/osui_frame.c userspace/osui_frame.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
+$(ARM_DIR)/plat_form.o: userspace/plat_form.c userspace/plat_form.h include/os_ui_scale.h include/os_syscalls.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
 $(ARM_IMAGE): $(ARM_OBJS) arch/arm/arm.ld

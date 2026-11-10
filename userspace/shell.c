@@ -3697,7 +3697,7 @@ static int is_builtin(const char* cmd) {
         "session-new", "session-use", "session-status", "session-list", "session-end",
         "session-ttl", "session-restore", "session-cleanup", "confirm", "deny", "mcp-invoice-void",
         "agent-run", "api", "api-token", "api-revoke", "web-serve",
-        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-qos", "p2p-bwe", "p2p-probe", "p2p-pace", "p2p-flow", "ui-scale", "text-size", "ui-font", "ui-layout", "form-factor", "display-info", "power-apply", "power-sim", "p2p-burst", "p2p-flood", "p2p-kv", "p2p-poll",
+        "p2p-up", "p2p-down", "p2p-peers", "p2p-health", "p2p-stats", "p2p-analyze", "p2p-qos", "p2p-bwe", "p2p-probe", "p2p-pace", "p2p-flow", "ui-scale", "text-size", "ui-font", "ui-layout", "form-factor", "display-info", "power-apply", "power-sim", "power-dim", "p2p-burst", "p2p-flood", "p2p-kv", "p2p-poll",
         "p2p-send", "p2p-put", "p2p-get", "p2p-sync", "p2p-propose", "p2p-block", "p2p-unblock", "p2p-limit",
         "p2p-raft", "p2p-raft-compact", "p2p-raft-put", "p2p-grpc", "p2p-stun", "p2p-punch", "p2p-cache", "p2p-route",
         "collab-join", "collab-pay", "collab-offer", "collab-reserve", "collab-task", "collab-claim", "collab-work",
@@ -8051,7 +8051,8 @@ void main() {
         osui_gui_set_web_page_ops(&page_ops);
     }
     osui_gui_set_search_url(shell_search_url);   /* Lot 69: search-open on the desktop */   /* Lot 67: /browser over the network */
-    { extern int shell_display_ui_hint(void); osui_gui_set_scale_hint(shell_display_ui_hint()); }   /* Lot 69: fw_cfg first-boot pin */
+    { extern int shell_display_ui_hint(void); osui_gui_set_scale_hint(shell_display_ui_hint()); }
+    { extern int shell_energy_frame(int, unsigned, char*, int); osui_gui_set_frame_op(shell_energy_frame); }   /* Lot 88: US-081 */   /* Lot 69: fw_cfg first-boot pin */
     osui_gui_set_fs_io(&shell_fs_io);
     umalloc_init((void *)OS_USER_HEAP_BASE, shell_heap_grow);
     osui_gui_set_heap(urealloc);

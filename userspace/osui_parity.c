@@ -293,6 +293,7 @@ static const osui_par_entry_t k_p2pmesh[] = {
     { "Moteur de recherche", "search-engine", A, "ddg|ddg-lite|URL" },
     { "Profil d'energie (applique)", "power-apply", A, "performance|balanced|saver|auto|status" },
     { "Batterie simulee", "power-sim", A, "start|tick MS [BUSY]|charge on|off|stop|status" },
+    { "Attenuation apres inactivite", "power-dim", A, "SECONDES 1..3600|default" },   /* Lot 88 */
     { "Debloquer un pair", "p2p-unblock", A | M, "PAIR" },
 };
 

@@ -11,6 +11,7 @@
 #include "osui_scale.h"
 #include "plat_form.h"
 #include "plat_energy.h"
+#include "osui_frame.h"
 #include "../include/os_syscalls.h"
 
 void print_string(const char* s);
@@ -88,7 +89,7 @@ static void join(char* d, const char* dir, const char* name, int cap) {
     s_cat(d, name, cap);
 }
 
-static const char* k_cmds[] = { "form-factor", "display-info", "power-apply", "power-sim",
+static const char* k_cmds[] = { "form-factor", "display-info", "power-apply", "power-sim", "power-dim",
     "hal-info", "hal-port", "screen-adapt", "screen-resize", "gesture", "gesture-multi", "power-profile", "power-status", "dev-list",
     "dev-rules", "dev-hotplug", "admin-nodes", "admin-node-add",
     "compat-check", "compat-scan", "notify-push", "notify-list", "notify-ack", "migrate-export",
@@ -822,6 +823,77 @@ static int cmd_power_apply(const char* rest) {
     print_string(g_out);
     return 0;
 }
+/* Lot 88 (US-081): power-dim SECONDS|default */
+static int cmd_power_dim(const char* rest) {
+    char a[24];
+    int ok = 1, v;
+    energy_ensure();
+    word(rest, a, (int)sizeof(a));
+    if (s_eq(a, "default")) v = 0;
+    else v = a[0] ? to_int(a, &ok) : -1;
+    if (!a[0] || !ok || v < 0 || plat_energy_set_dim(&g_energy, (uint32_t)v) != 0) {
+        print_string("power-dim error usage: power-dim SECONDS (1..3600) | default\n");
+        return 1;
+    }
+    plat_energy_report(&g_energy, g_out, (int)sizeof(g_out));
+    print_string(g_out);
+    return 0;
+}
+
+/* Lot 88 (US-081): the desktop asks before each paint. The idle time
+ * feeds the energy idle policy (dim, deep dim); the frame pacer keeps an
+ * idle wake from painting faster than the resulting refresh budget. */
+static osui_frame_t g_frame;
+static int g_frame_dim_seen;
+static void fcat(char* d, int cap, const char* s) { s_cat(d, s, cap); }
+static void fcat_u(char* d, int cap, uint32_t v) { cat_u(d, v, cap); }
+int shell_energy_frame(int input, unsigned ticks, char* msg, int cap) {
+    uint32_t now = (uint32_t)ticks * 10U, idle, fps10, a, b;
+    int paint, was_dim;
+    if (!msg || cap < 2) return 1;
+    msg[0] = 0;
+    energy_ensure();
+    if (!g_frame.started) osui_frame_init(&g_frame, now);
+    idle = osui_frame_idle_ms(&g_frame, now);
+    was_dim = g_frame.dim;
+    fps10 = osui_frame_idle_fps10(&g_frame, now);
+    a = g_frame.idle_drawn;
+    b = g_frame.idle_skipped;
+    (void)plat_energy_idle(&g_energy, input ? 0U : idle);
+    paint = osui_frame_due(&g_frame, now, input, g_energy.refresh_hz, g_energy.dim);
+    if (g_energy.dim != g_frame_dim_seen) {
+        /* the idle policy also moved the mesh pace cap */
+        energy_push_pace();
+        if (input && was_dim) {
+            fcat(msg, cap, "osui energy wake after ");
+            fcat_u(msg, cap, idle);
+            fcat(msg, cap, " ms refresh ");
+            fcat_u(msg, cap, g_energy.refresh_hz);
+            fcat(msg, cap, " hz idle_fps10 ");
+            fcat_u(msg, cap, fps10);
+            fcat(msg, cap, " idle_drawn ");
+            fcat_u(msg, cap, a);
+            fcat(msg, cap, " idle_skipped ");
+            fcat_u(msg, cap, b);
+            fcat(msg, cap, "\n");
+        } else if (g_energy.dim) {
+            fcat(msg, cap, "osui energy dim ");
+            fcat_u(msg, cap, (uint32_t)g_energy.dim);
+            fcat(msg, cap, " after ");
+            fcat_u(msg, cap, idle / 1000U);
+            fcat(msg, cap, " s refresh ");
+            fcat_u(msg, cap, g_energy.refresh_hz);
+            fcat(msg, cap, " hz pace_cap_bps ");
+            fcat_u(msg, cap, g_energy.pace_cap_bps);
+            fcat(msg, cap, " idle_fps10 ");
+            fcat_u(msg, cap, fps10);
+            fcat(msg, cap, "\n");
+        }
+        g_frame_dim_seen = g_energy.dim;
+    }
+    return paint;
+}
+
 static int cmd_power_sim(const char* rest) {
     char a[24], b[24], c[24];
     int ok = 1;
@@ -1060,6 +1132,7 @@ int shell_platform_line(const char* line) {
     }
     if (s_eq(cmd, "power-apply")) return cmd_power_apply(rest);
     if (s_eq(cmd, "power-sim")) return cmd_power_sim(rest);
+    if (s_eq(cmd, "power-dim")) return cmd_power_dim(rest);
     if (s_eq(cmd, "power-profile")) {
         int p;
         word(rest, a, 64);

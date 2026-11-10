@@ -16,6 +16,9 @@ The reader stylesheet handles @scope, the all shorthand,
 text-transform and white-space. A QEMU tablet test clicks the chrome
 of every window type at 1x and 1.5x (a resize clamp bug was fixed).
 A CEA TV sink sets a safe first-boot scale (US-080 partial, no DDC).
+The idle desktop paints within the energy refresh budget and dims
+after power-dim seconds (US-081 partial, battery simulated). The ARM
+kernel self-tests three more shared sources (US-076 partial).
 US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097 stay
 simule. See docs/lot88_plan.md.
 

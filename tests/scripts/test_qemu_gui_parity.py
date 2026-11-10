@@ -419,23 +419,48 @@ KEY_ECHO_TIMEOUT = 25.0
 KEY_STATS = {"keys": 0, "max": 0.0, "slow": 0}
 
 
+def log_since(start):
+    """The serial log from byte offset start (only the new part is read:
+    the panel tests poll it after every key)."""
+    try:
+        with open(g.LOG, "rb") as handle:
+            handle.seek(start)
+            return handle.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+
+
+def log_size():
+    try:
+        return os.path.getsize(g.LOG)
+    except OSError:
+        return 0
+
+
 def panel_key(monitor, proc, name, sel, ilen):
     """Lot 88: one key to an open panel, then wait for the guest's trace
     "osui panel key sel=S ilen=L" before the next one (no blind typing).
     A key without its trace fails here, named, instead of showing up later
-    as a missing "armed" line."""
-    start = len(g.log_text())
+    as a missing "armed" line. The wait polls the new bytes of the log
+    every 30 ms and returns at the trace: the first version used wait_for
+    (whole log re-read, 0.35 s pause after each match) and took the Lot 46
+    CI job from 9 to almost 14 minutes for about 500 keys."""
+    start = log_size()
     t0 = time.monotonic()
     g.send_key(monitor, name)
     want = "osui panel key sel=%d ilen=" % sel + ("" if ilen is None else "%d" % ilen)
-    try:
-        g.wait_for(proc, want, KEY_ECHO_TIMEOUT, start)
-    except RuntimeError:
-        seen = [ln for ln in g.normalized_log(g.log_text()[start:]).splitlines() if "osui panel " in ln]
-        raise RuntimeError("panel key %r: no %r within %.0fs (guest panel lines since: %r)" %
-                           (name, want, KEY_ECHO_TIMEOUT, seen[-4:]))
-    # wait_for sleeps 0.35 s after a match
-    lat = time.monotonic() - t0 - 0.35
+    deadline = t0 + KEY_ECHO_TIMEOUT
+    while True:
+        if want in g.normalized_log(log_since(start)):
+            break
+        if proc.poll() is not None:
+            raise RuntimeError("QEMU stopped while waiting for panel key %r" % name)
+        if time.monotonic() > deadline:
+            seen = [ln for ln in g.normalized_log(log_since(start)).splitlines() if "osui panel " in ln]
+            raise RuntimeError("panel key %r: no %r within %.0fs (guest panel lines since: %r)" %
+                               (name, want, KEY_ECHO_TIMEOUT, seen[-4:]))
+        time.sleep(0.03)
+    lat = time.monotonic() - t0
     KEY_STATS["keys"] += 1
     if lat > KEY_STATS["max"]:
         KEY_STATS["max"] = lat
