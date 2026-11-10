@@ -1482,8 +1482,9 @@ static int scale_save(void) {
 }
 /* Lot 69: first boot (no /persist/ui.cfg): the auto rule, unless the
  * QEMU harness pinned a scale through fw_cfg (kernel display info). */
-static int g_scale_hint_q;
+static int g_scale_hint_q, g_scale_hint_used;
 void osui_gui_set_scale_hint(int q) { g_scale_hint_q = (q >= OS_UI_Q_MIN && q <= OS_UI_Q_MAX) ? q : 0; }
+int osui_gui_scale_hint_used(void) { return g_scale_hint_used; }
 static void scale_load_once(void) {
     char buf[160];
     int n;
@@ -1491,7 +1492,10 @@ static void scale_load_once(void) {
     g_scale_loaded = 1;
     n = web_image_read(0, OSUI_SCALE_CFG, (unsigned char *)buf, (int)sizeof(buf) - 1);
     if (n > 0 && n < (int)sizeof(buf)) { buf[n] = 0; if (osui_scale_load(osui_gui_scale(), buf, n) == 0) return; }
-    if (g_scale_hint_q) osui_gui_scale()->ui_q = (uint8_t)g_scale_hint_q;
+    if (g_scale_hint_q) {
+        osui_gui_scale()->ui_q = (uint8_t)g_scale_hint_q;
+        g_scale_hint_used = g_scale_hint_q;
+    }
 }
 int osui_gui_scale_command(const char *line, char *out, int cap) {
     osui_scale_t *sc;

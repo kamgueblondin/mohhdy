@@ -41,7 +41,14 @@ static char g_file[1100];
 static int sys0(int nr) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(nr) : "memory"); return r; }
 static int sys_display(os_display_info_t* d) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(SYS_DISPLAY_INFO), "c"(d) : "memory"); return r; }
 /* Lot 69: fw_cfg first-boot scale pin from the kernel (0 = none) */
-int shell_display_ui_hint(void) { os_display_info_t di; return sys_display(&di) == 0 ? di.ui_hint_q : 0; }
+/* Lot 69: the harness pin; Lot 88 (US-080): else the safe TV scale, which
+ * the desktop takes on a first boot (no /persist/ui.cfg) only */
+int shell_display_ui_hint(void) {
+    os_display_info_t di;
+    if (sys_display(&di) != 0) return 0;
+    if (di.ui_hint_q) return di.ui_hint_q;
+    return plat_form_tv_safe_q(&di, 0);
+}
 static int sys1(int nr, const void* a) { int r; asm volatile("int $0x80" : "=a"(r) : "a"(nr), "b"(a) : "memory"); return r; }
 
 static int s_len(const char* s) { int n = 0; while (s && s[n]) n++; return n; }
@@ -1041,18 +1048,13 @@ int shell_platform_line(const char* line) {
         print_string(g_out);
         /* Lot 85: the EDID extras, on their own line, only when the block had them. */
         if (plat_form_edid_detail(&di, g_out, (int)sizeof(g_out)) > 0) print_string(g_out);
-        /* Lot 87: the CEA-861 extension, and the scale a TV sink would want
-         * (printed as a hint; the scale is not changed) */
+        /* Lot 87: the CEA-861 extension. Lot 88: the TV scale, the safe
+         * one the desktop took on a first boot, and the overscan note */
         if (plat_form_cea_line(&di, g_out, (int)sizeof(g_out)) > 0) print_string(g_out);
         {
-            int q = plat_form_tv_scale_q(&di);
-            if (q > 0) {
-                g_out[0] = 0;
-                s_cat(g_out, "display tv-hint scale_q ", 4096);
-                cat_u(g_out, (uint32_t)q, 4096);
-                s_cat(g_out, " (not applied)\n", 4096);
-                print_string(g_out);
-            }
+            int used = osui_gui_scale_hint_used();
+            if (di.ui_hint_q) used = 0;     /* the harness pin, not the TV */
+            if (plat_form_tv_line(&di, used, g_out, (int)sizeof(g_out)) > 0) print_string(g_out);
         }
         return 0;
     }

@@ -62,4 +62,17 @@ int plat_form_cea_line(const os_display_info_t* d, char* out, int cap);
  * 0 when the sink is not a TV or nothing is known, else a quarter-step
  * scale (4 = 1.0) at least 6 (1.5x) and larger for a 4K panel. */
 int plat_form_tv_scale_q(const os_display_info_t* d);
+/* Lot 88 (US-080): the TV scale the desktop may take on its own, or 0.
+ * Only for a parsed CEA block that says TV, never when the test harness
+ * pinned a scale (ui_hint_q), and stepped down (3x, 2x, 1.5x) until the
+ * logical screen keeps at least 640 x 360 CSS px. why gets a short
+ * reason ("tv 1080p", "not a tv", "pinned", "screen too small", ...). */
+int plat_form_tv_safe_q(const os_display_info_t* d, const char **why);
+/* the mode the gui command sets (kernel GFX_FB_WIDTH x GFX_FB_HEIGHT): the
+ * TV hint is computed before the desktop starts, while fb_w is still 0 */
+#define PLAT_FORM_DESK_W 1024
+#define PLAT_FORM_DESK_H 768
+/* Lot 88 (US-080): "display tv-hint scale_q 8 safe_q 6 (...)\n" plus an
+ * overscan note for a TV without the underscan bit; length, 0 none. */
+int plat_form_tv_line(const os_display_info_t* d, int applied_q, char* out, int cap);
 #endif

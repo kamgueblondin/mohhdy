@@ -207,7 +207,7 @@ static int g_edid_status = 1;
 
 /* Lot 87: the first extension when byte 126 announces one. QEMU keeps
  * the blob in the same 4 KiB page; whatever it holds is reported as is. */
-static void probe_edid_ext(uint32_t bar2) {
+static void probe_edid_ext(const volatile uint8_t *src) {
     static uint8_t two[2 * EDID_BLOCK];
     char line[96];
     int i, tag = 0, r;
@@ -216,7 +216,7 @@ static void probe_edid_ext(uint32_t bar2) {
         print_string_serial("[GFX] edid ext none\n");
         return;
     }
-    for (i = 0; i < 2 * EDID_BLOCK; i++) two[i] = ((volatile uint8_t *)bar2)[i];
+    for (i = 0; i < 2 * EDID_BLOCK; i++) two[i] = src[i];
     r = edid_parse_ext(two, 2 * EDID_BLOCK, &g_edid, &g_cea, &tag);
     edid_cea_summarize(&g_cea, r, tag, &g_cea_sum);
     print_string_serial("[GFX] edid ext ");
@@ -233,10 +233,78 @@ static void probe_edid_ext(uint32_t bar2) {
     print_string_serial("\n");
 }
 
+/* Lot 69: QEMU fw_cfg "opt/mohhdy/ui-scale" (text, quarters, e.g. "4").
+ * Lets a test harness pin the first-boot text scale; real hardware has no
+ * fw_cfg and gets the auto rule. Read once at boot, read-only after. */
+static int g_ui_hint_q;
+static void fwcfg_select(uint16_t key) { __asm__ volatile("outw %0, %1" : : "a"(key), "Nd"((uint16_t)0x510)); }
+static uint8_t fwcfg_byte(void) { return inb(0x511); }
+/* Lot 88: the fw_cfg file named want: its size and selector, 0 found,
+ * -1 no fw_cfg or no such file */
+static int fwcfg_find(const char *want, uint32_t *size, uint16_t *sel) {
+    uint32_t n, i, k;
+    fwcfg_select(0);
+    if (fwcfg_byte() != 'Q' || fwcfg_byte() != 'E' || fwcfg_byte() != 'M' || fwcfg_byte() != 'U') return -1;
+    fwcfg_select(0x19);
+    n = 0;
+    for (k = 0; k < 4; k++) n = (n << 8) | fwcfg_byte();
+    if (n > 256) n = 256;
+    for (i = 0; i < n; i++) {
+        uint8_t e[64];
+        int match = 1;
+        for (k = 0; k < 64; k++) e[k] = fwcfg_byte();
+        /* the name, its NUL included (56 bytes at most) */
+        for (k = 0; k < 56; k++) {
+            if ((char)e[8 + k] != want[k]) { match = 0; break; }
+            if (!want[k]) break;
+        }
+        if (!match || k >= 56) continue;
+        *size = ((uint32_t)e[0] << 24) | ((uint32_t)e[1] << 16) | ((uint32_t)e[2] << 8) | e[3];
+        *sel = (uint16_t)(((uint16_t)e[4] << 8) | e[5]);
+        return 0;
+    }
+    return -1;
+}
+
+/* Lot 88 (US-080): QEMU fw_cfg "opt/mohhdy/edid", 128 or 256 bytes, read
+ * instead of the Bochs VGA block. A test harness hands the guest a TV's
+ * EDID (CEA extension) that QEMU's std VGA cannot describe. Real hardware
+ * has no fw_cfg; the blob is parsed and checked like any EDID. */
+static int probe_edid_fwcfg(void) {
+    static uint8_t blob[2 * EDID_BLOCK];
+    uint32_t size = 0, k;
+    uint16_t sel = 0;
+    int r;
+    if (fwcfg_find("opt/mohhdy/edid", &size, &sel) != 0) return 1;
+    if (size != EDID_BLOCK && size != 2 * EDID_BLOCK) {
+        print_string_serial("[GFX] edid fw_cfg size refused\n");
+        return 1;
+    }
+    for (k = 0; k < 2 * EDID_BLOCK; k++) blob[k] = 0;
+    fwcfg_select(sel);
+    for (k = 0; k < size; k++) blob[k] = fwcfg_byte();
+    r = edid_parse(blob, EDID_BLOCK, &g_edid);
+    g_edid_status = r == 0 ? 0 : r == -1 ? 3 : 4;
+    {
+        char line[96];
+        print_string_serial("[GFX] edid fw_cfg ");
+        (void)edid_describe(&g_edid, line, (int)sizeof(line));
+        print_string_serial(line);
+        print_string_serial(g_edid_status == 0 ? "\n" : g_edid_status == 3 ? " (bad header)\n" : " (bad checksum)\n");
+    }
+    if (r == 0) {
+        if (size < 2 * EDID_BLOCK && g_edid.ext_blocks > 0) g_edid.ext_blocks = 0;   /* announced, not given */
+        probe_edid_ext(blob);
+    }
+    return r;
+}
+
 int gfx_fb_probe_edid(void) {
     uint8_t slot, function;
     uint8_t blk[EDID_BLOCK];
     int i, r;
+    r = probe_edid_fwcfg();
+    if (r != 1) return r;
     for (slot = 0; slot < 32; slot++) {
         for (function = 0; function < 8; function++) {
             uint32_t id = pci_config_read32(0, slot, function, 0), bar2;
@@ -257,7 +325,7 @@ int gfx_fb_probe_edid(void) {
                 print_string_serial(line);
                 print_string_serial(g_edid_status == 0 ? "\n" : g_edid_status == 3 ? " (bad header)\n" : " (bad checksum)\n");
             }
-            if (r == 0) probe_edid_ext(bar2);
+            if (r == 0) probe_edid_ext((const volatile uint8_t *)bar2);
             return r;
         }
     }
@@ -266,44 +334,19 @@ int gfx_fb_probe_edid(void) {
     return -1;
 }
 
-/* Lot 69: QEMU fw_cfg "opt/mohhdy/ui-scale" (text, quarters, e.g. "4").
- * Lets a test harness pin the first-boot text scale; real hardware has no
- * fw_cfg and gets the auto rule. Read once at boot, read-only after. */
-static int g_ui_hint_q;
-static void fwcfg_select(uint16_t key) { __asm__ volatile("outw %0, %1" : : "a"(key), "Nd"((uint16_t)0x510)); }
-static uint8_t fwcfg_byte(void) { return inb(0x511); }
 int gfx_fb_probe_fwcfg(void) {
-    static const char want[] = "opt/mohhdy/ui-scale";
-    uint32_t n, i, k;
-    fwcfg_select(0);
-    if (fwcfg_byte() != 'Q' || fwcfg_byte() != 'E' || fwcfg_byte() != 'M' || fwcfg_byte() != 'U') return -1;
-    fwcfg_select(0x19);
-    n = 0;
-    for (k = 0; k < 4; k++) n = (n << 8) | fwcfg_byte();
-    if (n > 256) n = 256;
-    for (i = 0; i < n; i++) {
-        uint8_t e[64];
-        uint32_t size;
-        uint16_t sel;
-        int match = 1;
-        for (k = 0; k < 64; k++) e[k] = fwcfg_byte();
-        for (k = 0; k < sizeof(want); k++) if ((char)e[8 + k] != want[k]) { match = 0; break; }
-        if (!match) continue;
-        size = ((uint32_t)e[0] << 24) | ((uint32_t)e[1] << 16) | ((uint32_t)e[2] << 8) | e[3];
-        sel = (uint16_t)(((uint16_t)e[4] << 8) | e[5]);
-        fwcfg_select(sel);
-        {
-            int v = 0;
-            for (k = 0; k < size && k < 4; k++) {
-                uint8_t c = fwcfg_byte();
-                if (c < '0' || c > '9') break;
-                v = v * 10 + (c - '0');
-            }
-            if (v >= 4 && v <= 16) g_ui_hint_q = v;
-        }
-        return g_ui_hint_q;
+    uint32_t size = 0, k;
+    uint16_t sel = 0;
+    int v = 0;
+    if (fwcfg_find("opt/mohhdy/ui-scale", &size, &sel) != 0) return 0;
+    fwcfg_select(sel);
+    for (k = 0; k < size && k < 4; k++) {
+        uint8_t c = fwcfg_byte();
+        if (c < '0' || c > '9') break;
+        v = v * 10 + (c - '0');
     }
-    return 0;
+    if (v >= 4 && v <= 16) g_ui_hint_q = v;
+    return g_ui_hint_q;
 }
 
 void gfx_fb_display_info(os_display_info_t *o) {

@@ -1599,6 +1599,14 @@ qemu-lot87: $(OS_IMAGE) pack-initrd disk
 qemu-lot88: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot88.py
 
+# the two boots of qemu-lot88 alone (one CI job each, under 15 min)
+.PHONY: qemu-lot88-desk qemu-lot88-tv
+qemu-lot88-desk: $(OS_IMAGE) pack-initrd disk
+	@LOT88_PART=desk python3 tests/scripts/test_qemu_lot88.py
+
+qemu-lot88-tv: $(OS_IMAGE) pack-initrd disk
+	@LOT88_PART=tv python3 tests/scripts/test_qemu_lot88.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

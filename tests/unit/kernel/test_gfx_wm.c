@@ -130,6 +130,40 @@ static void test_lot69_scale_and_resize(void) {
     TEST_ASSERT_EQUAL(0, s.resize);
 }
 
+/* Lot 88: a resize starts from the size on screen, not from a grow that
+ * the work area clamped */
+static void test_lot88_resize_from_visible_size(void) {
+    gfx_wm_win_t s;
+    gfx_wm_rect_t base = R(100, 50, 400, 300), area = R(0, 30, 1024, 680), placed;
+    int w0, h0;
+    memset(&s, 0, sizeof(s));
+    gfx_wm_place(&s, base, area, &placed);
+    /* grow far past the area */
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_DRAG, gfx_wm_mouse(&s, placed, base, 30, 4, placed.x + placed.w - 2, placed.y + placed.h - 2, 1, 0));
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_RESIZED, gfx_wm_mouse(&s, placed, base, 30, 4, 4000, 4000, 0, 1));
+    gfx_wm_place(&s, base, area, &placed);
+    w0 = placed.w;
+    h0 = placed.h;
+    TEST_ASSERT_EQUAL(area.w, w0);
+    TEST_ASSERT_EQUAL(area.h, h0);
+    /* a 100 x 80 shrink is a 100 x 80 shrink on screen */
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_DRAG, gfx_wm_mouse(&s, placed, base, 30, 4, placed.x + placed.w - 2, placed.y + placed.h - 2, 1, 0));
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_RESIZED, gfx_wm_mouse(&s, placed, base, 30, 4, placed.x + placed.w - 102, placed.y + placed.h - 82, 0, 1));
+    gfx_wm_place(&s, base, area, &placed);
+    TEST_ASSERT_EQUAL(w0 - 100, placed.w);
+    TEST_ASSERT_EQUAL(h0 - 80, placed.h);
+    /* a window shown at its minimum after a big shrink grows at once */
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_DRAG, gfx_wm_mouse(&s, placed, base, 30, 4, placed.x + placed.w - 2, placed.y + placed.h - 2, 1, 0));
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_RESIZED, gfx_wm_mouse(&s, placed, base, 30, 4, -3000, -3000, 0, 1));
+    gfx_wm_place(&s, base, area, &placed);
+    TEST_ASSERT_EQUAL(GFX_WM_MIN_W, placed.w);
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_DRAG, gfx_wm_mouse(&s, placed, base, 30, 4, placed.x + placed.w - 2, placed.y + placed.h - 2, 1, 0));
+    TEST_ASSERT_EQUAL(GFX_WM_ACT_RESIZED, gfx_wm_mouse(&s, placed, base, 30, 4, placed.x + placed.w + 48, placed.y + placed.h + 28, 0, 1));
+    gfx_wm_place(&s, base, area, &placed);
+    TEST_ASSERT_EQUAL(GFX_WM_MIN_W + 50, placed.w);
+    TEST_ASSERT_EQUAL(GFX_WM_MIN_H + 30, placed.h);
+}
+
 static void test_lot86_chrome_suite(void) {
     TEST_ASSERT_EQUAL(0, gfx_wm_chrome_suite());
     TEST_ASSERT_EQUAL(0, gfx_wm_chrome_check(R(8, 40, 1024, 700), 30, 8));
@@ -143,6 +177,7 @@ int main(void) {
     RUN_TEST(test_draw_buttons_colors);
     RUN_TEST(test_lot69_scale_and_resize);
     RUN_TEST(test_lot86_chrome_suite);
+    RUN_TEST(test_lot88_resize_from_visible_size);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;

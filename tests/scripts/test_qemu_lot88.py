@@ -10,6 +10,14 @@ guest reaches it as 10.0.2.2 (slirp).
     its limit .foot88 nor the one outside; an @scope with no prelude in a
     <style> inside .wrap88 hides only the em there; :scope gets
     text-transform; all: revert undoes an author display: none.
+  * TV hint (US-080): a second boot gets a 1080p HDMI TV EDID through
+    fw_cfg and no scale pin; the safe TV scale (1.5x on 1024x768) is taken
+    on that first boot and display-info says so.
+  * window chrome (test_qemu_lot88_chrome.py): chat, Statut pane, Fichiers
+    app and full screen Browser-OS, at 1x then on the TV boot at 1.5x:
+    close button where the hit test puts it, button side from the scale,
+    maximize and back, grip grow / shrink / back, minimize and dock
+    restore (1x), close.
 """
 from __future__ import print_function
 
@@ -28,6 +36,7 @@ os.environ.setdefault("OVERLAY_DISK", os.path.join(LOGS, "qemu-lot88-overlay.img
 import test_qemu_osui_gui as g  # noqa: E402
 import test_qemu_lot67_web as lw  # noqa: E402
 from test_qemu_gui_windows import W, H, BAR_H  # noqa: E402,F401
+import test_qemu_lot88_chrome as chrome  # noqa: E402
 
 ROOT = g.ROOT
 SRV_LOG = os.path.join(g.LOG_DIR, "lot88-web-server.log")
@@ -95,15 +104,108 @@ def console_autofill(mon, proc):
         "evil-example.com's or the IP's")
 
 
-def main():
-    if not os.path.isfile(os.path.join(lw.PKI, "test_ca.pem")):
-        subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "lot67_gen_pki.py"), lw.PKI], check=True)
-    os.makedirs(g.LOG_DIR, exist_ok=True)
+def tv_edid():
+    """A 1080p HDMI television, written field by field: base block with a
+    1920x1080@60 detailed timing and no physical size, one CEA-861 rev 3
+    extension with VIC 16 (native) and VIC 4, an HDMI vendor block at
+    1.0.0.0, no underscan bit. 256 bytes, both checksums set."""
+    base = bytearray(128)
+    base[0:8] = b"\x00\xff\xff\xff\xff\xff\xff\x00"
+    base[8:10] = b"\x35\x08"           # manufacturer "MOH"
+    base[10:12] = b"\x88\x00"          # product 88
+    base[16], base[17] = 1, 36          # week 1 of 2026
+    base[18], base[19] = 1, 3           # EDID 1.3
+    base[20] = 0x80                     # digital input
+    base[21], base[22] = 0, 0           # no physical size: a TV hint
+    base[23], base[24] = 0x78, 0x0A
+    for k in range(38, 54):
+        base[k] = 0x01                  # no standard timings
+    # 1920x1080@60, 148.5 MHz: active/blank 1920/280, 1080/45
+    base[54:72] = bytes([0x02, 0x3A, 0x80, 0x18, 0x71, 0x38, 0x2D, 0x40, 0x58, 0x2C,
+                         0x45, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1E])
+    name = b"MOHHDY TV88\n"
+    base[72:90] = bytes([0, 0, 0, 0xFC, 0]) + name + b" " * (13 - len(name))
+    for off in (90, 108):
+        base[off:off + 18] = bytes([0, 0, 0, 0x10, 0]) + bytes(13)
+    base[126] = 1                       # one extension
+    base[127] = (-sum(base[:127])) & 0xFF
+    cea = bytearray(128)
+    blocks = bytes([0x42, 0x90, 0x04,               # video: VIC 16 native, VIC 4
+                    0x65, 0x03, 0x0C, 0x00, 0x10, 0x00])  # HDMI VSDB, 1.0.0.0
+    cea[0], cea[1], cea[2], cea[3] = 0x02, 3, 4 + len(blocks), 0x40
+    cea[4:4 + len(blocks)] = blocks
+    cea[127] = (-sum(cea[:127])) & 0xFF
+    return bytes(base + cea)
+
+
+def boot(scale, srv_port, edid=None):
+    """One QEMU at this ui-scale (quarters, 4 = 1x; None: no pin), with an
+    EDID blob through fw_cfg when edid is a path; returns proc, mon, qmp."""
     for path in (g.LOG, g.MON_SOCK, g.QMP_SOCK):
         try:
             os.remove(path)
         except OSError:
             pass
+    g.prepare_test_disk()
+    err = open(os.devnull, "wb")
+    pins = []
+    if scale:
+        pins += ["-fw_cfg", "name=opt/mohhdy/ui-scale,string=%d" % scale]
+    if edid:
+        pins += ["-fw_cfg", "name=opt/mohhdy/edid,file=%s" % edid]
+    proc = subprocess.Popen([
+        "qemu-system-i386"] + pins + [
+        "-cpu", os.environ.get("LOT88_CPU", "max"),
+        "-kernel", g.KERNEL, "-initrd", g.INITRD, "-m", "1024M",
+        "-display", "none", "-vga", "std",
+        "-usb", "-device", "usb-tablet",
+        "-serial", "file:" + g.LOG,
+        "-monitor", "unix:%s,server,nowait" % g.MON_SOCK,
+        "-qmp", "unix:%s,server,nowait" % g.QMP_SOCK,
+        "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
+        "-netdev", "user,id=n0", "-device", "ne2k_isa,netdev=n0",
+    ] + g.qemu_disk_args(), cwd=ROOT, stdout=err, stderr=err)
+    err.close()
+    g.wait_for(proc, "[0m : ", g.BOOT_TIMEOUT)
+    g.wait_for(proc, "usbdriver tablet enumerated port ", g.CMD_TIMEOUT)
+    mon = g.monitor_connect()
+    qmp = g.qmp_connect()
+    return proc, mon, qmp
+
+
+def stop(proc, mon, qmp):
+    for s in (mon, qmp):
+        if s:
+            try:
+                s.close()
+            except Exception:
+                pass
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+
+
+def keep_log(name):
+    """the serial log of a finished boot, kept for the CI artifact"""
+    try:
+        with open(g.LOG, "rb") as f:
+            data = f.read()
+        with open(os.path.join(g.LOG_DIR, name), "wb") as f:
+            f.write(data)
+    except OSError:
+        pass
+
+
+def main():
+    part = os.environ.get("LOT88_PART", "all")
+    if part not in ("all", "desk", "tv"):
+        raise SystemExit("LOT88_PART must be all, desk or tv, not %r" % part)
+    if not os.path.isfile(os.path.join(lw.PKI, "test_ca.pem")):
+        subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "lot67_gen_pki.py"), lw.PKI], check=True)
+    os.makedirs(g.LOG_DIR, exist_ok=True)
     hp = 41000 + os.getpid() % 9000
     srv_log = open(SRV_LOG, "w")
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "scripts", "lot67_web_server.py"), lw.PKI,
@@ -111,52 +213,68 @@ def main():
     proc = mon = qmp = None
     t0 = time.monotonic()
     try:
-        g.prepare_test_disk()
-        with open(os.devnull, "wb") as err:
-            proc = subprocess.Popen([
-                "qemu-system-i386", "-fw_cfg", "name=opt/mohhdy/ui-scale,string=4",
-                "-cpu", os.environ.get("LOT88_CPU", "max"),
-                "-kernel", g.KERNEL, "-initrd", g.INITRD, "-m", "1024M",
-                "-display", "none", "-vga", "std",
-                "-usb", "-device", "usb-tablet",
-                "-serial", "file:" + g.LOG,
-                "-monitor", "unix:%s,server,nowait" % g.MON_SOCK,
-                "-qmp", "unix:%s,server,nowait" % g.QMP_SOCK,
-                "-machine", "type=pc,accel=tcg", "-no-reboot", "-no-shutdown",
-                "-netdev", "user,id=n0", "-device", "ne2k_isa,netdev=n0",
-            ] + g.qemu_disk_args(), cwd=ROOT, stdout=err, stderr=err)
-            g.wait_for(proc, "[0m : ", g.BOOT_TIMEOUT)
-            g.wait_for(proc, "usbdriver tablet enumerated port ", g.CMD_TIMEOUT)
-            mon = g.monitor_connect()
-            qmp = g.qmp_connect()
-            g.wait_for(proc, "net-driver stack ring3 ready", g.CMD_TIMEOUT)
-            time.sleep(0.5)
-            u = "http://10.0.2.2:%d" % hp
-            console_autofill(mon, proc)
-            ctx = {"u": u, "mon": mon, "qmp": qmp, "proc": proc}
-            for step in STEPS:
-                step(ctx)
-            say("lot88 qemu ok in %.1fs" % (time.monotonic() - t0))
-            return 0
+        if part != "tv":
+            proc, mon, qmp = boot_desk(hp)
+        if part != "desk":
+            proc, mon, qmp = boot_tv(hp)
+        say("lot88 qemu (%s) ok in %.1fs" % (part, time.monotonic() - t0))
+        return 0
     finally:
-        for s in (mon, qmp):
-            if s:
-                try:
-                    s.close()
-                except Exception:
-                    pass
-        if proc and proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except Exception:
-                proc.kill()
+        stop(proc, mon, qmp)
         srv.terminate()
         try:
             srv.wait(timeout=5)
         except Exception:
             srv.kill()
         srv_log.close()
+
+
+def boot_desk(hp):
+    """Boot 1, 1x: the console steps, then the window chrome. Stops the guest."""
+    proc, mon, qmp = boot(4, hp)
+    try:
+        g.wait_for(proc, "net-driver stack ring3 ready", g.CMD_TIMEOUT)
+        time.sleep(0.5)
+        u = "http://10.0.2.2:%d" % hp
+        console_autofill(mon, proc)
+        ctx = {"u": u, "mon": mon, "qmp": qmp, "proc": proc}
+        for step in STEPS:
+            step(ctx)
+        docks = g.desktop_hit_centers(W, H)["docks"]
+        q1 = chrome.run(qmp, mon, proc, docks=docks, want_q=lambda q: q == 4)
+        say("window chrome at ui-scale 1x (q=%d): every window type, every button, the grip" % q1)
+    finally:
+        stop(proc, mon, qmp)
+        keep_log("qemu-lot88-serial-1x.log")
+    return None, None, None
+
+
+def boot_tv(hp):
+    """Boot 2: a TV EDID through fw_cfg and no scale pin. The safe TV
+    scale (2x stepped down to 1.5x for 1024x768) is taken on this first
+    boot, and the chrome follows it. Stops the guest."""
+    edid = os.path.join(g.LOG_DIR, "lot88-tv-edid.bin")
+    with open(edid, "wb") as f:
+        f.write(tv_edid())
+    proc, mon, qmp = boot(None, hp, edid=edid)
+    try:
+        g.wait_for(proc, "net-driver stack ring3 ready", g.CMD_TIMEOUT)
+        boot_text = g.normalized_log(g.log_text())
+        need(boot_text, ["[GFX] edid fw_cfg ", "[GFX] edid ext cea ok rev 3"], "fw_cfg TV EDID")
+        time.sleep(1.0)
+        out = lw.run(mon, proc, "ui-scale", "ui-scale ok", 20)
+        need(out, ["ui-scale ok global 1.5x"], "first boot scale from the TV")
+        out = lw.run(mon, proc, "display-info", "display tv-hint", 20)
+        need(out, ["sink tv", "display tv-hint scale_q 8 safe_q 6 (stepped down for the framebuffer, applied 6)",
+                   "display tv-hint overscan likely"], "display-info TV")
+        say("TV EDID: 2x wanted, 1.5x safe on 1024x768 and taken on the first boot")
+        q2 = chrome.run(qmp, mon, proc, docks=None, want_q=lambda q: q == 6)
+        say("window chrome at 1.5x from the TV hint (q=%d): buttons %d px, every window type" %
+            (q2, chrome.py_btn(30, q2)))
+    finally:
+        stop(proc, mon, qmp)
+        keep_log("qemu-lot88-serial-tv.log")
+    return None, None, None
 
 
 def step_scope(ctx):

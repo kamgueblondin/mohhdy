@@ -8,11 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
-## Lot 88 (panel key trace, autofill per site; in progress)
+## Lot 88 (panel key trace, autofill per site, @scope, window chrome, TV scale; in progress)
 
 - Desktop panels print one trace line per key they take ("osui panel key sel=S ilen=L") and what Enter saw ("osui panel enter sel=S input=TEXT"). The QEMU panel tests (qemu-gui-panels, qemu-gui-mesh) wait for each key instead of typing blind; qemu-gui-mesh keeps its own serial log in the CI artifact. This answers the Lot 46 job failure seen on PR #245 (83af6e5): a lost key now fails at that key, named.
 - Autofill per site: a field is offered the host's values, then those of the other hosts of the same registrable domain (www.example.com and login.example.com), never across sites, never for IP hosts or hosting suffixes such as github.io. The suffix list is short and hand-written, not the Public Suffix List. `autofill add HOST NAME VALUE` and `autofill offers URL NAME` on the console. Proof `make qemu-lot88`.
 - Reader stylesheet: @scope (limits, implicit root = parent of the <style>, :scope and &, relative rules, declarations in the block, nesting, proximity in the cascade), the all shorthand, text-transform and white-space. Proof in QEMU: /lot88/scope.html in `make qemu-lot88`.
+- Window chrome: one QEMU tablet pass over the chat, a pane, an app and the full-screen web window clicks every title button and the resize grip, at 1x and at 1.5x, placing each click from the guest's "gfx wm hit" line and the close button found in a screendump. It found a real bug, fixed: a grow clamped at the screen edge kept the unclamped size, so the next shrink did nothing. The title bar height does not scale (buttons capped).
+- US-080 stays partial: a CEA TV sink sets the first-boot scale through the existing path, stepped down until the framebuffer holds 640x360 logical pixels (1080p TV on 1024x768: 1.5x). display-info says whether it was applied and notes likely overscan (no margin drawn). No DDC/I2C, mode set unchanged. A test EDID can be passed with fw_cfg opt/mohhdy/edid. Proof `make qemu-lot88-tv`.
 - Detail and gaps: docs/lot88_plan.md.
 
 ## Lot 87 (external stylesheets, cascade layers, named script walls, autofill list on the rendered page, CEA EDID, delay trend)
