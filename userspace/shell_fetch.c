@@ -743,6 +743,12 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
             scat(out, cap, sc);
             scat(out, cap, "\n");
         }
+        /* Lot 89: custom properties set per element */
+        if (wf_html_sitecss_vars(sc, (int)sizeof(sc)) > 0) {
+            scat(out, cap, "css-vars ");
+            scat(out, cap, sc);
+            scat(out, cap, "\n");
+        }
     }
     if (g_css_ran) {
         char line[160];

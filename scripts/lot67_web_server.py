@@ -51,6 +51,8 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       guest, which must drop the connection)
   /lot89/props.html   Lot 89: calc(), min(), clamp() and var() anywhere in
                       a reader length
+  /lot89/vars.html    Lot 89: custom properties set per element (a class,
+                      a style attribute, an @scope block) and inherited
   /kastray/N          Lot 89: a keep-alive answer and an unsolicited 404 in
                       the same write (the client must drop the connection)
   /lot89/stray.html   Lot 89: a page followed by an unsolicited second
@@ -335,6 +337,23 @@ class H(http.server.BaseHTTPRequestHandler):
             self.wfile.write(head + page + b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found")
             self.wfile.flush()
             print("STRAY1 sent", flush=True)
+            return True
+        if p == "/lot89/vars.html":
+            # Lot 89: custom properties per element
+            page = ("<!doctype html><html><head><title>Lot 89 vars</title><style>"
+                    ":root { --fs89: 14px }\n"
+                    ".card89 { --fs89: 20px }\n"
+                    ".card89 .big89 { --fs89: 24px }\n"
+                    "@scope (.panel89) { --fs89: 22px }\n"
+                    "p { font-size: var(--fs89); text-indent: var(--in89, 1px) }\n"
+                    "</style></head><body>"
+                    "<p id=root89>varroot89</p>"
+                    "<div class=card89><div><p id=deep89>vardeep89</p></div>"
+                    "<p id=big89 class=big89>varbig89</p></div>"
+                    "<div class=panel89><p id=pan89>varpan89</p></div>"
+                    "<div style=\"--in89: 5px\"><p id=inl89>varinl89</p></div>"
+                    "<p>fin89v</p></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/props.html":
             # Lot 89: math functions and var() in the reader's lengths

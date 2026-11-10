@@ -10,6 +10,9 @@ runs on the host and the guest reaches it as 10.0.2.2 (slirp).
   * reader lengths (/lot89/props.html): calc(), min(), clamp(), max() and
     var() inside calc() and in a fallback resolve to one length; a var()
     cycle and an em + px sum drop the declaration, the earlier one stays.
+  * custom properties per element (/lot89/vars.html): --x set by a class,
+    a descendant selector, an @scope block and a style attribute, read by
+    var() on each element; inherited through a div.
   * idle paint cost (US-081): saver with a 3 s dim; the wake line carries
     paint time and busy share per dim level and the paint time not spent,
     and they agree with the frame counts.
@@ -143,6 +146,23 @@ def keepalive_unsolicited(mon, proc):
     return int(line.split(" unsolicited ")[1].split()[0])
 
 
+def step_elem_vars(mon, proc, u):
+    lw.run(mon, proc, "web-css on", "web-css on", 20)
+    lw.run(mon, proc, "web-open %s/lot89/vars.html" % u, "osui web page sections", fail=["error="])
+    css = lw.run(mon, proc, "web-css", "css-vars ", 30)
+    need(css, ["node p #root89 display auto size 14px indent 1px",
+               "node p #deep89 display auto size 20px indent 1px",
+               "node p #big89 .big89 display auto size 24px indent 1px",
+               "node p #pan89 display auto size 22px indent 1px",
+               "node p #inl89 display auto size 14px indent 5px",
+               "css-vars names 2 "], "web-css custom properties per element")
+    read = lw.run(mon, proc, "web-read", "fin89v", 30)
+    need(read, ["varroot89", "vardeep89", "varbig89", "varpan89", "varinl89"], "web-read custom properties")
+    lw.run(mon, proc, "web-css off", "web-css off", 20)
+    say("custom properties per element: root 14px, class 20px inherited, descendant 24px, @scope 22px, "
+        "style attribute 5px")
+
+
 def step_energy_cost(mon, proc):
     lw.run(mon, proc, "power-apply saver", "power-apply profile saver", 20)
     out = lw.run(mon, proc, "power-dim 3", "dim_after", 20)
@@ -211,6 +231,7 @@ def main():
         step_autofill_dates(mon, proc)
         step_scope_lists(mon, proc, u)
         step_lengths(mon, proc, u)
+        step_elem_vars(mon, proc, u)
         step_stray_recovery(mon, proc, u)
         step_energy_cost(mon, proc)
         say("lot89 qemu ok in %.1fs" % (time.monotonic() - t0))
