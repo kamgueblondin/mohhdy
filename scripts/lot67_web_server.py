@@ -49,6 +49,9 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       :scope:last-child
   /lot89/props.html   Lot 89: calc(), min(), clamp() and var() anywhere in
                       a reader length
+  /lot89/stray.html   Lot 89: a page followed by an unsolicited second
+                      response on the same keep-alive connection (the
+                      server bug that exposed the NE2000 ring stall)
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -295,6 +298,17 @@ class H(http.server.BaseHTTPRequestHandler):
                     "<section><div class=\"sc89\"><p>sckeep89</p></div><div class=\"sc89\"><p>schide89</p></div></section>"
                     "<p>fin89s</p></body></html>")
             self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot89/stray.html":
+            # Lot 89: what a buggy route did by accident: the page, then a
+            # 404 nobody asked for, on the same kept-alive connection
+            page = ("<!doctype html><html><head><title>Lot 89 stray</title></head>"
+                    "<body><p>stray89</p></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            self.wfile.write(b"HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n"
+                             b"Content-Length: 9\r\n\r\nnot found")
+            self.wfile.flush()
+            print("STRAY sent", flush=True)
             return True
         if p == "/lot89/props.html":
             # Lot 89: math functions and var() in the reader's lengths

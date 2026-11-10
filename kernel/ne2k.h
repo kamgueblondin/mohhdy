@@ -50,6 +50,10 @@
 #define NE2K_RX_PAGE_STOP  0x60U
 #define NE2K_RX_HEADER_SIZE 4U
 #define NE2K_RX_STATUS_OK 0x01U
+/* Lot 89: smallest frame a card stores (runt filter off: 60 bytes, but
+ * accept the 14 byte header alone) and the optional trailing CRC. */
+#define NE2K_RX_MIN_FRAME 14U
+#define NE2K_RX_CRC_SIZE 4U
 #define NE2K_LLM_PROVIDER_OLLAMA 0U
 #define NE2K_LLM_PROVIDER_OPENAI 1U
 
@@ -67,6 +71,14 @@ typedef struct {
     uint8_t initialized;
     uint8_t mac[6];
     uint8_t mac_valid;
+    /* Lot 89: ring packets skipped (too big for the caller) and header
+     * resyncs (unusable header, pending ring dropped). */
+    uint32_t rx_dropped;
+    uint32_t rx_resyncs;
+    /* Lot 89: last refused ring header, current page and boundary page. */
+    uint8_t rx_bad_header[NE2K_RX_HEADER_SIZE];
+    uint8_t rx_bad_curr;
+    uint8_t rx_bad_page;
 } ne2k_device_t;
 
 #define NE2K_LLM_CONNECTION_IDLE 0U
@@ -687,6 +699,8 @@ int ne2k_irq_attach(ne2k_device_t* device, const ne2k_io_t* io);
 void ne2k_irq_service(void);
 uint32_t ne2k_irq_count(void);
 /* Polling RX borné: lit une trame depuis la RAM distante vers un buffer appelant. */
+int ne2k_rx_header_check(const uint8_t header[NE2K_RX_HEADER_SIZE],
+                         uint16_t frame_capacity, uint16_t* payload_length);
 int ne2k_rx_poll(ne2k_device_t* device, const ne2k_io_t* io,
                  uint8_t* frame, uint16_t frame_capacity,
                  uint16_t* frame_length);

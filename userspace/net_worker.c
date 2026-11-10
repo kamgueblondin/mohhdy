@@ -232,6 +232,17 @@ static void nic_report(void) {
     puts(" refused "); put_uint(st.kernel_refused);
     puts(" gated "); put_uint(st.kernel_gated);
     puts(" end\n");
+    /* Lot 89: a separate line so the counters line above keeps its shape. */
+    puts("net-driver nic ring dropped "); put_uint(nic.rx_dropped);
+    puts(" resyncs "); put_uint(nic.rx_resyncs);
+    if (nic.rx_dropped || nic.rx_resyncs) {
+        uint32_t k;
+        puts(" last");
+        for (k = 0U; k < NE2K_RX_HEADER_SIZE; k++) { puts(" "); put_uint(nic.rx_bad_header[k]); }
+        puts(" page "); put_uint(nic.rx_bad_page);
+        puts(" curr "); put_uint(nic.rx_bad_curr);
+    }
+    puts(" end\n");
     if (!nic_owned) return;
     puts("net-driver stack ring3 sockets "); put_uint(stack.report.socket_ops);
     puts(" wire "); put_uint(stack.report.wire_ops);

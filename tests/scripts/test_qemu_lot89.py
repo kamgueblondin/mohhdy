@@ -13,6 +13,12 @@ runs on the host and the guest reaches it as 10.0.2.2 (slirp).
   * idle paint cost (US-081): saver with a 3 s dim; the wake line carries
     paint time and busy share per dim level and the paint time not spent,
     and they agree with the frame counts.
+  * stray response (gap 6): /lot89/stray.html sends a second, unasked HTTP
+    response on the kept-alive connection; after 12 s of quiet (the kept
+    connection is dropped at 10 s) the next page must still load. Before
+    Lot 89 the NE2000 ring could be overwritten while nobody read it and the
+    driver then refused the same bad header forever: every later connect
+    timed out. The worker's ring line must stay well formed.
 """
 from __future__ import print_function
 
@@ -99,6 +105,23 @@ def step_lengths(mon, proc, u):
         "a var() cycle and 1em + 2px dropped" % m.group(1))
 
 
+RING_RE = re.compile(r"net-driver nic ring dropped (\d+) resyncs (\d+)( last \d+ \d+ \d+ \d+ page \d+ curr \d+)? end")
+
+
+def step_stray_recovery(mon, proc, u):
+    lw.run(mon, proc, "web-open %s/lot89/stray.html" % u, "osui web page sections", fail=["error="])
+    time.sleep(12)
+    out = lw.run(mon, proc, "web-open %s/lot89/scope.html" % u, "osui web page sections", fail=["error="])
+    need(out, ["osui web fetch ok status 200"], "page after a stray response")
+    with open(SRV_LOG) as f:
+        need(f.read(), ["STRAY sent"], "test server stray response")
+    rings = RING_RE.findall(g.normalized_log(out))
+    if not rings:
+        raise RuntimeError("worker printed no NE2000 ring line")
+    dropped, resyncs = int(rings[-1][0]), int(rings[-1][1])
+    say("stray response: next page loaded after 12 s, ring dropped %d resyncs %d" % (dropped, resyncs))
+
+
 def step_energy_cost(mon, proc):
     lw.run(mon, proc, "power-apply saver", "power-apply profile saver", 20)
     out = lw.run(mon, proc, "power-dim 3", "dim_after", 20)
@@ -167,6 +190,7 @@ def main():
         step_autofill_dates(mon, proc)
         step_scope_lists(mon, proc, u)
         step_lengths(mon, proc, u)
+        step_stray_recovery(mon, proc, u)
         step_energy_cost(mon, proc)
         say("lot89 qemu ok in %.1fs" % (time.monotonic() - t0))
         return 0
