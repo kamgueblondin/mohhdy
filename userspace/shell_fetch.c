@@ -708,6 +708,11 @@ int shell_page_fill_cmd(const char *line, char *out, int cap) {
         scat(out, cap, got[i].name);
         scat(out, cap, " ");
         scat(out, cap, got[i].value);
+        if (got[i].site) {
+            /* Lot 88: offered from another host of the same site */
+            scat(out, cap, " site ");
+            scat(out, cap, got[i].host);
+        }
         scat(out, cap, "\n");
     }
     return 0;
@@ -730,6 +735,15 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
         return 0;
     }
     if (wf_html_sitecss_report(out, cap) <= 0) scat(out, cap, "css none\n");
+    {
+        /* Lot 88: the @scope summary of the page */
+        char sc[64];
+        if (wf_html_sitecss_scope(sc, (int)sizeof(sc)) > 0) {
+            scat(out, cap, "css-scope ");
+            scat(out, cap, sc);
+            scat(out, cap, "\n");
+        }
+    }
     if (g_css_ran) {
         char line[160];
         if (wf_csslink_stats_text(&g_css_st, line, (int)sizeof(line)) > 0) scat(out, cap, line);

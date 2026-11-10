@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 88 (panel key trace, autofill per site; in progress)
+
+- Desktop panels print one trace line per key they take ("osui panel key sel=S ilen=L") and what Enter saw ("osui panel enter sel=S input=TEXT"). The QEMU panel tests (qemu-gui-panels, qemu-gui-mesh) wait for each key instead of typing blind; qemu-gui-mesh keeps its own serial log in the CI artifact. This answers the Lot 46 job failure seen on PR #245 (83af6e5): a lost key now fails at that key, named.
+- Autofill per site: a field is offered the host's values, then those of the other hosts of the same registrable domain (www.example.com and login.example.com), never across sites, never for IP hosts or hosting suffixes such as github.io. The suffix list is short and hand-written, not the Public Suffix List. `autofill add HOST NAME VALUE` and `autofill offers URL NAME` on the console. Proof `make qemu-lot88`.
+- Reader stylesheet: @scope (limits, implicit root = parent of the <style>, :scope and &, relative rules, declarations in the block, nesting, proximity in the cascade), the all shorthand, text-transform and white-space. Proof in QEMU: /lot88/scope.html in `make qemu-lot88`.
+- Detail and gaps: docs/lot88_plan.md.
+
 ## Lot 87 (external stylesheets, cascade layers, named script walls, autofill list on the rendered page, CEA EDID, delay trend)
 
 - Reader CSS: 192 nodes, 128 rules, 16 KiB. New attribute operators, structural pseudo-classes, :not/:is/:where, var() from :root, @media lists and @supports. `<link rel=stylesheet>` and one level of @import are fetched (4 attempts per page, print sheets skipped); the status prints `css-links found F fetched N failed M media D`. `web-load` reads the sheets of a saved page from its directory by base name. URL resolution removes dot segments. Cascade layers: @layer statements and blocks (named, nested, anonymous), unlayered beats layered, !important reversed, `@import ... layer(name) supports(cond)`, `revert-layer`, `revert`, `initial`, `inherit` and `unset` on the nine properties the reader keeps (proof in qemu-lot87: an unlayered revert-layer hides a paragraph again through the reset layer, display: initial shows one the layer hides). A late rule no longer beats a selector with one more type (the order was added to the specificity).

@@ -412,20 +412,81 @@ def entry_index(slash_name, cmd):
     return cmds.index(cmd)
 
 
+# A loaded TCG guest (two QEMUs on one runner, measured on the box) took
+# more than 8 s for one key, which then arrived: the trace shows a late key,
+# not a lost one, so the wait is long and the slowest key is reported.
+KEY_ECHO_TIMEOUT = 25.0
+KEY_STATS = {"keys": 0, "max": 0.0, "slow": 0}
+
+
+def panel_key(monitor, proc, name, sel, ilen):
+    """Lot 88: one key to an open panel, then wait for the guest's trace
+    "osui panel key sel=S ilen=L" before the next one (no blind typing).
+    A key without its trace fails here, named, instead of showing up later
+    as a missing "armed" line."""
+    start = len(g.log_text())
+    t0 = time.monotonic()
+    g.send_key(monitor, name)
+    want = "osui panel key sel=%d ilen=" % sel + ("" if ilen is None else "%d" % ilen)
+    try:
+        g.wait_for(proc, want, KEY_ECHO_TIMEOUT, start)
+    except RuntimeError:
+        seen = [ln for ln in g.normalized_log(g.log_text()[start:]).splitlines() if "osui panel " in ln]
+        raise RuntimeError("panel key %r: no %r within %.0fs (guest panel lines since: %r)" %
+                           (name, want, KEY_ECHO_TIMEOUT, seen[-4:]))
+    # wait_for sleeps 0.35 s after a match
+    lat = time.monotonic() - t0 - 0.35
+    KEY_STATS["keys"] += 1
+    if lat > KEY_STATS["max"]:
+        KEY_STATS["max"] = lat
+    if lat > 4.0:
+        KEY_STATS["slow"] += 1
+
+
+def key_stats_text():
+    return "panel keys %d, slowest trace %.1fs, %d over 4s" % (KEY_STATS["keys"], KEY_STATS["max"], KEY_STATS["slow"])
+
+
+def panel_type(monitor, proc, text, sel, ilen=0):
+    for ch in text:
+        if ch in ALIASES:
+            name = ALIASES[ch]
+        elif ch.isupper():
+            name = "shift-" + ch.lower()
+        else:
+            name = ch
+        ilen += 1
+        panel_key(monitor, proc, name, sel, ilen)
+    return ilen
+
+
+def panel_enter_check(proc, start, sel, arg):
+    """The guest's own account of the Enter: entry and text it saw."""
+    want = "osui panel enter sel=%d input=%s" % (sel, arg or "")
+    g.wait_for(proc, "osui panel enter sel=", g.CMD_TIMEOUT, start)
+    lines = [ln for ln in g.normalized_log(g.log_text()[start:]).splitlines() if "osui panel enter sel=" in ln]
+    if not any(ln.strip().endswith(want) for ln in lines):
+        raise RuntimeError("Enter: guest saw %r, test sent %r" % (lines[-1:], want))
+
+
 def run_entry(monitor, proc, sl, title, cmd, arg, frag, mutating=False):
     slash(monitor, proc, sl, "osui tool open app=" + title)
-    for _ in range(entry_index(sl, cmd)):
-        key(monitor, "down")
+    idx = entry_index(sl, cmd)
+    for i in range(idx):
+        panel_key(monitor, proc, "down", i + 1, 0)
     if arg:
-        type_text(monitor, arg)
+        panel_type(monitor, proc, arg, idx)
     start = len(g.log_text())
     key(monitor, "ret")
+    panel_enter_check(proc, start, idx, arg)
     full = cmd + (" " + arg if arg else "")
     if mutating:
         g.wait_for(proc, "osui panel armed cmd=" + full, g.CMD_TIMEOUT, start)
         if "osui panel run cmd=" + full in g.log_text()[start:]:
             raise RuntimeError("%s ran without confirmation" % full)
+        start2 = len(g.log_text())
         key(monitor, "ret")
+        panel_enter_check(proc, start2, idx, arg)
     g.wait_for(proc, "osui panel run cmd=" + full, g.CMD_TIMEOUT, start)
     g.wait_for(proc, "osui panel out=", g.CMD_TIMEOUT, start)
     out = g.normalized_log(g.log_text()[start:])
@@ -536,6 +597,7 @@ def main():
             spawn_capture(monitor, proc)
             driver_respawn(monitor, proc)
             g.screendump_rgb(monitor, "qemu-gui-parity-end.ppm")
+        say(key_stats_text())
         say("QEMU UX5 GUI parity panels contract passed.")
         return 0
     finally:

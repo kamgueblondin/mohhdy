@@ -1,5 +1,6 @@
 /* wf_autofill.c - Lot 86: see wf_autofill.h. */
 #include "wf_autofill.h"
+#include "wf_regdom.h"
 
 static int alen(const char *s) { int n = 0; while (s && s[n]) n++; return n; }
 static char alow(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
@@ -259,4 +260,71 @@ int wf_autofill_text(const wf_autofill_t *a, char *out, int cap) {
     }
     out[p] = 0;
     return p;
+}
+
+/* ---- Lot 88: sharing inside a site ------------------------------------ */
+
+static const char *ent_value(const wf_af_ent_t *e, int k) { return k == 0 ? e->value : e->old[k - 1]; }
+
+/* The site list of (host, name): the host's key first, then the other
+ * keys of the site in slot order. Fills up to WF_AF_SITE_MAX pointers
+ * into the store; other[i] is 1 for another host. Returns the count. */
+static int site_list(const wf_autofill_t *a, const char *host, const char *name, const char **val, int *other) {
+    int n = 0, pass, i, k, j;
+    if (!a || !host || !name || !host[0] || !name[0]) return 0;
+    for (pass = 0; pass < 2; pass++) {
+        for (i = 0; i < WF_AF_MAX && n < WF_AF_SITE_MAX; i++) {
+            const wf_af_ent_t *e = &a->e[i];
+            int mine;
+            if (!e->used || !aeq(e->name, name)) continue;
+            mine = aeq(e->host, host);
+            if (pass == 0 ? !mine : (mine || !wf_regdom_same_site(e->host, host))) continue;
+            for (k = 0; k <= e->nold && n < WF_AF_SITE_MAX; k++) {
+                const char *v = ent_value(e, k);
+                int dup = 0;
+                for (j = 0; j < n; j++) if (seq(val[j], v)) dup = 1;
+                if (dup) continue;
+                val[n] = v;
+                other[n] = pass;
+                n++;
+            }
+        }
+    }
+    return n;
+}
+
+int wf_autofill_get_site(wf_autofill_t *a, const char *host, const char *name, int idx, char *out, int cap,
+                         int *other) {
+    const char *val[WF_AF_SITE_MAX];
+    int oth[WF_AF_SITE_MAX], n;
+    if (other) *other = 0;
+    if (!out || cap < 2) return -1;
+    out[0] = 0;
+    n = site_list(a, host, name, val, oth);
+    if (idx < 0 || idx >= n) return -1;
+    acpy(out, cap, val[idx], 0);
+    if (other) *other = oth[idx];
+    a->hits++;
+    return 0;
+}
+
+int wf_autofill_count_site(const wf_autofill_t *a, const char *host, const char *name) {
+    const char *val[WF_AF_SITE_MAX];
+    int oth[WF_AF_SITE_MAX];
+    return site_list(a, host, name, val, oth);
+}
+
+int wf_autofill_drop_site(wf_autofill_t *a, const char *host, const char *name, const char *value) {
+    int i, r;
+    if (!a || !host || !name || !value) return -1;
+    r = wf_autofill_drop(a, host, name, value);
+    if (r >= 0) return r;
+    for (i = 0; i < WF_AF_MAX; i++) {
+        wf_af_ent_t *e = &a->e[i];
+        if (!e->used || !aeq(e->name, name) || aeq(e->host, host)) continue;
+        if (!wf_regdom_same_site(e->host, host)) continue;
+        r = wf_autofill_drop(a, e->host, name, value);
+        if (r >= 0) return r;
+    }
+    return -1;
 }

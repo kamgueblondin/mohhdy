@@ -19,7 +19,14 @@
  * Cascade: user-agent, then author, then the style attribute. !important
  * beats normal. Specificity then source order. The reader uses display:none
  * to skip a subtree and copies color, font-weight and text-align onto the
- * tag it keeps. No @media, no external <link>, no JavaScript. */
+ * tag it keeps. No @media, no external <link>, no JavaScript.
+ * Lot 88: @scope (start) to (end) { ... } and @scope { ... } (the parent of
+ * the <style> element is the root), nested up to four levels, with :scope
+ * and &, relative rules (":scope p" implied, or a leading > + ~),
+ * declarations right in the block (on the root, specificity 0) and scope
+ * proximity in the cascade (between specificity and order). The all
+ * shorthand with initial, inherit, unset, revert and revert-layer.
+ * text-transform and white-space, which inherit, with every keyword. */
 #ifndef WF_SITECSS_H
 #define WF_SITECSS_H
 #include <stdint.h>
@@ -39,6 +46,10 @@
  * a nested layer is "outer.inner"; an anonymous block gets its own. */
 #define WF_SITE_LAYERS 12
 #define WF_SITE_LAYER_NAME 32
+/* Lot 88: @scope rules and the <style> blocks that own a part of css[] */
+#define WF_SITE_SCOPES 8
+#define WF_SITE_STYLES 8
+#define WF_SITE_SCOPE_DEPTH 4
 
 enum {
     WF_SITE_DISP_NONE = 3,
@@ -68,7 +79,9 @@ enum {
     WF_SITE_PS_EMPTY = 13,
     WF_SITE_PS_ROOT = 14,
     WF_SITE_PS_IS = 15,
-    WF_SITE_PS_WHERE = 16
+    WF_SITE_PS_WHERE = 16,
+    WF_SITE_PS_SCOPE = 17,    /* Lot 88: :scope, specificity of a class */
+    WF_SITE_PS_AMP = 18       /* Lot 88: & in @scope, :where(:scope) */
 };
 enum {
     WF_SITE_ATTR_NONE = 0,
@@ -91,7 +104,19 @@ enum {
     WF_SITE_K_STYLE = 7,      /* font-style: 1 normal, 2 italic */
     WF_SITE_K_DECO = 8,       /* text-decoration: 1 none, 2 underline, 3 line-through */
     WF_SITE_K_VIS = 9,        /* visibility: 1 visible, 2 hidden */
-    WF_SITE_K_MAX = 9
+    /* Lot 88 */
+    WF_SITE_K_TRANSFORM = 10, /* text-transform: 1 none, 2 uppercase, 3 lowercase, 4 capitalize */
+    WF_SITE_K_WS = 11,        /* white-space: 1 normal, 2 pre, 3 nowrap, 4 pre-wrap, 5 pre-line */
+    WF_SITE_K_MAX = 11,
+    WF_SITE_K_ALL = 12        /* the all shorthand: a CSS-wide keyword on every kind */
+};
+/* Lot 88: how a rule inside @scope relates to its scoping root */
+enum {
+    WF_SITE_SR_NONE = 0,      /* not relative: the selector has :scope or & */
+    WF_SITE_SR_DESC = 1,      /* "p": ":scope p" */
+    WF_SITE_SR_CHILD = 2,     /* "> p" */
+    WF_SITE_SR_ADJ = 3,       /* "+ p" */
+    WF_SITE_SR_SIB = 4        /* "~ p" */
 };
 /* Lot 87: CSS-wide keywords a declaration may carry instead of a value */
 enum {
@@ -134,6 +159,8 @@ typedef struct {
     /* Lot 87: the winning declaration of kind k was revert-layer (1) or
      * revert (2); wf_site_apply rolls it back before it returns */
     uint8_t rv[WF_SITE_K_MAX + 1];
+    uint8_t transform, ws;        /* Lot 88: WF_SITE_K_TRANSFORM / WF_SITE_K_WS values */
+    int transform_rank, ws_rank;
 } wf_site_node_t;
 
 typedef struct {
@@ -168,7 +195,22 @@ typedef struct {
     int spec, order;
     uint8_t layer;                /* Lot 87: 0 unlayered, else layer index + 1 */
     uint8_t revert;               /* Lot 87: WF_SITE_RV_* (kind set, no value) */
+    uint8_t scope;                /* Lot 88: 0 unscoped, else scope index + 1 */
+    uint8_t scope_rel;            /* Lot 88: WF_SITE_SR_* */
 } wf_site_rule_t;
+
+/* Lot 88: one @scope rule. A root is an element that matches start (or,
+ * without start, the parent element of the <style> block, owner -1 for
+ * the whole document); the scope is the root and its descendants, minus
+ * every descendant that matches end and what is under it. */
+typedef struct {
+    wf_site_part_t start[WF_SITE_PARTS];
+    int nstart;
+    wf_site_part_t end[WF_SITE_PARTS];
+    int nend;
+    int owner;                    /* implicit root (no start): node index or -1 */
+    int parent;                   /* enclosing scope index, or -1 */
+} wf_site_scope_t;
 
 typedef struct {
     char name[24];
@@ -203,6 +245,11 @@ typedef struct {
     uint8_t layer_rank[WF_SITE_LAYERS];   /* cascade position, 1 = weakest */
     int reverts;                  /* Lot 87: revert-layer / revert rolled back */
     int inherits;                 /* Lot 87: inherit / unset taken from the parent */
+    wf_site_scope_t scope[WF_SITE_SCOPES];   /* Lot 88 */
+    int nscopes, dropped_scopes;
+    int style_from[WF_SITE_STYLES], style_to[WF_SITE_STYLES], style_owner[WF_SITE_STYLES];
+    int nstyles;
+    int scoped_hits;              /* Lot 88: scoped rule matches painted */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */
@@ -238,6 +285,12 @@ int wf_site_supports(const char *cond, int n);
 int wf_site_import_conds(const char *s, int n, int *media_at, char *layer_out, int cap, int *layered);
 /* Lot 87: the layer order of the last prepare, "a,b.c,#anon1"; length. */
 int wf_site_layers_text(const wf_site_t *d, char *out, int cap);
+/* Lot 88: "scopes N rules R hits H", the @scope summary of the last
+ * prepare; length. */
+int wf_site_scope_text(const wf_site_t *d, char *out, int cap);
+/* Lot 88: the root a scoped rule would use for node idx (nearest first),
+ * -1 when it is not in any scope of that rule, -2 for an unscoped rule. */
+int wf_site_scope_root(const wf_site_t *d, int rule, int idx);
 /* Custom property value after the cascade of :root/html/body, or 0. */
 const char *wf_site_var(const wf_site_t *d, const char *name);
 #endif

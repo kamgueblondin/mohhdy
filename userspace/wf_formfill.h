@@ -12,11 +12,15 @@ typedef struct {
     int ent;
     char name[WF_AF_NAME];
     char value[WF_AF_VALUE];
+    int site;                   /* Lot 88: 1 when from another host of the site */
+    char host[WF_AF_HOST];      /* the host that holds it */
 } wf_fill_offer_t;
 
 /* Host of an absolute URL, lower case, no port. 0, or -1. */
 int wf_formfill_host(const char *url, char *host, int cap);
-/* Offers for one field. Exact host and field name. Returns the count. */
+/* Offers for one field: the exact host first, then (Lot 88) the other
+ * hosts of the same site (registrable domain), without repeated values.
+ * Returns the count. */
 int wf_formfill_offers(const wf_autofill_t *a, const wf_form_page_t *p, int field,
                        const char *host, wf_fill_offer_t *out, int cap);
 /* Copy one offer into the field. 0, or -1. */

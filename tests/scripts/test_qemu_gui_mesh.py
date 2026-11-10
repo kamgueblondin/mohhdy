@@ -17,6 +17,12 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Lot 88: its own serial log, so the CI artifact keeps it (it shared the
+# parity log name, which the Lot 46 job did not keep after a failure)
+os.environ.setdefault("OSUI_GUI_LOG", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                                                   "test_logs", "qemu-gui-mesh-serial.log"))
+os.environ.setdefault("OVERLAY_DISK", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                                                   "test_logs", "qemu-gui-mesh-overlay.img"))
 import test_qemu_gui_parity as gp  # noqa: E402
 
 g = gp.g
@@ -85,6 +91,7 @@ def main():
             for cmd, arg, frag, mut in rows[8:]:
                 gp.run_entry(monitor, proc, "/mesh", "Maillage P2P", cmd, arg, frag, mut)
             g.screendump_rgb(monitor, "qemu-gui-mesh-end.ppm")
+        gp.say(gp.key_stats_text())
         gp.say("QEMU /mesh live node contract passed.")
         return 0
     finally:

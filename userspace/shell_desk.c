@@ -99,7 +99,8 @@ int shell_desk_offer_at(const char *url, const char *name, int idx, char *out, i
     if (!url || !name || !name[0] || idx < 0) return -1;
     ready();
     if (wf_formfill_host(url, host, (int)sizeof(host)) != 0) return -1;
-    if (wf_autofill_get_at(&g_fill, host, name, idx, out, cap) != 0) { out[0] = 0; return -1; }
+    /* Lot 88: the host's values, then the other hosts of its site */
+    if (wf_autofill_get_site(&g_fill, host, name, idx, out, cap, 0) != 0) { out[0] = 0; return -1; }
     for (n = 0; out[n]; n++) {}
     return n > 0 ? n : -1;
 }
@@ -110,7 +111,7 @@ int shell_desk_offer_drop(const char *url, const char *name, const char *value) 
     if (!url || !name || !name[0] || !value) return -1;
     ready();
     if (wf_formfill_host(url, host, (int)sizeof(host)) != 0) return -1;
-    left = wf_autofill_drop(&g_fill, host, name, value);
+    left = wf_autofill_drop_site(&g_fill, host, name, value);
     if (left >= 0) (void)save_fill();
     return left;
 }
@@ -252,6 +253,54 @@ int shell_desk_line(const char *line) {
             if (wf_autofill_text(&g_fill, text, (int)sizeof(text)) > 0) print_string(text);
             return 0;
         }
+        if (pre(a, "add ") || pre(a, "offers ")) {
+            /* Lot 88: "autofill add HOST NAME VALUE" stores a value by
+             * hand (passwords cannot be named: the type is text, and the
+             * store refuses control characters); "autofill offers URL
+             * NAME" lists what a field of that page would be offered, the
+             * same list as the desktop (the host, then its site) */
+            char w1[WF_AF_HOST + 32], w2[WF_AF_NAME];
+            int add = pre(a, "add "), k, r;
+            a += add ? 4 : 7;
+            skip(&a);
+            for (k = 0; *a && *a != ' ' && k < (int)sizeof(w1) - 1; k++) w1[k] = *a++;
+            w1[k] = 0;
+            skip(&a);
+            for (k = 0; *a && *a != ' ' && k < (int)sizeof(w2) - 1; k++) w2[k] = *a++;
+            w2[k] = 0;
+            skip(&a);
+            if (!w1[0] || !w2[0] || (add && !*a)) {
+                print_string("autofill error usage: autofill add HOST NAME VALUE | autofill offers URL NAME\n");
+                return 1;
+            }
+            if (add) {
+                r = wf_autofill_put(&g_fill, w1, w2, a, "text");
+                print_string(r == 0 ? "autofill added\n" : "autofill refused\n");
+                if (r == 0) (void)save_fill();
+                return r == 0 ? 0 : 1;
+            }
+            {
+                char host[WF_AF_HOST], v[WF_AF_VALUE];
+                int i, other, n = 0;
+                if (wf_formfill_host(w1, host, (int)sizeof(host)) != 0) {
+                    print_string("autofill error not an absolute URL\n");
+                    return 1;
+                }
+                for (i = 0; i < WF_AF_SITE_MAX; i++) {
+                    if (wf_autofill_get_site(&g_fill, host, w2, i, v, (int)sizeof(v), &other) != 0) break;
+                    print_string("autofill offer ");
+                    print_int(i);
+                    print_string(" ");
+                    print_string(v);
+                    print_string(other ? " site\n" : " host\n");
+                    n++;
+                }
+                print_string("autofill offers ");
+                print_int(n);
+                print_string("\n");
+            }
+            return 0;
+        }
         if (pre(a, "forget")) {
             /* Lot 87: forget HOST, forget HOST NAME (the key), or forget
              * HOST NAME VALUE (one value, the rest of the line); saved to
@@ -284,7 +333,7 @@ int shell_desk_line(const char *line) {
             (void)save_fill();
             return 0;
         }
-        print_string("autofill error usage: autofill [list|forget HOST [NAME [VALUE]]]\n");
+        print_string("autofill error usage: autofill [list|forget HOST [NAME [VALUE]]|add HOST NAME VALUE|offers URL NAME]\n");
         return 1;
     }
     if (pre(line, "web-back")) return go(1);

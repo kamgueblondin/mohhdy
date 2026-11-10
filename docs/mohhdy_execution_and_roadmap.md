@@ -7,6 +7,16 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 88 (10 November 2026, in progress)
+
+US-031 partial, phase3_complete=false. Autofill is shared between the
+hosts of one site (registrable domain, short hand-written suffix list).
+Desktop panels trace each key so the panel QEMU tests wait for it.
+The reader stylesheet handles @scope, the all shorthand,
+text-transform and white-space.
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097 stay
+simule. See docs/lot88_plan.md.
+
 ### Lot 87 (9 November 2026)
 
 US-031 partial, phase3_complete=false. The reader fetches external

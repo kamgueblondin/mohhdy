@@ -1595,6 +1595,10 @@ qemu-lot86: $(OS_IMAGE) pack-initrd disk
 qemu-lot87: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot87.py
 
+.PHONY: qemu-lot88
+qemu-lot88: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot88.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

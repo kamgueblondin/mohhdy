@@ -64,6 +64,8 @@ int wf_html_sitecss_on(void);
 void wf_html_set_extcss(const char *css, int n);
 /* Report of the sheet built by the last reduce that had sitecss on. */
 int wf_html_sitecss_report(char *out, int cap);
+/* Lot 88: "scopes N rules R hits H" of the last page (@scope) */
+int wf_html_sitecss_scope(char *out, int cap);
 /* Plain text of a page for the console (tags removed, blocks on new
  * lines). Lot 71: every character reference decoded and the text written
  * as UTF-8 (the console decodes UTF-8), Latin-1 pages converted. */

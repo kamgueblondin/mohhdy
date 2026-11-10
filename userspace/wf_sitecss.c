@@ -334,7 +334,18 @@ int wf_site_prepare_ext(wf_site_t *d, const char *html, int n, int vw, int vh, c
                 while (k > body && html[k - 1] != '<') k--;
                 if (k > body && html[k - 1] == '<') stop = k - 1;
             }
-            if (css_append(d, html, body, stop) != 0) d->errors++;
+            {
+                int from = d->css_n;
+                if (css_append(d, html, body, stop) != 0) d->errors++;
+                /* Lot 88: @scope without a prelude uses the parent element
+                 * of the <style> block as its root */
+                if (d->nstyles < WF_SITE_STYLES) {
+                    d->style_from[d->nstyles] = from;
+                    d->style_to[d->nstyles] = d->css_n;
+                    d->style_owner[d->nstyles] = parent;
+                    d->nstyles++;
+                }
+            }
             i = after;
             continue;
         }
@@ -580,11 +591,17 @@ static int alt_match(const wf_site_node_t *nd, const wf_site_part_t *pt) {
     return 0;
 }
 
-static int part_match(const wf_site_t *d, int idx, const wf_site_part_t *pt) {
+/* sroot: the scoping root :scope and & stand for (Lot 88); -2 outside
+ * any @scope, where :scope is :root as in Selectors 4. */
+static int part_match(const wf_site_t *d, int idx, const wf_site_part_t *pt, int sroot) {
     const wf_site_node_t *nd;
     int i;
     if (idx < 0 || idx >= d->nnodes) return 0;
     nd = &d->node[idx];
+    if (pt->pseudo == WF_SITE_PS_SCOPE || pt->pseudo == WF_SITE_PS_AMP) {
+        if (sroot >= 0 && idx != sroot) return 0;
+        if (sroot < 0 && (nd->parent >= 0 || !eq(nd->tag, "html"))) return 0;
+    }
     if (pt->tag[0] && !eq(pt->tag, nd->tag)) return 0;
     if (pt->id[0] && !eq(pt->id, nd->id)) return 0;
     for (i = 0; i < pt->ncls; i++) if (!has_class(nd, pt->cls[i])) return 0;
@@ -607,30 +624,140 @@ static int part_match(const wf_site_t *d, int idx, const wf_site_part_t *pt) {
     return 1;
 }
 
-static int sel_match(const wf_site_t *d, int idx, const wf_site_rule_t *r) {
+/* A compound chain (subject last). *left gets the node the first
+ * compound matched, for the relative rules of @scope. */
+static int chain_match(const wf_site_t *d, int idx, const wf_site_part_t *part, int nparts, int sroot, int *left) {
     int k, cur;
-    if (r->nparts <= 0) return 0;
-    if (!part_match(d, idx, &r->part[r->nparts - 1])) return 0;
+    if (nparts <= 0) return 0;
+    if (!part_match(d, idx, &part[nparts - 1], sroot)) return 0;
     cur = idx;
-    for (k = r->nparts - 1; k > 0; k--) {
-        uint8_t rel = r->part[k].rel;
+    for (k = nparts - 1; k > 0; k--) {
+        uint8_t rel = part[k].rel;
         if (rel == WF_SITE_REL_CHILD) {
             cur = cur >= 0 ? d->node[cur].parent : -1;
-            if (!part_match(d, cur, &r->part[k - 1])) return 0;
+            if (!part_match(d, cur, &part[k - 1], sroot)) return 0;
         } else if (rel == WF_SITE_REL_DESC) {
             cur = cur >= 0 ? d->node[cur].parent : -1;
-            while (cur >= 0 && !part_match(d, cur, &r->part[k - 1])) cur = d->node[cur].parent;
+            while (cur >= 0 && !part_match(d, cur, &part[k - 1], sroot)) cur = d->node[cur].parent;
             if (cur < 0) return 0;
         } else if (rel == WF_SITE_REL_ADJ) {
             cur = cur >= 0 ? d->node[cur].prev : -1;
-            if (!part_match(d, cur, &r->part[k - 1])) return 0;
+            if (!part_match(d, cur, &part[k - 1], sroot)) return 0;
         } else {
             cur = cur >= 0 ? d->node[cur].prev : -1;
-            while (cur >= 0 && !part_match(d, cur, &r->part[k - 1])) cur = d->node[cur].prev;
+            while (cur >= 0 && !part_match(d, cur, &part[k - 1], sroot)) cur = d->node[cur].prev;
             if (cur < 0) return 0;
         }
     }
+    if (left) *left = cur;
     return 1;
+}
+
+/* ---- @scope (Lot 88) ------------------------------------------------- */
+
+static int is_ancestor(const wf_site_t *d, int anc, int idx) {
+    int guard = 0;
+    if (anc < 0 || idx < 0) return 0;
+    idx = d->node[idx].parent;
+    while (idx >= 0 && guard++ < WF_SITE_NODES) {
+        if (idx == anc) return 1;
+        idx = d->node[idx].parent;
+    }
+    return 0;
+}
+
+static int scope_in(const wf_site_t *d, int sc, int root, int idx, int depth);
+
+/* root is a scoping root of scope sc: it matches start (or is the owner
+ * of an implicit scope) and, for a nested @scope, sits in a scope of the
+ * enclosing one, whose root is the :scope of start. */
+static int scope_root_ok(const wf_site_t *d, int sc, int root, int depth) {
+    const wf_site_scope_t *s = &d->scope[sc];
+    if (root < 0 || root >= d->nnodes || depth > WF_SITE_SCOPE_DEPTH) return 0;
+    if (s->parent >= 0) {
+        int outer = root, guard = 0;
+        /* the nearest enclosing root that holds this one */
+        while (outer >= 0 && guard++ < WF_SITE_NODES) {
+            if (scope_root_ok(d, s->parent, outer, depth + 1) && scope_in(d, s->parent, outer, root, depth + 1)) {
+                if (s->nstart) {
+                    int left = -1;
+                    if (chain_match(d, root, s->start, s->nstart, outer, &left)) return 1;
+                } else if (root == outer) return 1;
+            }
+            outer = d->node[outer].parent;
+        }
+        return 0;
+    }
+    if (s->nstart) return chain_match(d, root, s->start, s->nstart, -2, 0);
+    if (s->owner >= 0) return root == s->owner;
+    return d->node[root].parent < 0;     /* the document: its top elements */
+}
+
+/* idx is in the scope that root opens: root itself or a descendant, and
+ * neither a limit (a descendant of root matching end) nor under one. */
+static int scope_in(const wf_site_t *d, int sc, int root, int idx, int depth) {
+    const wf_site_scope_t *s = &d->scope[sc];
+    int cur = idx, guard = 0;
+    if (depth > WF_SITE_SCOPE_DEPTH) return 0;
+    if (idx != root && !is_ancestor(d, root, idx)) return 0;
+    if (!s->nend) return 1;
+    while (cur >= 0 && cur != root && guard++ < WF_SITE_NODES) {
+        if (chain_match(d, cur, s->end, s->nend, root, 0)) return 0;
+        cur = d->node[cur].parent;
+    }
+    return 1;
+}
+
+/* the leftmost compound of a relative rule against its root */
+static int rel_ok(const wf_site_t *d, int rel, int left, int root) {
+    int cur, guard = 0;
+    switch (rel) {
+    case WF_SITE_SR_NONE: return 1;
+    case WF_SITE_SR_DESC: return is_ancestor(d, root, left);
+    case WF_SITE_SR_CHILD: return left >= 0 && d->node[left].parent == root;
+    case WF_SITE_SR_ADJ: return left >= 0 && d->node[left].prev == root;
+    case WF_SITE_SR_SIB:
+        cur = left >= 0 ? d->node[left].prev : -1;
+        while (cur >= 0 && guard++ < WF_SITE_NODES) { if (cur == root) return 1; cur = d->node[cur].prev; }
+        return 0;
+    default: return 0;
+    }
+}
+
+/* Scoped rule: the nearest root (walking up from the subject) that
+ * opens a scope holding the subject and makes the selector match.
+ * Returns the root, -1 when none; *hops gets the generations between. */
+static int scoped_root(const wf_site_t *d, int idx, const wf_site_rule_t *r, int *hops) {
+    int sc = (int)r->scope - 1, root = idx, h = 0;
+    if (sc < 0 || sc >= d->nscopes) return -1;
+    while (root >= 0 && h < WF_SITE_NODES) {
+        if (scope_root_ok(d, sc, root, 0) && scope_in(d, sc, root, idx, 0)) {
+            int left = -1;
+            if (chain_match(d, idx, r->part, r->nparts, root, &left) && rel_ok(d, r->scope_rel, left, root)) {
+                if (hops) *hops = h;
+                return root;
+            }
+        }
+        root = d->node[root].parent;
+        h++;
+    }
+    return -1;
+}
+
+/* 0 no match, else 1 + proximity: 0 for an unscoped rule (infinite
+ * hops, the weakest), 7 - hops (at least 1) for a scoped one. */
+static int rule_match(const wf_site_t *d, int idx, const wf_site_rule_t *r) {
+    int hops = 0;
+    if (!r->scope) return chain_match(d, idx, r->part, r->nparts, -2, 0) ? 1 : 0;
+    if (scoped_root(d, idx, r, &hops) < 0) return 0;
+    if (hops > 6) hops = 6;
+    return 1 + 7 - hops;
+}
+
+int wf_site_scope_root(const wf_site_t *d, int rule, int idx) {
+    if (!d || rule < 0 || rule >= d->nrules || idx < 0 || idx >= d->nnodes) return -1;
+    if (!d->rule[rule].scope) return -2;
+    return scoped_root(d, idx, &d->rule[rule], 0);
 }
 
 static int specificity(const wf_site_rule_t *r) {
@@ -645,8 +772,8 @@ static int specificity(const wf_site_rule_t *r) {
             if (pt->not_kind == 2) s += 10000;
             else if (pt->not_kind == 1 || pt->not_kind == 3) s += 100;
             else s += pt->not_tag[0] ? 1 : 0;
-        } else if (pt->pseudo == WF_SITE_PS_WHERE) {
-            /* :where() adds nothing */
+        } else if (pt->pseudo == WF_SITE_PS_WHERE || pt->pseudo == WF_SITE_PS_AMP) {
+            /* :where() adds nothing; Lot 88: & is :where(:scope) */
         } else if (pt->pseudo == WF_SITE_PS_IS) {
             /* the most specific alternative */
             int k, best = 0;
@@ -683,12 +810,15 @@ static int layer_step(const wf_site_rule_t *r) {
     return k ? 15 - k : 0;
 }
 
-static int rank_of(const wf_site_rule_t *r) {
+static int rank_of(const wf_site_rule_t *r, int prox) {
     /* important, then origin (inline > author > ua), then layer, then
-     * specificity, then order; fits in 31 bits:
+     * specificity, then (Lot 88) scope proximity 0..7, then order 0..127
+     * (WF_SITE_RULES); fits in 31 bits:
      * ((imp * 4 + origin) * 16 + layer) * 8192 * 1024 < 2^30 */
     int top = ((int)r->imp * 4 + (int)r->origin) * 16 + layer_step(r);
-    return (top * 8192 + spec_packed(r->spec)) * 1024 + (r->order & 1023);
+    if (prox < 0) prox = 0;
+    if (prox > 7) prox = 7;
+    return (top * 8192 + spec_packed(r->spec)) * 1024 + prox * 128 + (r->order & 127);
 }
 
 /* the cascade step of a rule without its specificity and order:
@@ -708,6 +838,8 @@ static int *kind_rank(wf_site_node_t *nd, int kind) {
     case WF_SITE_K_STYLE: return &nd->italic_rank;
     case WF_SITE_K_DECO: return &nd->deco_rank;
     case WF_SITE_K_VIS: return &nd->vis_rank;
+    case WF_SITE_K_TRANSFORM: return &nd->transform_rank;
+    case WF_SITE_K_WS: return &nd->ws_rank;
     default: return 0;
     }
 }
@@ -725,15 +857,17 @@ static void reset_kind(wf_site_node_t *nd, int kind) {
     case WF_SITE_K_STYLE: nd->italic = 0; break;
     case WF_SITE_K_DECO: nd->deco = 0; break;
     case WF_SITE_K_VIS: nd->vis = 0; break;
+    case WF_SITE_K_TRANSFORM: nd->transform = 0; break;
+    case WF_SITE_K_WS: nd->ws = 0; break;
     default: return;
     }
     if (kind_rank(nd, kind)) *kind_rank(nd, kind) = 0;
     nd->rv[kind] = 0;
 }
 
-static void paint_rule(wf_site_t *d, int idx, const wf_site_rule_t *r) {
+static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) {
     wf_site_node_t *nd = &d->node[idx];
-    int rank = rank_of(r);
+    int rank = rank_of(r, prox);
     if (r->revert && r->kind >= 1 && r->kind <= WF_SITE_K_MAX) {
         /* Lot 87: a winning revert-layer / revert keeps its rank (later
          * weaker rules still lose to it) and is rolled back at the end */
@@ -770,7 +904,50 @@ static void paint_rule(wf_site_t *d, int idx, const wf_site_rule_t *r) {
         if (rank >= nd->deco_rank) { nd->deco = r->val; nd->deco_rank = rank; }
     } else if (r->kind == WF_SITE_K_VIS) {
         if (rank >= nd->vis_rank) { nd->vis = r->val; nd->vis_rank = rank; }
+    } else if (r->kind == WF_SITE_K_TRANSFORM) {
+        if (rank >= nd->transform_rank) { nd->transform = r->val; nd->transform_rank = rank; }
+    } else if (r->kind == WF_SITE_K_WS) {
+        if (rank >= nd->ws_rank) { nd->ws = r->val; nd->ws_rank = rank; }
     }
+}
+
+static int kind_inherits(int kind);
+static void initial_value(int kind, wf_site_rule_t *proto);
+
+/* Lot 88: the all shorthand keeps its keyword in val (1 initial,
+ * 2 inherit, 3 unset, 4 revert, 5 revert-layer); one kind of it: */
+static void all_kind(const wf_site_rule_t *r, int kind, wf_site_rule_t *out) {
+    int kw = r->val;
+    out->imp = r->imp;
+    out->origin = r->origin;
+    out->layer = r->layer;
+    out->spec = r->spec;
+    out->order = r->order;
+    out->nparts = 0;
+    out->scope = r->scope;
+    out->scope_rel = r->scope_rel;
+    if (kw == 1 || (kw == 3 && !kind_inherits(kind))) { initial_value(kind, out); return; }
+    out->kind = (uint8_t)kind;
+    out->val = 0;
+    out->box_n = 0;
+    out->color = 0;
+    out->revert = (uint8_t)(kw == 4 ? WF_SITE_RV_ORIGIN : kw == 5 ? WF_SITE_RV_LAYER : WF_SITE_RV_INHERIT);
+}
+
+/* only: 0 every kind the rule sets, else that kind alone */
+static void paint_rule(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox, int only) {
+    if (r->kind == WF_SITE_K_ALL) {
+        int k;
+        for (k = 1; k <= WF_SITE_K_MAX; k++) {
+            wf_site_rule_t one;
+            if (only && only != k) continue;
+            all_kind(r, k, &one);
+            paint_one(d, idx, &one, prox);
+        }
+        return;
+    }
+    if (only && r->kind != only) return;
+    paint_one(d, idx, r, prox);
 }
 
 static const wf_site_node_t *node_by_start(const wf_site_t *d, int offset) {
@@ -842,7 +1019,7 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
     out[0] = 0;
     if (!nd) return 0;
     if (!nd->color_set && nd->weight != 2 && nd->align < 2 && !nd->margin_set && !nd->pad_set &&
-        nd->italic != 2 && nd->deco < 2) return 0;
+        nd->italic != 2 && nd->deco < 2 && nd->transform < 2 && nd->ws < 2) return 0;
     n = app(out, cap, n, " style=\"");
     if (nd->color_set) { n = app(out, cap, n, "color:"); n = app_hex(out, cap, n, nd->color); any = 1; }
     if (nd->weight == 2) { if (any) n = app(out, cap, n, ";"); n = app(out, cap, n, "font-weight:bold"); any = 1; }
@@ -872,6 +1049,20 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
     if (nd->deco >= 2) {
         if (any) n = app(out, cap, n, ";");
         n = app(out, cap, n, nd->deco == 2 ? "text-decoration:underline" : "text-decoration:line-through");
+        any = 1;
+    }
+    if (nd->transform >= 2 && nd->transform <= 4) {
+        static const char *const tt[5] = {"", "", "uppercase", "lowercase", "capitalize"};
+        if (any) n = app(out, cap, n, ";");
+        n = app(out, cap, n, "text-transform:");
+        n = app(out, cap, n, tt[nd->transform]);
+        any = 1;
+    }
+    if (nd->ws >= 2 && nd->ws <= 5) {
+        static const char *const wt[6] = {"", "", "pre", "nowrap", "pre-wrap", "pre-line"};
+        if (any) n = app(out, cap, n, ";");
+        n = app(out, cap, n, "white-space:");
+        n = app(out, cap, n, wt[nd->ws]);
     }
     n = app(out, cap, n, "\"");
     return n;
@@ -916,7 +1107,34 @@ int wf_site_report(const wf_site_t *d, char *out, int cap) {
         if (nd->deco == 2) n = app(out, cap, n, " underline");
         else if (nd->deco == 3) n = app(out, cap, n, " line-through");
         if (nd->vis == 2) n = app(out, cap, n, " hidden");
+        if (nd->transform == 2) n = app(out, cap, n, " uppercase");
+        else if (nd->transform == 3) n = app(out, cap, n, " lowercase");
+        else if (nd->transform == 4) n = app(out, cap, n, " capitalize");
+        if (nd->ws == 2) n = app(out, cap, n, " ws-pre");
+        else if (nd->ws == 3) n = app(out, cap, n, " ws-nowrap");
+        else if (nd->ws == 4) n = app(out, cap, n, " ws-pre-wrap");
+        else if (nd->ws == 5) n = app(out, cap, n, " ws-pre-line");
         n = app(out, cap, n, "\n");
+    }
+    return n;
+}
+
+/* Lot 88: "scopes N rules R hits H" */
+int wf_site_scope_text(const wf_site_t *d, char *out, int cap) {
+    int n = 0, r, nr = 0;
+    if (!out || cap < 8) return 0;
+    out[0] = 0;
+    if (!d) return 0;
+    for (r = 0; r < d->nrules; r++) if (d->rule[r].scope) nr++;
+    n = app(out, cap, n, "scopes ");
+    n = app_u(out, cap, n, (unsigned)d->nscopes);
+    n = app(out, cap, n, " rules ");
+    n = app_u(out, cap, n, (unsigned)nr);
+    n = app(out, cap, n, " hits ");
+    n = app_u(out, cap, n, (unsigned)d->scoped_hits);
+    if (d->dropped_scopes) {
+        n = app(out, cap, n, " dropped ");
+        n = app_u(out, cap, n, (unsigned)d->dropped_scopes);
     }
     return n;
 }
@@ -970,6 +1188,8 @@ static int add_rule(wf_site_t *d, const wf_site_rule_t *src) {
     r->color = src->color;
     r->layer = src->layer;
     r->revert = src->revert;
+    r->scope = src->scope;
+    r->scope_rel = src->scope_rel;
     r->order = d->nrules;
     for (p = 0; p < src->nparts && p < WF_SITE_PARTS; p++) {
         const unsigned char *a = (const unsigned char *)&src->part[p];
@@ -1073,6 +1293,34 @@ static int vis_val(const char *s) {
     return 0;
 }
 
+/* Lot 88 */
+static int transform_val(const char *s) {
+    if (eq(s, "none")) return 1;
+    if (eq(s, "uppercase")) return 2;
+    if (eq(s, "lowercase")) return 3;
+    if (eq(s, "capitalize")) return 4;
+    return 0;
+}
+
+static int ws_val(const char *s) {
+    if (eq(s, "normal")) return 1;
+    if (eq(s, "pre")) return 2;
+    if (eq(s, "nowrap")) return 3;
+    if (eq(s, "pre-wrap") || eq(s, "break-spaces")) return 4;
+    if (eq(s, "pre-line")) return 5;
+    return 0;
+}
+
+/* the all shorthand takes a CSS-wide keyword only */
+static int all_val(const char *s) {
+    if (eq(s, "initial")) return 1;
+    if (eq(s, "inherit")) return 2;
+    if (eq(s, "unset")) return 3;
+    if (eq(s, "revert")) return 4;
+    if (eq(s, "revert-layer")) return 5;
+    return 0;
+}
+
 const char *wf_site_var(const wf_site_t *d, const char *name) {
     int i;
     if (!d || !name) return 0;
@@ -1125,12 +1373,15 @@ static int prop_kind(const char *prop) {
     if (eq(prop, "font-style")) return WF_SITE_K_STYLE;
     if (eq(prop, "text-decoration") || eq(prop, "text-decoration-line")) return WF_SITE_K_DECO;
     if (eq(prop, "visibility")) return WF_SITE_K_VIS;
+    if (eq(prop, "text-transform")) return WF_SITE_K_TRANSFORM;
+    if (eq(prop, "white-space")) return WF_SITE_K_WS;
     return 0;
 }
 
 /* Lot 87: the properties that inherit in CSS */
 static int kind_inherits(int kind) {
-    return kind == 2 || kind == 3 || kind == 4 || kind == WF_SITE_K_STYLE || kind == WF_SITE_K_VIS;
+    return kind == 2 || kind == 3 || kind == 4 || kind == WF_SITE_K_STYLE || kind == WF_SITE_K_VIS ||
+           kind == WF_SITE_K_TRANSFORM || kind == WF_SITE_K_WS;
 }
 
 /* Lot 87: initial is a value like any other: inline, normal, start
@@ -1144,7 +1395,7 @@ static void initial_value(int kind, wf_site_rule_t *proto) {
     case 1: proto->val = WF_SITE_DISP_INLINE; break;
     case 4: proto->val = 1; proto->color = 0x000000; break;
     case 5: case 6: proto->val = 0; proto->box_n = 1; proto->box[0] = 0; break;
-    default: proto->val = 1; break;     /* normal, left, normal, none, visible */
+    default: proto->val = 1; break;     /* normal, left, normal, none, visible, none, normal */
     }
 }
 
@@ -1169,6 +1420,20 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
         trim_word(body + vs, ve - vs, val, (int)sizeof(val), &imp);
         proto->imp = (uint8_t)imp;
         if (d && expand_var(d, val, (int)sizeof(val)) < 0) { if (i < n && body[i] == ';') i++; continue; }
+        if (eq(prop, "all")) {
+            /* Lot 88: every reader property at once; any other value is
+             * invalid for all */
+            int kw = all_val(val);
+            if (kw) {
+                proto->kind = WF_SITE_K_ALL;
+                proto->val = (uint8_t)kw;
+                proto->revert = WF_SITE_RV_NONE;
+                proto->box_n = 0;
+                return 1;
+            }
+            if (i < n && body[i] == ';') i++;
+            continue;
+        }
         if (prop_kind(prop) && (eq(val, "initial") || (eq(val, "unset") && !kind_inherits(prop_kind(prop))))) {
             initial_value(prop_kind(prop), proto);
             return 1;
@@ -1210,6 +1475,12 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
         } else if (eq(prop, "visibility")) {
             int v = vis_val(val);
             if (v) { proto->kind = WF_SITE_K_VIS; proto->val = (uint8_t)v; return 1; }
+        } else if (eq(prop, "text-transform")) {
+            int v = transform_val(val);
+            if (v) { proto->kind = WF_SITE_K_TRANSFORM; proto->val = (uint8_t)v; return 1; }
+        } else if (eq(prop, "white-space")) {
+            int v = ws_val(val);
+            if (v) { proto->kind = WF_SITE_K_WS; proto->val = (uint8_t)v; return 1; }
         }
         if (i < n && body[i] == ';') i++;
     }
@@ -1254,7 +1525,12 @@ static int parse_nth(const char *s, int n, wf_site_part_t *pt) {
 static int parse_compound(const char *s, int n, int i, wf_site_part_t *pt) {
     clear(pt, (int)sizeof(*pt));
     i = skip_noise(s, n, i);
-    if (i < n && s[i] != '.' && s[i] != '#' && s[i] != '[' && s[i] != ':' && s[i] != '*')
+    if (i < n && s[i] == '&') {
+        /* Lot 88: & in @scope is :where(:scope); a compound may go on
+         * after it ("&.wide") */
+        pt->pseudo = WF_SITE_PS_AMP;
+        i++;
+    } else if (i < n && s[i] != '.' && s[i] != '#' && s[i] != '[' && s[i] != ':' && s[i] != '*')
         i = ident(s, n, i, pt->tag, (int)sizeof(pt->tag));
     else if (i < n && s[i] == '*') i++;
     while (i < n) {
@@ -1312,6 +1588,12 @@ static int parse_compound(const char *s, int n, int i, wf_site_part_t *pt) {
             else if (eq(ps, "only-of-type")) pt->pseudo = WF_SITE_PS_ONLY_TYPE;
             else if (eq(ps, "empty")) pt->pseudo = WF_SITE_PS_EMPTY;
             else if (eq(ps, "root")) pt->pseudo = WF_SITE_PS_ROOT;
+            else if (eq(ps, "scope")) {
+                /* Lot 88: one pseudo-class per compound; :scope with
+                 * another one is not kept rather than widened */
+                if (pt->pseudo) return -1;
+                pt->pseudo = WF_SITE_PS_SCOPE;
+            }
             else if (eq(ps, "not") && i < n && s[i] == '(') {
                 i++;
                 i = skip_noise(s, n, i);
@@ -1390,6 +1672,10 @@ static int parse_selector(wf_site_t *d, const char *s, int n, const wf_site_rule
         rule.origin = proto->origin;
         rule.layer = proto->layer;
         rule.revert = proto->revert;
+        rule.scope = proto->scope;
+        {
+            uint8_t lead = WF_SITE_REL_DESC;
+            int has_scope = 0, q;
         i = skip_noise(s, n, i);
         while (i < n && s[i] != ',') {
             wf_site_part_t part;
@@ -1416,13 +1702,23 @@ static int parse_selector(wf_site_t *d, const char *s, int n, const wf_site_rule
                 break;
             }
             if (i == before) { i++; continue; }
+            if (!parts) lead = rel;
             part.rel = parts ? rel : WF_SITE_REL_DESC;
             rel = WF_SITE_REL_DESC;
             if (parts < WF_SITE_PARTS) copy_part(&rule.part[parts++], &part);
             else d->errors++;
         }
         rule.nparts = parts;
+        /* Lot 88: in @scope a selector without :scope or & is relative
+         * to the root: ":scope p", or the leading combinator it has */
+        for (q = 0; q < parts; q++)
+            if (rule.part[q].pseudo == WF_SITE_PS_SCOPE || rule.part[q].pseudo == WF_SITE_PS_AMP) has_scope = 1;
+        if (!rule.scope || has_scope) rule.scope_rel = WF_SITE_SR_NONE;
+        else rule.scope_rel = (uint8_t)(lead == WF_SITE_REL_CHILD ? WF_SITE_SR_CHILD :
+                                        lead == WF_SITE_REL_ADJ ? WF_SITE_SR_ADJ :
+                                        lead == WF_SITE_REL_SIB ? WF_SITE_SR_SIB : WF_SITE_SR_DESC);
         if (parts) add_rule(d, &rule);
+        }
         if (i < n && s[i] == ',') i++;
     }
     return 0;
@@ -1560,7 +1856,7 @@ static int known_prop(const char *p, const char *v) {
         "text-decoration", "text-decoration-line", "visibility", "background-color", "border",
         "border-radius", "width", "height", "max-width", "min-width", "gap", "grid-template-columns",
         "flex-wrap", "position", "opacity", "box-shadow", "transform", "line-height",
-        "letter-spacing", "column-count", "aspect-ratio", "object-fit", "text-transform", 0
+        "letter-spacing", "column-count", "aspect-ratio", "object-fit", "text-transform", "white-space", "all", 0
     };
     int i;
     for (i = 0; props[i]; i++) if (eq(props[i], p)) break;
@@ -1960,12 +2256,124 @@ static void scan_sheet(wf_site_t *d, const char *s, int n, int depth) {
     }
 }
 
-static int parse_sheet_in(wf_site_t *d, const char *s, int n, uint8_t origin, int layer, int depth) {
+/* ---- @scope prelude (Lot 88) ------------------------------------------ */
+
+/* "(selector)" at i: the compound chain, one selector (a list keeps its
+ * first one and counts an error). Returns the index after ")" or -1. */
+static int scope_sel(wf_site_t *d, const char *s, int n, int i, wf_site_part_t *out, int *nout) {
+    int close, depth = 1, k, parts = 0;
+    uint8_t rel = WF_SITE_REL_DESC;
+    *nout = 0;
+    if (i >= n || s[i] != '(') return -1;
+    close = i + 1;
+    while (close < n && depth) {
+        if (s[close] == '(') depth++;
+        else if (s[close] == ')') depth--;
+        if (depth) close++;
+    }
+    if (close >= n) return -1;
+    k = i + 1;
+    while (k < close) {
+        wf_site_part_t part;
+        int before;
+        k = skip_noise(s, close, k);
+        if (k >= close) break;
+        if (s[k] == ',') { d->errors++; break; }
+        if (s[k] == '>') { rel = WF_SITE_REL_CHILD; k++; continue; }
+        if (s[k] == '+') { rel = WF_SITE_REL_ADJ; k++; continue; }
+        if (s[k] == '~') { rel = WF_SITE_REL_SIB; k++; continue; }
+        before = k;
+        k = parse_compound(s, close, k, &part);
+        if (k < 0) return -1;
+        if (k == before) { k++; continue; }
+        part.rel = parts ? rel : WF_SITE_REL_DESC;
+        rel = WF_SITE_REL_DESC;
+        if (parts >= WF_SITE_PARTS) return -1;
+        copy_part(&out[parts++], &part);
+    }
+    if (!parts) return -1;
+    *nout = parts;
+    return close + 1;
+}
+
+/* the parent element of the <style> block whose text holds css offset
+ * at, or -1 (an external sheet, or a <style> at the top) */
+static int style_owner_at(const wf_site_t *d, int at) {
+    int k;
+    for (k = 0; k < d->nstyles; k++)
+        if (at >= d->style_from[k] && at < d->style_to[k]) return d->style_owner[k];
+    return -1;
+}
+
+/* "@scope (start) to (end)", "@scope to (end)", "@scope (start)" or
+ * "@scope": a new scope inside outer (-1 none). Returns its index + 1,
+ * 0 when the prelude is not valid (the block is then dropped, as a
+ * browser does) or the table is full (counted). */
+static int scope_block(wf_site_t *d, int outer, const char *s, int n, int css_at) {
+    wf_site_scope_t *sc;
+    int i = 6;   /* after "@scope" */
+    if (d->nscopes >= WF_SITE_SCOPES) { d->dropped_scopes++; return 0; }
+    sc = &d->scope[d->nscopes];
+    clear(sc, (int)sizeof(*sc));
+    sc->parent = outer;
+    sc->owner = -1;
+    i = skip_noise(s, n, i);
+    if (i < n && s[i] == '(') {
+        i = scope_sel(d, s, n, i, sc->start, &sc->nstart);
+        if (i < 0) { d->errors++; return 0; }
+        i = skip_noise(s, n, i);
+    }
+    if (i + 1 < n && lc(s[i]) == 't' && lc(s[i + 1]) == 'o' && (i + 2 >= n || is_sp(s[i + 2]) || s[i + 2] == '(')) {
+        i = skip_noise(s, n, i + 2);
+        i = scope_sel(d, s, n, i, sc->end, &sc->nend);
+        if (i < 0) { d->errors++; return 0; }
+        i = skip_noise(s, n, i);
+    }
+    if (i < n) { d->errors++; return 0; }
+    if (!sc->nstart && outer < 0) sc->owner = style_owner_at(d, css_at);
+    d->nscopes++;
+    return d->nscopes;
+}
+
+/* a run of declarations right in an @scope block: they apply to the
+ * root, as ":where(:scope)" */
+static void scope_decls(wf_site_t *d, const char *s, int n, uint8_t origin, int layer, int scope) {
+    int p = 0;
+    while (p < n) {
+        wf_site_rule_t proto;
+        int semi = p;
+        while (semi < n && s[semi] != ';') semi++;
+        clear(&proto, (int)sizeof(proto));
+        proto.origin = origin;
+        proto.layer = (uint8_t)layer;
+        proto.scope = (uint8_t)scope;
+        if (parse_decl(d, s + p, semi - p, &proto) && proto.kind) parse_selector(d, "&", 1, &proto);
+        p = semi < n ? semi + 1 : n;
+    }
+}
+
+static int parse_sheet_in(wf_site_t *d, const char *s, int n, uint8_t origin, int layer, int depth, int scope) {
     int i = 0;
     while (i < n) {
         int sel, brace;
         i = skip_noise(s, n, i);
         if (i >= n) break;
+        if (scope && s[i] != '@') {
+            /* Lot 88: "color: red;" before "{" in an @scope block is a
+             * declaration of the root, not a selector */
+            int k = i, colon = 0;
+            while (k < n && s[k] != '{' && s[k] != ';' && s[k] != '}') { if (s[k] == ':' && !colon) colon = k; k++; }
+            if (k < n && s[k] == ';' && colon) {
+                scope_decls(d, s + i, k - i, origin, layer, scope);
+                i = k + 1;
+                continue;
+            }
+            if (k >= n && colon) {
+                /* the last declaration may go without ";" */
+                scope_decls(d, s + i, n - i, origin, layer, scope);
+                break;
+            }
+        }
         if (s[i] == '@') {
             int prelude = i;
             while (i < n && s[i] != '{' && s[i] != ';') i++;
@@ -1979,7 +2387,7 @@ static int parse_sheet_in(wf_site_t *d, const char *s, int n, uint8_t origin, in
                 int body = i + 1, after = skip_block(s, n, i), blen = after - 1 - body;
                 int inner = layer_block(d, layer, s + prelude, i - prelude);
                 /* a full table: the block still applies, unlayered (counted) */
-                if (blen > 0 && depth < 6) parse_sheet_in(d, s + body, blen, origin, inner ? inner : layer, depth + 1);
+                if (blen > 0 && depth < 6) parse_sheet_in(d, s + body, blen, origin, inner ? inner : layer, depth + 1, scope);
                 i = after;
                 continue;
             }
@@ -1991,7 +2399,17 @@ static int parse_sheet_in(wf_site_t *d, const char *s, int n, uint8_t origin, in
                 int body = i + 1;
                 int after = skip_block(s, n, i);
                 int blen = after - 1 - body;
-                if (blen > 0 && depth < 6) parse_sheet_in(d, s + body, blen, origin, layer, depth + 1);
+                if (blen > 0 && depth < 6) parse_sheet_in(d, s + body, blen, origin, layer, depth + 1, scope);
+                i = after;
+            } else if (i < n && s[i] == '{' && at_is(s, n, prelude, "scope")) {
+                /* Lot 88: @scope, nested up to WF_SITE_SCOPE_DEPTH */
+                int body = i + 1, after = skip_block(s, n, i), blen = after - 1 - body;
+                int inner = 0, lvl = 0, k = scope - 1;
+                while (k >= 0 && lvl < 8) { lvl++; k = d->scope[k].parent; }
+                if (lvl < WF_SITE_SCOPE_DEPTH)
+                    inner = scope_block(d, scope - 1, s + prelude, i - prelude, (int)(s + prelude - d->css));
+                else d->errors++;
+                if (inner && blen > 0 && depth < 6) parse_sheet_in(d, s + body, blen, origin, layer, depth + 1, inner);
                 i = after;
             } else i = skip_block(s, n, i);
             continue;
@@ -2016,6 +2434,7 @@ static int parse_sheet_in(wf_site_t *d, const char *s, int n, uint8_t origin, in
                     clear(&proto, (int)sizeof(proto));
                     proto.origin = origin;
                     proto.layer = (uint8_t)layer;
+                    proto.scope = (uint8_t)scope;
                     if (parse_decl(d, s + body + p, semi - p, &proto) && proto.kind)
                         parse_selector(d, s + sel, brace - sel, &proto);
                     p = semi < body_n ? semi + 1 : body_n;
@@ -2027,7 +2446,7 @@ static int parse_sheet_in(wf_site_t *d, const char *s, int n, uint8_t origin, in
 }
 
 static int parse_sheet(wf_site_t *d, const char *s, int n, uint8_t origin) {
-    return parse_sheet_in(d, s, n, origin, 0, 0);
+    return parse_sheet_in(d, s, n, origin, 0, 0, 0);
 }
 
 static void add_ua(wf_site_t *d, const char *sel, int disp) {
@@ -2051,12 +2470,12 @@ static void inline_node(wf_site_t *d, int i, int kind, int ceiling) {
         while (semi < n && st[semi] != ';') semi++;
         clear(&proto, (int)sizeof(proto));
         proto.origin = 3;
-        if (parse_decl(d, st + p, semi - p, &proto) && proto.kind && (!kind || proto.kind == kind) &&
-            top_of(&proto) < ceiling) {
+        if (parse_decl(d, st + p, semi - p, &proto) && proto.kind &&
+            (!kind || proto.kind == kind || proto.kind == WF_SITE_K_ALL) && top_of(&proto) < ceiling) {
             proto.spec = 100000;
             proto.order = 1000 + i;
             proto.nparts = 0;
-            paint_rule(d, i, &proto);
+            paint_rule(d, i, &proto, 0, kind);
         }
         p = semi < n ? semi + 1 : n;
     }
@@ -2093,6 +2512,8 @@ static void copy_kind(wf_site_node_t *nd, const wf_site_node_t *par, int kind) {
     case WF_SITE_K_STYLE: nd->italic = par->italic; break;
     case WF_SITE_K_DECO: nd->deco = par->deco; break;
     case WF_SITE_K_VIS: nd->vis = par->vis; break;
+    case WF_SITE_K_TRANSFORM: nd->transform = par->transform; break;
+    case WF_SITE_K_WS: nd->ws = par->ws; break;
     default: break;
     }
 }
@@ -2111,8 +2532,11 @@ static void resolve_reverts(wf_site_t *d) {
                 d->reverts++;
                 for (r = 0; r < d->nrules; r++) {
                     const wf_site_rule_t *ru = &d->rule[r];
-                    if (ru->kind != k || !keep_rule(top_of(ru), ru->origin, ceiling, max_origin)) continue;
-                    if (sel_match(d, i, ru)) paint_rule(d, i, ru);
+                    int m;
+                    if ((ru->kind != k && ru->kind != WF_SITE_K_ALL) ||
+                        !keep_rule(top_of(ru), ru->origin, ceiling, max_origin)) continue;
+                    m = rule_match(d, i, ru);
+                    if (m) paint_rule(d, i, ru, m - 1, k);
                 }
                 /* the style attribute is author origin: an author revert
                  * drops it as well */
@@ -2147,8 +2571,14 @@ int wf_site_apply(wf_site_t *d) {
     layer_ranks(d);
     for (r = 0; r < d->nrules; r++)
         if (d->rule[r].layer > 0 && d->rule[r].layer <= d->nlayers) d->rule[r].layer = d->layer_rank[d->rule[r].layer - 1];
+    d->scoped_hits = 0;
     for (r = 0; r < d->nrules; r++) {
-        for (i = 0; i < d->nnodes; i++) if (sel_match(d, i, &d->rule[r])) paint_rule(d, i, &d->rule[r]);
+        for (i = 0; i < d->nnodes; i++) {
+            int m = rule_match(d, i, &d->rule[r]);
+            if (!m) continue;
+            if (d->rule[r].scope) d->scoped_hits++;
+            paint_rule(d, i, &d->rule[r], m - 1, 0);
+        }
     }
     apply_inline(d);
     d->reverts = 0;

@@ -1073,6 +1073,25 @@ int osui_tool_click(osui_tool_t *t, int row, int col, int dbl, const osui_tool_s
     return OSUI_TOOL_NONE;
 }
 
+/* Lot 88: one serial line per key a panel takes ("osui panel key sel=S
+ * ilen=L"), so a QEMU test can wait for each key instead of typing blind,
+ * and name the key the guest did not get. Enter writes "osui panel enter
+ * sel=S input=TEXT", printed after what the run itself logged. The trace
+ * has its own buffer: a run that fills log (400 bytes) cut it at first. */
+static void panel_trace(osui_tool_t *t, const char *what, int append) {
+    char *line = t->trace;
+    t_cpy(line, (int)sizeof(t->trace), what);
+    t_cat(line, (int)sizeof(t->trace), " sel=");
+    t_cat_u(line, (int)sizeof(t->trace), (unsigned)(t->sel < 0 ? 0 : t->sel));
+    if (append) {
+        t_cat(line, (int)sizeof(t->trace), " input=");
+        t_cat(line, (int)sizeof(t->trace), t->input);
+    } else {
+        t_cat(line, (int)sizeof(t->trace), " ilen=");
+        t_cat_u(line, (int)sizeof(t->trace), (unsigned)t->ilen);
+    }
+}
+
 int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src) {
     int v;
     if (!t || !t->active) return OSUI_TOOL_NONE;
@@ -1104,11 +1123,34 @@ int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src) {
             if (t->mode == 1 && osui_par_family(t->kind)->count) { panel_menu(t); return OSUI_TOOL_CHANGED; }
             return OSUI_TOOL_CLOSE;
         }
-        if (key == '\n' || key == '\r') { panel_run(t, src); return OSUI_TOOL_CHANGED; }
-        if (key == '\b' || key == 127) { if (t->ilen > 0) t->input[--t->ilen] = 0; return OSUI_TOOL_CHANGED; }
+        if (key == '\n' || key == '\r') {
+            char typed[OSUI_TOOL_INPUT];
+            int sel = t->sel;
+            t_cpy(typed, (int)sizeof(typed), t->input);
+            t->log[0] = 0;
+            panel_run(t, src);
+            {
+                /* the trace names what Enter saw, not what the run left */
+                char keep[OSUI_TOOL_INPUT];
+                int ksel = t->sel;
+                t_cpy(keep, (int)sizeof(keep), t->input);
+                t->sel = sel;
+                t_cpy(t->input, (int)sizeof(t->input), typed);
+                panel_trace(t, "osui panel enter", 1);
+                t->sel = ksel;
+                t_cpy(t->input, (int)sizeof(t->input), keep);
+            }
+            return OSUI_TOOL_CHANGED;
+        }
+        if (key == '\b' || key == 127) {
+            if (t->ilen > 0) t->input[--t->ilen] = 0;
+            panel_trace(t, "osui panel key", 0);
+            return OSUI_TOOL_CHANGED;
+        }
         if (key >= 32 && key <= 126) {
             if (t->ilen < OSUI_TOOL_INPUT - 1) { t->input[t->ilen++] = (char)key; t->input[t->ilen] = 0; }
             t->armed_pid = -1;
+            panel_trace(t, "osui panel key", 0);
             return OSUI_TOOL_CHANGED;
         }
         if (t->sel >= 0 && (key == K_UP || key == K_DOWN)) t->armed_pid = -1;
@@ -1169,6 +1211,7 @@ int osui_tool_key(osui_tool_t *t, int key, const osui_tool_src_t *src) {
         else if (key == K_END) t->sel = t->n ? t->n - 1 : 0;
         else return OSUI_TOOL_NONE;
         follow_sel(t);
+        if (osui_par_family(t->kind)) panel_trace(t, "osui panel key", 0);
         return OSUI_TOOL_CHANGED;
     }
     if (key == K_UP && t->top > 0) t->top--;
