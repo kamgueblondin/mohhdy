@@ -152,12 +152,20 @@ run_test() {
     if [ "$(basename "$test_file")" = "test_devsync.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/devsync.c"
     fi
+    if [ "$(basename "$test_file")" = "test_lot89_idna.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/wf_idna.c"
+        cflags="$cflags -I$BASE_DIR/userspace"
+    fi
     if [ "$(basename "$test_file")" = "test_lot88_shape.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/p2p_shape.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_lot88_frame.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/osui_frame.c $BASE_DIR/userspace/plat_energy.c $BASE_DIR/userspace/platform.c"
+        cflags="$cflags -I$BASE_DIR/userspace"
+    fi
+    if [ "$(basename "$test_file")" = "test_lot89_framecost.c" ]; then
+        extra_src="$extra_src $BASE_DIR/userspace/osui_frame.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_lot87_display.c" ]; then
@@ -247,18 +255,18 @@ run_test() {
         test_p2p_rtx.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_rtx.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
         test_p2p_flow.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
         test_p2p_bwe.c) extra_src="$extra_src $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_pace.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
-        test_wf_text.c|test_wf_form.c|test_wf_section.c|test_wf_lot75.c|test_wf_lot76.c|test_wf_lot85.c|test_wf_lot85_sites.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/userspace/wf_section.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
+        test_wf_text.c|test_wf_form.c|test_wf_section.c|test_wf_lot75.c|test_wf_lot76.c|test_wf_lot85.c|test_wf_lot85_sites.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/userspace/wf_section.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
         # Lot 72: the images test was only in tests/Makefile, test-all never compiled it
-        test_wf_webimg.c|test_wf_webimg_anim.c|test_wf_srcset.c|test_wf_cache.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/userspace/wf_webimg.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/imgdec.c"; cflags="$cflags -I$BASE_DIR/include -I$TEST_DIR/unit/userspace" ;;
+        test_wf_webimg.c|test_wf_webimg_anim.c|test_wf_srcset.c|test_wf_cache.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/userspace/wf_webimg.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/imgdec.c"; cflags="$cflags -I$BASE_DIR/include -I$TEST_DIR/unit/userspace" ;;
         test_wsearch_api.c) extra_src="$extra_src $BASE_DIR/userspace/wsearch_api.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/wsearch_local.c $BASE_DIR/userspace/wf_entity.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
-        test_wf_http.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
+        test_wf_http.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
         test_wf_article.c) extra_src="$extra_src $BASE_DIR/userspace/wf_article.c" ;;
         test_lot86.c)
-            extra_src="$extra_src $BASE_DIR/userspace/wf_nav.c $BASE_DIR/userspace/desk_cfg.c $BASE_DIR/userspace/wf_store.c $BASE_DIR/userspace/wf_blocks.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_bn.c $BASE_DIR/userspace/wf_sha512.c $BASE_DIR/userspace/wf_ec.c $BASE_DIR/userspace/wf_p256.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_rsa.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/sha256.c"
+            extra_src="$extra_src $BASE_DIR/userspace/wf_nav.c $BASE_DIR/userspace/desk_cfg.c $BASE_DIR/userspace/wf_store.c $BASE_DIR/userspace/wf_blocks.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_bn.c $BASE_DIR/userspace/wf_sha512.c $BASE_DIR/userspace/wf_ec.c $BASE_DIR/userspace/wf_p256.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_rsa.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/sha256.c"
             cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include"
             ;;
         test_lot86b.c)
-            extra_src="$extra_src $BASE_DIR/userspace/wf_tabs.c $BASE_DIR/userspace/wf_autofill.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/wf_compat.c $BASE_DIR/userspace/wf_feed.c $BASE_DIR/userspace/wf_robots.c"
+            extra_src="$extra_src $BASE_DIR/userspace/wf_tabs.c $BASE_DIR/userspace/wf_autofill.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/wf_idna.c $BASE_DIR/userspace/wf_compat.c $BASE_DIR/userspace/wf_feed.c $BASE_DIR/userspace/wf_robots.c"
             cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include"
             ;;
         test_p2p_trend.c)
@@ -270,19 +278,19 @@ run_test() {
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
         test_lot87_link.c|test_lot87_layer.c|test_lot87_revert.c)
-            extra_src="$extra_src $BASE_DIR/userspace/wf_csslink.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_http.c"
+            extra_src="$extra_src $BASE_DIR/userspace/wf_csslink.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c $BASE_DIR/userspace/wf_http.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
-        test_lot87_fill.c|test_lot88_site.c)
-            extra_src="$extra_src $BASE_DIR/userspace/wf_autofill.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/wf_formfill.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_qstring.c $BASE_DIR/userspace/wf_entity.c"
+        test_lot87_fill.c|test_lot88_site.c|test_lot89_fillage.c)
+            extra_src="$extra_src $BASE_DIR/userspace/wf_autofill.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/wf_idna.c $BASE_DIR/userspace/wf_formfill.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_qstring.c $BASE_DIR/userspace/wf_entity.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
-        test_lot87_css.c|test_lot88_scope.c|test_lot88_props.c)
-            extra_src="$extra_src $BASE_DIR/userspace/wf_sitecss.c"
+        test_lot87_css.c|test_lot88_scope.c|test_lot89_scope2.c|test_lot88_props.c|test_lot89_cssmath.c|test_lot89_cssvar.c)
+            extra_src="$extra_src $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
         test_lot86c.c)
-            extra_src="$extra_src $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_formfill.c $BASE_DIR/userspace/wf_qstring.c $BASE_DIR/userspace/wf_autofill.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_bn.c $BASE_DIR/userspace/wf_sha512.c $BASE_DIR/userspace/wf_ec.c $BASE_DIR/userspace/wf_p256.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_rsa.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/sha256.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/imgdec.c"
+            extra_src="$extra_src $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c $BASE_DIR/userspace/wf_formfill.c $BASE_DIR/userspace/wf_qstring.c $BASE_DIR/userspace/wf_autofill.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/wf_idna.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_bn.c $BASE_DIR/userspace/wf_sha512.c $BASE_DIR/userspace/wf_ec.c $BASE_DIR/userspace/wf_p256.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_rsa.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/sha256.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/imgdec.c"
             cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include"
             ;;
     esac
@@ -342,7 +350,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/wsearch.c"
     fi
     if [ "$(basename "$test_file")" = "test_arm_portable.c" ]; then
-        extra_src="$extra_src $BASE_DIR/arch/arm/arm_portable.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/edid.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/osui_frame.c $BASE_DIR/userspace/plat_form.c $BASE_DIR/userspace/p2p_shape.c"
+        extra_src="$extra_src $BASE_DIR/arch/arm/arm_portable.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/edid.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/wf_idna.c $BASE_DIR/userspace/osui_frame.c $BASE_DIR/userspace/plat_form.c $BASE_DIR/userspace/p2p_shape.c"
         cflags="$cflags -I$BASE_DIR/kernel -I$BASE_DIR/userspace -I$BASE_DIR/include"
     fi
     if [ "$(basename "$test_file")" = "test_edid.c" ] || [ "$(basename "$test_file")" = "test_edid_cea.c" ]; then

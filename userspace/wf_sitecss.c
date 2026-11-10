@@ -1,5 +1,7 @@
 /* wf_sitecss.c - Lot 86: see wf_sitecss.h. Freestanding, no heap. */
 #include "wf_sitecss.h"
+#include "wf_cssmath.h"
+#include "wf_cssvar.h"
 
 int wf_site_apply(wf_site_t *d);
 
@@ -598,7 +600,7 @@ static int part_match(const wf_site_t *d, int idx, const wf_site_part_t *pt, int
     int i;
     if (idx < 0 || idx >= d->nnodes) return 0;
     nd = &d->node[idx];
-    if (pt->pseudo == WF_SITE_PS_SCOPE || pt->pseudo == WF_SITE_PS_AMP) {
+    if (pt->scope_ref) {
         if (sroot >= 0 && idx != sroot) return 0;
         if (sroot < 0 && (nd->parent >= 0 || !eq(nd->tag, "html"))) return 0;
     }
@@ -668,6 +670,15 @@ static int is_ancestor(const wf_site_t *d, int anc, int idx) {
 
 static int scope_in(const wf_site_t *d, int sc, int root, int idx, int depth);
 
+/* Lot 89: a start or end list matches when one of its selectors does */
+static int list_match(const wf_site_t *d, int idx, const wf_site_part_t list[][WF_SITE_PARTS],
+                      const uint8_t *len, int nsel, int sroot) {
+    int k;
+    for (k = 0; k < nsel && k < WF_SITE_SCOPE_ALTS; k++)
+        if (chain_match(d, idx, list[k], len[k], sroot, 0)) return 1;
+    return 0;
+}
+
 /* root is a scoping root of scope sc: it matches start (or is the owner
  * of an implicit scope) and, for a nested @scope, sits in a scope of the
  * enclosing one, whose root is the :scope of start. */
@@ -680,15 +691,14 @@ static int scope_root_ok(const wf_site_t *d, int sc, int root, int depth) {
         while (outer >= 0 && guard++ < WF_SITE_NODES) {
             if (scope_root_ok(d, s->parent, outer, depth + 1) && scope_in(d, s->parent, outer, root, depth + 1)) {
                 if (s->nstart) {
-                    int left = -1;
-                    if (chain_match(d, root, s->start, s->nstart, outer, &left)) return 1;
+                    if (list_match(d, root, s->start, s->start_len, s->nstart, outer)) return 1;
                 } else if (root == outer) return 1;
             }
             outer = d->node[outer].parent;
         }
         return 0;
     }
-    if (s->nstart) return chain_match(d, root, s->start, s->nstart, -2, 0);
+    if (s->nstart) return list_match(d, root, s->start, s->start_len, s->nstart, -2);
     if (s->owner >= 0) return root == s->owner;
     return d->node[root].parent < 0;     /* the document: its top elements */
 }
@@ -702,7 +712,7 @@ static int scope_in(const wf_site_t *d, int sc, int root, int idx, int depth) {
     if (idx != root && !is_ancestor(d, root, idx)) return 0;
     if (!s->nend) return 1;
     while (cur >= 0 && cur != root && guard++ < WF_SITE_NODES) {
-        if (chain_match(d, cur, s->end, s->nend, root, 0)) return 0;
+        if (list_match(d, cur, s->end, s->end_len, s->nend, root)) return 0;
         cur = d->node[cur].parent;
     }
     return 1;
@@ -772,8 +782,8 @@ static int specificity(const wf_site_rule_t *r) {
             if (pt->not_kind == 2) s += 10000;
             else if (pt->not_kind == 1 || pt->not_kind == 3) s += 100;
             else s += pt->not_tag[0] ? 1 : 0;
-        } else if (pt->pseudo == WF_SITE_PS_WHERE || pt->pseudo == WF_SITE_PS_AMP) {
-            /* :where() adds nothing; Lot 88: & is :where(:scope) */
+        } else if (pt->pseudo == WF_SITE_PS_WHERE) {
+            /* :where() adds nothing */
         } else if (pt->pseudo == WF_SITE_PS_IS) {
             /* the most specific alternative */
             int k, best = 0;
@@ -784,6 +794,8 @@ static int specificity(const wf_site_rule_t *r) {
             s += best;
         } else if (pt->pseudo) s += 100;
         if (pt->tag[0]) s += 1;
+        /* Lot 89: :scope counts as a pseudo-class, & (:where(:scope)) as nothing */
+        if (pt->scope_ref == WF_SITE_SREF_SCOPE) s += 100;
     }
     return s;
 }
@@ -1376,37 +1388,23 @@ const char *wf_site_var(const wf_site_t *d, const char *name) {
     return 0;
 }
 
-/* var(--name) or var(--name, fallback): the value of the custom property
- * when it is known, else the fallback. One level, no nesting. 0 when the
- * value is not a var() at all (val unchanged), 1 replaced, -1 unknown and
- * no fallback (the declaration is invalid at computed-value time). */
+/* Lot 89: every var() of a value is substituted (wf_cssvar.c):
+ * var() inside calc() or another value, fallbacks that hold var(), and
+ * custom properties defined from other ones, 8 levels at most (a cycle is
+ * invalid). 0 when the value holds no var() (val unchanged), 1 replaced,
+ * -1 invalid at computed-value time (an unknown property with no
+ * fallback, a cycle, a malformed var() or a result longer than val):
+ * the declaration is dropped. */
+static const char *var_get(const void *ctx, const char *name) {
+    return wf_site_var((const wf_site_t *)ctx, name);
+}
 static int expand_var(const wf_site_t *d, char *val, int cap) {
-    char name[24], fb[48];
-    const char *got;
-    int i = 4, k = 0;
-    if (!(val[0] == 'v' && val[1] == 'a' && val[2] == 'r' && val[3] == '(')) return 0;
-    while (val[i] && is_sp(val[i])) i++;
-    while (val[i] && val[i] != ',' && val[i] != ')' && !is_sp(val[i]) && k < (int)sizeof(name) - 1) name[k++] = val[i++];
-    name[k] = 0;
-    while (val[i] && is_sp(val[i])) i++;
-    fb[0] = 0;
-    if (val[i] == ',') {
-        int depth = 0;
-        i++;
-        while (val[i] && is_sp(val[i])) i++;
-        k = 0;
-        while (val[i] && (depth || val[i] != ')') && k < (int)sizeof(fb) - 1) {
-            if (val[i] == '(') depth++;
-            else if (val[i] == ')') depth--;
-            fb[k++] = val[i++];
-        }
-        while (k > 0 && is_sp(fb[k - 1])) k--;
-        fb[k] = 0;
-    }
-    got = wf_site_var(d, name);
-    if (!got) got = fb[0] ? fb : 0;
-    if (!got) return -1;
-    scopy(val, cap, got, slen(got));
+    char tmp[48];
+    int r;
+    if (cap > (int)sizeof(tmp)) cap = (int)sizeof(tmp);
+    r = wf_cssvar_subst(val, tmp, cap, var_get, d);
+    if (r <= 0) return r < 0 ? (wf_cssvar_count(val) == 0 ? 0 : -1) : 0;
+    scopy(val, cap, tmp, slen(tmp));
     return 1;
 }
 
@@ -1549,10 +1547,25 @@ static int lspace_tok(const char *s) {
 }
 
 /* one token kind: 1 and proto filled, 0 invalid */
-static int tok_decl(const char *prop, const char *val, wf_site_rule_t *proto) {
-    char t[WF_SITE_TOK];
+static int tok_decl(const wf_site_t *d, const char *prop, const char *val, wf_site_rule_t *proto) {
+    char t[WF_SITE_TOK], m[WF_SITE_TOK];
     int kind = 0;
     t[0] = 0;
+    /* Lot 89: calc(), min(), max() and clamp() resolve to one length
+     * token first (wf_cssmath.c), then go through the same bounds as a
+     * written length; an expression that does not resolve is invalid */
+    if (wf_css_is_math(val) && (eq(prop, "font-size") || eq(prop, "text-indent") || eq(prop, "letter-spacing"))) {
+        if (wf_css_math(val, d ? d->vw : 0, d ? d->vh : 0, m, (int)sizeof(m)) != 1) return 0;
+        if (eq(prop, "font-size") && fsize_tok(m)) kind = WF_SITE_K_FSIZE;
+        else if (eq(prop, "text-indent") && indent_tok(m)) kind = WF_SITE_K_INDENT;
+        else if (eq(prop, "letter-spacing") && lspace_tok(m)) kind = WF_SITE_K_LSPACE;
+        if (!kind) return 0;
+        proto->kind = (uint8_t)kind;
+        proto->val = 2;
+        proto->box_n = 0;
+        scopy(proto->tok, WF_SITE_TOK, m, slen(m));
+        return 1;
+    }
     if (slen(val) >= WF_SITE_TOK + 12) return 0;
     if (eq(prop, "list-style-type")) {
         if (list_name(val)) { scopy(t, WF_SITE_TOK, val, slen(val)); kind = WF_SITE_K_LIST; }
@@ -1661,7 +1674,7 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             uint32_t c = 0;
             if (eq(val, "transparent")) { proto->kind = WF_SITE_K_BG; proto->val = 1; proto->color = 0; return 1; }
             if (parse_color(val, slen(val), &c)) { proto->kind = WF_SITE_K_BG; proto->val = 2; proto->color = c; return 1; }
-        } else if (tok_decl(prop, val, proto)) {
+        } else if (tok_decl(d, prop, val, proto)) {
             return 1;
         }
         if (i < n && body[i] == ';') i++;
@@ -1710,7 +1723,7 @@ static int parse_compound(const char *s, int n, int i, wf_site_part_t *pt) {
     if (i < n && s[i] == '&') {
         /* Lot 88: & in @scope is :where(:scope); a compound may go on
          * after it ("&.wide") */
-        pt->pseudo = WF_SITE_PS_AMP;
+        pt->scope_ref = WF_SITE_SREF_AMP;
         i++;
     } else if (i < n && s[i] != '.' && s[i] != '#' && s[i] != '[' && s[i] != ':' && s[i] != '*')
         i = ident(s, n, i, pt->tag, (int)sizeof(pt->tag));
@@ -1771,10 +1784,9 @@ static int parse_compound(const char *s, int n, int i, wf_site_part_t *pt) {
             else if (eq(ps, "empty")) pt->pseudo = WF_SITE_PS_EMPTY;
             else if (eq(ps, "root")) pt->pseudo = WF_SITE_PS_ROOT;
             else if (eq(ps, "scope")) {
-                /* Lot 88: one pseudo-class per compound; :scope with
-                 * another one is not kept rather than widened */
-                if (pt->pseudo) return -1;
-                pt->pseudo = WF_SITE_PS_SCOPE;
+                /* Lot 89: kept apart from pseudo, so ":scope:first-child"
+                 * keeps both conditions */
+                if (!pt->scope_ref) pt->scope_ref = WF_SITE_SREF_SCOPE;
             }
             else if (eq(ps, "not") && i < n && s[i] == '(') {
                 i++;
@@ -1895,7 +1907,7 @@ static int parse_selector(wf_site_t *d, const char *s, int n, const wf_site_rule
         /* Lot 88: in @scope a selector without :scope or & is relative
          * to the root: ":scope p", or the leading combinator it has */
         for (q = 0; q < parts; q++)
-            if (rule.part[q].pseudo == WF_SITE_PS_SCOPE || rule.part[q].pseudo == WF_SITE_PS_AMP) has_scope = 1;
+            if (rule.part[q].scope_ref) has_scope = 1;
         if (!rule.scope || has_scope) rule.scope_rel = WF_SITE_SR_NONE;
         else rule.scope_rel = (uint8_t)(lead == WF_SITE_REL_CHILD ? WF_SITE_SR_CHILD :
                                         lead == WF_SITE_REL_ADJ ? WF_SITE_SR_ADJ :
@@ -2442,10 +2454,13 @@ static void scan_sheet(wf_site_t *d, const char *s, int n, int depth) {
 
 /* ---- @scope prelude (Lot 88) ------------------------------------------ */
 
-/* "(selector)" at i: the compound chain, one selector (a list keeps its
- * first one and counts an error). Returns the index after ")" or -1. */
-static int scope_sel(wf_site_t *d, const char *s, int n, int i, wf_site_part_t *out, int *nout) {
-    int close, depth = 1, k, parts = 0;
+/* "(selector, ...)" at i: up to WF_SITE_SCOPE_ALTS compound chains (a
+ * longer list keeps the first ones and counts an error; an empty or
+ * invalid selector in the list drops the prelude, as a browser drops an
+ * invalid selector list). Returns the index after ")" or -1. */
+static int scope_sel(wf_site_t *d, const char *s, int n, int i, wf_site_part_t out[][WF_SITE_PARTS],
+                     uint8_t *len, int *nout) {
+    int close, depth = 1, k, parts = 0, nsel = 0, over = 0;
     uint8_t rel = WF_SITE_REL_DESC;
     *nout = 0;
     if (i >= n || s[i] != '(') return -1;
@@ -2457,12 +2472,21 @@ static int scope_sel(wf_site_t *d, const char *s, int n, int i, wf_site_part_t *
     }
     if (close >= n) return -1;
     k = i + 1;
-    while (k < close) {
+    while (k <= close) {
         wf_site_part_t part;
         int before;
         k = skip_noise(s, close, k);
-        if (k >= close) break;
-        if (s[k] == ',') { d->errors++; break; }
+        if (k >= close || s[k] == ',') {
+            /* end of one selector */
+            if (!parts) return -1;
+            if (!over) len[nsel++] = (uint8_t)parts;
+            parts = 0;
+            rel = WF_SITE_REL_DESC;
+            if (k >= close) break;
+            k++;
+            if (nsel >= WF_SITE_SCOPE_ALTS && !over) { over = 1; d->errors++; }
+            continue;
+        }
         if (s[k] == '>') { rel = WF_SITE_REL_CHILD; k++; continue; }
         if (s[k] == '+') { rel = WF_SITE_REL_ADJ; k++; continue; }
         if (s[k] == '~') { rel = WF_SITE_REL_SIB; k++; continue; }
@@ -2473,10 +2497,11 @@ static int scope_sel(wf_site_t *d, const char *s, int n, int i, wf_site_part_t *
         part.rel = parts ? rel : WF_SITE_REL_DESC;
         rel = WF_SITE_REL_DESC;
         if (parts >= WF_SITE_PARTS) return -1;
-        copy_part(&out[parts++], &part);
+        if (!over) copy_part(&out[nsel][parts], &part);
+        parts++;
     }
-    if (!parts) return -1;
-    *nout = parts;
+    if (!nsel) return -1;
+    *nout = nsel;
     return close + 1;
 }
 
@@ -2503,13 +2528,13 @@ static int scope_block(wf_site_t *d, int outer, const char *s, int n, int css_at
     sc->owner = -1;
     i = skip_noise(s, n, i);
     if (i < n && s[i] == '(') {
-        i = scope_sel(d, s, n, i, sc->start, &sc->nstart);
+        i = scope_sel(d, s, n, i, sc->start, sc->start_len, &sc->nstart);
         if (i < 0) { d->errors++; return 0; }
         i = skip_noise(s, n, i);
     }
     if (i + 1 < n && lc(s[i]) == 't' && lc(s[i + 1]) == 'o' && (i + 2 >= n || is_sp(s[i + 2]) || s[i + 2] == '(')) {
         i = skip_noise(s, n, i + 2);
-        i = scope_sel(d, s, n, i, sc->end, &sc->nend);
+        i = scope_sel(d, s, n, i, sc->end, sc->end_len, &sc->nend);
         if (i < 0) { d->errors++; return 0; }
         i = skip_noise(s, n, i);
     }

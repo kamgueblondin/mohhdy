@@ -1415,7 +1415,7 @@ ARM_OBJS = $(ARM_DIR)/boot.o $(ARM_DIR)/arm_kernel.o $(ARM_DIR)/arm_mmu.o \
 	$(ARM_DIR)/arm_portable.o $(ARM_DIR)/aes_gcm.o $(ARM_DIR)/edid.o \
 	$(ARM_DIR)/p2p_flow.o $(ARM_DIR)/p2p_pace.o $(ARM_DIR)/p2p_rtx.o $(ARM_DIR)/p2p_bwe.o \
 	$(ARM_DIR)/wf_aead.o $(ARM_DIR)/p2p_trend.o \
-	$(ARM_DIR)/wf_regdom.o $(ARM_DIR)/osui_frame.o $(ARM_DIR)/plat_form.o $(ARM_DIR)/p2p_shape.o
+	$(ARM_DIR)/wf_regdom.o $(ARM_DIR)/wf_idna.o $(ARM_DIR)/osui_frame.o $(ARM_DIR)/plat_form.o $(ARM_DIR)/p2p_shape.o
 
 $(ARM_DIR)/%.o: arch/arm/%.S
 	@mkdir -p $(ARM_DIR)
@@ -1461,7 +1461,10 @@ $(ARM_DIR)/p2p_trend.o: userspace/p2p_trend.c userspace/p2p_trend.h
 	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
 # Lot 88 (US-076): registrable domains, the frame pacer and the safe TV
 # scale, compiled unchanged
-$(ARM_DIR)/wf_regdom.o: userspace/wf_regdom.c userspace/wf_regdom.h
+$(ARM_DIR)/wf_regdom.o: userspace/wf_regdom.c userspace/wf_regdom.h userspace/wf_idna.h
+	@mkdir -p $(ARM_DIR)
+	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
+$(ARM_DIR)/wf_idna.o: userspace/wf_idna.c userspace/wf_idna.h
 	@mkdir -p $(ARM_DIR)
 	$(ARM_CC) $(ARM_CFLAGS) -Iuserspace -c $< -o $@
 $(ARM_DIR)/osui_frame.o: userspace/osui_frame.c userspace/osui_frame.h
@@ -1622,6 +1625,11 @@ qemu-lot88-desk: $(OS_IMAGE) pack-initrd disk
 
 qemu-lot88-tv: $(OS_IMAGE) pack-initrd disk
 	@LOT88_PART=tv python3 tests/scripts/test_qemu_lot88.py
+
+# Lot 89: autofill dates, @scope lists, calc()/var() lengths, idle paint cost
+.PHONY: qemu-lot89
+qemu-lot89: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot89.py
 
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk

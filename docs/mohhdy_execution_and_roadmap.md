@@ -7,7 +7,19 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
-### Lot 88 (10 November 2026, in progress)
+### Lot 89 (10 November 2026, in progress)
+
+US-031 partial, phase3_complete=false. The reader resolves calc(),
+min(), max() and clamp() in its lengths and substitutes var() anywhere
+in a value; @scope keeps the root with a second pseudo-class and takes
+selector lists. Autofill sites compare internationalised hosts in their
+Punycode form, and autofill keys are dated (autofill ages,
+autofill forget-older DAYS). The idle desktop reports what its paints
+cost per dim level (US-081 partial, battery simulated).
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097 stay
+simule. See docs/lot89_plan.md.
+
+### Lot 88 (10 November 2026, PR #246 merged)
 
 US-031 partial, phase3_complete=false. Autofill is shared between the
 hosts of one site (registrable domain, short hand-written suffix list).

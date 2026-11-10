@@ -1,5 +1,6 @@
 /* wf_regdom.c - Lot 88: see wf_regdom.h. */
 #include "wf_regdom.h"
+#include "wf_idna.h"
 
 /* Multi-label public suffixes. Every entry has at least one dot; a
  * single label (com, fr, io...) is a TLD and handled by the rule. The
@@ -97,8 +98,15 @@ int wf_regdom_is_suffix(const char *h) {
 int wf_regdom(const char *host, char *out, int cap) {
     int n, i, dots = 0, start, k;
     int at[WF_REGDOM_MAX];                /* label starts */
+    char mapped[WF_REGDOM_MAX];
     if (!out || cap <= 0) return -1;
     out[0] = 0;
+    /* Lot 89: a UTF-8 or upper-case host is compared in its ASCII form
+     * (bucher.example with an umlaut is xn--bcher-kva.example) */
+    if (host && wf_idna_needs_map(host)) {
+        if (wf_idna_to_ascii(host, mapped, (int)sizeof(mapped)) != 0) return -1;
+        host = mapped;
+    }
     if (!host_ok(host) || wf_regdom_is_ip(host)) return -1;
     n = slen(host);
     if (host[n - 1] == '.') return -1;    /* a trailing dot: not handled */
@@ -121,8 +129,12 @@ int wf_regdom(const char *host, char *out, int cap) {
 int wf_regdom_same_site(const char *a, const char *b) {
     char ra[WF_REGDOM_MAX], rb[WF_REGDOM_MAX];
     int i;
+    char ma[WF_REGDOM_MAX], mb[WF_REGDOM_MAX];
     if (!a || !b || !a[0] || !b[0]) return 0;
     if (slen(a) == slen(b) && eqn(a, slen(a), b)) return 1;
+    /* Lot 89: the same host written in UTF-8 and in its ASCII form */
+    if ((wf_idna_needs_map(a) || wf_idna_needs_map(b)) && wf_idna_to_ascii(a, ma, (int)sizeof(ma)) == 0 &&
+        wf_idna_to_ascii(b, mb, (int)sizeof(mb)) == 0 && slen(ma) == slen(mb) && eqn(ma, slen(ma), mb)) return 1;
     if (wf_regdom(a, ra, (int)sizeof(ra)) != 0 || wf_regdom(b, rb, (int)sizeof(rb)) != 0) return 0;
     for (i = 0; ra[i] || rb[i]; i++) if (ra[i] != rb[i]) return 0;
     return 1;

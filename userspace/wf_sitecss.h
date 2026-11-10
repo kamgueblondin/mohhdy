@@ -57,6 +57,7 @@
 #define WF_SITE_SCOPES 8
 #define WF_SITE_STYLES 8
 #define WF_SITE_SCOPE_DEPTH 4
+#define WF_SITE_SCOPE_ALTS 3        /* Lot 89: selectors in a start or end list */
 
 enum {
     WF_SITE_DISP_NONE = 3,
@@ -88,7 +89,7 @@ enum {
     WF_SITE_PS_IS = 15,
     WF_SITE_PS_WHERE = 16,
     WF_SITE_PS_SCOPE = 17,    /* Lot 88: :scope, specificity of a class */
-    WF_SITE_PS_AMP = 18       /* Lot 88: & in @scope, :where(:scope) */
+    WF_SITE_PS_AMP = 18       /* Lot 88: & in @scope, :where(:scope) (Lot 89: no longer set, see scope_ref) */
 };
 enum {
     WF_SITE_ATTR_NONE = 0,
@@ -121,6 +122,12 @@ enum {
     WF_SITE_K_LSPACE = 16,    /* letter-spacing: token, inherits */
     WF_SITE_K_MAX = 16,
     WF_SITE_K_ALL = 17        /* the all shorthand: a CSS-wide keyword on every kind */
+};
+/* Lot 89: a compound that names the scoping root */
+enum {
+    WF_SITE_SREF_NONE = 0,
+    WF_SITE_SREF_SCOPE = 1,   /* :scope, specificity of a class */
+    WF_SITE_SREF_AMP = 2      /* &, :where(:scope), no specificity */
 };
 /* Lot 88: how a rule inside @scope relates to its scoping root */
 enum {
@@ -202,6 +209,10 @@ typedef struct {
     char alt_cls[WF_SITE_ALT][12];
     uint8_t nalt;
     uint8_t rel;                  /* combinator that leads to this compound */
+    /* Lot 89: the compound names the scoping root, WF_SITE_SREF_*; kept
+     * apart from pseudo so "&:first-child" and ":scope.wide:last-child"
+     * keep both conditions */
+    uint8_t scope_ref;
 } wf_site_part_t;
 
 typedef struct {
@@ -226,9 +237,14 @@ typedef struct {
  * the whole document); the scope is the root and its descendants, minus
  * every descendant that matches end and what is under it. */
 typedef struct {
-    wf_site_part_t start[WF_SITE_PARTS];
+    /* Lot 89: start and end are selector lists of up to
+     * WF_SITE_SCOPE_ALTS selectors; nstart / nend count the selectors,
+     * start_len / end_len the compounds of each */
+    wf_site_part_t start[WF_SITE_SCOPE_ALTS][WF_SITE_PARTS];
+    uint8_t start_len[WF_SITE_SCOPE_ALTS];
     int nstart;
-    wf_site_part_t end[WF_SITE_PARTS];
+    wf_site_part_t end[WF_SITE_SCOPE_ALTS][WF_SITE_PARTS];
+    uint8_t end_len[WF_SITE_SCOPE_ALTS];
     int nend;
     int owner;                    /* implicit root (no start): node index or -1 */
     int parent;                   /* enclosing scope index, or -1 */

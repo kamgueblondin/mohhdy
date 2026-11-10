@@ -253,6 +253,10 @@ int arm_port_regdom(void) {
     if (wf_regdom("localhost", out, (int)sizeof(out)) != -1) return 0;
     if (!wf_regdom_same_site("www.example.com", "login.example.com")) return 0;
     if (wf_regdom_same_site("alice.github.io", "bob.github.io")) return 0;
+    /* Lot 89: an IDN host (UTF-8 b, u-umlaut, cher) in its ASCII form,
+     * through the Punycode of userspace/wf_idna.c */
+    if (wf_regdom("www.b\xc3\xbc" "cher.example", out, (int)sizeof(out)) != 0 || !same_str(out, "xn--bcher-kva.example")) return 0;
+    if (!wf_regdom_same_site("\xe4\xbe\x8b\xe5\xad\x90.example", "xn--fsqu00a.example")) return 0;
     return !wf_regdom_same_site("example.com", "evil-example.com");
 }
 
@@ -266,9 +270,16 @@ int arm_port_frame(void) {
     osui_frame_init(&f, now);
     for (i = 0; i < 40; i++) {
         now += 100U;
-        painted += osui_frame_due(&f, now, 0, 5U, 2);
+        if (osui_frame_due(&f, now, 0, 5U, 2)) {
+            painted++;
+            osui_frame_cost(&f, now, now + 40U, 1);   /* chunk 9: a 40 ms paint */
+        }
     }
     if (painted != 20 || f.idle_skipped != 20U || osui_frame_idle_fps10(&f, now) != 50U) return 0;
+    /* 20 paints of 40 ms in 3.9 s at the deep dim (the first interval
+     * counts at level 0, the level before the first call): 205 permille,
+     * and 800 ms not spent on the 20 skipped wakes */
+    if (f.paint_ms[2] != 800U || osui_frame_busy_permille(&f, 2) != 205U || osui_frame_saved_ms(&f) != 800U) return 0;
     if (osui_frame_due(&f, now + 1U, 1, 5U, 0) != 1 || f.wakes != 1U || f.idle_drawn != 0U) return 0;
     return osui_frame_idle_ms(&f, now + 1U) == 0U && now < 0x1000U;
 }

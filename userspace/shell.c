@@ -5496,6 +5496,8 @@ static int sys_rtc_utc(char out[16]) {
     asm volatile("int $0x80" : "=a"(rc) : "a"(SYS_RTC_UTC), "c"(out) : "memory");
     return rc;
 }
+/* Lot 89: the same clock for the desk (autofill dates) */
+int shell_rtc_utc(char out[16]) { return sys_rtc_utc(out); }
 
 /* Real wall clock (CMOS RTC through SYS_RTC_UTC); it used to print a fixed
  * date built from the tick counter. */
@@ -8052,7 +8054,8 @@ void main() {
     }
     osui_gui_set_search_url(shell_search_url);   /* Lot 69: search-open on the desktop */   /* Lot 67: /browser over the network */
     { extern int shell_display_ui_hint(void); osui_gui_set_scale_hint(shell_display_ui_hint()); }
-    { extern int shell_energy_frame(int, unsigned, char*, int); osui_gui_set_frame_op(shell_energy_frame); }   /* Lot 88: US-081 */   /* Lot 69: fw_cfg first-boot pin */
+    { extern int shell_energy_frame(int, unsigned, char*, int); extern void shell_energy_frame_cost(unsigned, unsigned, int);
+      osui_gui_set_frame_op(shell_energy_frame); osui_gui_set_frame_cost_op(shell_energy_frame_cost); }   /* Lot 88: US-081, Lot 89: frame cost */   /* Lot 69: fw_cfg first-boot pin */
     osui_gui_set_fs_io(&shell_fs_io);
     umalloc_init((void *)OS_USER_HEAP_BASE, shell_heap_grow);
     osui_gui_set_heap(urealloc);

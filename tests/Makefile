@@ -519,9 +519,9 @@ $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_user_heap: $(UNIT_DIR)/kernel/test_user_hea
 	$(CC) $(CFLAGS_KERNEL) -I.. -o $@ $< ../kernel/user_heap.c $(FRAMEWORK_SOURCES)
 
 # Lot 69 (US-076): portable self-tests shared with the ARM boot
-$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_arm_portable: $(UNIT_DIR)/kernel/test_arm_portable.c ../arch/arm/arm_portable.c ../arch/arm/arm_portable.h ../kernel/aes_gcm.c ../kernel/edid.c ../userspace/p2p_flow.c ../userspace/p2p_pace.c ../userspace/p2p_rtx.c ../userspace/p2p_bwe.c ../userspace/p2p_trend.c ../userspace/wf_aead.c ../userspace/wf_regdom.c ../userspace/osui_frame.c ../userspace/plat_form.c ../userspace/p2p_shape.c ../include/os_charset.h ../include/os_charset_pages.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
+$(BUILD_DIR)/$(UNIT_DIR)/kernel/test_arm_portable: $(UNIT_DIR)/kernel/test_arm_portable.c ../arch/arm/arm_portable.c ../arch/arm/arm_portable.h ../kernel/aes_gcm.c ../kernel/edid.c ../userspace/p2p_flow.c ../userspace/p2p_pace.c ../userspace/p2p_rtx.c ../userspace/p2p_bwe.c ../userspace/p2p_trend.c ../userspace/wf_aead.c ../userspace/wf_regdom.c ../userspace/wf_idna.c ../userspace/osui_frame.c ../userspace/plat_form.c ../userspace/p2p_shape.c ../include/os_charset.h ../include/os_charset_pages.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_KERNEL) -I.. -I../kernel -I../userspace -I../include -o $@ $< ../arch/arm/arm_portable.c ../kernel/aes_gcm.c ../kernel/edid.c ../userspace/p2p_flow.c ../userspace/p2p_pace.c ../userspace/p2p_rtx.c ../userspace/p2p_bwe.c ../userspace/p2p_trend.c ../userspace/wf_aead.c ../userspace/wf_regdom.c ../userspace/osui_frame.c ../userspace/plat_form.c ../userspace/p2p_shape.c $(FRAMEWORK_SOURCES)
+	$(CC) $(CFLAGS_KERNEL) -I.. -I../kernel -I../userspace -I../include -o $@ $< ../arch/arm/arm_portable.c ../kernel/aes_gcm.c ../kernel/edid.c ../userspace/p2p_flow.c ../userspace/p2p_pace.c ../userspace/p2p_rtx.c ../userspace/p2p_bwe.c ../userspace/p2p_trend.c ../userspace/wf_aead.c ../userspace/wf_regdom.c ../userspace/wf_idna.c ../userspace/osui_frame.c ../userspace/plat_form.c ../userspace/p2p_shape.c $(FRAMEWORK_SOURCES)
 
 $(BUILD_DIR)/$(UNIT_DIR)/kernel/test_edid: $(UNIT_DIR)/kernel/test_edid.c ../kernel/edid.c ../kernel/edid.h $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
@@ -864,7 +864,7 @@ $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_webimg: $(UNIT_DIR)/userspace/test_wf
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) ../userspace/wf_webimg.c ../userspace/webeng.c ../userspace/imgdec.c $(FRAMEWORK_SOURCES)
 
 # Lot 67: URL / HTTP / DNS / TLS PRF / fetch
-WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_sitecss.c ../userspace/wf_read.c ../userspace/wf_score.c ../userspace/wf_searchform.c ../userspace/wf_article.c ../userspace/wf_srcset.c ../userspace/wf_entity.c ../userspace/wf_form.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_cache.c ../userspace/wf_cookie.c ../userspace/wf_inflate.c ../kernel/x25519.c $(WF_X509_SRCS)
+WF_NET_SRCS = ../userspace/wf_html.c ../userspace/wf_sitecss.c ../userspace/wf_cssmath.c ../userspace/wf_cssvar.c ../userspace/wf_read.c ../userspace/wf_score.c ../userspace/wf_searchform.c ../userspace/wf_article.c ../userspace/wf_srcset.c ../userspace/wf_entity.c ../userspace/wf_form.c ../userspace/wf_http.c ../userspace/wf_dns.c ../userspace/wf_tls.c ../userspace/wf_fetch.c ../userspace/wf_cache.c ../userspace/wf_cookie.c ../userspace/wf_inflate.c ../kernel/x25519.c $(WF_X509_SRCS)
 $(BUILD_DIR)/$(UNIT_DIR)/userspace/test_wf_lot85: $(UNIT_DIR)/userspace/test_wf_lot85.c $(WF_NET_SRCS) $(wildcard ../userspace/wf_*.h) $(FRAMEWORK_SOURCES) $(FRAMEWORK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_USER) -I../userspace -I../include -o $@ $< $(WF_NET_SRCS) $(FRAMEWORK_SOURCES)

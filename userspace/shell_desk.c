@@ -37,6 +37,15 @@ static void print_int(int v) {
     print_string(b + k);
 }
 
+/* Lot 89: autofill dates follow the CMOS clock; read again
+ * before a store or an expiry, so a session across midnight dates right */
+extern int shell_rtc_utc(char out[16]);
+static void fill_clock(void) {
+    char utc[16];
+    utc[0] = 0;
+    wf_autofill_set_today(&g_fill, shell_rtc_utc(utc) == 0 ? wf_autofill_day(utc) : 0U);
+}
+
 static void ready(void) {
     char buf[512];
     int n;
@@ -46,6 +55,7 @@ static void ready(void) {
     wf_nav_init(&g_nav);
     wf_tabs_init(&g_tabs);
     wf_autofill_init(&g_fill);
+    fill_clock();
     n = osui_gui_persist_read("/persist/settings.cfg", buf, (int)sizeof(buf) - 1);
     if (n > 0) { buf[n] = 0; (void)desk_cfg_load(&g_cfg, buf, n); }
     n = osui_gui_persist_read("/persist/nav.txt", buf, (int)sizeof(buf) - 1);
@@ -67,6 +77,7 @@ static int save_fill(void) {
 int shell_desk_remember_form(const wf_form_page_t *p, int form, const char *url) {
     int n;
     ready();
+    fill_clock();
     n = wf_formfill_remember(&g_fill, p, form, url);
     if (n > 0) (void)save_fill();
     return n;
@@ -274,6 +285,7 @@ int shell_desk_line(const char *line) {
                 return 1;
             }
             if (add) {
+                fill_clock();
                 r = wf_autofill_put(&g_fill, w1, w2, a, "text");
                 print_string(r == 0 ? "autofill added\n" : "autofill refused\n");
                 if (r == 0) (void)save_fill();
@@ -299,6 +311,40 @@ int shell_desk_line(const char *line) {
                 print_int(n);
                 print_string("\n");
             }
+            return 0;
+        }
+        if (pre(a, "ages")) {
+            /* Lot 89: days since each key was last stored */
+            /* 32 keys of up to 96 + 48 bytes: more than text holds */
+            static char ages[32 * 176 + 48];
+            fill_clock();
+            if (wf_autofill_ages(&g_fill, ages, (int)sizeof(ages)) < 0) { print_string("autofill error\n"); return 1; }
+            print_string(ages);
+            return 0;
+        }
+        if (pre(a, "forget-older")) {
+            /* Lot 89: autofill forget-older DAYS (0..36500) */
+            uint32_t days = 0;
+            int k = 0, r, und = 0;
+            a += 12;
+            skip(&a);
+            while (a[k] >= '0' && a[k] <= '9' && k < 6) { days = days * 10U + (uint32_t)(a[k] - '0'); k++; }
+            fill_clock();
+            if (k == 0 || a[k] || (r = wf_autofill_forget_older(&g_fill, days, &und)) < 0) {
+                print_string(g_fill.today ? "autofill error usage: autofill forget-older DAYS (0..36500)\n"
+                                          : "autofill error no clock\n");
+                return 1;
+            }
+            print_string("autofill forgot older than ");
+            print_int((int)days);
+            print_string(" days keys ");
+            print_int(r);
+            print_string(" undated ");
+            print_int(und);
+            print_string(" left ");
+            print_int(g_fill.n);
+            print_string("\n");
+            (void)save_fill();
             return 0;
         }
         if (pre(a, "forget")) {
@@ -333,7 +379,7 @@ int shell_desk_line(const char *line) {
             (void)save_fill();
             return 0;
         }
-        print_string("autofill error usage: autofill [list|forget HOST [NAME [VALUE]]|add HOST NAME VALUE|offers URL NAME]\n");
+        print_string("autofill error usage: autofill [list|ages|forget HOST [NAME [VALUE]]|forget-older DAYS|add HOST NAME VALUE|offers URL NAME]\n");
         return 1;
     }
     if (pre(line, "web-back")) return go(1);

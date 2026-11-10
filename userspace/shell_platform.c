@@ -850,6 +850,7 @@ static void fcat_u(char* d, int cap, uint32_t v) { cat_u(d, v, cap); }
 int shell_energy_frame(int input, unsigned ticks, char* msg, int cap) {
     uint32_t now = (uint32_t)ticks * 10U, idle, fps10, a, b;
     int paint, was_dim;
+    char cost[128];
     if (!msg || cap < 2) return 1;
     msg[0] = 0;
     energy_ensure();
@@ -859,6 +860,7 @@ int shell_energy_frame(int input, unsigned ticks, char* msg, int cap) {
     fps10 = osui_frame_idle_fps10(&g_frame, now);
     a = g_frame.idle_drawn;
     b = g_frame.idle_skipped;
+    (void)osui_frame_cost_report(&g_frame, cost, (int)sizeof(cost));
     (void)plat_energy_idle(&g_energy, input ? 0U : idle);
     paint = osui_frame_due(&g_frame, now, input, g_energy.refresh_hz, g_energy.dim);
     if (g_energy.dim != g_frame_dim_seen) {
@@ -875,6 +877,8 @@ int shell_energy_frame(int input, unsigned ticks, char* msg, int cap) {
             fcat_u(msg, cap, a);
             fcat(msg, cap, " idle_skipped ");
             fcat_u(msg, cap, b);
+            fcat(msg, cap, " ");
+            fcat(msg, cap, cost);
             fcat(msg, cap, "\n");
         } else if (g_energy.dim) {
             fcat(msg, cap, "osui energy dim ");
@@ -892,6 +896,11 @@ int shell_energy_frame(int input, unsigned ticks, char* msg, int cap) {
         g_frame_dim_seen = g_energy.dim;
     }
     return paint;
+}
+
+/* Lot 89: the desktop times each paint (osui_gui_set_frame_cost_op) */
+void shell_energy_frame_cost(unsigned start, unsigned end, int idle) {
+    osui_frame_cost(&g_frame, (uint32_t)start * 10U, (uint32_t)end * 10U, idle);
 }
 
 static int cmd_power_sim(const char* rest) {
