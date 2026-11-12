@@ -51,11 +51,13 @@ by hand (code, hand tests, QEMU test, docs).
     - test_p2p.c test_rate_limit_and_stats (queue-full part) and test_lot88_shape_fair_and_ordered: counts follow P2P_SHAPE_Q instead of the literals 8, 9, 10 and 11; message labels have two digits.
     - tests/scripts/test_qemu_lot89.py step_lengths: #cyc89 is 30px (the fallback of var() on a cycle, was 20px kept) and #mix89 indent 18px (calc(1em + 2px) resolved, was 1em kept), the QEMU side of the cssvar and cssmath conversions.
     - arch/arm/arm_portable.c arm_port_shape: P2P_SHAPE_Q - 1 instead of 7, plus Lot 90 checks.
+    - tests/scripts/test_qemu_gui_text_scale.py (Lot 68, qemu-gui-text-scale): the web measurements start at the page top found on the screenshot (the first row under the menu bar that is page background across 90% of the window) instead of the fixed row 90. The assertions are unchanged (web glyph runs must grow after Ctrl+'+', CSS font-size tallest >= 2 x median). See point 16.
 11. The QEMU step for the shaping settings types its keys in SYS_GETC mode: while the mesh is up the shell reads keys without blocking (shell.c), so the echo is "caractere retourne", not "caractere ajoute".
 12. ASan (gcc -fsanitize=address,undefined) on base e051615 fails 5 suites, not the 4 usually listed: test_gpt2_infer, test_pmm, test_vfs_service, test_webrt and test_lot87_web (a stack underflow in wf_compat_advice, untouched by this lot). The head run found one more, test_lot90_rxq: the test pushed a 1536-byte frame from a 1514-byte buffer (a test bug, not net_rxq.c); the buffer is now NET_RXQ_FRAME_MAX and the rxq mutations are still killed.
 13. The first full test-all after chunk 10 failed test_p2p (2 tests asserting the Lot 88 queue of 8); 3e185c5 converts them (point 10).
 14. P2P regression found by the gates and fixed in be22267: with the idle drain, qemu-p2p (devsync reply lost), qemu-p2p-mesh (STUN answer lost) and qemu-p2p-phase5 (peers flapping) failed on 3e185c5, alone too, while qemu-p2p passed on base e051615 (583 s). Cause: kernel/net_llm_client.c (kernel_p2p_op, the LLM and DHCP paths), compiled into the worker, reads the card with ne2k_rx_poll directly, so frames the drain had moved into the FIFO never reached it. A run with the drain disabled passed (588 s), which isolated it. Fix: kernel/ne2k_hw.c ne2k_rx_poll asks an rx hook first (ne2k_set_rx_hook, the raw read is ne2k_rx_poll_card); the worker installs a FIFO hook; in the kernel no hook is set, so its path is unchanged. Kernel source change, no ABI or rights change.
 15. CI trigger: removed the branches filter from pull_request so stacked PRs get CI (PR #248 base is lot89-css-autofill-energy, not main). The push trigger stays master/main only.
+16. qemu-gui-text-scale failed in CI run 43191357411 on PR 248 ("web zoom did not enlarge the page text: 22 -> 22") and the same way on the box; it passed on base e051615 (CI and box). Cause: at 2x the full-screen web window title bar is 60 px (30 at 1x, row J), so its bottom (y 90 to 104) and the 8 px gap above the page (104 to 112) sit inside the test band that started at the fixed row 90; every sampled column gets one dark run of 22 px there (330 runs), which is the 98th percentile before and after the zoom. The page itself moved from y 82 to y 112 and its text grows as before: measured from the page top it is 10 -> 13 on Lot 90, the same as 10 -> 13 on e051615. No product change; the test now finds the page top. Mutation: web glyphs capped at 2x in draw_web (kernel/gfx_desktop.c) gives 10 -> 10 and the test fails.
 
 ## Not done (first gaps for lot 91)
 
@@ -100,6 +102,11 @@ ASan/UBSan (TEST_CC with -fsanitize=address,undefined) on copies of the tree:
 - Base e051615: 15708 tests, 5 failed (test_gpt2_infer, test_pmm, test_vfs_service, test_webrt, test_lot87_web).
 - Head, after the test_lot90_rxq buffer fix: 17448 tests, the same 5 failed. Nothing new (review point 12).
 
-Mutations: 33 applied, 33 killed (/workspace/run/lot90/mutations.txt).
+Run 3, after the text-scale fix (each job alone, review point 16):
+- qemu-gui-text-scale on b4b3586: FAILED, web glyph-run p98 22 -> 22 (as in CI). On base e051615: PASS, 10 -> 13 (page top y 82).
+- qemu-gui-text-scale with the fix: PASS, page top y 112, web glyph-run p98 10 -> 13, font-size median 3 tallest 18.
+- qemu-lot90: 427 s, both boots. qemu-gui-parity: PASS.
+
+Mutations: 34 applied, 34 killed (/workspace/run/lot90/mutations.txt).
 
 Final tree: tree-clean-check after the docs commit.
