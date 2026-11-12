@@ -44,10 +44,16 @@ static void test_syntax(void) {
     /* no quotes, mismatched quotes, lists, alternatives, unknown types */
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("<length>", 8));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length>\"", 10));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length>+'", 11));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length>#'", 11));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length> | auto'", 17));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<angle>'", 9));
+    /* Lot 91 (converted): lists, alternatives and <angle> are read now
+     * (Lot 90: WF_CSSPROP_BAD); the refusals that stay are below */
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<length>+'", 11));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<length>#'", 11));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<length> | auto'", 17));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_syntax("'<angle>'", 9));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length> +'", 12));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length>+#'", 12));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length> |'", 12));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<resolution>'", 14));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("''", 2));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'**'", 4));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax(0, 3));
@@ -142,7 +148,7 @@ static void test_parse(void) {
             "syntax: '<length>'; inherits: false; initial-value: red",     /* wrong type */
             "syntax: '<length>'; inherits: false; initial-value: 2em",     /* not independent */
             "syntax: '*'; inherits: false; initial-value: var(--y)",       /* not independent */
-            "syntax: '<angle>'; inherits: false; initial-value: 1deg",     /* unsupported */
+            "syntax: '<resolution>'; inherits: false; initial-value: 1dpi", /* unsupported (Lot 91: <angle> is read) */
             "syntax: '<length>'; inherits: false; initial-value: 4px; broken",
             "syntax: '<length>; inherits: false; initial-value: 4px",       /* open string */
             0

@@ -2887,7 +2887,7 @@ static void compute_vars(wf_site_t *d) {
             nd->vbind[k] = nb[k];
             if (!own[k] || !(p = kprop(d, k))) continue;
             /* a registered value of the wrong type acts as unset */
-            if (nb[k] != WF_SITE_VINVALID && nb[k] <= d->nevars && wf_cssprop_match(p->syntax, d->evar[nb[k] - 1].value))
+            if (nb[k] != WF_SITE_VINVALID && nb[k] <= d->nevars && wf_cssprop_match_prop(p, d->evar[nb[k] - 1].value))
                 continue;
             if (nb[k] != WF_SITE_VINVALID) d->prop_unset++;
             nd->vbind[k] = inherited_b(d, i, k);
