@@ -839,13 +839,14 @@ static int scoped_root(const wf_site_t *d, int idx, const wf_site_rule_t *r, int
 }
 
 /* 0 no match, else 1 + proximity: 0 for an unscoped rule (infinite
- * hops, the weakest), 7 - hops (at least 1) for a scoped one. */
+ * hops, the weakest), 15 - hops (at least 1) for a scoped one (Lot 90:
+ * 15 - hops, hops capped at 14; Lot 88: 7 - hops, capped at 6). */
 static int rule_match(const wf_site_t *d, int idx, const wf_site_rule_t *r) {
     int hops = 0;
     if (!r->scope) return chain_match(d, idx, r->part, r->nparts, -2, 0) ? 1 : 0;
     if (scoped_root(d, idx, r, &hops) < 0) return 0;
-    if (hops > 6) hops = 6;
-    return 1 + 7 - hops;
+    if (hops > WF_SITE_SCOPE_HOPS) hops = WF_SITE_SCOPE_HOPS;
+    return 1 + 15 - hops;
 }
 
 int wf_site_scope_root(const wf_site_t *d, int rule, int idx) {
@@ -908,13 +909,14 @@ static int layer_step(const wf_site_rule_t *r) {
 
 static int rank_of(const wf_site_rule_t *r, int prox) {
     /* important, then origin (inline > author > ua), then layer, then
-     * specificity, then (Lot 88) scope proximity 0..7, then order 0..127
-     * (WF_SITE_RULES); fits in 31 bits:
-     * ((imp * 4 + origin) * 16 + layer) * 8192 * 1024 < 2^30 */
+     * specificity, then (Lot 88) scope proximity 0..15 (Lot 90; 0..7
+     * before), then order 0..127 (WF_SITE_RULES); fits in 31 bits: the
+     * largest value, (127 * 8192 + 8191) * 2048 + 15 * 128 + 127, is
+     * exactly 2^31 - 1 */
     int top = ((int)r->imp * 4 + (int)r->origin) * 16 + layer_step(r);
     if (prox < 0) prox = 0;
-    if (prox > 7) prox = 7;
-    return (top * 8192 + spec_packed(r->spec)) * 1024 + prox * 128 + (r->order & 127);
+    if (prox > 15) prox = 15;
+    return (top * 8192 + spec_packed(r->spec)) * WF_SITE_RANK_LOW + prox * 128 + (r->order & 127);
 }
 
 /* the cascade step of a rule without its specificity and order:
@@ -3515,7 +3517,7 @@ static void resolve_reverts(wf_site_t *d) {
         for (k = 1; k <= WF_SITE_K_MAX; k++) {
             for (round = 0; (nd->rv[k] == WF_SITE_RV_LAYER || nd->rv[k] == WF_SITE_RV_ORIGIN) &&
                             round < WF_SITE_LAYERS + 3; round++) {
-                int top = *kind_rank(nd, k) / (8192 * 1024);
+                int top = *kind_rank(nd, k) / (8192 * WF_SITE_RANK_LOW);
                 int origin = (top / 16) % 4, ceiling = top, max_origin = 0;
                 if (nd->rv[k] == WF_SITE_RV_ORIGIN) max_origin = origin >= 2 ? 2 : 1;
                 reset_kind(nd, k);

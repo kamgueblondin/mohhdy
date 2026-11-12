@@ -87,7 +87,9 @@
 #define WF_SITE_SCOPES 8
 #define WF_SITE_STYLES 8
 #define WF_SITE_SCOPE_DEPTH 4
-#define WF_SITE_SCOPE_ALTS 3        /* Lot 89: selectors in a start or end list */
+#define WF_SITE_SCOPE_ALTS 6        /* selectors in a start or end list (Lot 89: 3, Lot 90: 6) */
+#define WF_SITE_SCOPE_HOPS 14       /* Lot 90: proximity counts up to 14 generations (Lot 88: 6) */
+#define WF_SITE_RANK_LOW 2048       /* Lot 90: proximity 0..15 * 128 + order 0..127 (Lot 88: 1024) */
 #define WF_SITE_VAL 128             /* Lot 90: a declaration value, NUL included (Lot 89: 48) */
 #define WF_SITE_LONGS 32            /* Lot 90: long values (backgrounds, list images) */
 #define WF_SITE_LONG 128
