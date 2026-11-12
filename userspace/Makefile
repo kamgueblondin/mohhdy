@@ -127,7 +127,7 @@ NET_STACK_OBJS = $(addprefix drvnet_,$(addsuffix .o,$(NET_STACK_SRCS)))
 drvnet_%.o: ../kernel/%.c $(USER_HEADERS)
 	$(CC) $(CFLAGS) -I.. -DMOHHDY_RING3 -c -o $@ $<
 
-networker: net_worker.o drv_ne2k_hw.o $(NET_STACK_OBJS) net_libc.o start.o
+networker: net_worker.o drv_ne2k_hw.o net_rxq.o $(NET_STACK_OBJS) net_libc.o start.o
 	@echo "Linking networker..."
 	$(LD) -m elf_i386 $(LDFLAGS) -o $@ $^
 
