@@ -47,10 +47,19 @@
  * one is dropped and counted, never cut. Font sizes that mix em with px
  * (calc(1em + 2px)) and rem lengths when the root font size is not 16 px
  * are resolved by the reader against the parent's (or the root's) font
- * size and written in px. */
+ * size and written in px.
+ * Lot 90 (custom properties): 24 names, 64 values of 63 bytes. A custom
+ * property's var() are substituted on the element that declares it (as
+ * CSS Variables 1 says: the computed value is inherited, not the text),
+ * the sheet-wide ones (:root, html, body) on the root; a var() that does
+ * not resolve there makes the property guaranteed-invalid, which its
+ * descendants inherit. initial, inherit and unset on a custom property.
+ * @property (wf_cssprop.c) registers a type, an initial value and
+ * whether it inherits; a registered name is always per element. */
 #ifndef WF_SITECSS_H
 #define WF_SITECSS_H
 #include <stdint.h>
+#include "wf_cssprop.h"
 
 #define WF_SITE_NODES 192
 #define WF_SITE_RULES 128
@@ -63,8 +72,11 @@
 #define WF_SITE_TOKS 4            /* list, font-size, text-indent, letter-spacing */
 #define WF_SITE_ALT 2
 #define WF_SITE_VARS 16
-#define WF_SITE_VNAMES 12         /* Lot 89: custom property names set per element */
-#define WF_SITE_EVARS 32          /* Lot 89: distinct (name, value) pairs bound to elements */
+#define WF_SITE_VNAMES 24         /* custom property names set per element (Lot 89: 12) */
+#define WF_SITE_EVARS 64          /* distinct (name, value) pairs bound to elements (Lot 89: 32) */
+#define WF_SITE_VVAL 64           /* a custom property value, NUL included (Lot 89: 32) */
+#define WF_SITE_PROPS 8           /* Lot 90: @property registrations */
+#define WF_SITE_VINVALID 255      /* Lot 90: vbind of a guaranteed-invalid value */
 #define WF_SITE_LINKS 6
 #define WF_SITE_HREF 160
 /* Lot 87: cascade layers (@layer). Names in order of first appearance;
@@ -272,7 +284,7 @@ typedef struct {
     char tok[WF_SITE_TOK];        /* Lot 88: the value of a token kind */
     /* Lot 89: WF_SITE_K_VAR: name index + 1 and the value */
     uint8_t vname;
-    char vval[32];
+    char vval[WF_SITE_VVAL];
     /* Lot 89: the value holds var() of a per-element property: the
      * declaration "dprop: draw" is read again for each element */
     uint8_t deferred;
@@ -301,7 +313,8 @@ typedef struct {
 
 typedef struct {
     char name[24];
-    char value[32];
+    char value[WF_SITE_VVAL];
+    uint8_t invalid;              /* Lot 90: its var() did not resolve where it was declared */
 } wf_site_var_t;
 
 typedef struct {
@@ -342,10 +355,18 @@ typedef struct {
     int nvnames;
     wf_site_var_t evar[WF_SITE_EVARS];
     int nevars;
-    int dropped_vars;             /* names or values over the tables, values over 31 bytes */
+    int dropped_vars;             /* names or values over the tables, values over 63 bytes */
     int var_bound;                /* elements with a custom property of their own */
     int deferred_hits;            /* declarations read again for one element */
     int deferred_dropped;         /* ... and invalid there (dropped on that element) */
+    /* Lot 90: custom properties computed where they are declared, and
+     * @property */
+    wf_cssprop_t prop[WF_SITE_PROPS];
+    int nprops, dropped_props;    /* valid registrations; invalid rules or over the table */
+    int var_computed;             /* own values whose var() was substituted on their element */
+    int var_invalid;              /* own values invalid there (guaranteed-invalid, or unset when registered) */
+    int prop_unset;               /* registered values that did not match their syntax */
+    int prop_initial;             /* elements given a registered initial value */
     /* Lot 90 */
     char lpool[WF_SITE_LONGS][WF_SITE_LONG];
     int nlongs, dropped_longs;    /* pool entries; values left out because it was full */
@@ -403,4 +424,9 @@ const char *wf_site_node_var(const wf_site_t *d, int idx, const char *name);
  * properties of the last prepare (dropped: over a table, or invalid on
  * one element); length. */
 int wf_site_vars_text(const wf_site_t *d, char *out, int cap);
+/* Lot 90: "registered N rejected R computed C invalid I unset U initial
+ * J" for @property and the declaration-time values; length. */
+int wf_site_props_text(const wf_site_t *d, char *out, int cap);
+/* Lot 90: the registration of a custom property name, or 0. */
+const wf_cssprop_t *wf_site_prop(const wf_site_t *d, const char *name);
 #endif

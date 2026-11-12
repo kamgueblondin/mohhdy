@@ -73,7 +73,7 @@ static int evar_intern(wf_site_t *d, int k, const char *val) {
         if (eq(d->evar[e].name, d->vname[k]) && eq(d->evar[e].value, val)) return e;
     if (d->nevars >= WF_SITE_EVARS) { d->dropped_vars++; return -1; }
     scopy(d->evar[d->nevars].name, 24, d->vname[k], slen(d->vname[k]));
-    scopy(d->evar[d->nevars].value, 32, val, slen(val));
+    scopy(d->evar[d->nevars].value, WF_SITE_VVAL, val, slen(val));
     return d->nevars++;
 }
 
@@ -88,11 +88,24 @@ static int long_intern(wf_site_t *d, const char *val) {
     return d->nlongs;
 }
 
-static const char *node_var(const wf_site_t *d, int idx, const char *name) {
-    int k = vname_index(d, name);
+/* the element's value of name, 0 when it has none; *inv 1 when it is
+ * guaranteed-invalid there (Lot 90: no fallback to the sheet-wide value) */
+static const char *node_var_inv(const wf_site_t *d, int idx, const char *name, int *inv) {
+    int k = vname_index(d, name), b;
+    *inv = 0;
     if (k < 0 || idx < 0 || idx >= d->nnodes) return 0;
-    if (!d->node[idx].vbind[k]) return 0;
-    return d->evar[d->node[idx].vbind[k] - 1].value;
+    b = d->node[idx].vbind[k];
+    if (!b) return 0;
+    if (b == WF_SITE_VINVALID || b > d->nevars) { *inv = 1; return 0; }
+    return d->evar[b - 1].value;
+}
+
+/* Lot 90: the registration of a name, or 0 */
+const wf_cssprop_t *wf_site_prop(const wf_site_t *d, const char *name) {
+    int k;
+    if (!d || !name) return 0;
+    for (k = 0; k < d->nprops; k++) if (eq(d->prop[k].name, name)) return &d->prop[k];
+    return 0;
 }
 
 /* the declarations "--x: v" of one block (n bytes at s), names only */
@@ -1551,7 +1564,8 @@ static int all_val(const char *s) {
 const char *wf_site_var(const wf_site_t *d, const char *name) {
     int i;
     if (!d || !name) return 0;
-    for (i = d->nvars - 1; i >= 0; i--) if (eq(d->var[i].name, name)) return d->var[i].value;
+    for (i = d->nvars - 1; i >= 0; i--)
+        if (eq(d->var[i].name, name)) return d->var[i].invalid ? 0 : d->var[i].value;
     return 0;
 }
 
@@ -1566,16 +1580,20 @@ static const char *var_get(const void *ctx, const char *name) {
     const wf_site_t *d = (const wf_site_t *)ctx;
     /* Lot 89: the element's own or inherited value first */
     if (g_vnode >= 0) {
-        const char *v = node_var(d, g_vnode, name);
+        int inv;
+        const char *v = node_var_inv(d, g_vnode, name, &inv);
         if (v) return v;
+        if (inv) return 0;   /* Lot 90: guaranteed-invalid on this element */
     }
     return wf_site_var(d, name);
 }
 
 const char *wf_site_node_var(const wf_site_t *d, int idx, const char *name) {
     const char *v;
+    int inv;
     if (!d || !name) return 0;
-    v = node_var(d, idx, name);
+    v = node_var_inv(d, idx, name, &inv);
+    if (inv) return 0;
     return v ? v : wf_site_var(d, name);
 }
 
@@ -1968,7 +1986,7 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
         if (prop[0] == '-' && prop[1] == '-') {
             /* Lot 89: a custom property set on the elements this rule
              * matches; only names found while scanning the sheet (a full
-             * table or a value over 31 bytes leaves the declaration out) */
+             * table or a value over 63 bytes leaves the declaration out) */
             int k = vname_index(d, prop), vl = slen(val);
             if (k >= 0 && vl > 0 && vl < (int)sizeof(proto->vval)) {
                 proto->kind = WF_SITE_K_VAR;
@@ -1976,6 +1994,9 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                 scopy(proto->vval, (int)sizeof(proto->vval), val, vl);
                 return 1;
             }
+            /* Lot 90: a value over 63 bytes is counted once (the sheet
+             * pass and the style attribute pass both run with g_vnode -1) */
+            if (k >= 0 && vl >= (int)sizeof(proto->vval) && d && g_vnode < 0) ((wf_site_t *)d)->dropped_vars++;
             if (i < n && body[i] == ';') i++;
             continue;
         }
@@ -2663,18 +2684,222 @@ static void take_vars(wf_site_t *d, const char *sel, int sn, const char *body, i
         if (b - a < 3 || body[a] != '-' || body[a + 1] != '-') continue;
         while (vs < ve && is_sp(body[vs])) vs++;
         while (ve > vs && is_sp(body[ve - 1])) ve--;
+        {
+            /* Lot 90: a registered name (@property) is always per element */
+            char nm[24];
+            if (b - a >= (int)sizeof(nm)) { d->errors++; continue; }
+            slower(nm, (int)sizeof(nm), body + a, b - a);
+            if (wf_site_prop(d, nm)) { vname_add(d, body + a, b - a); continue; }
+        }
         for (k = 0; k < d->nvars; k++) {
             char nm[24];
             slower(nm, (int)sizeof(nm), body + a, b - a);
             if (eq(d->var[k].name, nm)) break;
         }
+        /* Lot 90: a value that does not fit is left out, never cut */
+        if (ve - vs >= (int)sizeof(d->var[0].value)) { d->dropped_vars++; continue; }
         if (k == d->nvars) {
             if (d->nvars >= WF_SITE_VARS) { d->errors++; continue; }
             d->nvars++;
         }
         slower(d->var[k].name, (int)sizeof(d->var[k].name), body + a, b - a);
         slower(d->var[k].value, (int)sizeof(d->var[k].value), body + vs, ve - vs);
+        d->var[k].invalid = 0;
     }
+}
+
+/* ---- Lot 90: @property and custom properties computed where declared -- */
+
+static int at_is(const char *s, int n, int at, const char *w);
+
+/* one @property rule; the last valid one for a name wins */
+static void take_prop(wf_site_t *d, const char *pre, int pn, const char *body, int bn) {
+    wf_cssprop_t p;
+    int k;
+    if (!wf_cssprop_parse(pre, pn, body, bn, &p)) { d->dropped_props++; return; }
+    for (k = 0; k < d->nprops; k++) if (eq(d->prop[k].name, p.name)) break;
+    if (k == d->nprops) {
+        if (d->nprops >= WF_SITE_PROPS) { d->dropped_props++; return; }
+        d->nprops++;
+    }
+    d->prop[k] = p;
+    vname_add(d, p.name, slen(p.name));
+}
+
+/* Pass 0: @property at the top level and in applying @media, @supports
+ * and @layer blocks, before any custom property is read */
+static void scan_props(wf_site_t *d, const char *s, int n, int depth) {
+    int i = 0;
+    while (i < n) {
+        i = skip_noise(s, n, i);
+        if (i >= n) break;
+        if (s[i] == '@') {
+            int prelude = i;
+            while (i < n && s[i] != '{' && s[i] != ';') i++;
+            if (i < n && s[i] == ';') { i++; continue; }
+            if (i < n && s[i] == '{') {
+                int body = i + 1, after = skip_block(s, n, i), blen = after - 1 - body;
+                if (blen < 0) blen = 0;
+                if (at_is(s, n, prelude, "property")) take_prop(d, s + prelude + 9, i - prelude - 9, s + body, blen);
+                else if (depth < 4 && blen > 0 &&
+                         ((prelude + 6 <= n && lc(s[prelude + 1]) == 'm' && lc(s[prelude + 2]) == 'e' &&
+                           media_ok(s + prelude, body - 1 - prelude, d->vw, d->vh)) ||
+                          (prelude + 9 <= n && lc(s[prelude + 1]) == 's' && lc(s[prelude + 2]) == 'u' &&
+                           wf_site_supports(s + prelude + 9, body - 1 - prelude - 9)) ||
+                          at_is(s, n, prelude, "layer")))
+                    scan_props(d, s + body, blen, depth + 1);
+                i = after;
+            }
+            continue;
+        }
+        while (i < n && s[i] != '{') i++;
+        if (i >= n) break;
+        i = skip_block(s, n, i);
+    }
+}
+
+/* the sheet-wide values (:root, html, body) computed on the root: their
+ * var() read the other sheet-wide values only; one that does not resolve
+ * makes the value guaranteed-invalid (wf_site_var then returns 0) */
+static void resolve_sheet_vars(wf_site_t *d) {
+    static char res[WF_SITE_VARS][WF_SITE_VVAL];
+    static int8_t st[WF_SITE_VARS];
+    int k;
+    for (k = 0; k < d->nvars; k++) {
+        const char *v = d->var[k].value;
+        st[k] = 0;
+        if (eq(v, "initial") || eq(v, "inherit") || eq(v, "unset") || eq(v, "revert") || eq(v, "revert-layer")) {
+            /* nothing above the root: the initial value, guaranteed-invalid */
+            st[k] = -1;
+            continue;
+        }
+        if (wf_cssvar_count(v) == 0) continue;
+        g_vnode = -1;
+        if (wf_cssvar_subst(v, res[k], WF_SITE_VVAL, var_get, d) < 0) st[k] = -1;
+        else st[k] = 1;
+    }
+    for (k = 0; k < d->nvars; k++) {
+        if (st[k] < 0) { d->var[k].invalid = 1; d->var_invalid++; }
+        else if (st[k] > 0) { scopy(d->var[k].value, WF_SITE_VVAL, res[k], slen(res[k])); d->var_computed++; }
+    }
+}
+
+/* the registration of name k, or 0 */
+static const wf_cssprop_t *kprop(const wf_site_t *d, int k) { return wf_site_prop(d, d->vname[k]); }
+
+/* the initial value of name k as a binding: the registered one, else
+ * guaranteed-invalid for a registered name without one, 0 (sheet-wide)
+ * when the name is not registered */
+static uint8_t initial_b(wf_site_t *d, int k) {
+    const wf_cssprop_t *p = kprop(d, k);
+    int e;
+    if (!p) return 0;
+    if (!p->has_initial) return WF_SITE_VINVALID;
+    e = evar_intern(d, k, p->initial);
+    if (e < 0) return WF_SITE_VINVALID;
+    d->prop_initial++;
+    return (uint8_t)(e + 1);
+}
+
+/* what name k inherits on node i (unset on an inherited property) */
+static uint8_t inherited_b(wf_site_t *d, int i, int k) {
+    const wf_cssprop_t *p = kprop(d, k);
+    int par = d->node[i].parent;
+    if (p && !p->inherits) return initial_b(d, k);
+    if (par >= 0 && par < i && d->node[par].vbind[k]) return d->node[par].vbind[k];
+    return p ? initial_b(d, k) : 0;
+}
+
+/* Lot 89 copied the declared text down the tree and substituted var() on
+ * each element that used it. Lot 90: each element's own values are
+ * computed on that element (CSS-wide keywords, then var(), then the
+ * syntax of a registration), and that computed value is what descendants
+ * inherit. Nodes are in document order: the parent is done first. */
+static void compute_vars(wf_site_t *d) {
+    static uint8_t own[WF_SITE_VNAMES], nb[WF_SITE_VNAMES];
+    int i, k;
+    d->var_bound = 0;
+    for (i = 0; i < d->nnodes; i++) {
+        wf_site_node_t *nd = &d->node[i];
+        int any = 0;
+        for (k = 0; k < d->nvnames; k++) {
+            own[k] = nd->vbind[k];
+            if (own[k]) any = 1;
+            else nd->vbind[k] = inherited_b(d, i, k);
+        }
+        if (any) d->var_bound++;
+        /* CSS-wide keywords first: other values may read them */
+        for (k = 0; k < d->nvnames; k++) {
+            const char *v;
+            if (!own[k] || own[k] > d->nevars) continue;
+            v = d->evar[own[k] - 1].value;
+            if (eq(v, "initial")) {
+                const wf_cssprop_t *p = kprop(d, k);
+                nd->vbind[k] = p ? initial_b(d, k) : WF_SITE_VINVALID;
+            } else if (eq(v, "inherit")) {
+                int par = nd->parent;
+                nd->vbind[k] = (par >= 0 && par < i && d->node[par].vbind[k]) ? d->node[par].vbind[k] :
+                               (kprop(d, k) ? initial_b(d, k) : 0);
+            } else if (eq(v, "unset") || eq(v, "revert") || eq(v, "revert-layer")) {
+                /* revert and revert-layer act as unset on a custom property
+                 * (the reader does not keep earlier origins for them) */
+                nd->vbind[k] = inherited_b(d, i, k);
+            } else continue;
+            own[k] = 0;
+        }
+        /* var() of the own values, every one read against the same state */
+        for (k = 0; k < d->nvnames; k++) {
+            static char tmp[WF_SITE_VVAL];
+            const char *v;
+            int r, e;
+            nb[k] = nd->vbind[k];
+            if (!own[k]) continue;
+            v = d->evar[own[k] - 1].value;
+            if (wf_cssvar_count(v) == 0) continue;
+            g_vnode = i;
+            r = wf_cssvar_subst(v, tmp, WF_SITE_VVAL, var_get, d);
+            g_vnode = -1;
+            if (r < 0) {
+                d->var_invalid++;
+                nb[k] = kprop(d, k) ? inherited_b(d, i, k) : WF_SITE_VINVALID;
+                continue;
+            }
+            e = evar_intern(d, k, tmp);
+            if (e < 0) { d->var_invalid++; nb[k] = WF_SITE_VINVALID; continue; }
+            nb[k] = (uint8_t)(e + 1);
+            d->var_computed++;
+        }
+        for (k = 0; k < d->nvnames; k++) {
+            const wf_cssprop_t *p;
+            nd->vbind[k] = nb[k];
+            if (!own[k] || !(p = kprop(d, k))) continue;
+            /* a registered value of the wrong type acts as unset */
+            if (nb[k] != WF_SITE_VINVALID && nb[k] <= d->nevars && wf_cssprop_match(p->syntax, d->evar[nb[k] - 1].value))
+                continue;
+            if (nb[k] != WF_SITE_VINVALID) d->prop_unset++;
+            nd->vbind[k] = inherited_b(d, i, k);
+        }
+    }
+}
+
+int wf_site_props_text(const wf_site_t *d, char *out, int cap) {
+    int n = 0;
+    if (!out || cap <= 0) return 0;
+    out[0] = 0;
+    if (!d) return 0;
+    n = app(out, cap, n, "registered ");
+    n = app_u(out, cap, n, (unsigned)d->nprops);
+    n = app(out, cap, n, " rejected ");
+    n = app_u(out, cap, n, (unsigned)d->dropped_props);
+    n = app(out, cap, n, " computed ");
+    n = app_u(out, cap, n, (unsigned)d->var_computed);
+    n = app(out, cap, n, " invalid ");
+    n = app_u(out, cap, n, (unsigned)d->var_invalid);
+    n = app(out, cap, n, " unset ");
+    n = app_u(out, cap, n, (unsigned)d->prop_unset);
+    n = app(out, cap, n, " initial ");
+    n = app_u(out, cap, n, (unsigned)d->prop_initial);
+    return n;
 }
 
 /* ---- @layer ----------------------------------------------------------- */
@@ -3189,22 +3414,6 @@ static void inline_vars(wf_site_t *d) {
     }
 }
 
-/* Lot 89: an element without its own value takes its parent's (nodes are
- * in document order, the parent comes first) */
-static void inherit_vars(wf_site_t *d) {
-    int i, k;
-    d->var_bound = 0;
-    for (i = 0; i < d->nnodes; i++) {
-        wf_site_node_t *nd = &d->node[i];
-        int own = 0;
-        for (k = 0; k < d->nvnames; k++) {
-            if (nd->vbind[k]) { own = 1; continue; }
-            if (nd->parent >= 0 && nd->parent < i) nd->vbind[k] = d->node[nd->parent].vbind[k];
-        }
-        if (own) d->var_bound++;
-    }
-}
-
 /* Lot 89: the declaration of a deferred rule read for node idx with that
  * element's custom properties; 0 when it is invalid there (dropped on
  * this element, as a sheet-wide invalid var() drops it everywhere) */
@@ -3423,7 +3632,10 @@ int wf_site_apply(wf_site_t *d) {
     add_ua(d, "style", WF_SITE_DISP_NONE);
     for (i = 0; i < d->nnodes; i++) vnames_in(d, d->node[i].style, slen(d->node[i].style));
     if (d->css_n) {
+        /* Lot 90: registrations before any custom property is read */
+        scan_props(d, d->css, d->css_n, 0);
         scan_sheet(d, d->css, d->css_n, 0);
+        resolve_sheet_vars(d);
         parse_sheet(d, d->css, d->css_n, 2);
     }
     /* Lot 87: the rules carry the layer index until every layer is known;
@@ -3444,7 +3656,7 @@ int wf_site_apply(wf_site_t *d) {
         }
     }
     inline_vars(d);
-    inherit_vars(d);
+    compute_vars(d);
     for (r = 0; r < d->nrules; r++) {
         if (d->rule[r].kind == WF_SITE_K_VAR) continue;
         for (i = 0; i < d->nnodes; i++) {
