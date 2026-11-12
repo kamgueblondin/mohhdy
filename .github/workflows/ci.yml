@@ -271,7 +271,7 @@ jobs:
   arm-port:
     name: ARM kernel core (qemu-system-arm virt)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Checkout repository
@@ -287,8 +287,11 @@ jobs:
           path: ~/apt-arm
           key: apt-arm-${{ runner.os }}-noble-v1
 
+      # Lot 90: run 42763680795 (Lot 89) hit the 11 min step limit while
+      # attempt 1 stalled on the Azure mirror; two bounded attempts need up
+      # to 18 min, so the step gets 19 and the job 25.
       - name: Install ARM toolchain and QEMU
-        timeout-minutes: 11
+        timeout-minutes: 19
         run: |
           mkdir -p ~/apt-arm/partial
           pkgs="gcc-arm-none-eabi libnewlib-arm-none-eabi qemu-system-arm"
@@ -1201,6 +1204,76 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lot89-reader-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
+  # Lot 90: two boots of make qemu-lot90, one job each (about 4 and 3 min
+  # locally) so neither grows past the 15 min budget.
+  lot90-reader:
+    name: QEMU reader backgrounds, @property, @scope proximity, autofill tz/expiry, PSL, shaping, rxq (Lot 90)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 90 reader boot
+        run: LOT90_ONLY=reader make qemu-lot90
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot90-reader-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
+  lot90-tv:
+    name: QEMU TV safe area and title bars that follow the scale (Lot 90)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 90 TV boot
+        run: LOT90_ONLY=tv make qemu-lot90
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot90-tv-logs
           if-no-files-found: ignore
           path: |
             test_logs/
