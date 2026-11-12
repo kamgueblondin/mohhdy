@@ -77,7 +77,8 @@ int wf_cssprop_syntax_parse(const char *s, int n, wf_cssprop_t *out) {
             y--;
             if (y <= x) return WF_CSSPROP_BAD;
         }
-        for (k = x; k < y; k++) if (cp_sp(s[k])) return WF_CSSPROP_BAD;   /* "<length> +", "a b" */
+        /* "<length> +" and "a b" fail below: a type name is compared whole
+         * and an ident has no space */
         alt[nalt].mult = (unsigned char)m;
         alt[nalt].ident[0] = 0;
         if (s[x] == '<') {

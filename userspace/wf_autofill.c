@@ -723,6 +723,8 @@ int wf_autofill_dst_offset(const char *utc, int tz_min, int rule) {
 
 uint32_t wf_autofill_day_rule(const char *utc, int tz_min, int rule) {
     int32_t t, l;
+    /* rule 0: exactly wf_autofill_day_tz (which takes a bare date at
+     * offset 0) */
     if (rule == WF_AF_DST_NONE) return wf_autofill_day_tz(utc, tz_min);
     if (tz_min < -720 || tz_min > 840 || rule < WF_AF_DST_NONE || rule > WF_AF_DST_AU) return 0;
     t = utc_minutes(utc);

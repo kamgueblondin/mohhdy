@@ -90,6 +90,11 @@ static void test_day_moves(void) {
     TEST_ASSERT_EQUAL((int)d, (int)wf_autofill_day_rule("202607011330", 600, WF_AF_DST_NONE));
     /* in January it is 00:30 on the next day */
     TEST_ASSERT_EQUAL((int)wf_autofill_day("20260116"), (int)wf_autofill_day_rule("202601151330", 600, WF_AF_DST_AU));
+    /* rule 0 is the Lot 90 day: a bare date at offset 0 is a day, the
+     * rules need the time */
+    TEST_ASSERT_EQUAL((int)d, (int)wf_autofill_day_rule("20260701", 0, WF_AF_DST_NONE));
+    TEST_ASSERT_EQUAL(0, (int)wf_autofill_day_rule("20260701", 0, WF_AF_DST_EU));
+    TEST_ASSERT_EQUAL(-1, wf_autofill_dst_offset("20260701", 0, WF_AF_DST_NONE));
     /* the end of the range */
     TEST_ASSERT_EQUAL((int)WF_AF_DAY_MAX, (int)wf_autofill_day_rule("219912312259", 0, WF_AF_DST_AU));
     TEST_ASSERT_EQUAL(0, (int)wf_autofill_day_rule("219912312300", 0, WF_AF_DST_AU));
