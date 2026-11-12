@@ -37,7 +37,17 @@
  * elements it matches like any other property and is inherited by their
  * descendants; a value with var() is then read again for each element it
  * applies to, with that element's properties. Names declared on :root,
- * html or body only keep the sheet-wide path (wf_site_var). */
+ * html or body only keep the sheet-wide path (wf_site_var).
+ * Lot 90: background-image (url(), linear and radial gradients, up to
+ * four layers), background-position, -size and -repeat, and the
+ * background shorthand split into them (wf_cssbg.c); list-style-image and
+ * list-style-position (list-style sets the three list properties). Long
+ * values sit in a pool of WF_SITE_LONGS strings. A declaration value may
+ * hold WF_SITE_VAL - 1 bytes (Lot 89: 47, a longer one was cut); a longer
+ * one is dropped and counted, never cut. Font sizes that mix em with px
+ * (calc(1em + 2px)) and rem lengths when the root font size is not 16 px
+ * are resolved by the reader against the parent's (or the root's) font
+ * size and written in px. */
 #ifndef WF_SITECSS_H
 #define WF_SITECSS_H
 #include <stdint.h>
@@ -66,6 +76,10 @@
 #define WF_SITE_STYLES 8
 #define WF_SITE_SCOPE_DEPTH 4
 #define WF_SITE_SCOPE_ALTS 3        /* Lot 89: selectors in a start or end list */
+#define WF_SITE_VAL 128             /* Lot 90: a declaration value, NUL included (Lot 89: 48) */
+#define WF_SITE_LONGS 32            /* Lot 90: long values (backgrounds, list images) */
+#define WF_SITE_LONG 128
+#define WF_SITE_LKINDS 6            /* Lot 90: the kinds kept in the pool */
 
 enum {
     WF_SITE_DISP_NONE = 3,
@@ -128,9 +142,16 @@ enum {
     WF_SITE_K_FSIZE = 14,     /* font-size: token, inherits */
     WF_SITE_K_INDENT = 15,    /* text-indent: token, inherits */
     WF_SITE_K_LSPACE = 16,    /* letter-spacing: token, inherits */
-    WF_SITE_K_MAX = 16,
-    WF_SITE_K_ALL = 17,       /* the all shorthand: a CSS-wide keyword on every kind */
-    WF_SITE_K_VAR = 18        /* Lot 89: a custom property set on the elements a rule matches */
+    /* Lot 90: pool kinds (WF_SITE_K_BGIMG + i, i < WF_SITE_LKINDS) */
+    WF_SITE_K_BGIMG = 17,     /* background-image: the layer list */
+    WF_SITE_K_BGPOS = 18,     /* background-position */
+    WF_SITE_K_BGSIZE = 19,    /* background-size */
+    WF_SITE_K_BGREP = 20,     /* background-repeat */
+    WF_SITE_K_LIMG = 21,      /* list-style-image, inherits */
+    WF_SITE_K_LPOS = 22,      /* list-style-position, inherits */
+    WF_SITE_K_MAX = 22,
+    WF_SITE_K_ALL = 23,       /* the all shorthand: a CSS-wide keyword on every kind */
+    WF_SITE_K_VAR = 24        /* Lot 89: a custom property set on the elements a rule matches */
 };
 /* Lot 89: a compound that names the scoping root */
 enum {
@@ -203,6 +224,11 @@ typedef struct {
      * rank of the declaration that won on this element (0 inherited) */
     uint8_t vbind[WF_SITE_VNAMES];
     int vrank[WF_SITE_VNAMES];
+    /* Lot 90: the pool kinds: value index + 1 in wf_site_t.lpool (0
+     * none), 1 = from initial (not passed on) / 2 = a value the page
+     * gave, and the rank of the winning declaration */
+    uint8_t lv[WF_SITE_LKINDS], lv_val[WF_SITE_LKINDS];
+    int lv_rank[WF_SITE_LKINDS];
 } wf_site_node_t;
 
 typedef struct {
@@ -251,7 +277,8 @@ typedef struct {
      * declaration "dprop: draw" is read again for each element */
     uint8_t deferred;
     char dprop[20];
-    char draw[48];
+    char draw[WF_SITE_VAL];      /* Lot 90: 128 (Lot 89: 48) */
+    uint8_t lidx;                 /* Lot 90: a pool kind's value, index + 1 in lpool */
 } wf_site_rule_t;
 
 /* Lot 88: one @scope rule. A root is an element that matches start (or,
@@ -319,6 +346,13 @@ typedef struct {
     int var_bound;                /* elements with a custom property of their own */
     int deferred_hits;            /* declarations read again for one element */
     int deferred_dropped;         /* ... and invalid there (dropped on that element) */
+    /* Lot 90 */
+    char lpool[WF_SITE_LONGS][WF_SITE_LONG];
+    int nlongs, dropped_longs;    /* pool entries; values left out because it was full */
+    int long_values;              /* declarations dropped because the value was too long */
+    int fs[WF_SITE_NODES];        /* font size of each element, px thousandths */
+    int root_fs;                  /* the root element's (rem), px thousandths */
+    int len_resolved, len_dropped;   /* lengths the reader resolved; out of bounds there */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */

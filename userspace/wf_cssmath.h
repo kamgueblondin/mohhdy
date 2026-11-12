@@ -12,7 +12,9 @@
  * compared without the parent size: refused). The result is one token
  * with at most two decimals ("24.5px", "1.25em"), or refused when it has
  * both parts. Bounded: |value| <= 10000 px, numbers <= 10000, nesting 8,
- * 32-bit arithmetic only (no 64-bit division in the guest). Host tested
+ * 32-bit arithmetic only (no 64-bit division in the guest). Lot 90: the
+ * reader keeps an expression that mixes parts (or uses rem) and resolves
+ * it once the parent and root font sizes are known (wf_css_math_px). Host tested
  * (tests/unit/userspace/test_lot88_cssmath.c). */
 #ifndef WF_CSSMATH_H
 #define WF_CSSMATH_H
@@ -28,4 +30,13 @@
 int wf_css_math(const char *s, int vw, int vh, char *out, int cap);
 /* 1 when s starts with calc( min( max( or clamp( (ASCII case-insensitive) */
 int wf_css_is_math(const char *s);
+/* Lot 90: s (a length such as "1.5rem", or calc()/min()/max()/clamp()
+ * mixing em, %, rem and px) in px thousandths, with em and % taken
+ * against em_px and rem against rem_px (thousandths of a px, 1..10^7).
+ * 1 and *px set; 0 for an empty string; -1 when it is not a length or
+ * cannot be resolved. min() and clamp() compare any units then. */
+int wf_css_math_px(const char *s, int vw, int vh, int em_px, int rem_px, int *px);
+/* Lot 90: "N.NNunit" (at most two decimals, half away from zero) for a
+ * value in thousandths; the length, -1 when cap is too small. */
+int wf_css_token(int milli, const char *unit, char *out, int cap);
 #endif

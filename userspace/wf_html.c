@@ -88,7 +88,9 @@ int wf_html_sitecss_scope(char *out, int cap) { return wf_site_scope_text(&g_sit
 int wf_html_sitecss_vars(char *out, int cap) { return wf_site_vars_text(&g_site, out, cap); }
 
 static void ob_style(ob_t *b, int offset) {
-    char sty[320];   /* Lot 88: five more properties can be passed on */
+    /* Lot 88: five more properties can be passed on; Lot 90: six long
+     * values (backgrounds, list images) of up to 127 bytes each */
+    static char sty[1280];
     if (!g_sitecss) return;
     if (wf_site_style_attr(&g_site, offset, sty, (int)sizeof(sty)) > 0) ob_s(b, sty);
 }

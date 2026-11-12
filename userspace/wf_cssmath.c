@@ -8,6 +8,9 @@ typedef struct { int px, em, len; } mv_t;     /* thousandths; len 0: a plain num
 typedef struct {
     const char *s;
     int i, depth, vw, vh, bad;
+    /* Lot 90: ctx set: em and % are em_px thousandths of a px each, rem
+     * is rem_px; every value is then a px value */
+    int ctx, em_px, rem_px;
 } mp_t;
 
 static char lc(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
@@ -83,13 +86,13 @@ static mv_t with_unit(mp_t *p, int n) {
     if (pre(p->s + p->i, "px")) { p->i += 2; v.px = n; }
     else if (pre(p->s + p->i, "pt")) { p->i += 2; v.px = div_milli(mul_milli(n, 4000, &p->bad), 3000, &p->bad); }
     else if (pre(p->s + p->i, "pc")) { p->i += 2; v.px = mul_milli(n, 16000, &p->bad); }
-    else if (pre(p->s + p->i, "rem")) { p->i += 3; v.px = mul_milli(n, 16000, &p->bad); }
-    else if (pre(p->s + p->i, "em")) { p->i += 2; v.em = n; }
+    else if (pre(p->s + p->i, "rem")) { p->i += 3; v.px = mul_milli(n, p->ctx ? p->rem_px : 16000, &p->bad); }
+    else if (pre(p->s + p->i, "em")) { p->i += 2; if (p->ctx) v.px = mul_milli(n, p->em_px, &p->bad); else v.em = n; }
     else if (pre(p->s + p->i, "vmin")) { p->i += 4; v.px = mul_milli(n, (vw < vh ? vw : vh) * 10, &p->bad); }
     else if (pre(p->s + p->i, "vmax")) { p->i += 4; v.px = mul_milli(n, (vw > vh ? vw : vh) * 10, &p->bad); }
     else if (pre(p->s + p->i, "vw")) { p->i += 2; v.px = mul_milli(n, vw * 10, &p->bad); }
     else if (pre(p->s + p->i, "vh")) { p->i += 2; v.px = mul_milli(n, vh * 10, &p->bad); }
-    else if (p->s[p->i] == '%') { p->i++; v.em = n / 100; }
+    else if (p->s[p->i] == '%') { p->i++; if (p->ctx) v.px = mul_milli(n / 100, p->em_px, &p->bad); else v.em = n / 100; }
     else if ((p->s[p->i] >= 'a' && p->s[p->i] <= 'z') || (p->s[p->i] >= 'A' && p->s[p->i] <= 'Z')) p->bad = 1;
     else { v.len = 0; v.px = n; }
     return v;
@@ -227,7 +230,7 @@ int wf_css_is_math(const char *s) {
 }
 
 /* "N.NNunit" with at most two decimals, rounded half away from zero */
-static int put_token(int milli, const char *unit, char *out, int cap) {
+int wf_css_token(int milli, const char *unit, char *out, int cap) {
     int n = 0, neg = milli < 0, v, whole, frac, k;
     char t[16];
     v = (abs_i(milli) + 5) / 10;              /* hundredths */
@@ -259,10 +262,29 @@ int wf_css_math(const char *s, int vw, int vh, char *out, int cap) {
     out[0] = 0;
     if (!wf_css_is_math(s)) return 0;
     p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
+    p.ctx = 0; p.em_px = p.rem_px = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i] || !v.len) return -1;
     if (v.px && v.em) return -1;
-    if (v.em) return put_token(v.em, "em", out, cap) < 0 ? -1 : 1;
-    return put_token(v.px, "px", out, cap) < 0 ? -1 : 1;
+    if (v.em) return wf_css_token(v.em, "em", out, cap) < 0 ? -1 : 1;
+    return wf_css_token(v.px, "px", out, cap) < 0 ? -1 : 1;
+}
+
+/* Lot 90: the value in px against a known em and root size */
+int wf_css_math_px(const char *s, int vw, int vh, int em_px, int rem_px, int *px) {
+    mp_t p;
+    mv_t v;
+    if (!s || !px) return -1;
+    *px = 0;
+    if (!s[0]) return 0;
+    if (em_px <= 0 || em_px > WF_CSSMATH_MAX || rem_px <= 0 || rem_px > WF_CSSMATH_MAX) return -1;
+    p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
+    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px;
+    v = factor(&p);
+    ws(&p);
+    if (p.bad || p.s[p.i]) return -1;
+    if (!v.len && v.px) return -1;              /* a plain number other than 0 */
+    *px = v.px;
+    return 1;
 }
