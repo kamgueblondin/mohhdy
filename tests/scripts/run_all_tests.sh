@@ -281,7 +281,7 @@ run_test() {
             extra_src="$extra_src $BASE_DIR/userspace/wf_csslink.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c $BASE_DIR/userspace/wf_cssbg.c $BASE_DIR/userspace/wf_cssprop.c $BASE_DIR/userspace/wf_http.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
-        test_lot87_fill.c|test_lot88_site.c|test_lot89_fillage.c|test_lot90_fill.c|test_lot90_fillgen.c|test_lot90_psl.c)
+        test_lot87_fill.c|test_lot88_site.c|test_lot89_fillage.c|test_lot90_fill.c|test_lot90_fillgen.c|test_lot90_psl.c|test_lot91_fill.c|test_lot91_dst.c|test_lot91_dststore.c)
             extra_src="$extra_src $BASE_DIR/userspace/wf_autofill.c $BASE_DIR/userspace/wf_regdom.c $BASE_DIR/userspace/wf_idna.c $BASE_DIR/userspace/wf_formfill.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_qstring.c $BASE_DIR/userspace/wf_entity.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;

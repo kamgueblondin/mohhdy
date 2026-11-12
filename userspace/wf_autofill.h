@@ -38,6 +38,8 @@ typedef struct {
     int tz_min;             /* local time offset from UTC, minutes (-720..840) */
     uint32_t touched;       /* values accepted from the list (wf_autofill_touch) */
     uint32_t expired;       /* values the automatic expiry forgot */
+    /* Lot 91 */
+    int dst;                /* summer time rule, WF_AF_DST_* (0 none) */
 } wf_autofill_t;
 
 void wf_autofill_init(wf_autofill_t *a);
@@ -139,6 +141,32 @@ uint32_t wf_autofill_day_tz(const char *utc, int tz_min);
 int wf_autofill_status(const wf_autofill_t *a, char *out, int cap);
 /* One line per value: "autofill value HOST NAME IDX Nd" or "... undated". */
 int wf_autofill_value_ages(const wf_autofill_t *a, char *out, int cap);
+
+/* ---- Lot 91: summer time rules -------------------------------------
+ * Lot 90 took a fixed offset. A rule adds 60 minutes to the offset during
+ * summer time, so the local date follows the clock change:
+ *   eu: last Sunday of March 01:00 UTC to last Sunday of October 01:00 UTC;
+ *   us: second Sunday of March 02:00 local standard time to first Sunday
+ *       of November 02:00 local summer time (01:00 standard);
+ *   au: (south) first Sunday of October 02:00 standard to first Sunday
+ *       of April 03:00 summer time (02:00 standard).
+ * tz_min stays the standard offset. The session file header gains
+ * " dst R" and the status line " dst R" when a rule is set. */
+enum { WF_AF_DST_NONE = 0, WF_AF_DST_EU = 1, WF_AF_DST_US = 2, WF_AF_DST_AU = 3 };
+/* 0, or -1 when rule is not one of WF_AF_DST_* */
+int wf_autofill_set_dst(wf_autofill_t *a, int rule);
+/* "eu", "us", "au", "off" (none); "" for an unknown rule */
+const char *wf_autofill_dst_name(int rule);
+/* the rule of "eu", "us", "au", "off" or "none"; -1 otherwise */
+int wf_autofill_dst_parse(const char *s);
+/* minutes the rule adds at that UTC instant "YYYYMMDDhhmm[ss]" for a zone
+ * of standard offset tz_min: 0 or 60; -1 when the text, the offset or
+ * the rule is not valid */
+int wf_autofill_dst_offset(const char *utc, int tz_min, int rule);
+/* the local day number with the rule (rule 0: wf_autofill_day_tz); 0
+ * when the text is not a valid date and time, or the local date is out of
+ * 1970..2199 */
+uint32_t wf_autofill_day_rule(const char *utc, int tz_min, int rule);
 
 int wf_autofill_save(const wf_autofill_t *a, char *out, int cap);
 int wf_autofill_load(wf_autofill_t *a, const char *text, int len);

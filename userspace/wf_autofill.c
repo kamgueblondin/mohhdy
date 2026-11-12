@@ -213,6 +213,8 @@ int wf_autofill_save(const wf_autofill_t *a, char *out, int cap) {
         p = app(out, cap, p, a->tz_min < 0 ? " tz -" : " tz ");
         p = app_u(out, cap, p, (uint32_t)(a->tz_min < 0 ? -a->tz_min : a->tz_min));
     }
+    /* Lot 91: " dst eu|us|au" when a rule is set */
+    if (p >= 0 && a->dst) { p = app(out, cap, p, " dst "); p = p < 0 ? -1 : app(out, cap, p, wf_autofill_dst_name(a->dst)); }
     p = p < 0 ? -1 : app(out, cap, p, "\n");
     if (p < 0) return -1;
     /* Lot 87: the older values first, oldest first, so a load that puts
@@ -251,15 +253,30 @@ static int pref(const char *s, const char *p) {
     return 1;
 }
 
-/* the settings after "MOHHDY-AUTOFILL 3": " expire N" (1..36500) and
- * " tz M" (-720..840), each at most once, in any order */
+/* the settings after "MOHHDY-AUTOFILL 3": " expire N" (1..36500),
+ * " tz M" (-720..840) and Lot 91 " dst R" (eu, us, au), each at most
+ * once, in any order */
 static int load_header(wf_autofill_t *t, const char *s) {
-    int seen_e = 0, seen_t = 0;
+    int seen_e = 0, seen_t = 0, seen_d = 0;
     while (*s) {
         int neg = 0, k = 0;
         uint32_t v = 0;
         if (*s != ' ') return -1;
         s++;
+        if (pref(s, "dst ") && !seen_d) {
+            /* Lot 91: " dst eu|us|au" */
+            char w[4];
+            int r;
+            s += 4;
+            while (k < 3 && s[k] >= 'a' && s[k] <= 'z') { w[k] = s[k]; k++; }
+            w[k] = 0;
+            r = wf_autofill_dst_parse(w);
+            if (r <= 0 || (s[k] && s[k] != ' ')) return -1;
+            (void)wf_autofill_set_dst(t, r);
+            s += k;
+            seen_d = 1;
+            continue;
+        }
         if (pref(s, "expire ") && !seen_e) { s += 7; seen_e = 1; }
         else if (pref(s, "tz ") && !seen_t) { s += 3; seen_t = 2; if (*s == '-') { neg = 1; s++; } }
         else return -1;
@@ -588,6 +605,133 @@ uint32_t wf_autofill_day_tz(const char *utc, int tz_min) {
     return day;
 }
 
+/* ---- Lot 91: daylight saving rules --------------------------------- */
+
+static const uint8_t g_mdays[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
+static int mlen(uint32_t y, uint32_t m) { return g_mdays[m - 1U] + (m == 2U && leap(y) ? 1 : 0); }
+
+/* day number (1970-01-01 = 1) of y-m-d; the date is valid */
+static int32_t ymd_day(uint32_t y, uint32_t m, uint32_t d) {
+    int32_t days = 0;
+    uint32_t i;
+    for (i = 1970U; i < y; i++) days += leap(i) ? 366 : 365;
+    for (i = 1U; i < m; i++) days += mlen(y, i);
+    return days + (int32_t)d;
+}
+
+/* 0 Sunday .. 6 Saturday; day 1 (1970-01-01) was a Thursday */
+static int wday(int32_t day) { return (int)((day - 1 + 4) % 7); }
+
+/* the year of a minute count from 1970-01-01 00:00 (>= 0) */
+static uint32_t year_of(int32_t min) {
+    int32_t day = min / 1440 + 1;
+    uint32_t y = 1970U;
+    while (day > (leap(y) ? 366 : 365)) { day -= leap(y) ? 366 : 365; y++; }
+    return y;
+}
+
+/* the n-th Sunday (1..5) of a month; n 9 the last one */
+static int32_t sunday(uint32_t y, uint32_t m, int n) {
+    if (n == 9) {
+        int32_t last = ymd_day(y, m, (uint32_t)mlen(y, m));
+        return last - wday(last);
+    } else {
+        int32_t first = ymd_day(y, m, 1U);
+        return first + (7 - wday(first)) % 7 + 7 * (n - 1);
+    }
+}
+
+/* minutes from 1970-01-01 00:00 UTC of "YYYYMMDDhhmm"; -1 invalid */
+static int32_t utc_minutes(const char *utc) {
+    uint32_t day = wf_autofill_day(utc);
+    int k, hh, mm;
+    if (!day) return -1;
+    for (k = 8; k < 12; k++) if (utc[k] < '0' || utc[k] > '9') return -1;
+    hh = (utc[8] - '0') * 10 + (utc[9] - '0');
+    mm = (utc[10] - '0') * 10 + (utc[11] - '0');
+    if (hh > 23 || mm > 59) return -1;
+    return (int32_t)(day - 1U) * 1440 + hh * 60 + mm;
+}
+
+/* 60 when the rule puts the instant t (UTC minutes) in summer time for
+ * a zone tz_min minutes from UTC (its standard time), else 0 */
+static int dst_shift(int32_t t, int tz_min, int rule) {
+    int32_t l = t + tz_min, a, b;
+    uint32_t y;
+    if (rule == WF_AF_DST_EU) {
+        /* last Sunday of March 01:00 UTC to last Sunday of October 01:00 UTC */
+        y = year_of(t);
+        a = (sunday(y, 3U, 9) - 1) * 1440 + 60;
+        b = (sunday(y, 10U, 9) - 1) * 1440 + 60;
+        return t >= a && t < b ? 60 : 0;
+    }
+    if (l < 0) return 0;
+    y = year_of(l);
+    if (rule == WF_AF_DST_US) {
+        /* second Sunday of March 02:00 standard to first Sunday of
+         * November 02:00 summer time (01:00 standard) */
+        a = (sunday(y, 3U, 2) - 1) * 1440 + 120;
+        b = (sunday(y, 11U, 1) - 1) * 1440 + 60;
+        return l >= a && l < b ? 60 : 0;
+    }
+    if (rule == WF_AF_DST_AU) {
+        /* southern: first Sunday of October 02:00 standard to first
+         * Sunday of April 03:00 summer time (02:00 standard) */
+        a = (sunday(y, 10U, 1) - 1) * 1440 + 120;
+        b = (sunday(y, 4U, 1) - 1) * 1440 + 120;
+        return l >= a || l < b ? 60 : 0;
+    }
+    return 0;
+}
+
+int wf_autofill_set_dst(wf_autofill_t *a, int rule) {
+    if (!a || rule < WF_AF_DST_NONE || rule > WF_AF_DST_AU) return -1;
+    a->dst = rule;
+    return 0;
+}
+
+const char *wf_autofill_dst_name(int rule) {
+    switch (rule) {
+    case WF_AF_DST_EU: return "eu";
+    case WF_AF_DST_US: return "us";
+    case WF_AF_DST_AU: return "au";
+    case WF_AF_DST_NONE: return "off";
+    default: return "";
+    }
+}
+
+int wf_autofill_dst_parse(const char *s) {
+    int k;
+    for (k = WF_AF_DST_NONE; k <= WF_AF_DST_AU; k++) {
+        const char *n = wf_autofill_dst_name(k);
+        int i = 0;
+        while (n[i] && s && s[i] == n[i]) i++;
+        if (s && !n[i] && !s[i]) return k;
+    }
+    if (s && s[0] == 'n' && s[1] == 'o' && s[2] == 'n' && s[3] == 'e' && !s[4]) return WF_AF_DST_NONE;
+    return -1;
+}
+
+int wf_autofill_dst_offset(const char *utc, int tz_min, int rule) {
+    int32_t t;
+    if (tz_min < -720 || tz_min > 840 || rule < WF_AF_DST_NONE || rule > WF_AF_DST_AU) return -1;
+    t = utc_minutes(utc);
+    if (t < 0) return -1;
+    return dst_shift(t, tz_min, rule);
+}
+
+uint32_t wf_autofill_day_rule(const char *utc, int tz_min, int rule) {
+    int32_t t, l;
+    if (rule == WF_AF_DST_NONE) return wf_autofill_day_tz(utc, tz_min);
+    if (tz_min < -720 || tz_min > 840 || rule < WF_AF_DST_NONE || rule > WF_AF_DST_AU) return 0;
+    t = utc_minutes(utc);
+    if (t < 0) return 0;
+    l = t + tz_min + dst_shift(t, tz_min, rule);
+    if (l < 0 || l / 1440 + 1 > (int32_t)WF_AF_DAY_MAX) return 0;
+    return (uint32_t)(l / 1440 + 1);
+}
+
 int wf_autofill_status(const wf_autofill_t *a, char *out, int cap) {
     int p = 0, i, vals = 0;
     if (!a || !out || cap < 2) return -1;
@@ -606,6 +750,9 @@ int wf_autofill_status(const wf_autofill_t *a, char *out, int cap) {
     p = app_u(out, cap, p, (uint32_t)(a->n < 0 ? 0 : a->n));
     p = p < 0 ? -1 : app(out, cap, p, " values ");
     p = app_u(out, cap, p, (uint32_t)vals);
+    /* Lot 91: the summer time rule, only when one is set (the Lot 90
+     * line is unchanged otherwise) */
+    if (p >= 0 && a->dst) { p = app(out, cap, p, " dst "); p = p < 0 ? -1 : app(out, cap, p, wf_autofill_dst_name(a->dst)); }
     p = p < 0 ? -1 : app(out, cap, p, "\n");
     if (p < 0) { out[0] = 0; return -1; }
     out[p] = 0;

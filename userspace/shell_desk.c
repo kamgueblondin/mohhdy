@@ -47,7 +47,8 @@ static void fill_clock(void) {
     char utc[16];
     int gone;
     utc[0] = 0;
-    gone = wf_autofill_tick(&g_fill, shell_rtc_utc(utc) == 0 ? wf_autofill_day_tz(utc, g_fill.tz_min) : 0U);
+    /* Lot 91: with the summer time rule the operator set */
+    gone = wf_autofill_tick(&g_fill, shell_rtc_utc(utc) == 0 ? wf_autofill_day_rule(utc, g_fill.tz_min, g_fill.dst) : 0U);
     if (gone > 0) (void)save_fill();
 }
 
@@ -91,6 +92,10 @@ int shell_desk_remember_form(const wf_form_page_t *p, int form, const char *url)
 
 int shell_desk_offers(const wf_form_page_t *p, int field, const char *url, wf_fill_offer_t *o, int cap) {
     ready();
+    /* Lot 91: a new day starts the expiry before anything is offered
+     * (Lot 90 ran it on stores and settings only, so a value past its
+     * limit was still offered after midnight until the next store) */
+    fill_clock();
     return wf_formfill_offers(&g_fill, p, field, url, o, cap);
 }
 
@@ -105,6 +110,7 @@ int shell_desk_apply_offer(wf_form_page_t *p, int field, int offer, const char *
     wf_fill_offer_t o[WF_FILL_OFFERS];
     int n;
     ready();
+    fill_clock();          /* Lot 91: the expiry before an offer */
     n = wf_formfill_offers(&g_fill, p, field, url, o, WF_FILL_OFFERS);
     if (offer < 0 || offer >= n) return -1;
     if (wf_formfill_apply(p, field, &o[offer]) != 0) return -1;
@@ -116,6 +122,7 @@ int shell_desk_fill_key(wf_form_page_t *p, int field, const char *url) {
     wf_fill_offer_t o[1];
     int n;
     ready();
+    fill_clock();          /* Lot 91: the expiry before an offer */
     n = wf_formfill_offers(&g_fill, p, field, url, o, 1);
     if (wf_formfill_key(&g_fill, p, field, url) != 0) return -1;
     if (n == 1) accepted(&o[0]);
@@ -142,6 +149,7 @@ int shell_desk_offer_at(const char *url, const char *name, int idx, char *out, i
     if (!url || !name || !name[0] || idx < 0) return -1;
     ready();
     if (wf_formfill_host(url, host, (int)sizeof(host)) != 0) return -1;
+    if (idx == 0) fill_clock();   /* Lot 91: the expiry before the list is offered */
     /* Lot 88: the host's values, then the other hosts of its site */
     if (wf_autofill_get_site(&g_fill, host, name, idx, out, cap, 0) != 0) { out[0] = 0; return -1; }
     for (n = 0; out[n]; n++) {}
@@ -330,6 +338,7 @@ int shell_desk_line(const char *line) {
                     print_string("autofill error not an absolute URL\n");
                     return 1;
                 }
+                fill_clock();      /* Lot 91: the expiry before the offers */
                 for (i = 0; i < WF_AF_SITE_MAX; i++) {
                     if (wf_autofill_get_site(&g_fill, host, w2, i, v, (int)sizeof(v), &other) != 0) break;
                     print_string("autofill offer ");
@@ -343,6 +352,26 @@ int shell_desk_line(const char *line) {
                 print_int(n);
                 print_string("\n");
             }
+            return 0;
+        }
+        if (pre(a, "dst")) {
+            /* Lot 91: autofill dst eu|us|au|off: the summer time rule on top
+             * of the tz offset (the standard time) */
+            int r;
+            a += 3;
+            skip(&a);
+            r = wf_autofill_dst_parse(a);
+            if (r < 0 || wf_autofill_set_dst(&g_fill, r) != 0) {
+                print_string("autofill error usage: autofill dst eu|us|au|off\n");
+                return 1;
+            }
+            fill_clock();
+            print_string("autofill dst ");
+            print_string(wf_autofill_dst_name(r));
+            print_string(" today ");
+            print_int((int)g_fill.today);
+            print_string("\n");
+            (void)save_fill();
             return 0;
         }
         if (pre(a, "status")) {
@@ -478,7 +507,7 @@ int shell_desk_line(const char *line) {
             (void)save_fill();
             return 0;
         }
-        print_string("autofill error usage: autofill [list|ages [values]|status|expire DAYS|off|tz MINUTES|utc|forget HOST [NAME [VALUE]]|forget-older DAYS|add HOST NAME VALUE|offers URL NAME]\n");
+        print_string("autofill error usage: autofill [list|ages [values]|status|expire DAYS|off|tz MINUTES|utc|dst eu|us|au|off|forget HOST [NAME [VALUE]]|forget-older DAYS|add HOST NAME VALUE|offers URL NAME]\n");
         return 1;
     }
     if (pre(line, "web-back")) return go(1);
