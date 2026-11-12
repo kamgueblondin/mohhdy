@@ -704,6 +704,19 @@ int ne2k_rx_header_check(const uint8_t header[NE2K_RX_HEADER_SIZE],
 int ne2k_rx_poll(ne2k_device_t* device, const ne2k_io_t* io,
                  uint8_t* frame, uint16_t frame_capacity,
                  uint16_t* frame_length);
+/* Lot 90: the card ring itself, without the hook below. */
+int ne2k_rx_poll_card(ne2k_device_t* device, const ne2k_io_t* io,
+                      uint8_t* frame, uint16_t frame_capacity,
+                      uint16_t* frame_length);
+/* Lot 90: the Ring 3 net worker moves frames off the card into a FIFO
+ * while it is idle (userspace/net_rxq.c). Every reader of the card (the
+ * Ring 3 stack, the kernel wire pump, the P2P and LLM clients, DHCP) goes
+ * through ne2k_rx_poll, so the worker installs a hook that serves the
+ * FIFO first (0 and the frame, nonzero when the FIFO is empty); then
+ * ne2k_rx_poll reads the card. No hook (the kernel never sets one): the
+ * card only, as before. */
+typedef int (*ne2k_rx_hook_t)(void* context, uint8_t* frame, uint16_t frame_capacity, uint16_t* frame_length);
+void ne2k_set_rx_hook(ne2k_rx_hook_t hook, void* context);
 /* Lit une trame puis décode son en-tête Ethernet et son ARP caller-owned. */
 int ne2k_rx_poll_arp(ne2k_device_t* device, const ne2k_io_t* io,
                      uint8_t* frame, uint16_t frame_capacity,

@@ -66,6 +66,14 @@ int net_rxq_pop(net_rxq_t* q, uint8_t* frame, uint16_t capacity, uint16_t* lengt
     return -1;
 }
 
+int net_rxq_read(net_rxq_t* q, net_rxq_poll_t poll, void* context, uint8_t* frame, uint16_t capacity,
+                 uint16_t* length) {
+    if (!frame || !length) return -1;
+    if (q && q->buf && net_rxq_pop(q, frame, capacity, length) == 0) return 0;
+    if (!poll) return -1;
+    return poll(context, frame, capacity, length) != 0 ? -1 : 0;
+}
+
 uint32_t net_rxq_drain(net_rxq_t* q, net_rxq_poll_t poll, void* context, uint8_t* scratch, uint32_t max) {
     uint32_t moved = 0U;
     uint16_t len;

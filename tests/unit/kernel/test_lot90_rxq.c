@@ -103,20 +103,19 @@ static uint8_t card_store(uint16_t length, uint8_t fill, uint16_t extra) {
 }
 
 
-static uint8_t frame[NE2K_ETHERNET_MAX_FRAME];
+static uint8_t frame[NET_RXQ_FRAME_MAX];   /* a full FIFO frame (pushed whole below) */
 static uint8_t scratch[NET_RXQ_FRAME_MAX];
 static uint8_t qmem[NET_RXQ_BYTES];
 static net_rxq_t q;
 
 static int card_poll(void* context, uint8_t* out, uint16_t capacity, uint16_t* length) {
     (void)context;
-    return ne2k_rx_poll(&dev, &io, out, capacity, length) != 0 ? -1 : 0;
+    return ne2k_rx_poll_card(&dev, &io, out, capacity, length) != 0 ? -1 : 0;
 }
 
-/* the worker's r3_poll: the FIFO, then the card */
+/* the worker's r3_poll and kernel wire pump: net_rxq_read */
 static int stack_poll(uint8_t* out, uint16_t capacity, uint16_t* length) {
-    if (net_rxq_pop(&q, out, capacity, length) == 0) return 0;
-    return card_poll(0, out, capacity, length);
+    return net_rxq_read(&q, card_poll, 0, out, capacity, length);
 }
 
 static void fifo_reset(void) {
@@ -244,6 +243,63 @@ void test_drain_max_per_round_and_empty_card(void) {
     TEST_ASSERT_EQUAL(0U, net_rxq_drain(&q, card_poll, 0, 0, 2U));
 }
 
+/* Lot 90 (the P2P regression found by qemu-p2p): a reader serves the
+ * frames the idle drain took off the card before newer card frames; a
+ * reader that went to the card first lost them for the kernel wire path */
+void test_read_serves_fifo_before_card(void) {
+    uint16_t len = 0U;
+    int k;
+    card_reset();
+    fifo_reset();
+    for (k = 0; k < 2; k++) TEST_ASSERT(card_store(200U, (uint8_t)(0x10 + k), 0U) != 0U);
+    TEST_ASSERT_EQUAL(2U, net_rxq_drain(&q, card_poll, 0, scratch, NET_RXQ_IDLE_MAX));
+    TEST_ASSERT(card_store(200U, 0x12, 0U) != 0U);
+    for (k = 0; k < 3; k++) {
+        TEST_ASSERT_EQUAL(0, net_rxq_read(&q, card_poll, 0, frame, sizeof(frame), &len));
+        TEST_ASSERT_EQUAL(200, len);
+        TEST_ASSERT_EQUAL(0x10 + k, frame[0]);
+    }
+    TEST_ASSERT_EQUAL(-1, net_rxq_read(&q, card_poll, 0, frame, sizeof(frame), &len));
+    TEST_ASSERT_EQUAL(0U, q.frames);
+    /* no FIFO: the card alone; no poll and an empty FIFO: nothing */
+    TEST_ASSERT(card_store(60U, 0x33, 0U) != 0U);
+    TEST_ASSERT_EQUAL(0, net_rxq_read(0, card_poll, 0, frame, sizeof(frame), &len));
+    TEST_ASSERT_EQUAL(0x33, frame[0]);
+    TEST_ASSERT_EQUAL(-1, net_rxq_read(&q, 0, 0, frame, sizeof(frame), &len));
+}
+
+/* Lot 90 (the P2P regression found by qemu-p2p): the P2P and LLM clients
+ * read the card with ne2k_rx_poll and know nothing of the FIFO; with the
+ * worker's hook they get the drained frames first, in order */
+static int fifo_hook(void* context, uint8_t* out, uint16_t capacity, uint16_t* length) {
+    (void)context;
+    return net_rxq_pop(&q, out, capacity, length);
+}
+
+void test_card_readers_see_the_fifo_first(void) {
+    uint16_t len = 0U;
+    int k;
+    card_reset();
+    fifo_reset();
+    for (k = 0; k < 3; k++) TEST_ASSERT(card_store(300U, (uint8_t)(0x40 + k), 0U) != 0U);
+    TEST_ASSERT_EQUAL(3U, net_rxq_drain(&q, card_poll, 0, scratch, NET_RXQ_IDLE_MAX));
+    TEST_ASSERT(card_store(300U, 0x43, 0U) != 0U);
+    /* without the hook a direct reader skips the drained frames */
+    TEST_ASSERT_EQUAL(0, ne2k_rx_poll(&dev, &io, frame, sizeof(frame), &len));
+    TEST_ASSERT_EQUAL(0x43, frame[0]);
+    TEST_ASSERT(card_store(300U, 0x44, 0U) != 0U);
+    ne2k_set_rx_hook(fifo_hook, 0);
+    for (k = 0; k < 3; k++) {
+        TEST_ASSERT_EQUAL(0, ne2k_rx_poll(&dev, &io, frame, sizeof(frame), &len));
+        TEST_ASSERT_EQUAL(300, len);
+        TEST_ASSERT_EQUAL(0x40 + k, frame[0]);
+    }
+    TEST_ASSERT_EQUAL(0, ne2k_rx_poll(&dev, &io, frame, sizeof(frame), &len));
+    TEST_ASSERT_EQUAL(0x44, frame[0]);
+    TEST_ASSERT(ne2k_rx_poll(&dev, &io, frame, sizeof(frame), &len) != 0);
+    ne2k_set_rx_hook(0, 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_fifo_order_wrap_and_bounds);
@@ -251,6 +307,8 @@ int main(void) {
     RUN_TEST(test_without_drain_the_card_refuses);
     RUN_TEST(test_drain_stops_when_full_and_order_is_kept);
     RUN_TEST(test_drain_max_per_round_and_empty_card);
+    RUN_TEST(test_read_serves_fifo_before_card);
+    RUN_TEST(test_card_readers_see_the_fifo_first);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

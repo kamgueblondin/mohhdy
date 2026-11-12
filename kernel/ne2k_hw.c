@@ -53,9 +53,25 @@ int ne2k_rx_header_check(const uint8_t header[NE2K_RX_HEADER_SIZE],
     return 0;
 }
 
+static ne2k_rx_hook_t g_rx_hook;
+static void* g_rx_hook_ctx;
+
+void ne2k_set_rx_hook(ne2k_rx_hook_t hook, void* context) {
+    g_rx_hook = hook;
+    g_rx_hook_ctx = context;
+}
+
 int ne2k_rx_poll(ne2k_device_t* device, const ne2k_io_t* io,
                  uint8_t* frame, uint16_t frame_capacity,
                  uint16_t* frame_length) {
+    if (g_rx_hook && frame && frame_length && g_rx_hook(g_rx_hook_ctx, frame, frame_capacity, frame_length) == 0)
+        return 0;
+    return ne2k_rx_poll_card(device, io, frame, frame_capacity, frame_length);
+}
+
+int ne2k_rx_poll_card(ne2k_device_t* device, const ne2k_io_t* io,
+                      uint8_t* frame, uint16_t frame_capacity,
+                      uint16_t* frame_length) {
     uint16_t base, page, payload_length = 0U;
     uint8_t header[NE2K_RX_HEADER_SIZE];
     uint8_t current_page;

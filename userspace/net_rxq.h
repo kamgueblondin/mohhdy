@@ -41,6 +41,13 @@ int net_rxq_push(net_rxq_t* q, const uint8_t* frame, uint16_t length);
 /* 0 and the oldest frame in frame / *length; -1 empty. A frame longer
  * than capacity is dropped (counted in oversize) and the next one tried. */
 int net_rxq_pop(net_rxq_t* q, uint8_t* frame, uint16_t capacity, uint16_t* length);
+/* Lot 90: every reader of the card goes through this: the oldest frame
+ * of the FIFO, else one from poll (0 and *length set), -1 when neither
+ * has one. A reader that polled the card directly would skip the frames
+ * the idle drain moved into the FIFO (they would wait for another reader,
+ * out of order, or forever). */
+int net_rxq_read(net_rxq_t* q, net_rxq_poll_t poll, void* context, uint8_t* frame, uint16_t capacity,
+                 uint16_t* length);
 /* Room for one more frame of length bytes: 1 or 0. */
 int net_rxq_room(const net_rxq_t* q, uint16_t length);
 /* Moves up to max frames from poll into the FIFO while there is room for

@@ -276,6 +276,8 @@ static void nic_report(void) {
     puts(" end\n");
 }
 
+static int card_poll(void* user, uint8_t* frame, uint16_t capacity, uint16_t* length);
+
 /* Drives the pending wire op to completion on this task's NIC. */
 static int nic_pump_loop(void) {
     os_net_nic_pump_t p;
@@ -295,7 +297,9 @@ static int nic_pump_loop(void) {
         }
         nic_ack();
         if (p.done) return p.result;
-        if (ne2k_rx_poll(&nic, &nic_io, nic_rx, sizeof(nic_rx), &length) == 0) {
+        /* Lot 90: the FIFO first (frames the idle drain took off the
+         * card), then the card, like r3_poll */
+        if (net_rxq_read(&rxq, card_poll, 0, nic_rx, sizeof(nic_rx), &length) == 0) {
             p.mode = OS_NET_NIC_PUMP_FRAME; p.rx = nic_rx; p.rx_length = length;
             nic_rx_frames++;
         } else {
@@ -449,20 +453,26 @@ static int r3_emit(void* context, const uint8_t* frame, uint16_t length) {
 
 static int card_poll(void* user, uint8_t* frame, uint16_t capacity, uint16_t* length) {
     (void)user;
-    return ne2k_rx_poll(&nic, &nic_io, frame, capacity, length) != 0 ? -1 : 0;
+    return ne2k_rx_poll_card(&nic, &nic_io, frame, capacity, length) != 0 ? -1 : 0;
+}
+
+/* Lot 90: the FIFO for every ne2k_rx_poll caller (ne2k.h) */
+static int fifo_hook(void* user, uint8_t* frame, uint16_t capacity, uint16_t* length) {
+    (void)user;
+    return net_rxq_pop(&rxq, frame, capacity, length);
 }
 
 static int r3_poll(void* user, uint8_t* frame, uint16_t capacity, uint16_t* length) {
     (void)user;
-    if (net_rxq_pop(&rxq, frame, capacity, length) == 0) { nic_rx_frames++; return 0; }
-    if (ne2k_rx_poll(&nic, &nic_io, frame, capacity, length) != 0) return -1;
+    if (net_rxq_read(&rxq, card_poll, 0, frame, capacity, length) != 0) return -1;
     nic_rx_frames++;
     return 0;
 }
 
-/* Lot 90: no relay request waiting. The LLM client reads the card itself
- * (not through r3_poll), so nothing is taken off the card while an LLM
- * session is in progress (phase bits 8..15 of its status word). */
+/* Lot 90: no relay request waiting. The LLM and P2P clients read the
+ * card with ne2k_rx_poll, which serves the FIFO first (fifo_hook); the
+ * drain still pauses during an LLM session (phase bits 8..15 of its status
+ * word) so a model download keeps the card to itself. */
 static void rxq_idle(void) {
     if (!nic_owned || ((kernel_llm_session_status() >> 8) & 0xffU) != 0U) return;
     rxq_idle_rounds++;
@@ -494,6 +504,7 @@ static void stack_publish(void) {
 
 static void stack_start(void) {
     (void)net_rxq_init(&rxq, rxq_mem, (uint32_t)sizeof(rxq_mem));
+    ne2k_set_rx_hook(fifo_hook, 0);   /* Lot 90: every card reader sees the FIFO first */
     net_stack_init(&stack);
     net_socket_reset_all();
     net_wire_reset();
