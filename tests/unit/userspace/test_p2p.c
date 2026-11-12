@@ -246,7 +246,7 @@ void test_failure_detection_and_relay(void) {
 }
 
 void test_rate_limit_and_stats(void) {
-    char rep[2048];
+    char rep[2048], want[128];
     int i, ok = 0, throttled = 0;
     setup(2, 0);
     run(2, 300);
@@ -272,23 +272,26 @@ void test_rate_limit_and_stats(void) {
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p stats ping"));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p stats ok tx_bytes "));
     TEST_ASSERT_EQUAL(-1, p2p_send_text(&g_n[0], &g_h[0], "nobody", "x"));
-    /* queue full: the ninth waiting message is refused and counted */
+    /* queue full: the (P2P_SHAPE_Q + 1)th waiting message is refused and
+     * counted. Lot 90 (converted, review point): the counts follow
+     * P2P_SHAPE_Q (16; Lot 88: 8, the literals 10, 11 and "queued 11") */
     g_n[0].rate_limit = 1;
     run(2, 120);
-    for (i = 0; i < 10; i++) (void)p2p_send_text(&g_n[0], &g_h[0], "beta", "q");
+    for (i = 0; i < P2P_SHAPE_Q + 2; i++) (void)p2p_send_text(&g_n[0], &g_h[0], "beta", "q");
     TEST_ASSERT_EQUAL(1U, g_n[0].qos.shaped_dropped);
     TEST_ASSERT_EQUAL(-2, p2p_send_text(&g_n[0], &g_h[0], "beta", "full"));
     g_n[0].rate_limit = 0;
     run(2, 200);
-    TEST_ASSERT_EQUAL(11U, g_n[0].qos.shaped_sent);
+    TEST_ASSERT_EQUAL((unsigned)(3 + P2P_SHAPE_Q), g_n[0].qos.shaped_sent);
     p2p_report(&g_n[0], &g_h[0], "qos", rep, sizeof(rep));
-    TEST_ASSERT_NOT_NULL(strstr(rep, " queued 11 shaped_sent 11 shaped_dropped 2"));
+    snprintf(want, sizeof(want), " queued %d shaped_sent %d shaped_dropped 2", 3 + P2P_SHAPE_Q, 3 + P2P_SHAPE_Q);
+    TEST_ASSERT_NOT_NULL(strstr(rep, want));
 }
 
 /* Lot 88 (US-068/US-073): the shaping queue keeps each peer's order and
  * a busy peer no longer locks a quieter one out of a full queue. */
 void test_lot88_shape_fair_and_ordered(void) {
-    char rep[2048], txt[8];
+    char rep[2048], txt[8], want[128];
     const char* p;
     int i, last;
     setup(3, 0);
@@ -296,39 +299,46 @@ void test_lot88_shape_fair_and_ordered(void) {
     g_n[0].rate_limit = 1;
     run(3, 120);
     memset(g_out, 0, sizeof(g_out));
-    /* one leaves on beta's budget, eight wait and fill the queue */
-    for (i = 0; i < 9; i++) {
-        txt[0] = 'b'; txt[1] = (char)('0' + i); txt[2] = 0;
+    /* one leaves on beta's budget, P2P_SHAPE_Q wait and fill the queue.
+     * Lot 90 (converted, review point): the counts follow P2P_SHAPE_Q (16;
+     * Lot 88: 8) and the labels have two digits (b00, b01, ...) */
+    for (i = 0; i < P2P_SHAPE_Q + 1; i++) {
+        snprintf(txt, sizeof(txt), "b%02d", i);
         TEST_ASSERT_EQUAL(i == 0 ? 0 : 1, p2p_send_text(&g_n[0], &g_h[0], "beta", txt));
     }
-    TEST_ASSERT_EQUAL(-2, p2p_send_text(&g_n[0], &g_h[0], "beta", "b9"));
+    TEST_ASSERT_EQUAL(-2, p2p_send_text(&g_n[0], &g_h[0], "beta", "bxx"));
     /* gamma has its own budget for the first; the second gets a slot from beta */
     TEST_ASSERT_EQUAL(0, p2p_send_text(&g_n[0], &g_h[0], "gamma", "g0"));
     TEST_ASSERT_EQUAL(1, p2p_send_text(&g_n[0], &g_h[0], "gamma", "g1"));
     p2p_report(&g_n[0], &g_h[0], "shape", rep, sizeof(rep));
-    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p shape depth 8 msg 8 bulk 0 queued 9 sent 0 dropped 0 evicted 1 refused 1"));
-    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p shape peer beta msg 7 bulk 0"));
+    snprintf(want, sizeof(want), "p2p shape depth %d msg %d bulk 0 queued %d sent 0 dropped 0 evicted 1 refused 1",
+             P2P_SHAPE_Q, P2P_SHAPE_Q, P2P_SHAPE_Q + 1);
+    TEST_ASSERT_NOT_NULL(strstr(rep, want));
+    snprintf(want, sizeof(want), "p2p shape peer beta msg %d bulk 0", P2P_SHAPE_Q - 1);
+    TEST_ASSERT_NOT_NULL(strstr(rep, want));
     TEST_ASSERT_NOT_NULL(strstr(rep, "p2p shape peer gamma msg 1 bulk 0"));
     g_n[0].rate_limit = 0;
     run(3, 300);
     p2p_report(&g_n[0], &g_h[0], "shape", rep, sizeof(rep));
-    TEST_ASSERT_NOT_NULL(strstr(rep, "p2p shape depth 0 msg 0 bulk 0 queued 9 sent 8 dropped 0 evicted 1"));
+    snprintf(want, sizeof(want), "p2p shape depth 0 msg 0 bulk 0 queued %d sent %d dropped 0 evicted 1",
+             P2P_SHAPE_Q + 1, P2P_SHAPE_Q);
+    TEST_ASSERT_NOT_NULL(strstr(rep, want));
     TEST_ASSERT_NULL(strstr(rep, "p2p shape peer "));
     TEST_ASSERT_NOT_NULL(strstr(g_out[2], "p2p msg from alpha: g1"));
-    /* beta got b0..b7 in order (b8 was pushed out for gamma) */
+    /* beta got b00..b(Q-1) in order (bQ was pushed out for gamma) */
     last = -1;
-    for (i = 0; i < 8; i++) {
-        char want[32];
-        strcpy(want, "p2p msg from alpha: b0");
-        want[21] = (char)('0' + i);
+    for (i = 0; i < P2P_SHAPE_Q; i++) {
+        snprintf(want, sizeof(want), "p2p msg from alpha: b%02d", i);
         p = strstr(g_out[1], want);
         TEST_ASSERT_NOT_NULL(p);
         TEST_ASSERT_TRUE((int)(p - g_out[1]) > last);
         last = (int)(p - g_out[1]);
     }
-    TEST_ASSERT_NULL(strstr(g_out[1], "p2p msg from alpha: b8"));
+    snprintf(want, sizeof(want), "p2p msg from alpha: b%02d", P2P_SHAPE_Q);
+    TEST_ASSERT_NULL(strstr(g_out[1], want));
     p2p_report(&g_n[0], &g_h[0], "qos", rep, sizeof(rep));
-    TEST_ASSERT_NOT_NULL(strstr(rep, " queued 9 shaped_sent 8 shaped_dropped 2"));
+    snprintf(want, sizeof(want), " queued %d shaped_sent %d shaped_dropped 2", P2P_SHAPE_Q + 1, P2P_SHAPE_Q);
+    TEST_ASSERT_NOT_NULL(strstr(rep, want));
 }
 
 void test_traffic_analysis(void) {
