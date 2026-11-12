@@ -2,13 +2,18 @@
  * autofill shared between hosts of one site (www.example.com and
  * login.example.com).
  *
- * Not the full Public Suffix List: a short hand-written list of the
+ * Not the full Public Suffix List: a hand-written list of the
  * multi-label public suffixes most often met (country second levels such
  * as co.uk or com.au, and hosting suffixes whose subdomains belong to
  * different owners such as github.io). Any other host is taken as
  * NAME.TLD. IP literals, single-label hosts (localhost) and a host that is
  * itself a public suffix have no registrable domain: they never share.
- * No heap, no table generated from outside data. */
+ * No heap, no table generated from outside data.
+ * Lot 90: 360 entries (Lot 88: 126) and the PSL rule forms: a
+ * wildcard "*.ck" (every label under ck is a public suffix) and an
+ * exception "!www.ck" (registrable although the wildcard covers it),
+ * applied as the PSL algorithm says (an exception wins, else the
+ * matching rule with the most labels, else the TLD). */
 #ifndef WF_REGDOM_H
 #define WF_REGDOM_H
 

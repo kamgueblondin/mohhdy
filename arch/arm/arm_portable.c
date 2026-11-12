@@ -257,6 +257,11 @@ int arm_port_regdom(void) {
      * through the Punycode of userspace/wf_idna.c */
     if (wf_regdom("www.b\xc3\xbc" "cher.example", out, (int)sizeof(out)) != 0 || !same_str(out, "xn--bcher-kva.example")) return 0;
     if (!wf_regdom_same_site("\xe4\xbe\x8b\xe5\xad\x90.example", "xn--fsqu00a.example")) return 0;
+    /* Lot 90: PSL wildcard and exception rules */
+    if (wf_regdom("a.b.ck", out, (int)sizeof(out)) != 0 || !same_str(out, "a.b.ck")) return 0;
+    if (wf_regdom("x.www.ck", out, (int)sizeof(out)) != 0 || !same_str(out, "www.ck")) return 0;
+    if (wf_regdom("x.city.kawasaki.jp", out, (int)sizeof(out)) != 0 || !same_str(out, "city.kawasaki.jp")) return 0;
+    if (wf_regdom("ward.kawasaki.jp", out, (int)sizeof(out)) != -1 || !wf_regdom_is_suffix("ward.kawasaki.jp")) return 0;
     return !wf_regdom_same_site("example.com", "evil-example.com");
 }
 
