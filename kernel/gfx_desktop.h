@@ -87,6 +87,10 @@ void gfx_desktop_web_nav(int w, int h, int which, gfx_rect_t *r);
 void gfx_desktop_web_origin(int w, int h, int *ox, int *oy, int *pw, int *ph);
 /* Lot 71: placed full-screen web / editor window (maximized by default,
  * restore / move / resize through its title buttons and grip). */
+/* Lot 90 (US-080): TV safe area margin per side in pixels (0 = none);
+ * windows and the dock stay inside, the margin band is dimmed. */
+void gfx_desktop_set_safe(int sx, int sy);
+void gfx_desktop_safe_rect(int w, int h, gfx_rect_t *r);
 void gfx_desktop_full_rect(int w, int h, gfx_rect_t *r);
 int gfx_desktop_full_maximized(void);
 /* UX5: viewer image (copied; 0 or a bad image clears). Returns 0 / -1. */

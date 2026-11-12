@@ -360,7 +360,7 @@ int plat_form_tv_line(const os_display_info_t* d, int applied_q, char* out, int 
     else f_cat(out, cap, safe ? ", not applied: ui.cfg or user scale" : ", not applied");
     f_cat(out, cap, ")\n");
     if (!(d->cea_flags & OS_DISPLAY_CEA_UNDERSCAN))
-        f_cat(out, cap, "display tv-hint overscan likely (no underscan bit): keep 5% edges clear, not applied\n");
+        f_cat(out, cap, "display tv-hint overscan likely (no underscan bit): the desktop keeps a 2.5% margin per side clear\n");
     return (int)f_len(out);
 }
 

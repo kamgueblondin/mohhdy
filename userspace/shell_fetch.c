@@ -737,7 +737,7 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
     if (wf_html_sitecss_report(out, cap) <= 0) scat(out, cap, "css none\n");
     {
         /* Lot 88: the @scope summary of the page */
-        char sc[64];
+        char sc[96];   /* Lot 90: 96 (the css-props line is up to 80) */
         if (wf_html_sitecss_scope(sc, (int)sizeof(sc)) > 0) {
             scat(out, cap, "css-scope ");
             scat(out, cap, sc);
@@ -746,6 +746,12 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
         /* Lot 89: custom properties set per element */
         if (wf_html_sitecss_vars(sc, (int)sizeof(sc)) > 0) {
             scat(out, cap, "css-vars ");
+            scat(out, cap, sc);
+            scat(out, cap, "\n");
+        }
+        /* Lot 90: @property registrations and declaration-time values */
+        if (wf_html_sitecss_props(sc, (int)sizeof(sc)) > 0) {
+            scat(out, cap, "css-props ");
             scat(out, cap, sc);
             scat(out, cap, "\n");
         }

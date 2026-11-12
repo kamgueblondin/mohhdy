@@ -86,6 +86,7 @@ int wf_html_sitecss_on(void) { return g_sitecss; }
 int wf_html_sitecss_report(char *out, int cap) { return wf_site_report(&g_site, out, cap); }
 int wf_html_sitecss_scope(char *out, int cap) { return wf_site_scope_text(&g_site, out, cap); }
 int wf_html_sitecss_vars(char *out, int cap) { return wf_site_vars_text(&g_site, out, cap); }
+int wf_html_sitecss_props(char *out, int cap) { return wf_site_props_text(&g_site, out, cap); }
 
 static void ob_style(ob_t *b, int offset) {
     /* Lot 88: five more properties can be passed on; Lot 90: six long
