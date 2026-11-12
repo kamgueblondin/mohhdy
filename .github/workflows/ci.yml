@@ -1277,8 +1277,8 @@ jobs:
           path: |
             test_logs/
 
-  # Lot 91: one boot of make qemu-lot91 (about 4 min locally, two of
-  # them are the guest clock crossing midnight on purpose)
+  # Lot 91: one boot of make qemu-lot91 (about 6 min locally, four to
+  # five of them wait for the guest clock to cross local midnight)
   lot91-reader:
     name: QEMU reader radial radii, gradians, background boxes, @property syntaxes, calc types, autofill summer time and expiry before offers (Lot 91)
     runs-on: ubuntu-latest

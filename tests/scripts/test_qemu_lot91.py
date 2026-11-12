@@ -46,6 +46,7 @@ SRV_LOG = os.path.join(g.LOG_DIR, "lot91-web-server.log")
 need, refuse = l88.need, l88.refuse
 RTC = "2026-07-01T10:30:00"
 DAY0 = (datetime.date(2026, 7, 1) - datetime.date(1970, 1, 1)).days + 1
+MARGIN_MIN = 4
 DATE_RE = re.compile(r"date ok (\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d) UTC")
 
 
@@ -144,18 +145,25 @@ def step_expiry(mon, proc):
     need(out, ["autofill expire 1 forgot 0"], "autofill expire 1")
     out = lw.run(mon, proc, "autofill add www.example.org user exp91", "autofill ", 20)
     need(out, ["autofill added"], "autofill add on 30 June")
+    # Local midnight a few minutes ahead: typing a command line costs about
+    # half a second per key, so the tz line and the first offers line take
+    # up to a minute. With one minute of margin (the first version) the
+    # guest crossed midnight before the first list in one run of two and
+    # the value was (rightly) forgotten there already.
     u, s = guest_utc(mon, proc)
-    if s > 40:
-        time.sleep(62 - s)
-        u, s = guest_utc(mon, proc)
-    tz = 1439 - u                        # local 23:59 on 1 July
+    tz = 1439 - u - MARGIN_MIN           # local 23:5x, MARGIN_MIN whole minutes to midnight
     out = lw.run(mon, proc, "autofill tz %d" % tz, "autofill tz ", 20)
-    need(out, ["autofill tz +%d today %d" % (tz, DAY0)], "autofill tz to 23:59")
+    need(out, ["autofill tz +%d today %d" % (tz, DAY0)], "autofill tz before midnight")
     out = lw.run(mon, proc, "autofill offers https://www.example.org/ user", "autofill offers ", 20)
+    u, s = guest_utc(mon, proc)
+    if u + tz >= 1440:
+        raise RuntimeError("setup too slow: local midnight passed before the first offer list was checked")
     need(out, ["autofill offer 0 exp91 host", "autofill offers 1"], "the value one day old is offered")
-    # the guest minute turns: local midnight, the value is two days old
-    _, s = guest_utc(mon, proc)
-    time.sleep(63 - s)
+    # wait on the guest clock until local midnight has passed
+    time.sleep(max(0, (1440 - (u + tz)) * 60 - s) + 3)
+    u, s = guest_utc(mon, proc)
+    if u + tz < 1440:
+        raise RuntimeError("the guest clock did not reach local midnight: utc minute %d tz %d" % (u, tz))
     out = lw.run(mon, proc, "autofill offers https://www.example.org/ user", "autofill offers ", 20)
     need(out, ["autofill offers 0"], "expiry before the offers after midnight")
     refuse(out, ["exp91"], "expiry before the offers after midnight")
@@ -164,7 +172,7 @@ def step_expiry(mon, proc):
          "autofill status after midnight")
     lw.run(mon, proc, "autofill expire off", "autofill expire ", 20)
     lw.run(mon, proc, "autofill tz utc", "autofill tz ", 20)
-    say("expiry before offers: a value from 30 June (expire 1) offered at 23:59 on 1 July, forgotten by "
+    say("expiry before offers: a value from 30 June (expire 1) offered before midnight on 1 July, forgotten by "
         "the first offer list after midnight (expired 1)")
 
 
