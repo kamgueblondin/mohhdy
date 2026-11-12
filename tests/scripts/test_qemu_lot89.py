@@ -99,8 +99,13 @@ def step_lengths(mon, proc, u):
     css = lw.run(mon, proc, "web-css", "css-scope ", 30)
     need(css, ["node p #calc89 display auto size 20px indent 1.5em",
                "node p #var89 display auto size 18px indent 3px",
-               "node p #cyc89 display auto size 20px",
-               "node p #mix89 display auto indent 1em"], "web-css lengths")
+               # Lot 90 (converted, review point): --a89 and --c89 form a
+               # cycle, guaranteed-invalid where declared (the root), so
+               # var(--a89, 30px) takes its fallback as CSS Variables 1 says
+               # (was: dropped, 20px kept), and calc(1em + 2px) is resolved against the 16 px
+               # font size (was: dropped, 1em kept)
+               "node p #cyc89 display auto size 30px",
+               "node p #mix89 display auto indent 18px"], "web-css lengths")
     # clamp() depends on the reader's viewport: between its two bounds
     m = re.search(r"node p #clamp89 display auto size (\d+)(?:\.(\d+))?px ls 2px", g.normalized_log(css))
     if not m or not 16 <= int(m.group(1)) <= 32:

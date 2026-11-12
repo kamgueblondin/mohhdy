@@ -567,3 +567,15 @@ int edid_cea_is_tv(const edid_cea_sum_t *s, int size_mm_w) {
     }
     return size_mm_w == 0;
 }
+
+int edid_overscan_margin(const edid_cea_sum_t *s, int size_mm_w, int w, int h, int *mx, int *my) {
+    int x = 0, y = 0, on = 0;
+    if (s && s->status == 0 && w > 0 && h > 0 && edid_cea_is_tv(s, size_mm_w) && !(s->flags & EDID_SUM_UNDERSCAN)) {
+        x = (w * 25 + 500) / 1000;
+        y = (h * 25 + 500) / 1000;
+        on = 1;
+    }
+    if (mx) *mx = x;
+    if (my) *my = y;
+    return on;
+}

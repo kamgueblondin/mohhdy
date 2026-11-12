@@ -387,6 +387,13 @@ int p2p_pace_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, in
     return 0;
 }
 
+/* Lot 90 (US-068/US-073): "p2p-shape weight msg|bulk N | age MS|off |
+ * cap N|off" changes the shaping queue; the line printed is its status. */
+int p2p_shape_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, int cap) {
+    if (!n) return 1;
+    return p2p_shape_command(&n->shape, argc, argv, out, cap);
+}
+
 /* Lot 6 (US-068/073): a data message over budget is queued (shaping),
  * not dropped. Returns 1 when queued, -2 when the queue is full.
  * Lot 88: the queue is p2p_shape.c (per-peer order, two classes, peers

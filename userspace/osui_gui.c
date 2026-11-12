@@ -943,6 +943,26 @@ static void web_offer_clear(void) {
     g_offer_n = 0; g_offer_sel = 0; g_offer_taken = 0;
 }
 
+/* Lot 90: the value picked from the list is accepted: the store dates
+ * it (page_offer_touch); counted for the tests and the status line */
+static unsigned g_offer_touches;
+static void web_offer_touch(const char *value) {
+    if (!g_wops || !g_wops->page_offer_touch || !value || !value[0] || !g_offer_name[0]) return;
+    if (g_wops->page_offer_touch(g_web_file, g_offer_name, value) >= 0) g_offer_touches++;
+}
+
+/* a value taken with Down / Up and still in the field when the list
+ * closes (focus moved, submit, Esc) counts as accepted */
+static void web_offer_commit(void) {
+    char cur[WE_FSTATE_VAL];
+    if (g_offer_ctl < 0 || !g_offer_taken || g_offer_sel < 0 || g_offer_sel >= g_offer_n) return;
+    if (we_form_value(&g_web, g_offer_ctl, cur, (int)sizeof(cur)) < 0) return;
+    if (scmp(cur, g_offer_list[g_offer_sel]) != 0) return;
+    web_offer_touch(g_offer_list[g_offer_sel]);
+}
+
+unsigned osui_gui_offer_touches(void) { return g_offer_touches; }
+
 static const we_node_t *web_ctl_node(int ctl) {
     int i;
     if (ctl < 0) return 0;
@@ -1028,7 +1048,11 @@ static int web_offer_step(int dir, char *out, int out_max) {
         gui_cat_u(m, (int)sizeof(m), (unsigned)g_offer_n);
     }
     app_out(out, out_max, "osui web autofill applied", m);
-    if (g_offer_n == 1) web_offer_clear();
+    if (g_offer_n == 1) {
+        /* one value: filled and the list closes, accepted */
+        web_offer_touch(g_offer_list[pick]);
+        web_offer_clear();
+    }
     return 1;
 }
 
@@ -1087,6 +1111,7 @@ static int web_offer_key(int wk, char *out, int out_max) {
         scpy(m, (int)sizeof(m), " name=");
         scat(m, (int)sizeof(m), g_offer_name);
         app_out(out, out_max, "osui web autofill closed", m);
+        web_offer_commit();
         web_offer_clear();
         return 1;
     }
@@ -1154,6 +1179,7 @@ static int web_offer_click(int cx, int cy, char *out, int out_max) {
     }
     scat(m, (int)sizeof(m), " click");
     app_out(out, out_max, "osui web autofill applied", m);
+    web_offer_touch(g_offer_list[row]);
     web_offer_clear();
     return 1;
 }
@@ -1192,13 +1218,14 @@ int osui_gui_offer_state(char *out, int cap) {
 
 static void web_form_result(int fr, char *out, int out_max) {
     char m[48];
-    if (fr == WE_FACT_SUBMIT) { web_offer_clear(); web_form_send(out, out_max); return; }
+    if (fr == WE_FACT_SUBMIT) { web_offer_commit(); web_offer_clear(); web_form_send(out, out_max); return; }
     if (fr == WE_FACT_CHANGED) (void)web_form_render();
     scpy(m, (int)sizeof(m), fr == WE_FACT_CHANGED ? " changed focus " : " same focus ");
     if (g_web_forms.focus < 0) scat(m, (int)sizeof(m), "none");
     else gui_cat_u(m, (int)sizeof(m), (unsigned)g_web_forms.focus);
     app_out(out, out_max, "osui web form2", m);
     if (g_web_forms.focus != g_offer_ctl) {
+        web_offer_commit();
         if (g_web_forms.focus >= 0 && fr == WE_FACT_CHANGED) web_offer_for_focus(out, out_max);
         else web_offer_clear();
     }

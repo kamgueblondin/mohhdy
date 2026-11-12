@@ -103,13 +103,21 @@ static void test_end_list(void) {
 }
 
 static void test_long_list_keeps_three(void) {
-    prep("@scope (.a, .b, .c, .d) { p { color: #0a0b0c } }",
-         "<div class=a><p id=pa>a</p></div><div class=c><p id=pc>c</p></div><div class=d><p id=pd>d</p></div>");
+    /* Lot 90 (converted, review point): the cap rose from three to six
+     * selectors (WF_SITE_SCOPE_ALTS); the four-selector list of Lot 89 is
+     * now whole, so the test uses seven: six are kept, the seventh is
+     * dropped with an error. */
+    prep("@scope (.a, .b, .c, .d, .e, .f, .g) { p { color: #0a0b0c } }",
+         "<div class=a><p id=pa>a</p></div><div class=c><p id=pc>c</p></div><div class=d><p id=pd>d</p></div>"
+         "<div class=f><p id=pf>f</p></div><div class=g><p id=pg>g</p></div>");
     TEST_ASSERT_EQUAL(1, g_d.nscopes);
     TEST_ASSERT_EQUAL(WF_SITE_SCOPE_ALTS, g_d.scope[0].nstart);
+    TEST_ASSERT_EQUAL(6, WF_SITE_SCOPE_ALTS);
     TEST_ASSERT_EQUAL(0x0a0b0c, by_id("pa")->color);
     TEST_ASSERT_EQUAL(0x0a0b0c, by_id("pc")->color);
-    TEST_ASSERT_EQUAL(0, by_id("pd")->color_set);
+    TEST_ASSERT_EQUAL(0x0a0b0c, by_id("pd")->color);
+    TEST_ASSERT_EQUAL(0x0a0b0c, by_id("pf")->color);
+    TEST_ASSERT_EQUAL(0, by_id("pg")->color_set);
     TEST_ASSERT_EQUAL(1, g_d.errors);
 }
 

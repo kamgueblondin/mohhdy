@@ -47,17 +47,28 @@ static int seq(const char *a, const char *b) {
 /* Lot 87: the new value goes first; the one it replaces moves into the
  * older list (newest first, the oldest falls off). A value already in the
  * list moves to the front instead of being kept twice. */
-static void push_value(wf_af_ent_t *e, const char *value) {
+/* Lot 90: each value keeps its date as it moves; the value put first is
+ * dated day (0, the clock unknown: a value already there keeps its own
+ * date, a new one is undated) */
+static void push_value(wf_af_ent_t *e, const char *value, uint32_t day) {
     int k, at = -1;
-    if (seq(e->value, value)) return;
+    uint32_t keep = 0;
+    if (seq(e->value, value)) { if (day) e->day = day; return; }
     for (k = 0; k < e->nold; k++) if (seq(e->old[k], value)) { at = k; break; }
     if (at < 0) {
         at = e->nold < WF_AF_HIST - 1 ? e->nold++ : WF_AF_HIST - 2;
-    }
+    } else keep = e->old_day[at];
     /* close the gap at 'at', then shift the rest down by one */
-    for (k = at; k > 0; k--) acpy(e->old[k], WF_AF_VALUE, e->old[k - 1], 0);
-    if (WF_AF_HIST > 1) acpy(e->old[0], WF_AF_VALUE, e->value, 0);
+    for (k = at; k > 0; k--) {
+        acpy(e->old[k], WF_AF_VALUE, e->old[k - 1], 0);
+        e->old_day[k] = e->old_day[k - 1];
+    }
+    if (WF_AF_HIST > 1) {
+        acpy(e->old[0], WF_AF_VALUE, e->value, 0);
+        e->old_day[0] = e->day;
+    }
     acpy(e->value, WF_AF_VALUE, value, 0);
+    e->day = day ? day : keep;
 }
 
 int wf_autofill_put(wf_autofill_t *a, const char *host, const char *name, const char *value, const char *type) {
@@ -69,8 +80,7 @@ int wf_autofill_put(wf_autofill_t *a, const char *host, const char *name, const 
     for (i = 0; i < WF_AF_MAX; i++) {
         if (!a->e[i].used) { if (free_i < 0) free_i = i; continue; }
         if (aeq(a->e[i].host, host) && aeq(a->e[i].name, name)) {
-            push_value(&a->e[i], value);
-            if (a->today) a->e[i].day = a->today;
+            push_value(&a->e[i], value, a->today);
             a->stored++;
             return 0;
         }
@@ -168,10 +178,14 @@ int wf_autofill_drop(wf_autofill_t *a, const char *host, const char *name, const
         return 0;
     }
     /* value list: [value, old0, old1...]; remove index 'at' and close up */
-    if (at == 0) acpy(e->value, WF_AF_VALUE, e->old[0], 0);
-    for (k = (at == 0 ? 0 : at - 1); k < e->nold - 1; k++) acpy(e->old[k], WF_AF_VALUE, e->old[k + 1], 0);
+    if (at == 0) { acpy(e->value, WF_AF_VALUE, e->old[0], 0); e->day = e->old_day[0]; }
+    for (k = (at == 0 ? 0 : at - 1); k < e->nold - 1; k++) {
+        acpy(e->old[k], WF_AF_VALUE, e->old[k + 1], 0);
+        e->old_day[k] = e->old_day[k + 1];
+    }
     e->nold--;
     azero(e->old[e->nold], (uint32_t)WF_AF_VALUE);
+    e->old_day[e->nold] = 0;
     return 1 + e->nold;
 }
 
@@ -192,7 +206,14 @@ static int app_u(char *o, int cap, int p, uint32_t v) {
 int wf_autofill_save(const wf_autofill_t *a, char *out, int cap) {
     int p = 0, i;
     if (!a || !out || cap < 16) return -1;
-    p = app(out, cap, p, "MOHHDY-AUTOFILL 2\n");
+    /* Lot 90: version 3, the settings on the header line */
+    p = app(out, cap, p, "MOHHDY-AUTOFILL 3");
+    if (p >= 0 && a->expire_days) { p = app(out, cap, p, " expire "); p = app_u(out, cap, p, a->expire_days); }
+    if (p >= 0 && a->tz_min) {
+        p = app(out, cap, p, a->tz_min < 0 ? " tz -" : " tz ");
+        p = app_u(out, cap, p, (uint32_t)(a->tz_min < 0 ? -a->tz_min : a->tz_min));
+    }
+    p = p < 0 ? -1 : app(out, cap, p, "\n");
     if (p < 0) return -1;
     /* Lot 87: the older values first, oldest first, so a load that puts
      * the lines in order rebuilds the same list */
@@ -208,17 +229,54 @@ int wf_autofill_save(const wf_autofill_t *a, char *out, int cap) {
             out[p++] = '\t';
             p = app(out, cap, p, k == 0 ? a->e[i].value : a->e[i].old[k - 1]);
             if (p < 0 || p >= cap - 1) return -1;
-            if (a->e[i].day) {
-                /* Lot 89: the day as a fourth field */
-                out[p++] = '\t';
-                p = app_u(out, cap, p, a->e[i].day);
-                if (p < 0 || p >= cap - 1) return -1;
+            {
+                /* Lot 89: the day as a fourth field; Lot 90: each value's */
+                uint32_t day = k == 0 ? a->e[i].day : a->e[i].old_day[k - 1];
+                if (day) {
+                    out[p++] = '\t';
+                    p = app_u(out, cap, p, day);
+                    if (p < 0 || p >= cap - 1) return -1;
+                }
             }
             out[p++] = '\n';
         }
     }
     out[p] = 0;
     return p;
+}
+
+static int pref(const char *s, const char *p) {
+    int i = 0;
+    while (p[i]) { if (s[i] != p[i]) return 0; i++; }
+    return 1;
+}
+
+/* the settings after "MOHHDY-AUTOFILL 3": " expire N" (1..36500) and
+ * " tz M" (-720..840), each at most once, in any order */
+static int load_header(wf_autofill_t *t, const char *s) {
+    int seen_e = 0, seen_t = 0;
+    while (*s) {
+        int neg = 0, k = 0;
+        uint32_t v = 0;
+        if (*s != ' ') return -1;
+        s++;
+        if (pref(s, "expire ") && !seen_e) { s += 7; seen_e = 1; }
+        else if (pref(s, "tz ") && !seen_t) { s += 3; seen_t = 2; if (*s == '-') { neg = 1; s++; } }
+        else return -1;
+        while (s[k] >= '0' && s[k] <= '9') {
+            if (k >= 5) return -1;
+            v = v * 10U + (uint32_t)(s[k] - '0');
+            k++;
+        }
+        if (!k) return -1;
+        s += k;
+        if (seen_t == 2) {
+            int m = neg ? -(int)v : (int)v;
+            if (wf_autofill_set_tz(t, m) != 0 || m == 0) return -1;
+            seen_t = 1;
+        } else if (wf_autofill_set_expire(t, v) != 0 || v == 0) return -1;
+    }
+    return 0;
 }
 
 int wf_autofill_load(wf_autofill_t *a, const char *text, int len) {
@@ -237,6 +295,9 @@ int wf_autofill_load(wf_autofill_t *a, const char *text, int len) {
         if (k == 0) continue;
         if (line == 1) {
             if (buf[0] != 'M') return -1;
+            if (!pref(buf, "MOHHDY-AUTOFILL 3")) continue;
+            /* Lot 90: " expire N" and " tz M" after the version */
+            if (load_header(&tmp, buf + 17) != 0) return -1;
             continue;
         }
         for (k = 0; buf[k]; k++) if (buf[k] == '\t') {
@@ -269,6 +330,9 @@ int wf_autofill_load(wf_autofill_t *a, const char *text, int len) {
         const uint8_t *s = (const uint8_t *)&tmp;
         uint32_t n = (uint32_t)sizeof(tmp);
         tmp.today = a->today;   /* Lot 89: the clock is not in the file */
+        tmp.touched = a->touched;
+        tmp.expired = a->expired;
+        tmp.expire_ran = 0;     /* Lot 90: the next tick runs the expiry */
         while (n--) *d++ = *s++;
     }
     return 0;
@@ -400,27 +464,179 @@ int wf_autofill_age(const wf_autofill_t *a, const char *host, const char *name) 
 }
 
 int wf_autofill_forget_older(wf_autofill_t *a, uint32_t days, int *undated) {
-    int i, n = 0, u = 0;
+    int v;
+    return wf_autofill_forget_older_values(a, days, undated, &v);
+}
+
+/* Lot 90: a value older than the limit goes; the others keep their order */
+static int too_old(const wf_autofill_t *a, uint32_t day, uint32_t days) {
+    return day && day < a->today && a->today - day > days;
+}
+
+int wf_autofill_forget_older_values(wf_autofill_t *a, uint32_t days, int *undated, int *values) {
+    int i, n = 0, u = 0, gone = 0;
     if (undated) *undated = 0;
+    if (values) *values = 0;
     if (!a || !a->today || days > 36500U) return -1;
     for (i = 0; i < WF_AF_MAX; i++) {
         wf_af_ent_t *e = &a->e[i];
+        int k, had0 = 0;
         if (!e->used) continue;
-        if (!e->day) {
-            /* no date: dated now, it expires days days from today */
-            e->day = a->today;
-            u++;
-            continue;
+        /* no date: dated now, it expires days days from today */
+        if (!e->day) { e->day = a->today; had0 = 1; }
+        for (k = 0; k < e->nold; k++) if (!e->old_day[k]) { e->old_day[k] = a->today; had0 = 1; }
+        if (had0) u++;
+        /* a date in the future (a clock set back) is kept; the oldest
+         * values first so the key's own list closes up as it goes */
+        for (k = e->nold - 1; k >= 0; k--) {
+            if (!too_old(a, e->old_day[k], days)) continue;
+            (void)wf_autofill_drop(a, e->host, e->name, e->old[k]);
+            gone++;
         }
-        /* a date in the future (a clock set back) is kept */
-        if (e->day < a->today && a->today - e->day > days) {
-            azero(e, (uint32_t)sizeof(*e));
-            a->n--;
-            n++;
+        if (too_old(a, e->day, days)) {
+            gone++;
+            if (wf_autofill_drop(a, e->host, e->name, e->value) == 0 && !e->used) n++;
         }
     }
     if (undated) *undated = u;
+    if (values) *values = gone;
     return n;
+}
+
+static const wf_af_ent_t *find_ent(const wf_autofill_t *a, const char *host, const char *name);
+
+int wf_autofill_value_age(const wf_autofill_t *a, const char *host, const char *name, int idx) {
+    const wf_af_ent_t *e = find_ent(a, host, name);
+    uint32_t day;
+    if (!e || !a->today || idx < 0 || idx > e->nold) return -1;
+    day = idx == 0 ? e->day : e->old_day[idx - 1];
+    if (!day) return -1;
+    return day >= a->today ? 0 : (int)(a->today - day);
+}
+
+static int ent_has(const wf_af_ent_t *e, const char *value) {
+    int k;
+    if (seq(e->value, value)) return 1;
+    for (k = 0; k < e->nold; k++) if (seq(e->old[k], value)) return 1;
+    return 0;
+}
+
+int wf_autofill_touch(wf_autofill_t *a, const char *host, const char *name, const char *value) {
+    wf_af_ent_t *e;
+    if (!a || !value) return -1;
+    e = find_ent_rw(a, host, name);
+    if (!e || !ent_has(e, value)) return -1;
+    push_value(e, value, a->today);
+    a->touched++;
+    return 0;
+}
+
+int wf_autofill_touch_site(wf_autofill_t *a, const char *host, const char *name, const char *value) {
+    int i;
+    if (!a || !host || !name || !value) return -1;
+    if (wf_autofill_touch(a, host, name, value) == 0) return 0;
+    for (i = 0; i < WF_AF_MAX; i++) {
+        wf_af_ent_t *e = &a->e[i];
+        if (!e->used || !aeq(e->name, name) || aeq(e->host, host)) continue;
+        if (!wf_regdom_same_site(e->host, host) || !ent_has(e, value)) continue;
+        push_value(e, value, a->today);
+        a->touched++;
+        return 1;
+    }
+    return -1;
+}
+
+int wf_autofill_set_expire(wf_autofill_t *a, uint32_t days) {
+    if (!a || days > 36500U) return -1;
+    a->expire_days = days;
+    a->expire_ran = 0;
+    return 0;
+}
+
+int wf_autofill_tick(wf_autofill_t *a, uint32_t day) {
+    int v = 0;
+    if (!a) return -1;
+    a->today = day;
+    if (!day) return -1;
+    if (!a->expire_days || a->expire_ran == day) return 0;
+    if (wf_autofill_forget_older_values(a, a->expire_days, 0, &v) < 0) return 0;
+    a->expire_ran = day;
+    a->expired += (uint32_t)v;
+    return v;
+}
+
+int wf_autofill_set_tz(wf_autofill_t *a, int minutes) {
+    if (!a || minutes < -720 || minutes > 840) return -1;
+    a->tz_min = minutes;
+    return 0;
+}
+
+uint32_t wf_autofill_day_tz(const char *utc, int tz_min) {
+    uint32_t day;
+    int k, hh, mm, m;
+    if (tz_min < -720 || tz_min > 840) return 0;
+    day = wf_autofill_day(utc);
+    if (!day || tz_min == 0) return day;
+    for (k = 8; k < 12; k++) if (utc[k] < '0' || utc[k] > '9') return 0;
+    hh = (utc[8] - '0') * 10 + (utc[9] - '0');
+    mm = (utc[10] - '0') * 10 + (utc[11] - '0');
+    if (hh > 23 || mm > 59) return 0;
+    m = hh * 60 + mm + tz_min;
+    if (m < 0) day--;
+    else if (m >= 1440) day++;
+    if (day == 0 || day > WF_AF_DAY_MAX) return 0;
+    return day;
+}
+
+int wf_autofill_status(const wf_autofill_t *a, char *out, int cap) {
+    int p = 0, i, vals = 0;
+    if (!a || !out || cap < 2) return -1;
+    for (i = 0; i < WF_AF_MAX; i++) if (a->e[i].used) vals += 1 + a->e[i].nold;
+    p = app(out, cap, p, "autofill status expire ");
+    p = app_u(out, cap, p, a->expire_days);
+    p = p < 0 ? -1 : app(out, cap, p, a->tz_min < 0 ? " tz -" : " tz ");
+    p = app_u(out, cap, p, (uint32_t)(a->tz_min < 0 ? -a->tz_min : a->tz_min));
+    p = p < 0 ? -1 : app(out, cap, p, " today ");
+    p = app_u(out, cap, p, a->today);
+    p = p < 0 ? -1 : app(out, cap, p, " touched ");
+    p = app_u(out, cap, p, a->touched);
+    p = p < 0 ? -1 : app(out, cap, p, " expired ");
+    p = app_u(out, cap, p, a->expired);
+    p = p < 0 ? -1 : app(out, cap, p, " keys ");
+    p = app_u(out, cap, p, (uint32_t)(a->n < 0 ? 0 : a->n));
+    p = p < 0 ? -1 : app(out, cap, p, " values ");
+    p = app_u(out, cap, p, (uint32_t)vals);
+    p = p < 0 ? -1 : app(out, cap, p, "\n");
+    if (p < 0) { out[0] = 0; return -1; }
+    out[p] = 0;
+    return p;
+}
+
+int wf_autofill_value_ages(const wf_autofill_t *a, char *out, int cap) {
+    int p = 0, i, k;
+    if (!a || !out || cap < 2) return -1;
+    out[0] = 0;
+    for (i = 0; i < WF_AF_MAX; i++) {
+        const wf_af_ent_t *e = &a->e[i];
+        if (!e->used) continue;
+        for (k = 0; k <= e->nold; k++) {
+            uint32_t day = k == 0 ? e->day : e->old_day[k - 1];
+            p = app(out, cap, p, "autofill value ");
+            p = p < 0 ? -1 : app(out, cap, p, e->host);
+            p = p < 0 ? -1 : app(out, cap, p, " ");
+            p = p < 0 ? -1 : app(out, cap, p, e->name);
+            p = p < 0 ? -1 : app(out, cap, p, " ");
+            p = app_u(out, cap, p, (uint32_t)k);
+            if (p >= 0 && day && a->today) {
+                p = app(out, cap, p, " ");
+                p = app_u(out, cap, p, day >= a->today ? 0U : a->today - day);
+                p = p < 0 ? -1 : app(out, cap, p, "d\n");
+            } else if (p >= 0) p = app(out, cap, p, " undated\n");
+            if (p < 0) { out[0] = 0; return -1; }
+        }
+    }
+    out[p] = 0;
+    return p;
 }
 
 int wf_autofill_ages(const wf_autofill_t *a, char *out, int cap) {

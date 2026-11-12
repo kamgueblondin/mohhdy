@@ -95,8 +95,15 @@ typedef struct {
      * highlighted row of the list). Values the key still holds, 0 when it
      * went, -1 when the value was not there. */
     int (*page_offer_drop)(const char *url, const char *name, const char *value);
+    /* Lot 90: a remembered value accepted from the list (Down with one
+     * value, a click on a row, or the field left / submitted while it
+     * still holds the value picked): the store dates it today. May be 0. */
+    int (*page_offer_touch)(const char *url, const char *name, const char *value);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
+/* Lot 90: remembered values accepted from the list so far (page_offer_touch
+ * calls that found the value). */
+unsigned osui_gui_offer_touches(void);
 /* Lot 87: the autofill list drawn under the focused field: up to max
  * display items (page pixels, like the page). Returns the count, 0 when no
  * list is open. Used by the scene and by host tests. */

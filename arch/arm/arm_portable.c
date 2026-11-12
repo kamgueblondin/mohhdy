@@ -231,6 +231,16 @@ int arm_port_cea(void) {
     if (!c.underscan || !c.basic_audio || !c.ycbcr444 || c.ycbcr422) return 0;
     if (edid_cea_best(&c, &w, &h, &hz) != 0) return 0;
     if (w != 1920 || h != 1080 || hz != 60) return 0;
+    {
+        /* Lot 90: this TV declares underscan, so no overscan margin; the
+         * same summary without the bit gets 2.5% per side */
+        edid_cea_sum_t sum;
+        int mx = -1, my = -1;
+        edid_cea_summarize(&c, 0, 2, &sum);
+        if (edid_overscan_margin(&sum, 0, 1920, 1080, &mx, &my) != 0 || mx != 0 || my != 0) return 0;
+        sum.flags = (uint8_t)(sum.flags & ~EDID_SUM_UNDERSCAN);
+        if (edid_overscan_margin(&sum, 0, 1920, 1080, &mx, &my) != 1 || mx != 48 || my != 27) return 0;
+    }
     b[5] ^= 1u;   /* a damaged block is refused */
     return edid_cea_parse(b, EDID_BLOCK, &c) == -2;
 }
@@ -257,6 +267,11 @@ int arm_port_regdom(void) {
      * through the Punycode of userspace/wf_idna.c */
     if (wf_regdom("www.b\xc3\xbc" "cher.example", out, (int)sizeof(out)) != 0 || !same_str(out, "xn--bcher-kva.example")) return 0;
     if (!wf_regdom_same_site("\xe4\xbe\x8b\xe5\xad\x90.example", "xn--fsqu00a.example")) return 0;
+    /* Lot 90: PSL wildcard and exception rules */
+    if (wf_regdom("a.b.ck", out, (int)sizeof(out)) != 0 || !same_str(out, "a.b.ck")) return 0;
+    if (wf_regdom("x.www.ck", out, (int)sizeof(out)) != 0 || !same_str(out, "www.ck")) return 0;
+    if (wf_regdom("x.city.kawasaki.jp", out, (int)sizeof(out)) != 0 || !same_str(out, "city.kawasaki.jp")) return 0;
+    if (wf_regdom("ward.kawasaki.jp", out, (int)sizeof(out)) != -1 || !wf_regdom_is_suffix("ward.kawasaki.jp")) return 0;
     return !wf_regdom_same_site("example.com", "evil-example.com");
 }
 
@@ -347,7 +362,11 @@ int arm_port_shape(void) {
     for (i = 0; i < P2P_SHAPE_Q; i++) { b[0] = (uint8_t)('a' + i); (void)p2p_shape_push(&q, 3U, 0, 1, b, 4, 60); }
     if (p2p_shape_push(&q, 3U, 0, 1, b, 4, 60) != P2P_SHAPE_REFUSED) return 0;
     if (p2p_shape_push(&q, 5U, 1, 2, b, 4, 60) != P2P_SHAPE_QUEUED_EVICT) return 0;
-    return p2p_shape_depth(&q, 3U, -1) == 7 && p2p_shape_depth(&q, 5U, 1) == 1 && d == 0;
+    if (!(p2p_shape_depth(&q, 3U, -1) == P2P_SHAPE_Q - 1 && p2p_shape_depth(&q, 5U, 1) == 1 && d == 0)) return 0;
+    /* Lot 90: weights and the age limit (every entry was pushed at 60 ms) */
+    if (p2p_shape_set_weight(&q, 0, 17) != -1 || p2p_shape_set_weight(&q, 0, 2) != 0 || p2p_shape_weight(&q, 0) != 2) return 0;
+    if (p2p_shape_set_max_age(&q, 30) != 0 || p2p_shape_expire(&q, 90) != 0) return 0;
+    return p2p_shape_expire(&q, 91) == P2P_SHAPE_Q && p2p_shape_depth(&q, 0, -1) == 0;
 }
 
 uint32_t arm_port_selftest(void) {

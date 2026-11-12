@@ -68,6 +68,8 @@ int wf_html_sitecss_report(char *out, int cap);
 int wf_html_sitecss_scope(char *out, int cap);
 /* Lot 89: per-element custom properties of the last page (wf_site_vars_text) */
 int wf_html_sitecss_vars(char *out, int cap);
+/* Lot 90: "registered N rejected R computed C invalid I unset U initial J" */
+int wf_html_sitecss_props(char *out, int cap);
 /* Plain text of a page for the console (tags removed, blocks on new
  * lines). Lot 71: every character reference decoded and the text written
  * as UTF-8 (the console decodes UTF-8), Latin-1 pages converted. */

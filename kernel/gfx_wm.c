@@ -11,6 +11,15 @@ int gfx_wm_btn(int title_h, int scale) {
     return n < GFX_WM_BTN ? GFX_WM_BTN : n;
 }
 
+int gfx_wm_title_h(int base, int scale) {
+    int q = scale >= 4 ? scale : (scale < 1 ? 1 : scale) * 4;
+    int t;
+    if (base <= 0) return 0;
+    if (q <= 4) return base;
+    t = (base * q + 2) / 4;
+    return t > base * 2 ? base * 2 : t;
+}
+
 void gfx_wm_button_pos(gfx_wm_rect_t win, int title_h, int scale, int which, int *x, int *y) {
     int k = which == GFX_WM_HIT_CLOSE ? 1 : (which == GFX_WM_HIT_MAX ? 2 : 3);
     int n = gfx_wm_btn(title_h, scale);

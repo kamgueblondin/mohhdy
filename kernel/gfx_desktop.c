@@ -31,6 +31,11 @@ static os_fb_scene_t g_last_scene;
 static int g_last_scene_valid = 0;
 /* Lot 69: one scale (quarters) for every window's buttons and grip */
 static int g_wm_q = 4;
+/* Lot 90: the title bars follow the chrome scale (gfx_wm_title_h); tdy is
+ * how much taller than at 1x they are, and everything under a title bar
+ * moves down by it. At 1x nothing moves. */
+static int tbar(int base) { return gfx_wm_title_h(base, g_wm_q); }
+static int tdy(int base) { return tbar(base) - base; }
 #define WM_HELD(s) ((s).drag || (s).resize)
 /* Lot 69: the full-screen web / editor window can be minimized to the
  * dock (the scene is then drawn as the plain desktop until restored) */
@@ -49,9 +54,36 @@ static void full_ready(void) {
     g_wm_full.maximized = 1;
     g_wm_full_ready = 1;
 }
+/* Lot 90 (US-080): the TV safe area. A TV that does not declare
+ * underscan likely crops its edges (overscan); gfx_fb sets a margin of
+ * 2.5% per side (5% of each dimension) and the desktop keeps every window
+ * and the dock inside it; the margin band is dimmed and outlined so it
+ * shows. 0 (the default) changes nothing. */
+static int g_safe_x, g_safe_y;
+void gfx_desktop_set_safe(int sx, int sy) {
+    g_safe_x = sx < 0 ? 0 : sx > 200 ? 200 : sx;
+    g_safe_y = sy < 0 ? 0 : sy > 200 ? 200 : sy;
+}
+void gfx_desktop_safe_rect(int w, int h, gfx_rect_t *r) {
+    int sx = g_safe_x * 4 < w ? g_safe_x : 0, sy = g_safe_y * 4 < h ? g_safe_y : 0;
+    r->x = sx; r->y = sy; r->w = w - 2 * sx; r->h = h - 2 * sy;
+}
+/* an area clipped to the safe rect (unchanged without a margin) */
+static void safe_clip(int w, int h, gfx_wm_rect_t *a) {
+    gfx_rect_t s;
+    int x1, y1;
+    gfx_desktop_safe_rect(w, h, &s);
+    x1 = a->x + a->w; y1 = a->y + a->h;
+    if (a->x < s.x) a->x = s.x;
+    if (a->y < s.y) a->y = s.y;
+    if (x1 > s.x + s.w) x1 = s.x + s.w;
+    if (y1 > s.y + s.h) y1 = s.y + s.h;
+    a->w = x1 - a->x; a->h = y1 - a->y;
+}
 static void full_geom(int w, int h, gfx_wm_rect_t *base, gfx_wm_rect_t *area) {
     int bar_h = h / 22 < 28 ? 28 : h / 22 > 40 ? 40 : h / 22;
     area->x = 8; area->y = bar_h + 8; area->w = w - 16; area->h = h - bar_h - 16;
+    safe_clip(w, h, area);
     base->w = area->w * 3 / 4; base->h = area->h * 3 / 4;
     base->x = area->x + (area->w - base->w) / 2;
     base->y = area->y + (area->h - base->h) / 2;
@@ -169,8 +201,8 @@ void gfx_desktop_image_rect(const gfx_rect_t *box, gfx_rect_t *out) {
     int gx, gy, gw, gh, w, h, k;
     out->x = out->y = out->w = out->h = 0;
     if (!g_img_valid || !box || box->w <= 0) return;
-    gx = box->x + 12; gy = box->y + GFX_APP_GRID_Y + GFX_APP_ROW_H + 4;
-    gw = box->w - 24; gh = box->h - GFX_APP_GRID_Y - GFX_APP_ROW_H - 4 - 30;
+    gx = box->x + 12; gy = box->y + GFX_APP_GRID_Y + GFX_APP_ROW_H + 4 + tdy(GFX_DESKTOP_APP_TITLE_H);
+    gw = box->w - 24; gh = box->h - GFX_APP_GRID_Y - GFX_APP_ROW_H - 4 - 30 - tdy(GFX_DESKTOP_APP_TITLE_H);
     if (gw <= 0 || gh <= 0) return;
     w = g_img.w; h = g_img.h;
     k = 1;
@@ -432,7 +464,7 @@ static void wm_release(int x, int y) {
         gfx_rect_t pl;
         gfx_desktop_full_rect(w, h, &pl);
         full_geom(w, h, &base, &area);
-        wm_done("full", gfx_wm_mouse(&g_wm_full, to_wm(&pl), base, GFX_DESKTOP_PANE_TITLE_H, g_wm_q, x, y, 0, 1));
+        wm_done("full", gfx_wm_mouse(&g_wm_full, to_wm(&pl), base, tbar(GFX_DESKTOP_PANE_TITLE_H), g_wm_q, x, y, 0, 1));
         gfx_fb_redraw_desktop();
         return;
     }
@@ -447,14 +479,14 @@ static void wm_release(int x, int y) {
     }
     if (WM_HELD(g_wm_chat))
         wm_done("chat", gfx_wm_mouse(&g_wm_chat, to_wm(&layout.chat_win.box), to_wm(&layout.chat_win.base),
-                                     GFX_DESKTOP_CHAT_TITLE_H, g_wm_q, x, y, 0, 1));
+                                     tbar(GFX_DESKTOP_CHAT_TITLE_H), g_wm_q, x, y, 0, 1));
     if (WM_HELD(g_wm_pane))
         wm_done("pane", gfx_wm_mouse(&g_wm_pane, to_wm(&layout.pane_win.box), to_wm(&layout.pane_win.base),
-                                     GFX_DESKTOP_PANE_TITLE_H, g_wm_q, x, y, 0, 1));
+                                     tbar(GFX_DESKTOP_PANE_TITLE_H), g_wm_q, x, y, 0, 1));
     for (i = 0; i < OS_FB_APPS; i++)
         if (WM_HELD(g_wm_app[i]))
             wm_done("app", gfx_wm_mouse(&g_wm_app[i], to_wm(&layout.app_win[i].box), to_wm(&layout.app_win[i].base),
-                                        GFX_DESKTOP_APP_TITLE_H, g_wm_q, x, y, 0, 1));
+                                        tbar(GFX_DESKTOP_APP_TITLE_H), g_wm_q, x, y, 0, 1));
     gfx_fb_redraw_desktop();
 }
 
@@ -512,9 +544,9 @@ static void gfx_desktop_handle_click(int x, int y) {
         int act;
         gfx_desktop_full_rect(w, h, &fb_box);
         full_geom(w, h, &base, &area);
-        if (in_rect(x, y, &fb_box)) wm_hit_log("full", -1, &fb_box, GFX_DESKTOP_PANE_TITLE_H);
+        if (in_rect(x, y, &fb_box)) wm_hit_log("full", -1, &fb_box, tbar(GFX_DESKTOP_PANE_TITLE_H));
         if (in_rect(x, y, &layout.pane_win.traffic)) act = GFX_WM_ACT_CLOSE;
-        else act = gfx_wm_mouse(&g_wm_full, to_wm(&fb_box), base, GFX_DESKTOP_PANE_TITLE_H, g_wm_q, x, y, 1, 0);
+        else act = gfx_wm_mouse(&g_wm_full, to_wm(&fb_box), base, tbar(GFX_DESKTOP_PANE_TITLE_H), g_wm_q, x, y, 1, 0);
         if (act == GFX_WM_ACT_CLOSE) {
             g_wm_full.closed = 0;
             wm_log("gfx wm full close\n");
@@ -547,12 +579,12 @@ static void gfx_desktop_handle_click(int x, int y) {
         gfx_rect_t box;
         if (!win_box(&layout, win, &box) || !in_rect(x, y, &box)) continue;
         if (layout.z[GFX_WIN_COUNT - 1] != win) z_raise(win);
-        if (win == GFX_WIN_CHAT) wm_hit_log("chat", -1, &box, GFX_DESKTOP_CHAT_TITLE_H);
-        else if (win == GFX_WIN_PANE) wm_hit_log("pane", -1, &box, GFX_DESKTOP_PANE_TITLE_H);
-        else wm_hit_log("app", win - GFX_WIN_APP0, &box, GFX_DESKTOP_APP_TITLE_H);
+        if (win == GFX_WIN_CHAT) wm_hit_log("chat", -1, &box, tbar(GFX_DESKTOP_CHAT_TITLE_H));
+        else if (win == GFX_WIN_PANE) wm_hit_log("pane", -1, &box, tbar(GFX_DESKTOP_PANE_TITLE_H));
+        else wm_hit_log("app", win - GFX_WIN_APP0, &box, tbar(GFX_DESKTOP_APP_TITLE_H));
         if (win == GFX_WIN_CHAT) {
             act = gfx_wm_mouse(&g_wm_chat, to_wm(&layout.chat_win.box), to_wm(&layout.chat_win.base),
-                               GFX_DESKTOP_CHAT_TITLE_H, g_wm_q, x, y, 1, 0);
+                               tbar(GFX_DESKTOP_CHAT_TITLE_H), g_wm_q, x, y, 1, 0);
             evt_focus(-1);
             if (act == GFX_WM_ACT_CLOSE || act == GFX_WM_ACT_MINIMIZE || act == GFX_WM_ACT_MAXIMIZE) {
                 wm_log(act == GFX_WM_ACT_CLOSE ? "gfx wm chat close\n"
@@ -567,7 +599,7 @@ static void gfx_desktop_handle_click(int x, int y) {
         }
         if (win == GFX_WIN_PANE) {
             act = gfx_wm_mouse(&g_wm_pane, to_wm(&layout.pane_win.box), to_wm(&layout.pane_win.base),
-                               GFX_DESKTOP_PANE_TITLE_H, g_wm_q, x, y, 1, 0);
+                               tbar(GFX_DESKTOP_PANE_TITLE_H), g_wm_q, x, y, 1, 0);
             evt_focus(-1);
             if (act == GFX_WM_ACT_CLOSE) {
                 wm_log("gfx wm pane close\n");
@@ -592,7 +624,7 @@ static void gfx_desktop_handle_click(int x, int y) {
         {
             int slot = win - GFX_WIN_APP0;
             act = gfx_wm_mouse(&g_wm_app[slot], to_wm(&layout.app_win[slot].box), to_wm(&layout.app_win[slot].base),
-                               GFX_DESKTOP_APP_TITLE_H, g_wm_q, x, y, 1, 0);
+                               tbar(GFX_DESKTOP_APP_TITLE_H), g_wm_q, x, y, 1, 0);
             if (act != GFX_WM_ACT_CLOSE) evt_focus(win);
             app_click(&layout, slot, act, x, y);
             return;
@@ -690,7 +722,9 @@ static void dock_geom(int w, int h, gfx_rect_t *box) {
     if (g_dock_left) {
         int dh = GFX_DESKTOP_DOCK * 44 + 16;
         if (dh > h - bar_h - 16) dh = h - bar_h - 16;
-        box->x = 8;
+        gfx_rect_t sa;
+        gfx_desktop_safe_rect(w, h, &sa);
+        box->x = 8 + sa.x;   /* Lot 90: inside the TV margin */
         box->y = bar_h + (h - bar_h - dh) / 2;
         box->w = 44;
         box->h = dh;
@@ -700,6 +734,12 @@ static void dock_geom(int w, int h, gfx_rect_t *box) {
     if (box->w > w - 16) box->w = w - 16;
     box->x = (w - box->w) / 2;
     box->y = h - 48;
+    {
+        /* Lot 90: above the TV margin */
+        gfx_rect_t sa;
+        gfx_desktop_safe_rect(w, h, &sa);
+        box->y -= sa.y;
+    }
     if (box->y < bar_h + 8) box->y = h - 36;
     box->h = 40;
 }
@@ -1431,7 +1471,7 @@ static void draw_input_tail(uint32_t *fb, int w, int h, int x, int y, const char
 static void draw_full_chrome(uint32_t *fb, int w, int h, int x, int y, int rw, int rh) {
     gfx_wm_rect_t r;
     r.x = x; r.y = y; r.w = rw; r.h = rh;
-    gfx_wm_draw_buttons(fb, w, h, w, r, GFX_DESKTOP_PANE_TITLE_H, g_wm_q);
+    gfx_wm_draw_buttons(fb, w, h, w, r, tbar(GFX_DESKTOP_PANE_TITLE_H), g_wm_q);
 }
 
 static void draw_wm_buttons(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, int title_h) {
@@ -1448,9 +1488,11 @@ static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh
     char lab[64];
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(18, 28, 36), 255);  /* opaque: no bleed from windows behind */
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
-    fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
-    draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_PANE_TITLE_H);
-    draw_title(fb, w, h, x + 14, y + 12, title ? title : "", rw - 80, RGB(232, 238, 244));
+    fill_rect(fb, w, h, x, y, rw, 32 + tdy(GFX_DESKTOP_PANE_TITLE_H), RGB(28, 44, 56));
+    draw_wm_buttons(fb, w, h, x, y, rw, rh, tbar(GFX_DESKTOP_PANE_TITLE_H));
+    draw_title(fb, w, h, x + 14, y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2, title ? title : "", rw - 80, RGB(232, 238, 244));
+    y += tdy(GFX_DESKTOP_PANE_TITLE_H);   /* Lot 90: the body under a taller title bar */
+    rh -= tdy(GFX_DESKTOP_PANE_TITLE_H);
     int top = y + 84 + TS(12);
     if (sc && sc->pane == OS_FB_PANE_BROWSER && g_addr_valid) {
         /* Lot 69: visible address / search bar, clickable (see mouse) */
@@ -1529,11 +1571,13 @@ static void draw_ide(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, c
     if (n > OS_FB_TERM_MAX) n = OS_FB_TERM_MAX;
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 14, 18), 255);
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
-    fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
+    fill_rect(fb, w, h, x, y, rw, 32 + tdy(GFX_DESKTOP_PANE_TITLE_H), RGB(28, 44, 56));
     draw_full_chrome(fb, w, h, x, y, rw, rh);
     maxc = (rw - 40) / CW;
     if (maxc < 8) maxc = 8;
-    if (n > 0) draw_title(fb, w, h, x + 56, y + 12, sc->term[0], rw - 100, RGB(232, 238, 244));
+    if (n > 0) draw_title(fb, w, h, x + 56, y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2, sc->term[0], rw - 100, RGB(232, 238, 244));
+    y += tdy(GFX_DESKTOP_PANE_TITLE_H);   /* Lot 90: the body under a taller title bar */
+    rh -= tdy(GFX_DESKTOP_PANE_TITLE_H);
     ty = y + 48;
     for (i = 1; i < n - 1; i++) {
         if (ty + row_h > y + rh - 40) break;
@@ -1567,9 +1611,9 @@ void gfx_desktop_web_origin(int w, int h, int *ox, int *oy, int *pw, int *ph) {
     gfx_rect_t r;
     gfx_desktop_full_rect(w, h, &r);   /* Lot 71: from the placed window */
     if (ox) *ox = r.x + 8;
-    if (oy) *oy = r.y + 40;
+    if (oy) *oy = r.y + 40 + tdy(GFX_DESKTOP_PANE_TITLE_H);   /* Lot 90: under the title bar */
     if (pw) *pw = r.w - 16;
-    if (ph) *ph = r.h - 48;
+    if (ph) *ph = r.h - 48 - tdy(GFX_DESKTOP_PANE_TITLE_H);
 }
 
 /* UX4: back (0) / forward (1) buttons of the web pane title bar */
@@ -1579,7 +1623,7 @@ void gfx_desktop_web_nav(int w, int h, int which, gfx_rect_t *r) {
     r->w = 28;
     r->h = 20;
     r->x = f.x + 8 + which * 34;   /* Lot 69: left, the shared buttons are on the right */
-    r->y = f.y + 6;
+    r->y = f.y + 6 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2;   /* Lot 90: centred in the title bar */
 }
 
 /* Lot 68: the page is laid out by Ring 3 for a viewport of pw * 4 / q
@@ -1603,22 +1647,22 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
     }
     gfx_desktop_full_rect(w, h, &fr);
     round_rect_a(fb, w, h, fr.x, fr.y, fr.w, fr.h, 10, RGB(10, 14, 18), 250);
-    fill_rect(fb, w, h, fr.x, fr.y, fr.w, 32, RGB(28, 44, 56));
+    fill_rect(fb, w, h, fr.x, fr.y, fr.w, 32 + tdy(GFX_DESKTOP_PANE_TITLE_H), RGB(28, 44, 56));
     draw_full_chrome(fb, w, h, fr.x, fr.y, fr.w, fr.h);
     if (!g_wm_full.maximized) {
         gfx_wm_rect_t gr;
         gr.x = fr.x; gr.y = fr.y; gr.w = fr.w; gr.h = fr.h;
-        gfx_wm_draw_grip(fb, w, h, w, gr, GFX_DESKTOP_PANE_TITLE_H, g_wm_q, RGB(120, 140, 150));
+        gfx_wm_draw_grip(fb, w, h, w, gr, tbar(GFX_DESKTOP_PANE_TITLE_H), g_wm_q, RGB(120, 140, 150));
     }
     g_tq = q;
     {
         /* Lot 72: favicon of the page before its title */
         int tx = fr.x + 8 + 2 * 34 + 8, fav = os_ui_px(16, q);
         if (g_webimg_valid && g_webimg.slot[OS_FB_WEBIMG_FAVICON].w) {
-            draw_webimg(fb, w, h, OS_FB_WEBIMG_FAVICON, tx, fr.y + 16 - fav / 2, fav, fav, tx, fr.y, tx + fav, fr.y + 32);
+            draw_webimg(fb, w, h, OS_FB_WEBIMG_FAVICON, tx, fr.y + 16 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2 - fav / 2, fav, fav, tx, fr.y, tx + fav, fr.y + 32 + tdy(GFX_DESKTOP_PANE_TITLE_H));
             tx += fav + 6;
         }
-        draw_title(fb, w, h, tx, fr.y + 12, sc->web_title, fr.w + 16 - 96 - 80 - 3 * 30 - (tx - (fr.x + 8 + 2 * 34 + 8)), RGB(232, 238, 244));
+        draw_title(fb, w, h, tx, fr.y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2, sc->web_title, fr.w + 16 - 96 - 80 - 3 * 30 - (tx - (fr.x + 8 + 2 * 34 + 8)), RGB(232, 238, 244));
     }
     g_tq = OS_UI_Q1;
     for (i = 0; i < 2; i++) {
@@ -1679,10 +1723,12 @@ static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh,
     int ty, term_h, i, maxc, prompt_y, n;
     round_rect_a(fb, w, h, x, y, rw, rh, 10, RGB(10, 16, 20), 255);
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
-    fill_rect(fb, w, h, x, y, rw, 32, RGB(28, 44, 56));
-    draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_PANE_TITLE_H);
-    draw_title(fb, w, h, x + 14, y + 12, "Shell Multiboot", rw - 100, RGB(232, 238, 244));
+    fill_rect(fb, w, h, x, y, rw, 32 + tdy(GFX_DESKTOP_PANE_TITLE_H), RGB(28, 44, 56));
+    draw_wm_buttons(fb, w, h, x, y, rw, rh, tbar(GFX_DESKTOP_PANE_TITLE_H));
+    draw_title(fb, w, h, x + 14, y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2, "Shell Multiboot", rw - 100, RGB(232, 238, 244));
     if (g_tq <= OS_UI_Q1 && rw > CW * 34 + 80) draw_text(fb, w, h, x + rw - CW * 18 - 70, y + 12, "prompt=MOHHDY>", RGB(122, 212, 196));
+    y += tdy(GFX_DESKTOP_PANE_TITLE_H);   /* Lot 90 */
+    rh -= tdy(GFX_DESKTOP_PANE_TITLE_H);
     term_h = rh - 44;
     if (term_h < 80) term_h = 80;
     fill_rect(fb, w, h, x + 10, y + 36, rw - 20, term_h, RGB(8, 12, 16));
@@ -1736,9 +1782,9 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     int stub = scene_llm(sc)[0] == 's' && scene_llm(sc)[1] == 't';
     round_rect_a(fb, w, h, x, y, rw, rh, 14, RGB(12, 18, 24), 255);
     stroke_round(fb, w, h, x, y, rw, rh, 14, RGB(61, 154, 138), 2);
-    fill_rect(fb, w, h, x + 1, y + 1, rw - 2, 36, RGB(28, 44, 56));
-    draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_CHAT_TITLE_H);
-    draw_title(fb, w, h, x + 16, y + 14, "Mohhdy", 8 * 16, RGB(232, 238, 244));
+    fill_rect(fb, w, h, x + 1, y + 1, rw - 2, 36 + tdy(GFX_DESKTOP_CHAT_TITLE_H), RGB(28, 44, 56));
+    draw_wm_buttons(fb, w, h, x, y, rw, rh, tbar(GFX_DESKTOP_CHAT_TITLE_H));
+    draw_title(fb, w, h, x + 16, y + 14 + tdy(GFX_DESKTOP_CHAT_TITLE_H) / 2, "Mohhdy", 8 * 16, RGB(232, 238, 244));
     llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
     {
         int ln = 0;
@@ -1747,6 +1793,8 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
         if (g_tq <= OS_UI_Q1 && x + 16 + 8 * CW < x + rw - CW * ln - 66)
             draw_text(fb, w, h, x + rw - CW * ln - 66, y + 14, lab, RGB(243, 230, 176));
     }
+    y += tdy(GFX_DESKTOP_CHAT_TITLE_H);   /* Lot 90: the body under a taller title bar */
+    rh -= tdy(GFX_DESKTOP_CHAT_TITLE_H);
     fill_rect_a(fb, w, h, x + 14, y + 46, rw - 28, TS(24) + 20, RGB(42, 36, 16), 230);
     if (g_tq <= OS_UI_Q1) {
         draw_text_n(fb, w, h, x + 20, y + 50, "Posez une question ou tapez /help.", (rw - 40) / CW, RGB(243, 230, 176));
@@ -1818,7 +1866,10 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
 /* Lot 68: per app slot text scale (from the scene zoom), and the grid
  * metrics at a scale: row height, column width, first row offset. */
 int gfx_desktop_app_row_h(int q) { return os_ui_px(GFX_APP_ROW_H, q); }
-int gfx_desktop_app_grid_y(int q) { return q <= OS_UI_Q1 ? GFX_APP_GRID_Y : GFX_APP_TOOL_Y + os_ui_px(8, q) + 14; }
+/* Lot 90: plus the title bar growth at the chrome scale */
+int gfx_desktop_app_grid_y(int q) {
+    return (q <= OS_UI_Q1 ? GFX_APP_GRID_Y : GFX_APP_TOOL_Y + os_ui_px(8, q) + 14) + tdy(GFX_DESKTOP_APP_TITLE_H);
+}
 
 void gfx_desktop_app_grid_fit_q(const gfx_rect_t *box, int q, int *rows, int *cols) {
     int r = 0, c = 0;
@@ -1982,6 +2033,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         gfx_wm_rect_t area;
         area.x = 0; area.y = bar_h + 4; area.w = w; area.h = h - bar_h - 4 - 52;
         if (area.h < 120) area.h = h - bar_h - 4;
+        safe_clip(w, h, &area);   /* Lot 90: TV safe area */
         if (pane != g_wm_pane_id) {
             /* another pane: default place and state */
             gfx_wm_reset(&g_wm_pane);
@@ -2004,7 +2056,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
             out->pane_win.minimized = !gfx_wm_visible(&g_wm_pane);
             out->pane_win.maximized = g_wm_pane.maximized && out->pane_win.active;
         }
-        wm_buttons(&out->pane_win.box, GFX_DESKTOP_PANE_TITLE_H, out->pane_win.btn);
+        wm_buttons(&out->pane_win.box, tbar(GFX_DESKTOP_PANE_TITLE_H), out->pane_win.btn);
         out->pane_win.traffic = out->pane_win.btn[2];
         out->pane_win.has_addr = 0;
         if (pane == OS_FB_PANE_BROWSER && out->pane_win.active && !out->pane_win.minimized) {
@@ -2013,7 +2065,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
             int q = gfx_desktop_surface_q(scene, OS_UI_Z_PANE, w, h);
             int bh = os_ui_px(10, q) + 14, bw = os_ui_px(8, q) * 2 + 12, gw = os_ui_px(8, q) * 5 + 16;
             gfx_rect_t r;
-            r.y = bx->y + 44; r.h = bh;
+            r.y = bx->y + 44 + tdy(GFX_DESKTOP_PANE_TITLE_H); r.h = bh;   /* Lot 90: under the title bar */
             r.x = bx->x + 12; r.w = bw; out->pane_win.addr_back = r;
             r.x += bw + 6; out->pane_win.addr_fwd = r;
             r.x += bw + 6; r.w = bx->x + bx->w - 12 - gw - 6 - r.x; out->pane_win.addr = r;
@@ -2024,13 +2076,13 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
             /* Lot 69: full screen panes use the shared title buttons; the
              * "traffic" rect is now their close button (and ESC) */
             gfx_wm_rect_t fr;
-            int bx2, by2, bs = gfx_wm_btn(GFX_DESKTOP_PANE_TITLE_H, g_wm_q);
+            int bx2, by2, bs = gfx_wm_btn(tbar(GFX_DESKTOP_PANE_TITLE_H), g_wm_q);
             {
                 gfx_rect_t f;
                 gfx_desktop_full_rect(w, h, &f);
                 fr = to_wm(&f);
             }
-            gfx_wm_button_pos(fr, GFX_DESKTOP_PANE_TITLE_H, g_wm_q, GFX_WM_HIT_CLOSE, &bx2, &by2);
+            gfx_wm_button_pos(fr, tbar(GFX_DESKTOP_PANE_TITLE_H), g_wm_q, GFX_WM_HIT_CLOSE, &bx2, &by2);
             out->pane_win.traffic.x = bx2; out->pane_win.traffic.y = by2;
             out->pane_win.traffic.w = bs; out->pane_win.traffic.h = bs;
         }
@@ -2122,6 +2174,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         gfx_wm_rect_t base, placed, area;
         area.x = 0; area.y = bar_h + 4; area.w = w; area.h = h - bar_h - 4 - 52;
         if (area.h < 120) area.h = h - bar_h - 4;
+        safe_clip(w, h, &area);   /* Lot 90: TV safe area */
         base.x = chat_x; base.y = chat_y; base.w = chat_w; base.h = chat_h;
         out->chat_win.base = from_wm(base);
         gfx_wm_place(&g_wm_chat, base, area, &placed);
@@ -2149,7 +2202,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         out->chat_win.input.w = out->chat_win.input.h = 0;
         out->chat_win.send_btn.w = out->chat_win.send_btn.h = 0;
     }
-    wm_buttons(&out->chat_win.box, GFX_DESKTOP_CHAT_TITLE_H, out->chat_win.btn);
+    wm_buttons(&out->chat_win.box, tbar(GFX_DESKTOP_CHAT_TITLE_H), out->chat_win.btn);
 
     /* active window in the menu bar and open / minimized marks in the dock */
     /* app windows (scene v7) */
@@ -2158,6 +2211,7 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
         int open = sc->version >= 7 && sc->app[i].kind != 0;
         area.x = 0; area.y = bar_h + 4; area.w = w; area.h = h - bar_h - 4 - 52;
         if (area.h < 120) area.h = h - bar_h - 4;
+        safe_clip(w, h, &area);   /* Lot 90: TV safe area */
         g_app_q[i] = (uint8_t)os_ui_effective_q(sc->version >= 8 ? sc->ui_scale_q : OS_UI_Q1,
                                                  sc->version >= 8 ? sc->zoom_q[OS_UI_Z_APP0 + i] : 0, w, h);
         base.w = (OS_FB_APP_COLS - 1) * os_ui_char_w(g_app_q[i]) + 24;
@@ -2180,9 +2234,9 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
             out->app_win[i].visible = placed.w > 0;
             out->app_win[i].maximized = g_wm_app[i].maximized && placed.w > 0;
         }
-        wm_buttons(&out->app_win[i].box, GFX_DESKTOP_APP_TITLE_H, out->app_win[i].btn);
+        wm_buttons(&out->app_win[i].box, tbar(GFX_DESKTOP_APP_TITLE_H), out->app_win[i].btn);
         out->app_win[i].tool.x = out->app_win[i].box.x + 12;
-        out->app_win[i].tool.y = out->app_win[i].box.y + GFX_APP_TOOL_Y - 3;
+        out->app_win[i].tool.y = out->app_win[i].box.y + GFX_APP_TOOL_Y + tdy(GFX_DESKTOP_APP_TITLE_H) - 3;
         out->app_win[i].tool.w = out->app_win[i].box.w > 24 ? out->app_win[i].box.w - 24 : 0;
         out->app_win[i].tool.h = out->app_win[i].visible ? os_ui_px(8, g_app_q[i]) + 8 : 0;
         out->app_win[i].grid.x = out->app_win[i].box.x + 12;
@@ -2261,15 +2315,15 @@ static void draw_app(uint32_t *fb, int w, int h, const gfx_rect_t *box, const os
     int n = 0, i;
     round_rect_a(fb, w, h, x, y, rw, rh, 12, RGB(14, 20, 27), 255);
     stroke_round(fb, w, h, x, y, rw, rh, 12, focused ? RGB(122, 212, 196) : RGB(52, 70, 84), focused ? 2 : 1);
-    fill_rect(fb, w, h, x + 2, y + 2, rw - 4, GFX_DESKTOP_APP_TITLE_H - 4, focused ? RGB(28, 52, 62) : RGB(24, 34, 44));
-    draw_wm_buttons(fb, w, h, x, y, rw, rh, GFX_DESKTOP_APP_TITLE_H);
+    fill_rect(fb, w, h, x + 2, y + 2, rw - 4, tbar(GFX_DESKTOP_APP_TITLE_H) - 4, focused ? RGB(28, 52, 62) : RGB(24, 34, 44));
+    draw_wm_buttons(fb, w, h, x, y, rw, rh, tbar(GFX_DESKTOP_APP_TITLE_H));
     for (i = 0; a->title[i] && n < 70; i++) title[n++] = a->title[i];
     if (a->dirty && n < 76) { title[n++] = ' '; title[n++] = '*'; }
     title[n] = 0;
-    draw_title(fb, w, h, x + 14, y + 11, title, rw - 110, RGB(232, 238, 244));
+    draw_title(fb, w, h, x + 14, y + 11 + tdy(GFX_DESKTOP_APP_TITLE_H) / 2, title, rw - 110, RGB(232, 238, 244));
     gfx_desktop_app_grid_fit_q(box, q, &maxr, &maxc);
-    fill_rect(fb, w, h, x + 8, y + GFX_APP_TOOL_Y - 5, rw - 16, TS(8) + 10, RGB(22, 32, 42));
-    draw_text_n(fb, w, h, x + 12, y + GFX_APP_TOOL_Y, a->tool, maxc, RGB(122, 212, 196));
+    fill_rect(fb, w, h, x + 8, y + GFX_APP_TOOL_Y + tdy(GFX_DESKTOP_APP_TITLE_H) - 5, rw - 16, TS(8) + 10, RGB(22, 32, 42));
+    draw_text_n(fb, w, h, x + 12, y + GFX_APP_TOOL_Y + tdy(GFX_DESKTOP_APP_TITLE_H), a->tool, maxc, RGB(122, 212, 196));
     fill_rect(fb, w, h, x + 8, gy0 - 2, rw - 16, maxr * rowh + 4, RGB(9, 13, 18));
     for (r = 0; r < maxr && r < (int)a->nrows; r++) {
         int gy = gy0 + r * rowh;
@@ -2422,6 +2476,21 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
     /* one layout for drawing and for the click hit test */
     gfx_desktop_get_layout(sc, w, h, &lay);
     landscape(fb, w, h);
+    {
+        /* Lot 90 (US-080): the TV margin, dimmed and outlined */
+        gfx_rect_t sa;
+        gfx_desktop_safe_rect(w, h, &sa);
+        if (sa.x > 0 || sa.y > 0) {
+            fill_rect_a(fb, w, h, 0, 0, w, sa.y, RGB(0, 0, 0), 170);
+            fill_rect_a(fb, w, h, 0, sa.y + sa.h, w, h - sa.y - sa.h, RGB(0, 0, 0), 170);
+            fill_rect_a(fb, w, h, 0, sa.y, sa.x, sa.h, RGB(0, 0, 0), 170);
+            fill_rect_a(fb, w, h, sa.x + sa.w, sa.y, w - sa.x - sa.w, sa.h, RGB(0, 0, 0), 170);
+            fill_rect(fb, w, h, sa.x, sa.y, sa.w, 1, RGB(61, 154, 138));
+            fill_rect(fb, w, h, sa.x, sa.y + sa.h - 1, sa.w, 1, RGB(61, 154, 138));
+            fill_rect(fb, w, h, sa.x, sa.y, 1, sa.h, RGB(61, 154, 138));
+            fill_rect(fb, w, h, sa.x + sa.w - 1, sa.y, 1, sa.h, RGB(61, 154, 138));
+        }
+    }
     bar_h = clampi(h / 22, 28, 40);
     fill_rect_a(fb, w, h, 0, 0, w, bar_h, RGB(12, 28, 40), 235);
     fill_rect(fb, w, h, 12, (bar_h - 12) / 2, 12, 12, RGB(61, 154, 138));
@@ -2546,7 +2615,7 @@ void gfx_desktop_draw_no_cursor(const os_fb_scene_t *scene, uint32_t *fb, int w,
             draw_ide(fb, w, h, f.x, f.y, f.w, f.h, sc);
             if (!g_wm_full.maximized) {
                 gfx_wm_rect_t gr = to_wm(&f);
-                gfx_wm_draw_grip(fb, w, h, w, gr, GFX_DESKTOP_PANE_TITLE_H, g_wm_q, RGB(120, 140, 150));
+                gfx_wm_draw_grip(fb, w, h, w, gr, tbar(GFX_DESKTOP_PANE_TITLE_H), g_wm_q, RGB(120, 140, 150));
             }
         }
         g_tq = OS_UI_Q1;

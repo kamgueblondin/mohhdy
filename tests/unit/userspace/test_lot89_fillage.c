@@ -105,7 +105,8 @@ static void test_save_load_dates(void) {
     (void)wf_autofill_put(&g_a, "ex.am", "q", "new", "text");
     n = wf_autofill_save(&g_a, g_buf, (int)sizeof(g_buf));
     TEST_ASSERT(n > 0);
-    TEST_ASSERT(strncmp(g_buf, "MOHHDY-AUTOFILL 2\n", 18) == 0);
+    /* Lot 90 (converted, was version 2): version 3, no settings */
+    TEST_ASSERT(strncmp(g_buf, "MOHHDY-AUTOFILL 3\n", 18) == 0);
     TEST_ASSERT(strstr(g_buf, "old.org\tq\tu\n") != 0);
     TEST_ASSERT(strstr(g_buf, "ex.am\tq\told\t20768\nex.am\tq\tnew\t20768\n") != 0);
     /* the loaded store keeps the dates and its own clock */

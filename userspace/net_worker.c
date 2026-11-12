@@ -9,6 +9,7 @@
 #include "ne2k.h"
 #include "net_stack_exec.h"
 #include "net_llm_client.h"
+#include "net_rxq.h"
 
 static char log_line[OS_NET_NIC_LOG_MAX];
 static uint32_t log_length;
@@ -115,6 +116,13 @@ static uint8_t stack_tx[KERNEL_LLM_FRAME_CAPACITY];
 static uint8_t stack_rx[KERNEL_LLM_FRAME_CAPACITY];
 static uint8_t bulk_in[OS_NET_RELAY_BULK_MAX];
 static uint8_t bulk_out[OS_NET_RELAY_BULK_MAX];
+/* Lot 90: frames the worker took off the card between two relay ops
+ * (net_rxq.h); the stack's poll serves them first, oldest first */
+static uint8_t rxq_mem[NET_RXQ_BYTES];
+static uint8_t rxq_scratch[NET_RXQ_FRAME_MAX];
+static net_rxq_t rxq;
+static uint32_t rxq_idle_rounds;
+
 
 static inline uint8_t port_inb(uint16_t port) {
     uint8_t v; asm volatile("inb %1, %0" : "=a"(v) : "Nd"(port)); return v;
@@ -244,6 +252,18 @@ static void nic_report(void) {
     }
     puts(" end\n");
     if (!nic_owned) return;
+    {
+        /* Lot 90: the idle drain, a line of its own (the lines above keep
+         * their shape for the earlier QEMU checks) */
+        char t[160];
+        if (net_rxq_text(&rxq, t, (int)sizeof(t)) > 0) {
+            puts("net-driver nic ");
+            puts(t);
+            puts(" idle ");
+            put_uint(rxq_idle_rounds);
+            puts(" end\n");
+        }
+    }
     puts("net-driver stack ring3 sockets "); put_uint(stack.report.socket_ops);
     puts(" wire "); put_uint(stack.report.wire_ops);
     puts(" llm "); put_uint(stack.report.llm_ops);
@@ -255,6 +275,8 @@ static void nic_report(void) {
     puts(" kernel-in "); put_uint(st.frames_in);
     puts(" end\n");
 }
+
+static int card_poll(void* user, uint8_t* frame, uint16_t capacity, uint16_t* length);
 
 /* Drives the pending wire op to completion on this task's NIC. */
 static int nic_pump_loop(void) {
@@ -275,7 +297,9 @@ static int nic_pump_loop(void) {
         }
         nic_ack();
         if (p.done) return p.result;
-        if (ne2k_rx_poll(&nic, &nic_io, nic_rx, sizeof(nic_rx), &length) == 0) {
+        /* Lot 90: the FIFO first (frames the idle drain took off the
+         * card), then the card, like r3_poll */
+        if (net_rxq_read(&rxq, card_poll, 0, nic_rx, sizeof(nic_rx), &length) == 0) {
             p.mode = OS_NET_NIC_PUMP_FRAME; p.rx = nic_rx; p.rx_length = length;
             nic_rx_frames++;
         } else {
@@ -427,11 +451,32 @@ static int r3_emit(void* context, const uint8_t* frame, uint16_t length) {
     return -1;
 }
 
+static int card_poll(void* user, uint8_t* frame, uint16_t capacity, uint16_t* length) {
+    (void)user;
+    return ne2k_rx_poll_card(&nic, &nic_io, frame, capacity, length) != 0 ? -1 : 0;
+}
+
+/* Lot 90: the FIFO for every ne2k_rx_poll caller (ne2k.h) */
+static int fifo_hook(void* user, uint8_t* frame, uint16_t capacity, uint16_t* length) {
+    (void)user;
+    return net_rxq_pop(&rxq, frame, capacity, length);
+}
+
 static int r3_poll(void* user, uint8_t* frame, uint16_t capacity, uint16_t* length) {
     (void)user;
-    if (ne2k_rx_poll(&nic, &nic_io, frame, capacity, length) != 0) return -1;
+    if (net_rxq_read(&rxq, card_poll, 0, frame, capacity, length) != 0) return -1;
     nic_rx_frames++;
     return 0;
+}
+
+/* Lot 90: no relay request waiting. The LLM and P2P clients read the
+ * card with ne2k_rx_poll, which serves the FIFO first (fifo_hook); the
+ * drain still pauses during an LLM session (phase bits 8..15 of its status
+ * word) so a model download keeps the card to itself. */
+static void rxq_idle(void) {
+    if (!nic_owned || ((kernel_llm_session_status() >> 8) & 0xffU) != 0U) return;
+    rxq_idle_rounds++;
+    (void)net_rxq_drain(&rxq, card_poll, 0, rxq_scratch, NET_RXQ_IDLE_MAX);
 }
 
 static void r3_idle(void* user) { (void)user; nic_pause(); }
@@ -458,6 +503,8 @@ static void stack_publish(void) {
 }
 
 static void stack_start(void) {
+    (void)net_rxq_init(&rxq, rxq_mem, (uint32_t)sizeof(rxq_mem));
+    ne2k_set_rx_hook(fifo_hook, 0);   /* Lot 90: every card reader sees the FIFO first */
     net_stack_init(&stack);
     net_socket_reset_all();
     net_wire_reset();
@@ -549,6 +596,7 @@ void main(void) {
     for (;;) {
         if (ipc_receive(&message) != 0) {
             if (nic_owned) (void)kernel_llm_dhcp_maintenance(timer_get_ticks());
+            rxq_idle();
             yield();
             continue;
         }
