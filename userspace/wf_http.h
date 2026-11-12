@@ -57,6 +57,8 @@ typedef struct {
     int done;                /* full message received */
     int conn_close;          /* Lot 72: the server closes after this response (Connection: close, HTTP/1.0, body to EOF) */
     int error;               /* < 0: protocol error */
+    int trailing;            /* Lot 89: bytes after the end of the message in the same read:
+                              * the connection is out of step (an answer nobody asked for) */
     const char* error_text;
     /* parser state */
     int state;

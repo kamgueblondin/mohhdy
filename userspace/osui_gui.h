@@ -145,6 +145,11 @@ int osui_gui_scale_hint_used(void);
  * Without it (or without a tick source) every pass paints, as before. */
 typedef int (*osui_gui_frame_op_t)(int input, unsigned ticks, char *msg, int cap);
 void osui_gui_set_frame_op(osui_gui_frame_op_t op);
+/* Lot 89: told the tick count before and after each fill and blit
+ * of the desktop scene; idle is 1 for a frame no key, event or new content
+ * asked for. Lets the pacer measure what an idle paint costs. */
+typedef void (*osui_gui_frame_cost_op_t)(unsigned start, unsigned end, int idle);
+void osui_gui_set_frame_cost_op(osui_gui_frame_cost_op_t op);
 int osui_gui_feed_key(int key, char *out, int out_max);
 /* Lot 68: shared text scale state (console ui-scale / text-size and GUI
  * Ctrl+'+'/'-'/'0'), and the window a zoom key applies to (OS_UI_Z_*). */

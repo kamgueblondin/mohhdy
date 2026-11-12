@@ -21,12 +21,14 @@ typedef struct {
     char value[WF_AF_VALUE];
     int nold;                                  /* Lot 87: 0..WF_AF_HIST-1 */
     char old[WF_AF_HIST - 1][WF_AF_VALUE];     /* older values, newest first */
+    uint32_t day;                              /* Lot 89: last stored, wf_autofill_day; 0 undated */
 } wf_af_ent_t;
 
 typedef struct {
     wf_af_ent_t e[WF_AF_MAX];
     int n;
     uint32_t stored, refused, hits;
+    uint32_t today;   /* Lot 89: wf_autofill_day of the clock, 0 unknown */
 } wf_autofill_t;
 
 void wf_autofill_init(wf_autofill_t *a);
@@ -61,6 +63,31 @@ int wf_autofill_count_site(const wf_autofill_t *a, const char *host, const char 
  * site that holds it. Values left on that key, or -1. */
 int wf_autofill_drop_site(wf_autofill_t *a, const char *host, const char *name, const char *value);
 #define WF_AF_SITE_MAX 8
+
+/* ---- Lot 89: dates and expiry ---------------------------------
+ * A key carries the day it was last stored (typed or added). Days count
+ * from 1970-01-01 = 1 (0 means no date: a key loaded from a file saved
+ * before this lot, or stored while the clock was unknown). The session
+ * file adds the day as a fourth tab field on each line of a dated key
+ * (header "MOHHDY-AUTOFILL 2"); a file without it still loads. */
+/* Day number of "YYYYMMDD..." (the SYS_RTC_UTC text); 0 when the date is
+ * not a valid Gregorian date between 1970 and 2199. */
+uint32_t wf_autofill_day(const char *utc);
+#define WF_AF_DAY_MAX 84006U   /* 2199-12-31 */
+/* The clock's day for the next stores (0 = unknown: stores stay undated). */
+void wf_autofill_set_today(wf_autofill_t *a, uint32_t day);
+/* Days since the key was last stored, or -1 when it has no date, the
+ * clock is unknown or the key is not there. A date after today reads 0. */
+int wf_autofill_age(const wf_autofill_t *a, const char *host, const char *name);
+/* Forget every key last stored more than days days ago (0..36500; 0
+ * forgets what is older than today). An undated key is not forgotten: it
+ * gets today's date, so it expires days days from now; *undated (may be
+ * 0) counts them. Returns the keys forgotten, -1 when the clock is
+ * unknown or days is out of range (nothing changes then). */
+int wf_autofill_forget_older(wf_autofill_t *a, uint32_t days, int *undated);
+/* One line per key: "autofill age HOST NAME Nd" or "... undated", then
+ * "autofill ages N dated D". -1 when out is too small. */
+int wf_autofill_ages(const wf_autofill_t *a, char *out, int cap);
 int wf_autofill_save(const wf_autofill_t *a, char *out, int cap);
 int wf_autofill_load(wf_autofill_t *a, const char *text, int len);
 int wf_autofill_text(const wf_autofill_t *a, char *out, int cap);

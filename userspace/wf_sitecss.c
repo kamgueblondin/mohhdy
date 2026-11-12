@@ -1,5 +1,7 @@
 /* wf_sitecss.c - Lot 86: see wf_sitecss.h. Freestanding, no heap. */
 #include "wf_sitecss.h"
+#include "wf_cssmath.h"
+#include "wf_cssvar.h"
 
 int wf_site_apply(wf_site_t *d);
 
@@ -36,6 +38,65 @@ static void slower(char *d, int cap, const char *s, int n) {
     if (cap <= 0) return;
     while (i < n && s[i] && i < cap - 1) { d[i] = lc(s[i]); i++; }
     d[i] = 0;
+}
+
+/* ---- Lot 89: custom properties per element -------------------------- */
+
+/* node whose properties var() reads while one declaration is parsed for
+ * that element (-1: the sheet-wide values) */
+static int g_vnode = -1;
+
+static int vname_index(const wf_site_t *d, const char *name) {
+    int k;
+    if (!d || !name) return -1;
+    for (k = 0; k < d->nvnames; k++) if (eq(d->vname[k], name)) return k;
+    return -1;
+}
+
+/* registers --name (n bytes at s, lower case); full table: counted */
+static void vname_add(wf_site_t *d, const char *s, int n) {
+    char nm[24];
+    if (n < 3 || s[0] != '-' || s[1] != '-') return;
+    if (n >= (int)sizeof(nm)) { d->dropped_vars++; return; }
+    slower(nm, (int)sizeof(nm), s, n);
+    if (vname_index(d, nm) >= 0) return;
+    if (d->nvnames >= WF_SITE_VNAMES) { d->dropped_vars++; return; }
+    scopy(d->vname[d->nvnames], 24, nm, slen(nm));
+    d->nvnames++;
+}
+
+/* index of (name k, value) in evar, added when new; -1 when full */
+static int evar_intern(wf_site_t *d, int k, const char *val) {
+    int e;
+    for (e = 0; e < d->nevars; e++)
+        if (eq(d->evar[e].name, d->vname[k]) && eq(d->evar[e].value, val)) return e;
+    if (d->nevars >= WF_SITE_EVARS) { d->dropped_vars++; return -1; }
+    scopy(d->evar[d->nevars].name, 24, d->vname[k], slen(d->vname[k]));
+    scopy(d->evar[d->nevars].value, 32, val, slen(val));
+    return d->nevars++;
+}
+
+static const char *node_var(const wf_site_t *d, int idx, const char *name) {
+    int k = vname_index(d, name);
+    if (k < 0 || idx < 0 || idx >= d->nnodes) return 0;
+    if (!d->node[idx].vbind[k]) return 0;
+    return d->evar[d->node[idx].vbind[k] - 1].value;
+}
+
+/* the declarations "--x: v" of one block (n bytes at s), names only */
+static void vnames_in(wf_site_t *d, const char *s, int n) {
+    int i = 0;
+    while (i < n) {
+        int a, b;
+        while (i < n && (is_sp(s[i]) || s[i] == ';')) i++;
+        a = i;
+        while (i < n && s[i] != ':' && s[i] != ';') i++;
+        if (i >= n || s[i] != ':') { while (i < n && s[i] != ';') i++; continue; }
+        b = i;
+        while (b > a && is_sp(s[b - 1])) b--;
+        if (b - a >= 3 && s[a] == '-' && s[a + 1] == '-') vname_add(d, s + a, b - a);
+        while (i < n && s[i] != ';') i++;
+    }
 }
 
 static int void_tag(const char *t) {
@@ -598,7 +659,7 @@ static int part_match(const wf_site_t *d, int idx, const wf_site_part_t *pt, int
     int i;
     if (idx < 0 || idx >= d->nnodes) return 0;
     nd = &d->node[idx];
-    if (pt->pseudo == WF_SITE_PS_SCOPE || pt->pseudo == WF_SITE_PS_AMP) {
+    if (pt->scope_ref) {
         if (sroot >= 0 && idx != sroot) return 0;
         if (sroot < 0 && (nd->parent >= 0 || !eq(nd->tag, "html"))) return 0;
     }
@@ -668,6 +729,15 @@ static int is_ancestor(const wf_site_t *d, int anc, int idx) {
 
 static int scope_in(const wf_site_t *d, int sc, int root, int idx, int depth);
 
+/* Lot 89: a start or end list matches when one of its selectors does */
+static int list_match(const wf_site_t *d, int idx, const wf_site_part_t list[][WF_SITE_PARTS],
+                      const uint8_t *len, int nsel, int sroot) {
+    int k;
+    for (k = 0; k < nsel && k < WF_SITE_SCOPE_ALTS; k++)
+        if (chain_match(d, idx, list[k], len[k], sroot, 0)) return 1;
+    return 0;
+}
+
 /* root is a scoping root of scope sc: it matches start (or is the owner
  * of an implicit scope) and, for a nested @scope, sits in a scope of the
  * enclosing one, whose root is the :scope of start. */
@@ -680,15 +750,14 @@ static int scope_root_ok(const wf_site_t *d, int sc, int root, int depth) {
         while (outer >= 0 && guard++ < WF_SITE_NODES) {
             if (scope_root_ok(d, s->parent, outer, depth + 1) && scope_in(d, s->parent, outer, root, depth + 1)) {
                 if (s->nstart) {
-                    int left = -1;
-                    if (chain_match(d, root, s->start, s->nstart, outer, &left)) return 1;
+                    if (list_match(d, root, s->start, s->start_len, s->nstart, outer)) return 1;
                 } else if (root == outer) return 1;
             }
             outer = d->node[outer].parent;
         }
         return 0;
     }
-    if (s->nstart) return chain_match(d, root, s->start, s->nstart, -2, 0);
+    if (s->nstart) return list_match(d, root, s->start, s->start_len, s->nstart, -2);
     if (s->owner >= 0) return root == s->owner;
     return d->node[root].parent < 0;     /* the document: its top elements */
 }
@@ -702,7 +771,7 @@ static int scope_in(const wf_site_t *d, int sc, int root, int idx, int depth) {
     if (idx != root && !is_ancestor(d, root, idx)) return 0;
     if (!s->nend) return 1;
     while (cur >= 0 && cur != root && guard++ < WF_SITE_NODES) {
-        if (chain_match(d, cur, s->end, s->nend, root, 0)) return 0;
+        if (list_match(d, cur, s->end, s->end_len, s->nend, root)) return 0;
         cur = d->node[cur].parent;
     }
     return 1;
@@ -772,8 +841,8 @@ static int specificity(const wf_site_rule_t *r) {
             if (pt->not_kind == 2) s += 10000;
             else if (pt->not_kind == 1 || pt->not_kind == 3) s += 100;
             else s += pt->not_tag[0] ? 1 : 0;
-        } else if (pt->pseudo == WF_SITE_PS_WHERE || pt->pseudo == WF_SITE_PS_AMP) {
-            /* :where() adds nothing; Lot 88: & is :where(:scope) */
+        } else if (pt->pseudo == WF_SITE_PS_WHERE) {
+            /* :where() adds nothing */
         } else if (pt->pseudo == WF_SITE_PS_IS) {
             /* the most specific alternative */
             int k, best = 0;
@@ -784,6 +853,8 @@ static int specificity(const wf_site_rule_t *r) {
             s += best;
         } else if (pt->pseudo) s += 100;
         if (pt->tag[0]) s += 1;
+        /* Lot 89: :scope counts as a pseudo-class, & (:where(:scope)) as nothing */
+        if (pt->scope_ref == WF_SITE_SREF_SCOPE) s += 100;
     }
     return s;
 }
@@ -876,6 +947,17 @@ static void reset_kind(wf_site_node_t *nd, int kind) {
 static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) {
     wf_site_node_t *nd = &d->node[idx];
     int rank = rank_of(r, prox);
+    if (r->kind == WF_SITE_K_VAR) {
+        /* Lot 89: the strongest --x on this element wins, like any
+         * property; inheritance is done once every element has its own */
+        int k = (int)r->vname - 1, e;
+        if (k < 0 || k >= d->nvnames || rank < nd->vrank[k]) return;
+        e = evar_intern(d, k, r->vval);
+        if (e < 0) return;
+        nd->vbind[k] = (uint8_t)(e + 1);
+        nd->vrank[k] = rank > 0 ? rank : 1;
+        return;
+    }
     if (r->revert && r->kind >= 1 && r->kind <= WF_SITE_K_MAX) {
         /* Lot 87: a winning revert-layer / revert keeps its rank (later
          * weaker rules still lose to it) and is rolled back at the end */
@@ -1167,6 +1249,24 @@ int wf_site_report(const wf_site_t *d, char *out, int cap) {
 }
 
 /* Lot 88: "scopes N rules R hits H" */
+int wf_site_vars_text(const wf_site_t *d, char *out, int cap) {
+    int n = 0;
+    if (!out || cap < 8) return 0;
+    out[0] = 0;
+    if (!d) return 0;
+    n = app(out, cap, n, "names ");
+    n = app_u(out, cap, n, (unsigned)d->nvnames);
+    n = app(out, cap, n, " values ");
+    n = app_u(out, cap, n, (unsigned)d->nevars);
+    n = app(out, cap, n, " bound ");
+    n = app_u(out, cap, n, (unsigned)d->var_bound);
+    n = app(out, cap, n, " reread ");
+    n = app_u(out, cap, n, (unsigned)d->deferred_hits);
+    n = app(out, cap, n, " dropped ");
+    n = app_u(out, cap, n, (unsigned)(d->dropped_vars + d->deferred_dropped));
+    return n;
+}
+
 int wf_site_scope_text(const wf_site_t *d, char *out, int cap) {
     int n = 0, r, nr = 0;
     if (!out || cap < 8) return 0;
@@ -1238,6 +1338,11 @@ static int add_rule(wf_site_t *d, const wf_site_rule_t *src) {
     r->scope = src->scope;
     r->scope_rel = src->scope_rel;
     scopy(r->tok, WF_SITE_TOK, src->tok, slen(src->tok));
+    r->vname = src->vname;
+    scopy(r->vval, (int)sizeof(r->vval), src->vval, slen(src->vval));
+    r->deferred = src->deferred;
+    scopy(r->dprop, (int)sizeof(r->dprop), src->dprop, slen(src->dprop));
+    scopy(r->draw, (int)sizeof(r->draw), src->draw, slen(src->draw));
     r->order = d->nrules;
     for (p = 0; p < src->nparts && p < WF_SITE_PARTS; p++) {
         const unsigned char *a = (const unsigned char *)&src->part[p];
@@ -1376,37 +1481,54 @@ const char *wf_site_var(const wf_site_t *d, const char *name) {
     return 0;
 }
 
-/* var(--name) or var(--name, fallback): the value of the custom property
- * when it is known, else the fallback. One level, no nesting. 0 when the
- * value is not a var() at all (val unchanged), 1 replaced, -1 unknown and
- * no fallback (the declaration is invalid at computed-value time). */
-static int expand_var(const wf_site_t *d, char *val, int cap) {
-    char name[24], fb[48];
-    const char *got;
-    int i = 4, k = 0;
-    if (!(val[0] == 'v' && val[1] == 'a' && val[2] == 'r' && val[3] == '(')) return 0;
-    while (val[i] && is_sp(val[i])) i++;
-    while (val[i] && val[i] != ',' && val[i] != ')' && !is_sp(val[i]) && k < (int)sizeof(name) - 1) name[k++] = val[i++];
-    name[k] = 0;
-    while (val[i] && is_sp(val[i])) i++;
-    fb[0] = 0;
-    if (val[i] == ',') {
-        int depth = 0;
-        i++;
-        while (val[i] && is_sp(val[i])) i++;
-        k = 0;
-        while (val[i] && (depth || val[i] != ')') && k < (int)sizeof(fb) - 1) {
-            if (val[i] == '(') depth++;
-            else if (val[i] == ')') depth--;
-            fb[k++] = val[i++];
-        }
-        while (k > 0 && is_sp(fb[k - 1])) k--;
-        fb[k] = 0;
+/* Lot 89: every var() of a value is substituted (wf_cssvar.c):
+ * var() inside calc() or another value, fallbacks that hold var(), and
+ * custom properties defined from other ones, 8 levels at most (a cycle is
+ * invalid). 0 when the value holds no var() (val unchanged), 1 replaced,
+ * -1 invalid at computed-value time (an unknown property with no
+ * fallback, a cycle, a malformed var() or a result longer than val):
+ * the declaration is dropped. */
+static const char *var_get(const void *ctx, const char *name) {
+    const wf_site_t *d = (const wf_site_t *)ctx;
+    /* Lot 89: the element's own or inherited value first */
+    if (g_vnode >= 0) {
+        const char *v = node_var(d, g_vnode, name);
+        if (v) return v;
     }
-    got = wf_site_var(d, name);
-    if (!got) got = fb[0] ? fb : 0;
-    if (!got) return -1;
-    scopy(val, cap, got, slen(got));
+    return wf_site_var(d, name);
+}
+
+const char *wf_site_node_var(const wf_site_t *d, int idx, const char *name) {
+    const char *v;
+    if (!d || !name) return 0;
+    v = node_var(d, idx, name);
+    return v ? v : wf_site_var(d, name);
+}
+
+/* Lot 89: 1 when val names a per-element custom property in a var() */
+static int names_elem_var(const wf_site_t *d, const char *val) {
+    int i, k;
+    if (!d || !d->nvnames) return 0;
+    for (i = 0; val[i]; i++) {
+        char nm[24];
+        if (!(val[i] == 'v' && val[i + 1] == 'a' && val[i + 2] == 'r' && val[i + 3] == '(')) continue;
+        i += 4;
+        while (val[i] == ' ') i++;
+        k = 0;
+        while (val[i] && val[i] != ',' && val[i] != ')' && val[i] != ' ' && k < 23) nm[k++] = val[i++];
+        nm[k] = 0;
+        if (vname_index(d, nm) >= 0) return 1;
+        if (!val[i]) break;
+    }
+    return 0;
+}
+static int expand_var(const wf_site_t *d, char *val, int cap) {
+    char tmp[48];
+    int r;
+    if (cap > (int)sizeof(tmp)) cap = (int)sizeof(tmp);
+    r = wf_cssvar_subst(val, tmp, cap, var_get, d);
+    if (r <= 0) return r < 0 ? (wf_cssvar_count(val) == 0 ? 0 : -1) : 0;
+    scopy(val, cap, tmp, slen(tmp));
     return 1;
 }
 
@@ -1549,10 +1671,25 @@ static int lspace_tok(const char *s) {
 }
 
 /* one token kind: 1 and proto filled, 0 invalid */
-static int tok_decl(const char *prop, const char *val, wf_site_rule_t *proto) {
-    char t[WF_SITE_TOK];
+static int tok_decl(const wf_site_t *d, const char *prop, const char *val, wf_site_rule_t *proto) {
+    char t[WF_SITE_TOK], m[WF_SITE_TOK];
     int kind = 0;
     t[0] = 0;
+    /* Lot 89: calc(), min(), max() and clamp() resolve to one length
+     * token first (wf_cssmath.c), then go through the same bounds as a
+     * written length; an expression that does not resolve is invalid */
+    if (wf_css_is_math(val) && (eq(prop, "font-size") || eq(prop, "text-indent") || eq(prop, "letter-spacing"))) {
+        if (wf_css_math(val, d ? d->vw : 0, d ? d->vh : 0, m, (int)sizeof(m)) != 1) return 0;
+        if (eq(prop, "font-size") && fsize_tok(m)) kind = WF_SITE_K_FSIZE;
+        else if (eq(prop, "text-indent") && indent_tok(m)) kind = WF_SITE_K_INDENT;
+        else if (eq(prop, "letter-spacing") && lspace_tok(m)) kind = WF_SITE_K_LSPACE;
+        if (!kind) return 0;
+        proto->kind = (uint8_t)kind;
+        proto->val = 2;
+        proto->box_n = 0;
+        scopy(proto->tok, WF_SITE_TOK, m, slen(m));
+        return 1;
+    }
     if (slen(val) >= WF_SITE_TOK + 12) return 0;
     if (eq(prop, "list-style-type")) {
         if (list_name(val)) { scopy(t, WF_SITE_TOK, val, slen(val)); kind = WF_SITE_K_LIST; }
@@ -1592,7 +1729,40 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
         ve = i;
         trim_word(body + vs, ve - vs, val, (int)sizeof(val), &imp);
         proto->imp = (uint8_t)imp;
-        if (d && expand_var(d, val, (int)sizeof(val)) < 0) { if (i < n && body[i] == ';') i++; continue; }
+        proto->deferred = 0;
+        if (prop[0] == '-' && prop[1] == '-') {
+            /* Lot 89: a custom property set on the elements this rule
+             * matches; only names found while scanning the sheet (a full
+             * table or a value over 31 bytes leaves the declaration out) */
+            int k = vname_index(d, prop), vl = slen(val);
+            if (k >= 0 && vl > 0 && vl < (int)sizeof(proto->vval)) {
+                proto->kind = WF_SITE_K_VAR;
+                proto->vname = (uint8_t)(k + 1);
+                scopy(proto->vval, (int)sizeof(proto->vval), val, vl);
+                return 1;
+            }
+            if (i < n && body[i] == ';') i++;
+            continue;
+        }
+        if (d && g_vnode < 0 && prop_kind(prop) && names_elem_var(d, val)) {
+            /* Lot 89: read again for each element (wf_site_apply) */
+            proto->deferred = 1;
+            scopy(proto->dprop, (int)sizeof(proto->dprop), prop, slen(prop));
+            scopy(proto->draw, (int)sizeof(proto->draw), val, slen(val));
+        }
+        if (d && expand_var(d, val, (int)sizeof(val)) < 0) {
+            if (proto->deferred) {
+                /* no sheet-wide value: the kind alone, the value comes per
+                 * element */
+                proto->kind = (uint8_t)prop_kind(prop);
+                proto->val = 0;
+                proto->box_n = 0;
+                proto->tok[0] = 0;
+                return 1;
+            }
+            if (i < n && body[i] == ';') i++;
+            continue;
+        }
         if (eq(prop, "all")) {
             /* Lot 88: every reader property at once; any other value is
              * invalid for all */
@@ -1661,7 +1831,7 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             uint32_t c = 0;
             if (eq(val, "transparent")) { proto->kind = WF_SITE_K_BG; proto->val = 1; proto->color = 0; return 1; }
             if (parse_color(val, slen(val), &c)) { proto->kind = WF_SITE_K_BG; proto->val = 2; proto->color = c; return 1; }
-        } else if (tok_decl(prop, val, proto)) {
+        } else if (tok_decl(d, prop, val, proto)) {
             return 1;
         }
         if (i < n && body[i] == ';') i++;
@@ -1710,7 +1880,7 @@ static int parse_compound(const char *s, int n, int i, wf_site_part_t *pt) {
     if (i < n && s[i] == '&') {
         /* Lot 88: & in @scope is :where(:scope); a compound may go on
          * after it ("&.wide") */
-        pt->pseudo = WF_SITE_PS_AMP;
+        pt->scope_ref = WF_SITE_SREF_AMP;
         i++;
     } else if (i < n && s[i] != '.' && s[i] != '#' && s[i] != '[' && s[i] != ':' && s[i] != '*')
         i = ident(s, n, i, pt->tag, (int)sizeof(pt->tag));
@@ -1771,10 +1941,9 @@ static int parse_compound(const char *s, int n, int i, wf_site_part_t *pt) {
             else if (eq(ps, "empty")) pt->pseudo = WF_SITE_PS_EMPTY;
             else if (eq(ps, "root")) pt->pseudo = WF_SITE_PS_ROOT;
             else if (eq(ps, "scope")) {
-                /* Lot 88: one pseudo-class per compound; :scope with
-                 * another one is not kept rather than widened */
-                if (pt->pseudo) return -1;
-                pt->pseudo = WF_SITE_PS_SCOPE;
+                /* Lot 89: kept apart from pseudo, so ":scope:first-child"
+                 * keeps both conditions */
+                if (!pt->scope_ref) pt->scope_ref = WF_SITE_SREF_SCOPE;
             }
             else if (eq(ps, "not") && i < n && s[i] == '(') {
                 i++;
@@ -1856,6 +2025,11 @@ static int parse_selector(wf_site_t *d, const char *s, int n, const wf_site_rule
         rule.revert = proto->revert;
         rule.scope = proto->scope;
         scopy(rule.tok, WF_SITE_TOK, proto->tok, slen(proto->tok));
+        rule.vname = proto->vname;
+        scopy(rule.vval, (int)sizeof(rule.vval), proto->vval, slen(proto->vval));
+        rule.deferred = proto->deferred;
+        scopy(rule.dprop, (int)sizeof(rule.dprop), proto->dprop, slen(proto->dprop));
+        scopy(rule.draw, (int)sizeof(rule.draw), proto->draw, slen(proto->draw));
         {
             uint8_t lead = WF_SITE_REL_DESC;
             int has_scope = 0, q;
@@ -1895,7 +2069,7 @@ static int parse_selector(wf_site_t *d, const char *s, int n, const wf_site_rule
         /* Lot 88: in @scope a selector without :scope or & is relative
          * to the root: ":scope p", or the leading combinator it has */
         for (q = 0; q < parts; q++)
-            if (rule.part[q].pseudo == WF_SITE_PS_SCOPE || rule.part[q].pseudo == WF_SITE_PS_AMP) has_scope = 1;
+            if (rule.part[q].scope_ref) has_scope = 1;
         if (!rule.scope || has_scope) rule.scope_rel = WF_SITE_SR_NONE;
         else rule.scope_rel = (uint8_t)(lead == WF_SITE_REL_CHILD ? WF_SITE_SR_CHILD :
                                         lead == WF_SITE_REL_ADJ ? WF_SITE_SR_ADJ :
@@ -2200,7 +2374,11 @@ static void take_vars(wf_site_t *d, const char *sel, int sn, const char *body, i
         if (i == at) { i++; continue; }
         if (eq(w, "html") || eq(w, "body")) ok = 1;
     }
-    if (!ok) return;
+    if (!ok) {
+        /* Lot 89: any other selector sets them per element */
+        vnames_in(d, body, bn);
+        return;
+    }
     i = 0;
     while (i < bn) {
         int a, b, vs, ve, k;
@@ -2406,6 +2584,8 @@ int wf_site_layers_text(const wf_site_t *d, char *out, int cap) {
 
 /* Pass 1 over a sheet: custom properties and @import, including those in
  * applying @media / @supports blocks. */
+static void scan_scope_names(wf_site_t *d, const char *s, int n, int depth);
+
 static void scan_sheet(wf_site_t *d, const char *s, int n, int depth) {
     int i = 0;
     while (i < n) {
@@ -2426,6 +2606,12 @@ static void scan_sheet(wf_site_t *d, const char *s, int n, int depth) {
                     keep = wf_site_supports(s + prelude + 9, body - 1 - prelude - 9);
                 else if (at_is(s, n, prelude, "layer"))
                     keep = 1;   /* Lot 87: variables and imports inside a layer count */
+                else if (at_is(s, n, prelude, "scope")) {
+                    /* Lot 89: every --x in @scope is per element */
+                    if (depth < 4 && after - 1 > body) scan_scope_names(d, s + body, after - 1 - body, depth + 1);
+                    i = after;
+                    continue;
+                }
                 if (keep && depth < 4 && after - 1 > body) scan_sheet(d, s + body, after - 1 - body, depth + 1);
                 i = after;
             }
@@ -2440,12 +2626,38 @@ static void scan_sheet(wf_site_t *d, const char *s, int n, int depth) {
     }
 }
 
+/* Lot 89: names in an @scope block: declarations right in the block and
+ * every rule, nested blocks included (never sheet-wide) */
+static void scan_scope_names(wf_site_t *d, const char *s, int n, int depth) {
+    int i = 0;
+    while (i < n) {
+        int k = i, brace;
+        while (k < n && s[k] != '{' && s[k] != '}') k++;
+        if (k >= n) { vnames_in(d, s + i, n - i); break; }
+        /* "--x: v; p" before "{": the declarations end at the last ';' */
+        brace = k;
+        while (k > i && s[k - 1] != ';') k--;
+        if (k > i) vnames_in(d, s + i, k - i);
+        {
+            int body = brace + 1, after = skip_block(s, n, brace), at = k;
+            while (at < brace && is_sp(s[at])) at++;
+            if (at < brace && s[at] == '@') {
+                if (depth < 4 && after - 1 > body) scan_scope_names(d, s + body, after - 1 - body, depth + 1);
+            } else if (after - 1 > body) vnames_in(d, s + body, after - 1 - body);
+            i = after;
+        }
+    }
+}
+
 /* ---- @scope prelude (Lot 88) ------------------------------------------ */
 
-/* "(selector)" at i: the compound chain, one selector (a list keeps its
- * first one and counts an error). Returns the index after ")" or -1. */
-static int scope_sel(wf_site_t *d, const char *s, int n, int i, wf_site_part_t *out, int *nout) {
-    int close, depth = 1, k, parts = 0;
+/* "(selector, ...)" at i: up to WF_SITE_SCOPE_ALTS compound chains (a
+ * longer list keeps the first ones and counts an error; an empty or
+ * invalid selector in the list drops the prelude, as a browser drops an
+ * invalid selector list). Returns the index after ")" or -1. */
+static int scope_sel(wf_site_t *d, const char *s, int n, int i, wf_site_part_t out[][WF_SITE_PARTS],
+                     uint8_t *len, int *nout) {
+    int close, depth = 1, k, parts = 0, nsel = 0, over = 0;
     uint8_t rel = WF_SITE_REL_DESC;
     *nout = 0;
     if (i >= n || s[i] != '(') return -1;
@@ -2457,12 +2669,21 @@ static int scope_sel(wf_site_t *d, const char *s, int n, int i, wf_site_part_t *
     }
     if (close >= n) return -1;
     k = i + 1;
-    while (k < close) {
+    while (k <= close) {
         wf_site_part_t part;
         int before;
         k = skip_noise(s, close, k);
-        if (k >= close) break;
-        if (s[k] == ',') { d->errors++; break; }
+        if (k >= close || s[k] == ',') {
+            /* end of one selector */
+            if (!parts) return -1;
+            if (!over) len[nsel++] = (uint8_t)parts;
+            parts = 0;
+            rel = WF_SITE_REL_DESC;
+            if (k >= close) break;
+            k++;
+            if (nsel >= WF_SITE_SCOPE_ALTS && !over) { over = 1; d->errors++; }
+            continue;
+        }
         if (s[k] == '>') { rel = WF_SITE_REL_CHILD; k++; continue; }
         if (s[k] == '+') { rel = WF_SITE_REL_ADJ; k++; continue; }
         if (s[k] == '~') { rel = WF_SITE_REL_SIB; k++; continue; }
@@ -2473,10 +2694,11 @@ static int scope_sel(wf_site_t *d, const char *s, int n, int i, wf_site_part_t *
         part.rel = parts ? rel : WF_SITE_REL_DESC;
         rel = WF_SITE_REL_DESC;
         if (parts >= WF_SITE_PARTS) return -1;
-        copy_part(&out[parts++], &part);
+        if (!over) copy_part(&out[nsel][parts], &part);
+        parts++;
     }
-    if (!parts) return -1;
-    *nout = parts;
+    if (!nsel) return -1;
+    *nout = nsel;
     return close + 1;
 }
 
@@ -2503,13 +2725,13 @@ static int scope_block(wf_site_t *d, int outer, const char *s, int n, int css_at
     sc->owner = -1;
     i = skip_noise(s, n, i);
     if (i < n && s[i] == '(') {
-        i = scope_sel(d, s, n, i, sc->start, &sc->nstart);
+        i = scope_sel(d, s, n, i, sc->start, sc->start_len, &sc->nstart);
         if (i < 0) { d->errors++; return 0; }
         i = skip_noise(s, n, i);
     }
     if (i + 1 < n && lc(s[i]) == 't' && lc(s[i + 1]) == 'o' && (i + 2 >= n || is_sp(s[i + 2]) || s[i + 2] == '(')) {
         i = skip_noise(s, n, i + 2);
-        i = scope_sel(d, s, n, i, sc->end, &sc->nend);
+        i = scope_sel(d, s, n, i, sc->end, sc->end_len, &sc->nend);
         if (i < 0) { d->errors++; return 0; }
         i = skip_noise(s, n, i);
     }
@@ -2654,15 +2876,97 @@ static void inline_node(wf_site_t *d, int i, int kind, int ceiling) {
         while (semi < n && st[semi] != ';') semi++;
         clear(&proto, (int)sizeof(proto));
         proto.origin = 3;
-        if (parse_decl(d, st + p, semi - p, &proto) && proto.kind &&
+        g_vnode = i;   /* Lot 89: var() in a style attribute reads this element */
+        if (parse_decl(d, st + p, semi - p, &proto) && proto.kind && proto.kind != WF_SITE_K_VAR &&
             (!kind || proto.kind == kind || proto.kind == WF_SITE_K_ALL) && top_of(&proto) < ceiling) {
             proto.spec = 100000;
             proto.order = 1000 + i;
             proto.nparts = 0;
             paint_rule(d, i, &proto, 0, kind);
         }
+        g_vnode = -1;
         p = semi < n ? semi + 1 : n;
     }
+}
+
+/* Lot 89: the --x of the style attributes (they beat every sheet rule) */
+static void inline_vars(wf_site_t *d) {
+    int i;
+    for (i = 0; i < d->nnodes; i++) {
+        const char *st = d->node[i].style;
+        int n = slen(st), p = 0;
+        while (p < n) {
+            wf_site_rule_t proto;
+            int semi = p;
+            while (semi < n && st[semi] != ';') semi++;
+            clear(&proto, (int)sizeof(proto));
+            proto.origin = 3;
+            if (parse_decl(d, st + p, semi - p, &proto) && proto.kind == WF_SITE_K_VAR) {
+                proto.spec = 100000;
+                proto.order = 1000 + i;
+                proto.nparts = 0;
+                paint_rule(d, i, &proto, 0, 0);
+            }
+            p = semi < n ? semi + 1 : n;
+        }
+    }
+}
+
+/* Lot 89: an element without its own value takes its parent's (nodes are
+ * in document order, the parent comes first) */
+static void inherit_vars(wf_site_t *d) {
+    int i, k;
+    d->var_bound = 0;
+    for (i = 0; i < d->nnodes; i++) {
+        wf_site_node_t *nd = &d->node[i];
+        int own = 0;
+        for (k = 0; k < d->nvnames; k++) {
+            if (nd->vbind[k]) { own = 1; continue; }
+            if (nd->parent >= 0 && nd->parent < i) nd->vbind[k] = d->node[nd->parent].vbind[k];
+        }
+        if (own) d->var_bound++;
+    }
+}
+
+/* Lot 89: the declaration of a deferred rule read for node idx with that
+ * element's custom properties; 0 when it is invalid there (dropped on
+ * this element, as a sheet-wide invalid var() drops it everywhere) */
+static int defer_rule(wf_site_t *d, int idx, const wf_site_rule_t *r, wf_site_rule_t *out) {
+    char text[72];
+    wf_site_rule_t p;
+    int n = 0, ok, k;
+    const unsigned char *a = (const unsigned char *)r;
+    unsigned char *b = (unsigned char *)out;
+    for (k = 0; k < (int)sizeof(*r); k++) b[k] = a[k];
+    for (k = 0; r->dprop[k] && n < (int)sizeof(text) - 2; k++) text[n++] = r->dprop[k];
+    text[n++] = ':';
+    for (k = 0; r->draw[k] && n < (int)sizeof(text) - 1; k++) text[n++] = r->draw[k];
+    text[n] = 0;
+    clear(&p, (int)sizeof(p));
+    g_vnode = idx;
+    ok = parse_decl(d, text, n, &p);
+    g_vnode = -1;
+    if (!ok || p.kind != r->kind) { d->deferred_dropped++; return 0; }
+    out->val = p.val;
+    out->color = p.color;
+    out->box_n = p.box_n;
+    for (k = 0; k < 4; k++) out->box[k] = p.box[k];
+    scopy(out->tok, WF_SITE_TOK, p.tok, slen(p.tok));
+    out->revert = p.revert;
+    out->deferred = 0;
+    d->deferred_hits++;
+    return 1;
+}
+
+/* one rule on one node, a deferred rule read for that node first */
+static void paint_matched(wf_site_t *d, int i, const wf_site_rule_t *r, int prox, int only) {
+    if (r->deferred) {
+        static wf_site_rule_t tmp;
+        if (!defer_rule(d, i, r, &tmp)) return;
+        paint_rule(d, i, &tmp, prox, only);
+        return;
+    }
+    paint_rule(d, i, r, prox, only);
 }
 
 static void apply_inline(wf_site_t *d) {
@@ -2726,7 +3030,7 @@ static void resolve_reverts(wf_site_t *d) {
                     if ((ru->kind != k && ru->kind != WF_SITE_K_ALL) ||
                         !keep_rule(top_of(ru), ru->origin, ceiling, max_origin)) continue;
                     m = rule_match(d, i, ru);
-                    if (m) paint_rule(d, i, ru, m - 1, k);
+                    if (m) paint_matched(d, i, ru, m - 1, k);
                 }
                 /* the style attribute is author origin: an author revert
                  * drops it as well */
@@ -2752,6 +3056,7 @@ int wf_site_apply(wf_site_t *d) {
     add_ua(d, "[hidden]", WF_SITE_DISP_NONE);
     add_ua(d, "script", WF_SITE_DISP_NONE);
     add_ua(d, "style", WF_SITE_DISP_NONE);
+    for (i = 0; i < d->nnodes; i++) vnames_in(d, d->node[i].style, slen(d->node[i].style));
     if (d->css_n) {
         scan_sheet(d, d->css, d->css_n, 0);
         parse_sheet(d, d->css, d->css_n, 2);
@@ -2762,12 +3067,26 @@ int wf_site_apply(wf_site_t *d) {
     for (r = 0; r < d->nrules; r++)
         if (d->rule[r].layer > 0 && d->rule[r].layer <= d->nlayers) d->rule[r].layer = d->layer_rank[d->rule[r].layer - 1];
     d->scoped_hits = 0;
+    d->deferred_hits = 0;
+    d->deferred_dropped = 0;
+    /* Lot 89: custom properties first (every element, then inherited),
+     * so a deferred declaration reads the final values */
     for (r = 0; r < d->nrules; r++) {
+        if (d->rule[r].kind != WF_SITE_K_VAR) continue;
+        for (i = 0; i < d->nnodes; i++) {
+            int m = rule_match(d, i, &d->rule[r]);
+            if (m) paint_rule(d, i, &d->rule[r], m - 1, 0);
+        }
+    }
+    inline_vars(d);
+    inherit_vars(d);
+    for (r = 0; r < d->nrules; r++) {
+        if (d->rule[r].kind == WF_SITE_K_VAR) continue;
         for (i = 0; i < d->nnodes; i++) {
             int m = rule_match(d, i, &d->rule[r]);
             if (!m) continue;
             if (d->rule[r].scope) d->scoped_hits++;
-            paint_rule(d, i, &d->rule[r], m - 1, 0);
+            paint_matched(d, i, &d->rule[r], m - 1, 0);
         }
     }
     apply_inline(d);

@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
         }
         wf_fetch_drop(&e);
         wf_fetch_conn_stats(&opened, &reused);
-        printf("KA total opened=%d reused=%d\n", opened, reused);
+        printf("KA total opened=%d reused=%d unsolicited=%d\n", opened, reused, wf_fetch_unsolicited());
         return 0;
     }
     if (argc > 5 && strncmp(argv[5], "search:", 7) == 0) {

@@ -31,7 +31,7 @@ NEEDLES = (
     "arm marks self-test ok vietnamese base letter (include/os_marks.h)",
     "arm p2p trend self-test ok overuse cap 15515 (userspace/p2p_trend.c)",
     "arm edid cea self-test ok 1920x1080@60 hdmi 1.0.0.0 (kernel/edid.c)",
-    "arm regdom self-test ok shop.co.uk github.io apart (userspace/wf_regdom.c)",
+    "arm regdom self-test ok shop.co.uk github.io apart xn--bcher-kva (userspace/wf_regdom.c wf_idna.c)",
     "arm frame pacer self-test ok 20 of 40 idle wakes at 5 hz (userspace/osui_frame.c)",
     "arm tv scale self-test ok 1080p tv 1.5x on 1024x768 (userspace/plat_form.c)",
     "arm p2p shape self-test ok order x123 after slot reuse (userspace/p2p_shape.c)",

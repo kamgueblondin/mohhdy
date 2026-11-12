@@ -12,7 +12,7 @@ gcc -O1 -m32 -Wall -Werror -I"$ROOT/userspace" -I"$ROOT/kernel" -I"$ROOT/include
     "$ROOT/tests/host/wf_fetch_host.c" \
     "$ROOT"/userspace/wf_http.c "$ROOT"/userspace/wf_dns.c "$ROOT"/userspace/wf_tls.c "$ROOT"/userspace/wf_fetch.c "$ROOT"/userspace/wf_cache.c "$ROOT"/userspace/wf_cookie.c "$ROOT"/userspace/wf_inflate.c \
     "$ROOT"/userspace/wf_x509.c "$ROOT"/userspace/wf_bn.c "$ROOT"/userspace/wf_sha512.c "$ROOT"/userspace/wf_ec.c "$ROOT"/userspace/wf_p256.c "$ROOT"/userspace/wf_aead.c \
-    "$ROOT"/userspace/wf_rsa.c "$ROOT"/userspace/wf_html.c "$ROOT"/userspace/wf_sitecss.c "$ROOT"/userspace/wf_read.c "$ROOT"/userspace/wf_score.c "$ROOT"/userspace/wf_searchform.c "$ROOT"/userspace/wf_article.c "$ROOT"/userspace/wf_srcset.c "$ROOT"/userspace/wf_entity.c "$ROOT"/userspace/wf_form.c \
+    "$ROOT"/userspace/wf_rsa.c "$ROOT"/userspace/wf_html.c "$ROOT"/userspace/wf_sitecss.c "$ROOT"/userspace/wf_cssmath.c "$ROOT"/userspace/wf_cssvar.c "$ROOT"/userspace/wf_read.c "$ROOT"/userspace/wf_score.c "$ROOT"/userspace/wf_searchform.c "$ROOT"/userspace/wf_article.c "$ROOT"/userspace/wf_srcset.c "$ROOT"/userspace/wf_entity.c "$ROOT"/userspace/wf_form.c \
     "$ROOT"/userspace/wf_section.c "$ROOT"/userspace/wsearch_api.c "$ROOT"/userspace/wsearch.c "$ROOT"/userspace/wsearch_local.c "$ROOT"/kernel/sha256.c "$ROOT"/kernel/aes_gcm.c "$ROOT"/kernel/x25519.c || { echo "FAIL: build"; exit 1; }
 HP=$((20000 + $$ % 20000)); SP=$((HP + 1))
 python3 "$ROOT/scripts/lot67_web_server.py" "$W/pki" $HP $SP > server.log 2>&1 &
@@ -113,6 +113,10 @@ check "https keep-alive one handshake" 'KA total opened=1 reused=2' "$CA" "https
 check "keep-alive host change" 'KA total opened=2 reused=1' "$CA" "http://127.0.0.1:$HP/ka/1" now 127.0.0.1 "ka:http://127.0.0.1:$HP/ka/2,https://$M:$T13/ka/3"
 check "keep-alive host change new conn" 'KA 2 rc=0 status=200 bytes=[0-9]+ reused=0 conn=1 suite=TLS13-AES256-GCM-SHA384' "$CA" "http://127.0.0.1:$HP/ka/1" now 127.0.0.1 "ka:http://127.0.0.1:$HP/ka/2,https://$M:$T13/ka/3"
 check "server close honoured" 'KA total opened=2 reused=1' "$CA" "http://127.0.0.1:$HP/ka/1" now - "ka:http://127.0.0.1:$HP/kaclose/2,http://127.0.0.1:$HP/ka/3"
+# Lot 89: an answer followed by bytes nobody asked for: the connection is
+# dropped, the next request opens a new one and gets its own answer
+check "unsolicited answer not reused" 'KA total opened=2 reused=0 unsolicited=1' "$CA" "http://127.0.0.1:$HP/kastray/1" now - "ka:http://127.0.0.1:$HP/ka/2"
+check "unsolicited answer next ok" 'KA 1 rc=0 status=200 bytes=20 reused=0 conn=1' "$CA" "http://127.0.0.1:$HP/kastray/1" now - "ka:http://127.0.0.1:$HP/ka/2"
 check "keep-alive redirect"  'KA 0 rc=0 status=200 bytes=[0-9]+ reused=1 conn=1' "$CA" "http://127.0.0.1:$HP/redirect" now - "ka:http://127.0.0.1:$HP/ka/9"
 echo "[lot67-web-host] $pass passed, $fail failed"
 [ $fail -eq 0 ]

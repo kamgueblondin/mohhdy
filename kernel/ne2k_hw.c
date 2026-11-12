@@ -19,20 +19,55 @@ static void ne2k_remote_read_setup(const ne2k_io_t* io, uint16_t base,
              NE2K_COMMAND_REMOTE_READ);
 }
 
+/* Lot 89: BNRY sits one page behind the next page to read. */
+static void ne2k_rx_set_boundary(const ne2k_io_t* io, uint16_t base, uint8_t next_page) {
+    io->outb(io->context, (uint16_t)(base + NE2K_REG_BNRY),
+             (uint8_t)(next_page == NE2K_RX_PAGE_START ? NE2K_RX_PAGE_STOP - 1U : next_page - 1U));
+}
+
+/* Lot 89: classify a ring header. 0 = readable, 1 = skip this packet only
+ * (sane chain, payload too big for the caller), 2 = header unusable, drop
+ * everything pending. The 4 byte ring header is not part of the frame and a
+ * card may append the 4 byte CRC, so a full 1514 byte Ethernet frame gives a
+ * packet length of 1518 or 1522; before Lot 89 that was refused as -4 and,
+ * since no error path moved BNRY, the ring stayed stuck on that packet for
+ * the rest of the session (gap 6 of the Lot 89 plan). */
+int ne2k_rx_header_check(const uint8_t header[NE2K_RX_HEADER_SIZE],
+                         uint16_t frame_capacity, uint16_t* payload_length) {
+    uint16_t packet_length, payload;
+    uint8_t next_page;
+    if (!header || !payload_length) return 2;
+    *payload_length = 0U;
+    next_page = header[1];
+    packet_length = (uint16_t)(header[2] | ((uint16_t)header[3] << 8));
+    if ((header[0] & NE2K_RX_STATUS_OK) == 0U) return 2;
+    if (next_page < NE2K_RX_PAGE_START || next_page >= NE2K_RX_PAGE_STOP) return 2;
+    if (packet_length < NE2K_RX_HEADER_SIZE + NE2K_RX_MIN_FRAME ||
+        packet_length > NE2K_RX_HEADER_SIZE + NE2K_ETHERNET_MAX_FRAME + NE2K_RX_CRC_SIZE)
+        return 2;
+    payload = (uint16_t)(packet_length - NE2K_RX_HEADER_SIZE);
+    /* Only the trailing CRC may go past the Ethernet maximum; drop it. */
+    if (payload > NE2K_ETHERNET_MAX_FRAME) payload = NE2K_ETHERNET_MAX_FRAME;
+    if (payload > frame_capacity) return 1;
+    *payload_length = payload;
+    return 0;
+}
+
 int ne2k_rx_poll(ne2k_device_t* device, const ne2k_io_t* io,
                  uint8_t* frame, uint16_t frame_capacity,
                  uint16_t* frame_length) {
-    uint16_t base, page, packet_length, payload_length;
+    uint16_t base, page, payload_length = 0U;
     uint8_t header[NE2K_RX_HEADER_SIZE];
-    uint8_t next_page, current_page;
+    uint8_t current_page;
     uint32_t i;
+    int verdict;
     if (!device || !io || !io->inb || !io->outb || !frame || !frame_length ||
         !device->initialized || frame_capacity == 0U || device->base_port == 0U)
         return -1;
     *frame_length = 0U;
     base = device->base_port;
-    /* L’IRQ peut déjà avoir acquitté PRX : CURR/BNRY reste l’état persistant
-     * du ring et évite de perdre une trame DHCP ou DNS arrivée entre deux tours. */
+    /* L'IRQ peut deja avoir acquitte PRX : CURR/BNRY reste l'etat persistant
+     * du ring et evite de perdre une trame DHCP ou DNS arrivee entre deux tours. */
     io->outb(io->context, (uint16_t)(base + NE2K_REG_COMMAND), 0x42U);
     current_page = io->inb(io->context, (uint16_t)(base + NE2K_REG_CURR));
     io->outb(io->context, (uint16_t)(base + NE2K_REG_COMMAND), 0x22U);
@@ -44,21 +79,29 @@ int ne2k_rx_poll(ne2k_device_t* device, const ne2k_io_t* io,
     ne2k_remote_read_setup(io, base, (uint16_t)(page << 8), NE2K_RX_HEADER_SIZE);
     for (i = 0; i < NE2K_RX_HEADER_SIZE; ++i)
         header[i] = io->inb(io->context, (uint16_t)(base + NE2K_REG_DATA));
-    if ((header[0] & NE2K_RX_STATUS_OK) == 0U) return -3;
-    next_page = header[1];
-    packet_length = (uint16_t)(header[2] | ((uint16_t)header[3] << 8));
-    if (packet_length < NE2K_RX_HEADER_SIZE || packet_length > NE2K_ETHERNET_MAX_FRAME)
-        return -4;
-    payload_length = (uint16_t)(packet_length - NE2K_RX_HEADER_SIZE);
-    if (payload_length > frame_capacity) return -5;
+    verdict = ne2k_rx_header_check(header, frame_capacity, &payload_length);
+    if (verdict != 0) {
+        for (i = 0; i < NE2K_RX_HEADER_SIZE; ++i) device->rx_bad_header[i] = header[i];
+        device->rx_bad_curr = current_page;
+        device->rx_bad_page = (uint8_t)page;
+    }
+    if (verdict == 2) {
+        /* Lot 89: no chain to follow; resynchronise on CURR so the next
+         * frame from the card is read instead of this header forever. */
+        ne2k_rx_set_boundary(io, base, current_page);
+        device->rx_resyncs++;
+        return -3;
+    }
+    if (verdict == 1) {
+        ne2k_rx_set_boundary(io, base, header[1]);
+        device->rx_dropped++;
+        return -5;
+    }
     ne2k_remote_read_setup(io, base, (uint16_t)((page << 8) + NE2K_RX_HEADER_SIZE),
                            payload_length);
     for (i = 0; i < payload_length; ++i)
         frame[i] = io->inb(io->context, (uint16_t)(base + NE2K_REG_DATA));
-    if (next_page < NE2K_RX_PAGE_START || next_page >= NE2K_RX_PAGE_STOP)
-        return -6;
-    io->outb(io->context, (uint16_t)(base + NE2K_REG_BNRY),
-             (uint8_t)(next_page == NE2K_RX_PAGE_START ? NE2K_RX_PAGE_STOP - 1U : next_page - 1U));
+    ne2k_rx_set_boundary(io, base, header[1]);
     *frame_length = payload_length;
     return 0;
 }

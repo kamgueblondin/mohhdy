@@ -31,7 +31,13 @@
  * colour), list-style-type (and the keyword of list-style), font-size,
  * text-indent and letter-spacing, with every keyword; the last four
  * inherit. Lengths are kept as a short checked token (12px, 1.5em, 120%)
- * and passed to the engine, which resolves em and % against the parent. */
+ * and passed to the engine, which resolves em and % against the parent.
+ * Lot 89: custom properties per element. A --x declared by any selector
+ * (or in a style attribute, or right in an @scope block) cascades on the
+ * elements it matches like any other property and is inherited by their
+ * descendants; a value with var() is then read again for each element it
+ * applies to, with that element's properties. Names declared on :root,
+ * html or body only keep the sheet-wide path (wf_site_var). */
 #ifndef WF_SITECSS_H
 #define WF_SITECSS_H
 #include <stdint.h>
@@ -47,6 +53,8 @@
 #define WF_SITE_TOKS 4            /* list, font-size, text-indent, letter-spacing */
 #define WF_SITE_ALT 2
 #define WF_SITE_VARS 16
+#define WF_SITE_VNAMES 12         /* Lot 89: custom property names set per element */
+#define WF_SITE_EVARS 32          /* Lot 89: distinct (name, value) pairs bound to elements */
 #define WF_SITE_LINKS 6
 #define WF_SITE_HREF 160
 /* Lot 87: cascade layers (@layer). Names in order of first appearance;
@@ -57,6 +65,7 @@
 #define WF_SITE_SCOPES 8
 #define WF_SITE_STYLES 8
 #define WF_SITE_SCOPE_DEPTH 4
+#define WF_SITE_SCOPE_ALTS 3        /* Lot 89: selectors in a start or end list */
 
 enum {
     WF_SITE_DISP_NONE = 3,
@@ -88,7 +97,7 @@ enum {
     WF_SITE_PS_IS = 15,
     WF_SITE_PS_WHERE = 16,
     WF_SITE_PS_SCOPE = 17,    /* Lot 88: :scope, specificity of a class */
-    WF_SITE_PS_AMP = 18       /* Lot 88: & in @scope, :where(:scope) */
+    WF_SITE_PS_AMP = 18       /* Lot 88: & in @scope, :where(:scope) (Lot 89: no longer set, see scope_ref) */
 };
 enum {
     WF_SITE_ATTR_NONE = 0,
@@ -120,7 +129,14 @@ enum {
     WF_SITE_K_INDENT = 15,    /* text-indent: token, inherits */
     WF_SITE_K_LSPACE = 16,    /* letter-spacing: token, inherits */
     WF_SITE_K_MAX = 16,
-    WF_SITE_K_ALL = 17        /* the all shorthand: a CSS-wide keyword on every kind */
+    WF_SITE_K_ALL = 17,       /* the all shorthand: a CSS-wide keyword on every kind */
+    WF_SITE_K_VAR = 18        /* Lot 89: a custom property set on the elements a rule matches */
+};
+/* Lot 89: a compound that names the scoping root */
+enum {
+    WF_SITE_SREF_NONE = 0,
+    WF_SITE_SREF_SCOPE = 1,   /* :scope, specificity of a class */
+    WF_SITE_SREF_AMP = 2      /* &, :where(:scope), no specificity */
 };
 /* Lot 88: how a rule inside @scope relates to its scoping root */
 enum {
@@ -182,6 +198,11 @@ typedef struct {
     char tok[WF_SITE_TOKS][WF_SITE_TOK];
     uint8_t tok_val[WF_SITE_TOKS];
     int tok_rank[WF_SITE_TOKS];
+    /* Lot 89: per custom property name (wf_site_t.vname), the bound value
+     * (index + 1 in wf_site_t.evar, 0 none: the sheet-wide value) and the
+     * rank of the declaration that won on this element (0 inherited) */
+    uint8_t vbind[WF_SITE_VNAMES];
+    int vrank[WF_SITE_VNAMES];
 } wf_site_node_t;
 
 typedef struct {
@@ -202,6 +223,10 @@ typedef struct {
     char alt_cls[WF_SITE_ALT][12];
     uint8_t nalt;
     uint8_t rel;                  /* combinator that leads to this compound */
+    /* Lot 89: the compound names the scoping root, WF_SITE_SREF_*; kept
+     * apart from pseudo so "&:first-child" and ":scope.wide:last-child"
+     * keep both conditions */
+    uint8_t scope_ref;
 } wf_site_part_t;
 
 typedef struct {
@@ -219,6 +244,14 @@ typedef struct {
     uint8_t scope;                /* Lot 88: 0 unscoped, else scope index + 1 */
     uint8_t scope_rel;            /* Lot 88: WF_SITE_SR_* */
     char tok[WF_SITE_TOK];        /* Lot 88: the value of a token kind */
+    /* Lot 89: WF_SITE_K_VAR: name index + 1 and the value */
+    uint8_t vname;
+    char vval[32];
+    /* Lot 89: the value holds var() of a per-element property: the
+     * declaration "dprop: draw" is read again for each element */
+    uint8_t deferred;
+    char dprop[20];
+    char draw[48];
 } wf_site_rule_t;
 
 /* Lot 88: one @scope rule. A root is an element that matches start (or,
@@ -226,9 +259,14 @@ typedef struct {
  * the whole document); the scope is the root and its descendants, minus
  * every descendant that matches end and what is under it. */
 typedef struct {
-    wf_site_part_t start[WF_SITE_PARTS];
+    /* Lot 89: start and end are selector lists of up to
+     * WF_SITE_SCOPE_ALTS selectors; nstart / nend count the selectors,
+     * start_len / end_len the compounds of each */
+    wf_site_part_t start[WF_SITE_SCOPE_ALTS][WF_SITE_PARTS];
+    uint8_t start_len[WF_SITE_SCOPE_ALTS];
     int nstart;
-    wf_site_part_t end[WF_SITE_PARTS];
+    wf_site_part_t end[WF_SITE_SCOPE_ALTS][WF_SITE_PARTS];
+    uint8_t end_len[WF_SITE_SCOPE_ALTS];
     int nend;
     int owner;                    /* implicit root (no start): node index or -1 */
     int parent;                   /* enclosing scope index, or -1 */
@@ -272,6 +310,15 @@ typedef struct {
     int style_from[WF_SITE_STYLES], style_to[WF_SITE_STYLES], style_owner[WF_SITE_STYLES];
     int nstyles;
     int scoped_hits;              /* Lot 88: scoped rule matches painted */
+    /* Lot 89: per-element custom properties */
+    char vname[WF_SITE_VNAMES][24];
+    int nvnames;
+    wf_site_var_t evar[WF_SITE_EVARS];
+    int nevars;
+    int dropped_vars;             /* names or values over the tables, values over 31 bytes */
+    int var_bound;                /* elements with a custom property of their own */
+    int deferred_hits;            /* declarations read again for one element */
+    int deferred_dropped;         /* ... and invalid there (dropped on that element) */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */
@@ -315,4 +362,11 @@ int wf_site_scope_text(const wf_site_t *d, char *out, int cap);
 int wf_site_scope_root(const wf_site_t *d, int rule, int idx);
 /* Custom property value after the cascade of :root/html/body, or 0. */
 const char *wf_site_var(const wf_site_t *d, const char *name);
+/* Lot 89: the value of a custom property on node idx: its own or an
+ * ancestor's (per-element cascade), else the sheet-wide one, else 0. */
+const char *wf_site_node_var(const wf_site_t *d, int idx, const char *name);
+/* Lot 89: "names N values V bound B reread R dropped D" for the custom
+ * properties of the last prepare (dropped: over a table, or invalid on
+ * one element); length. */
+int wf_site_vars_text(const wf_site_t *d, char *out, int cap);
 #endif

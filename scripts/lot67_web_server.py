@@ -45,6 +45,19 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /lot88/scope.html   Lot 88: @scope (limit, implicit root, :scope), all
   /lot88/props.html   Lot 88: background-color, list-style, font-size,
                       text-indent, letter-spacing in the reader sheet
+  /lot89/scope.html   Lot 89: @scope start and end lists, &:first-child,
+                      :scope:last-child
+  /lot89/stray1.html  Lot 89: the same in one write (read together by the
+                      guest, which must drop the connection)
+  /lot89/props.html   Lot 89: calc(), min(), clamp() and var() anywhere in
+                      a reader length
+  /lot89/vars.html    Lot 89: custom properties set per element (a class,
+                      a style attribute, an @scope block) and inherited
+  /kastray/N          Lot 89: a keep-alive answer and an unsolicited 404 in
+                      the same write (the client must drop the connection)
+  /lot89/stray.html   Lot 89: a page followed by an unsolicited second
+                      response on the same keep-alive connection (the
+                      server bug that exposed the NE2000 ring stall)
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -124,6 +137,17 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/ka/"):
             self._ka_log()
             self._send(200, ("keep-alive answer %s\n" % self.path[4:]).encode(), "text/plain")
+            return
+        if self.path.startswith("/kastray/"):
+            # Lot 89: an answer and a second one nobody asked for, in one
+            # write so the client reads both together; the client must not
+            # reuse this connection (its next request would read the 404)
+            self._ka_log()
+            body = ("keep-alive answer %s\n" % self.path[9:]).encode()
+            stray = b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found"
+            head = ("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n" % len(body)).encode()
+            self.wfile.write(head + body + stray)
+            self.wfile.flush()
             return
         if self.path.startswith("/kaclose/"):
             # answers then closes: the client must open a new connection
@@ -272,6 +296,77 @@ class H(http.server.BaseHTTPRequestHandler):
                     "<link rel=\"stylesheet\" href=\"layers.css\"></head><body>"
                     "<h1>Couches</h1><div class=\"keep87\">layerkeep87 visible</div>"
                     "<p class=\"gone87\">layergone87</p><p class=\"back87\">layerback87</p><p class=\"ini87\">layerinitial87</p><p>fin87</p></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot89/scope.html":
+            # Lot 89: a start list and an end list, & and :scope with a
+            # second pseudo-class (both used to lose the root mark). The end
+            # list uses blockquote: the reader drops aside like nav and
+            # footer, so an aside limit would prove nothing
+            page = ("<!doctype html><html><head><title>Lot 89 scope lists</title><style>"
+                    "@scope (.la89, .lb89) to (.keep89, blockquote) { p { display: none } }\n"
+                    "@scope (.amp89) { &:first-child { display: none } }\n"
+                    "@scope (.sc89) { :scope:last-child { display: none } }\n"
+                    "</style></head><body><h1>Listes</h1>"
+                    "<div class=\"la89\"><p>listhidea89</p><div class=\"keep89\"><p>listkeepa89</p></div></div>"
+                    "<div class=\"lb89\"><p>listhideb89</p><blockquote><p>listkeepb89</p></blockquote></div>"
+                    "<div class=\"lc89\"><p>listout89</p></div>"
+                    "<section><div class=\"amp89\"><p>amphide89</p></div><div class=\"amp89\"><p>ampkeep89</p></div></section>"
+                    "<section><div class=\"sc89\"><p>sckeep89</p></div><div class=\"sc89\"><p>schide89</p></div></section>"
+                    "<p>fin89s</p></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot89/stray.html":
+            # Lot 89: what a buggy route did by accident: the page, then a
+            # 404 nobody asked for, on the same kept-alive connection
+            page = ("<!doctype html><html><head><title>Lot 89 stray</title></head>"
+                    "<body><p>stray89</p></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            self.wfile.write(b"HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n"
+                             b"Content-Length: 9\r\n\r\nnot found")
+            self.wfile.flush()
+            print("STRAY sent", flush=True)
+            return True
+        if p == "/lot89/stray1.html":
+            # Lot 89: the page and an unasked 404 in one write, so the guest
+            # reads them together and must not keep the connection
+            page = ("<!doctype html><html><head><title>Lot 89 stray one</title></head>"
+                    "<body><p>strayone89</p></body></html>").encode("utf-8")
+            head = ("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
+                    "Content-Length: %d\r\n\r\n" % len(page)).encode()
+            self.wfile.write(head + page + b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found")
+            self.wfile.flush()
+            print("STRAY1 sent", flush=True)
+            return True
+        if p == "/lot89/vars.html":
+            # Lot 89: custom properties per element
+            page = ("<!doctype html><html><head><title>Lot 89 vars</title><style>"
+                    ":root { --fs89: 14px }\n"
+                    ".card89 { --fs89: 20px }\n"
+                    ".card89 .big89 { --fs89: 24px }\n"
+                    "@scope (.panel89) { --fs89: 22px }\n"
+                    "p { font-size: var(--fs89); text-indent: var(--in89, 1px) }\n"
+                    "</style></head><body>"
+                    "<p id=root89>varroot89</p>"
+                    "<div class=card89><div><p id=deep89>vardeep89</p></div>"
+                    "<p id=big89 class=big89>varbig89</p></div>"
+                    "<div class=panel89><p id=pan89>varpan89</p></div>"
+                    "<div style=\"--in89: 5px\"><p id=inl89>varinl89</p></div>"
+                    "<p>fin89v</p></body></html>")
+            self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p == "/lot89/props.html":
+            # Lot 89: math functions and var() in the reader's lengths
+            page = ("<!doctype html><html><head><title>Lot 89 lengths</title><style>"
+                    ":root { --b89: 1rem; --g89: var(--u89); --u89: 3px; --a89: var(--c89); --c89: var(--a89) }\n"
+                    "#calc89 { font-size: calc(1rem + 4px); text-indent: min(2em, 150%) }\n"
+                    "#clamp89 { font-size: clamp(1rem, 0.5rem + 1.3vw, 2rem); letter-spacing: max(1px, 0.5px * 4) }\n"
+                    "#var89 { font-size: calc(var(--b89) + 2px); text-indent: var(--no89, var(--g89)) }\n"
+                    "#cyc89 { font-size: 20px; font-size: var(--a89, 30px) }\n"
+                    "#mix89 { text-indent: 1em; text-indent: calc(1em + 2px) }\n"
+                    "</style></head><body><h1>Longueurs</h1>"
+                    "<p id=\"calc89\">lencalc89</p><p id=\"clamp89\">lenclamp89</p><p id=\"var89\">lenvar89</p>"
+                    "<p id=\"cyc89\">lencyc89</p><p id=\"mix89\">lenmix89</p><p>fin89p</p></body></html>")
             self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot88/scope.html":

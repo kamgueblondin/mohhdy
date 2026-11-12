@@ -8,6 +8,16 @@ US-076, US-080 and US-081 stay partial. US-078 and US-097 stay simule.
 This file is updated with each chunk pushed to the PR; a row is listed
 only when its code, tests and docs are in the branch.
 
+## Final state (10 November 2026)
+
+PR #246 was merged by the owner (merge 4869707, head f3efb63): rows A to I
+below, 4446 lines added and 66 files changed against the lot 87 base
+(git diff --shortstat 6a56c54...f3efb63). At the last check before the
+merge, 29 CI jobs had passed on f3efb63 and 8 were still running. The
+work started on the branch after f3efb63 (@scope lists, IDN sites,
+calc()/var() lengths, autofill dates, idle paint cost) was not pushed and
+continues as rows A to F of docs/lot89_plan.md.
+
 ## Scope
 
 | Id | Feature | Before | After |

@@ -109,6 +109,35 @@ static void test_autofill_site_list(void) {
     TEST_ASSERT_EQUAL(0, wf_autofill_count_site(0, "x.com", "user"));
 }
 
+/* Lot 89: internationalised hosts are compared in their ASCII form, so a
+ * host typed in UTF-8 and the same host from a redirect share values. */
+static void test_regdom_idn(void) {
+    char a[WF_REGDOM_MAX];
+    rd("www.b\xc3\xbc" "cher.example", "xn--bcher-kva.example");
+    rd("shop.B\xc3\x9c" "CHER.example", "xn--bcher-kva.example");
+    rd("www.xn--bcher-kva.example", "xn--bcher-kva.example");
+    rd("\xd0\xbf\xd1\x80\xd0\xb8\xd0\xbc\xd0\xb5\xd1\x80.co.uk", "xn--e1afmkfd.co.uk");
+    rd("\xe4\xbe\x8b\xe5\xad\x90\xe3\x80\x82\xe3\x83\x86\xe3\x82\xb9\xe3\x83\x88", "xn--fsqu00a.xn--zckzah");
+    rd("bad\x80host.com", 0);
+    rd("a\xe2\x80\x8b" "b.com", 0);
+    TEST_ASSERT_EQUAL(1, wf_regdom_same_site("login.b\xc3\xbc" "cher.example", "www.xn--bcher-kva.example"));
+    TEST_ASSERT_EQUAL(1, wf_regdom_same_site("B\xc3\x9c" "CHER.example", "xn--bcher-kva.example"));
+    TEST_ASSERT_EQUAL(0, wf_regdom_same_site("b\xc3\xbc" "cher.example", "bucher.example"));
+    TEST_ASSERT_EQUAL(0, wf_regdom_same_site("b\xc3\xbc" "cher.example", "xn--bcher-kva.example.org"));
+    /* a single-label IDN host (no registrable domain) equals its ASCII form */
+    TEST_ASSERT_EQUAL(1, wf_regdom_same_site("b\xc3\xbc" "cher", "xn--bcher-kva"));
+    TEST_ASSERT_EQUAL(-1, wf_regdom("b\xc3\xbc" "cher", a, (int)sizeof(a)));
+}
+
+static void test_autofill_idn_site(void) {
+    wf_autofill_init(&g_a);
+    (void)wf_autofill_put(&g_a, "login.xn--bcher-kva.example", "user", "ada", "text");
+    (void)wf_autofill_put(&g_a, "shop.example", "user", "eve", "text");
+    TEST_ASSERT_EQUAL(1, wf_autofill_count_site(&g_a, "www.b\xc3\xbc" "cher.example", "user"));
+    get_site("www.b\xc3\xbc" "cher.example", "user", 0, "ada", 1);
+    TEST_ASSERT_EQUAL(0, wf_autofill_count_site(&g_a, "www.bucher.example", "user"));
+}
+
 static void test_autofill_site_ip_and_hosting(void) {
     wf_autofill_init(&g_a);
     (void)wf_autofill_put(&g_a, "10.0.2.2", "user", "lab", "text");
@@ -174,6 +203,8 @@ int main(void) {
     RUN_TEST(test_regdom_none);
     RUN_TEST(test_same_site);
     RUN_TEST(test_autofill_site_list);
+    RUN_TEST(test_regdom_idn);
+    RUN_TEST(test_autofill_idn_site);
     RUN_TEST(test_autofill_site_ip_and_hosting);
     RUN_TEST(test_drop_site);
     RUN_TEST(test_formfill_offers_site);
