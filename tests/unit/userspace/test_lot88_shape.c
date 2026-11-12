@@ -139,18 +139,19 @@ static void test_full_queue_evicts_busiest_peer(void) {
     TEST_ASSERT_EQUAL(1U, g_q.refused);
     TEST_ASSERT_EQUAL(P2P_SHAPE_QUEUED_EVICT, push(B, 0, 'x', 10, 0));
     TEST_ASSERT_EQUAL(1U, g_q.evicted);
-    TEST_ASSERT_EQUAL(7, p2p_shape_depth(&g_q, A, -1));
+    /* Lot 90 (converted, review point): written for eight slots (7, four,
+     * a..d); the same steps with sixteen slots (15, eight, a..h) */
+    TEST_ASSERT_EQUAL(P2P_SHAPE_Q - 1, p2p_shape_depth(&g_q, A, -1));
     TEST_ASSERT_EQUAL(1, p2p_shape_depth(&g_q, B, -1));
-    /* B keeps pushing until both hold four */
-    TEST_ASSERT_EQUAL(P2P_SHAPE_QUEUED_EVICT, push(B, 0, 'y', 10, 0));
-    TEST_ASSERT_EQUAL(P2P_SHAPE_QUEUED_EVICT, push(B, 0, 'z', 10, 0));
-    TEST_ASSERT_EQUAL(P2P_SHAPE_QUEUED_EVICT, push(B, 0, 'w', 10, 0));
-    TEST_ASSERT_EQUAL(4, p2p_shape_depth(&g_q, A, -1));
+    /* B keeps pushing until both hold half */
+    for (i = 1; i < P2P_SHAPE_Q / 2; i++) TEST_ASSERT_EQUAL(P2P_SHAPE_QUEUED_EVICT, push(B, 0, 'y', 10, 0));
+    TEST_ASSERT_EQUAL(P2P_SHAPE_Q / 2, p2p_shape_depth(&g_q, A, -1));
+    TEST_ASSERT_EQUAL(P2P_SHAPE_Q / 2, p2p_shape_depth(&g_q, B, -1));
     TEST_ASSERT_EQUAL(P2P_SHAPE_REFUSED, push(B, 0, 'v', 10, 0));
-    /* the newest of A went: a..d are left, in order */
+    /* the newest of A went: a..h are left, in order */
     g_open[A] = 1;
-    TEST_ASSERT_EQUAL(4, drain(1));
-    TEST_ASSERT_EQUAL_STRING("3:a 3:b 3:c 3:d ", g_log);
+    TEST_ASSERT_EQUAL(P2P_SHAPE_Q / 2, drain(1));
+    TEST_ASSERT_EQUAL_STRING("3:a 3:b 3:c 3:d 3:e 3:f 3:g 3:h ", g_log);
 }
 
 /* A message takes the place of a queued put; a put from a quiet peer
@@ -158,30 +159,32 @@ static void test_full_queue_evicts_busiest_peer(void) {
 static void test_message_pushes_out_bulk(void) {
     int i;
     reset();
-    for (i = 0; i < 6; i++) push(A, P2P_SHAPE_C_MSG, 'm', 10, 0);
+    /* Lot 90 (converted, review point): six messages filled eight slots
+     * with the two puts; now P2P_SHAPE_Q - 2 (14) do */
+    for (i = 0; i < P2P_SHAPE_Q - 2; i++) push(A, P2P_SHAPE_C_MSG, 'm', 10, 0);
     push(A, P2P_SHAPE_C_BULK, '1', 10, 0);
     push(C, P2P_SHAPE_C_BULK, '2', 10, 0);
     /* B (none queued) against A (seven): A gives up its put, not a message */
     TEST_ASSERT_EQUAL(P2P_SHAPE_QUEUED_EVICT, push(B, P2P_SHAPE_C_BULK, 'k', 10, 0));
     TEST_ASSERT_EQUAL(0, p2p_shape_depth(&g_q, A, P2P_SHAPE_C_BULK));
-    TEST_ASSERT_EQUAL(6, p2p_shape_depth(&g_q, A, P2P_SHAPE_C_MSG));
+    TEST_ASSERT_EQUAL(P2P_SHAPE_Q - 2, p2p_shape_depth(&g_q, A, P2P_SHAPE_C_MSG));
     /* a message: B and C tie on one put each, the lowest id gives it up */
     TEST_ASSERT_EQUAL(P2P_SHAPE_QUEUED_EVICT, push(A, P2P_SHAPE_C_MSG, 'n', 10, 0));
     TEST_ASSERT_EQUAL(0, p2p_shape_depth(&g_q, B, -1));
     TEST_ASSERT_EQUAL(1, p2p_shape_depth(&g_q, C, P2P_SHAPE_C_BULK));
     TEST_ASSERT_EQUAL(P2P_SHAPE_QUEUED_EVICT, push(A, P2P_SHAPE_C_MSG, 'o', 10, 0));
     TEST_ASSERT_EQUAL(0, p2p_shape_depth(&g_q, 0, P2P_SHAPE_C_BULK));
-    /* no put left: A alone holds all eight, a ninth message is refused */
+    /* no put left: A alone holds all sixteen, one more message is refused */
     TEST_ASSERT_EQUAL(P2P_SHAPE_REFUSED, push(A, P2P_SHAPE_C_MSG, 'p', 10, 0));
     /* a put from C still gets in: A gives up its newest message */
     TEST_ASSERT_EQUAL(P2P_SHAPE_QUEUED_EVICT, push(C, P2P_SHAPE_C_BULK, '3', 10, 0));
-    TEST_ASSERT_EQUAL(7, p2p_shape_depth(&g_q, A, P2P_SHAPE_C_MSG));
+    TEST_ASSERT_EQUAL(P2P_SHAPE_Q - 1, p2p_shape_depth(&g_q, A, P2P_SHAPE_C_MSG));
     TEST_ASSERT_EQUAL(4U, g_q.evicted);
     TEST_ASSERT_EQUAL(1U, g_q.refused);
     g_open[A] = g_open[C] = 1;
-    TEST_ASSERT_EQUAL(8, drain(1));
-    /* the quantum is in bytes: seven 10-byte messages fit in one turn */
-    TEST_ASSERT_EQUAL_STRING("3:m 3:m 3:m 3:m 3:m 3:m 3:n 7:3 ", g_log);
+    TEST_ASSERT_EQUAL(P2P_SHAPE_Q, drain(1));
+    /* the quantum is in bytes: fifteen 10-byte messages fit in one turn */
+    TEST_ASSERT_EQUAL_STRING("3:m 3:m 3:m 3:m 3:m 3:m 3:m 3:m 3:m 3:m 3:m 3:m 3:m 3:m 3:n 7:3 ", g_log);
 }
 
 /* Drops (peer gone) free the slot, are counted, and do not stop the pass. */
@@ -218,7 +221,9 @@ static void test_wait_bounds_status(void) {
     TEST_ASSERT_EQUAL(200U, g_q.last_wait_ms);
     p2p_shape_status(&g_q, g_o, (int)sizeof(g_o));
     TEST_ASSERT_EQUAL_STRING("depth 0 msg 0 bulk 0 queued 2 sent 2 dropped 0 evicted 0 refused 3 "
-                             "msg_sent 1 bulk_sent 1 last_wait_ms 200 max_wait_ms 556 skips 0", g_o);
+                             "msg_sent 1 bulk_sent 1 last_wait_ms 200 max_wait_ms 556 skips 0"
+                             /* Lot 90 (converted, review point): five fields appended */
+                             " weight 3/1 age_ms 0 cap 16 expired 0 capped 0", g_o);
     p2p_shape_status(&g_q, g_o, 12);
     TEST_ASSERT_EQUAL(11, (int)strlen(g_o));
     TEST_ASSERT_EQUAL(0, drain(301));

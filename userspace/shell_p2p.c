@@ -205,7 +205,22 @@ int shell_p2p_line(const char* line) {
     /* Lot 67 (US-068/US-073): bandwidth estimator */
     if (s_eq(cmd, "p2p-bwe")) { report("bwe"); return 0; }
     /* Lot 88 (US-068/US-073): fair shaping queue */
-    if (s_eq(cmd, "p2p-shape")) { report("shape"); return 0; }
+    if (s_eq(cmd, "p2p-shape")) {
+        /* Lot 90: weight, age and cap settings, then the status lines */
+        static char out[320];
+        char w[3][16];
+        const char* av[3];
+        int ac = 0;
+        while (ac < 3) {
+            rest = word(rest, w[ac], (int)sizeof(w[ac]));
+            if (!w[ac][0]) break;
+            av[ac] = w[ac];
+            ac++;
+        }
+        if (ac && p2p_shape_cmd(&g_node, ac, av, out, (int)sizeof(out)) != 0) { print_string(out); return 1; }
+        report("shape");
+        return 0;
+    }
     if (s_eq(cmd, "p2p-kv")) { report("kv"); return 0; }
     if (s_eq(cmd, "p2p-raft-compact")) {
         rc = p2p_raft_compact(&g_node);

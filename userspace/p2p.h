@@ -338,6 +338,8 @@ int p2p_send_unshaped(p2p_node_t* n, const p2p_host_t* h, const char* peer, cons
 /* Lot 69: "p2p flow [PEER|reset]" per-peer flow status */
 int p2p_flow_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, int cap);
 int p2p_pace_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, int cap);
+/* Lot 90: "p2p-shape [status|weight msg|bulk N|age MS|off|cap N|off]" */
+int p2p_shape_cmd(p2p_node_t* n, int argc, const char* const* argv, char* out, int cap);
 int p2p_put(p2p_node_t* n, const p2p_host_t* h, const char* key, const char* value);
 const p2p_item_t* p2p_get_local(const p2p_node_t* n, const char* key);
 int p2p_get_remote(p2p_node_t* n, const p2p_host_t* h, const char* key);

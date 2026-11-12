@@ -352,7 +352,11 @@ int arm_port_shape(void) {
     for (i = 0; i < P2P_SHAPE_Q; i++) { b[0] = (uint8_t)('a' + i); (void)p2p_shape_push(&q, 3U, 0, 1, b, 4, 60); }
     if (p2p_shape_push(&q, 3U, 0, 1, b, 4, 60) != P2P_SHAPE_REFUSED) return 0;
     if (p2p_shape_push(&q, 5U, 1, 2, b, 4, 60) != P2P_SHAPE_QUEUED_EVICT) return 0;
-    return p2p_shape_depth(&q, 3U, -1) == 7 && p2p_shape_depth(&q, 5U, 1) == 1 && d == 0;
+    if (!(p2p_shape_depth(&q, 3U, -1) == P2P_SHAPE_Q - 1 && p2p_shape_depth(&q, 5U, 1) == 1 && d == 0)) return 0;
+    /* Lot 90: weights and the age limit (every entry was pushed at 60 ms) */
+    if (p2p_shape_set_weight(&q, 0, 17) != -1 || p2p_shape_set_weight(&q, 0, 2) != 0 || p2p_shape_weight(&q, 0) != 2) return 0;
+    if (p2p_shape_set_max_age(&q, 30) != 0 || p2p_shape_expire(&q, 90) != 0) return 0;
+    return p2p_shape_expire(&q, 91) == P2P_SHAPE_Q && p2p_shape_depth(&q, 0, -1) == 0;
 }
 
 uint32_t arm_port_selftest(void) {

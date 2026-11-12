@@ -156,7 +156,7 @@ run_test() {
         extra_src="$extra_src $BASE_DIR/userspace/wf_idna.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
-    if [ "$(basename "$test_file")" = "test_lot88_shape.c" ]; then
+    if [ "$(basename "$test_file")" = "test_lot88_shape.c" ] || [ "$(basename "$test_file")" = "test_lot90_shape.c" ]; then
         extra_src="$extra_src $BASE_DIR/userspace/p2p_shape.c"
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
