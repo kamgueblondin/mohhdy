@@ -7,6 +7,19 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 91 (12 November 2026, base 0576849, Lot 90 with the text-scale fix)
+
+US-031 partial, phase3_complete=false. The reader passes radial
+gradients with explicit radii, gradian angles, background-clip and
+background-origin and the box keywords of the background shorthand, all
+of which the engine already drew. @property takes syntaxes with
+alternatives, lists and keywords, and calc(), min(), max() and clamp()
+are type checked. Autofill adds eu, us and au summer time rules to its
+time zone and runs the expiry before every offer list. A QEMU page
+(`make qemu-lot91`, CI job lot91-reader) sets the guest clock and crosses
+local midnight. US-068/073, US-076, US-080 and US-081 stay partial.
+US-078 and US-097 stay simule. See docs/lot91_plan.md.
+
 ### Lot 90 (12 November 2026, base Lot 89 e051615, PR #247)
 
 US-031 partial, phase3_complete=false. The reader passes background
