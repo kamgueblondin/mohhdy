@@ -942,7 +942,7 @@ static int *kind_rank(wf_site_node_t *nd, int kind) {
     case WF_SITE_K_LIST: case WF_SITE_K_FSIZE: case WF_SITE_K_INDENT: case WF_SITE_K_LSPACE:
         return &nd->tok_rank[kind - WF_SITE_K_LIST];
     case WF_SITE_K_BGIMG: case WF_SITE_K_BGPOS: case WF_SITE_K_BGSIZE: case WF_SITE_K_BGREP:
-    case WF_SITE_K_LIMG: case WF_SITE_K_LPOS:
+    case WF_SITE_K_LIMG: case WF_SITE_K_LPOS: case WF_SITE_K_BGCLIP: case WF_SITE_K_BGORIGIN:
         return &nd->lv_rank[kind - WF_SITE_K_BGIMG];
     default: return 0;
     }
@@ -969,7 +969,7 @@ static void reset_kind(wf_site_node_t *nd, int kind) {
         nd->tok_val[kind - WF_SITE_K_LIST] = 0;
         break;
     case WF_SITE_K_BGIMG: case WF_SITE_K_BGPOS: case WF_SITE_K_BGSIZE: case WF_SITE_K_BGREP:
-    case WF_SITE_K_LIMG: case WF_SITE_K_LPOS:
+    case WF_SITE_K_LIMG: case WF_SITE_K_LPOS: case WF_SITE_K_BGCLIP: case WF_SITE_K_BGORIGIN:
         nd->lv[kind - WF_SITE_K_BGIMG] = 0;
         nd->lv_val[kind - WF_SITE_K_BGIMG] = 0;
         break;
@@ -1042,7 +1042,7 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
             nd->tok_val[t] = r->val;
             nd->tok_rank[t] = rank;
         }
-    } else if (r->kind >= WF_SITE_K_BGIMG && r->kind <= WF_SITE_K_LPOS) {
+    } else if (r->kind >= WF_SITE_K_BGIMG && r->kind <= WF_SITE_K_BGORIGIN) {
         int t = r->kind - WF_SITE_K_BGIMG;
         if (rank >= nd->lv_rank[t]) {
             nd->lv[t] = r->lidx;
@@ -1238,7 +1238,8 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
         /* Lot 90: the pool kinds, in the order the engine reads them
          * (the image list before the per-layer lists) */
         static const char *const lp[WF_SITE_LKINDS] = { "background-image:", "background-position:", "background-size:",
-                                                      "background-repeat:", "list-style-image:", "list-style-position:" };
+                                                      "background-repeat:", "list-style-image:", "list-style-position:",
+                                                      "background-clip:", "background-origin:" };
         int t;
         for (t = 0; t < WF_SITE_LKINDS; t++) {
             if (nd->lv_val[t] != 2 || !nd->lv[t] || nd->lv[t] > d->nlongs) continue;
@@ -1309,7 +1310,8 @@ int wf_site_report(const wf_site_t *d, char *out, int cap) {
             }
         }
         {
-            static const char *const ln[WF_SITE_LKINDS] = { " bgimg ", " bgpos ", " bgsize ", " bgrep ", " limg ", " lpos " };
+            static const char *const ln[WF_SITE_LKINDS] = { " bgimg ", " bgpos ", " bgsize ", " bgrep ", " limg ", " lpos ",
+                                                          " bgclip ", " bgorigin " };
             int t;
             for (t = 0; t < WF_SITE_LKINDS; t++) {
                 if (nd->lv_val[t] != 2 || !nd->lv[t] || nd->lv[t] > d->nlongs) continue;
@@ -1651,6 +1653,9 @@ static int prop_kind(const char *prop) {
     if (eq(prop, "background-repeat")) return WF_SITE_K_BGREP;
     if (eq(prop, "list-style-image")) return WF_SITE_K_LIMG;
     if (eq(prop, "list-style-position")) return WF_SITE_K_LPOS;
+    /* Lot 91 */
+    if (eq(prop, "background-clip")) return WF_SITE_K_BGCLIP;
+    if (eq(prop, "background-origin")) return WF_SITE_K_BGORIGIN;
     return 0;
 }
 
@@ -1824,14 +1829,15 @@ static int tok_decl(const wf_site_t *d, const char *prop, const char *val, wf_si
  * parse_decl fills proto with the first longhand; the others of a
  * shorthand (background, list-style) go to g_more, copies of proto with
  * their own kind and value. The callers add one rule per entry. */
-static wf_site_rule_t g_more[4];
+static wf_site_rule_t g_more[6];
 static int g_nmore;
 
 static int short_kinds(const char *prop, int *kinds) {
     if (eq(prop, "background")) {
         kinds[0] = WF_SITE_K_BG; kinds[1] = WF_SITE_K_BGIMG; kinds[2] = WF_SITE_K_BGPOS;
         kinds[3] = WF_SITE_K_BGSIZE; kinds[4] = WF_SITE_K_BGREP;
-        return 5;
+        kinds[5] = WF_SITE_K_BGCLIP; kinds[6] = WF_SITE_K_BGORIGIN;   /* Lot 91 */
+        return 7;
     }
     if (eq(prop, "list-style")) {
         kinds[0] = WF_SITE_K_LIST; kinds[1] = WF_SITE_K_LIMG; kinds[2] = WF_SITE_K_LPOS;
@@ -1843,7 +1849,7 @@ static int short_kinds(const char *prop, int *kinds) {
 /* the other longhands of a shorthand, each a copy of proto with the
  * same keyword (CSS-wide keywords and the per-element kind-only form) */
 static void more_like(const char *prop, const wf_site_rule_t *proto, int mode) {
-    int kinds[5], nk = short_kinds(prop, kinds), k;
+    int kinds[7], nk = short_kinds(prop, kinds), k;
     g_nmore = 0;
     for (k = 1; k < nk; k++) {
         wf_site_rule_t *m = &g_more[g_nmore++];
@@ -1874,7 +1880,8 @@ static int list_name(const char *s);
  * 88, or the last layer's) and the four layer lists */
 static int bg_short(const wf_site_t *d, const char *val, wf_site_rule_t *proto) {
     static wf_cssbg_t bg;
-    static const int kinds[4] = { WF_SITE_K_BGIMG, WF_SITE_K_BGPOS, WF_SITE_K_BGSIZE, WF_SITE_K_BGREP };
+    static const int kinds[6] = { WF_SITE_K_BGIMG, WF_SITE_K_BGPOS, WF_SITE_K_BGSIZE, WF_SITE_K_BGREP,
+                                  WF_SITE_K_BGCLIP, WF_SITE_K_BGORIGIN };
     uint32_t c = 0;
     int k;
     if (!wf_cssbg_shorthand(val, &bg)) return 0;
@@ -1885,9 +1892,11 @@ static int bg_short(const wf_site_t *d, const char *val, wf_site_rule_t *proto) 
     else if (parse_color(bg.color, slen(bg.color), &c)) { proto->val = 2; proto->color = c; }
     else return 0;                    /* a colour the reader does not keep: dropped as in lot 88 */
     g_nmore = 0;
-    for (k = 0; k < 4; k++) {
-        const char *norm = k == 0 ? bg.image : k == 1 ? bg.position : k == 2 ? bg.size : bg.repeat;
-        int given = k == 0 ? bg.has_image : k == 1 ? bg.has_position : k == 2 ? bg.has_size : bg.has_repeat;
+    for (k = 0; k < 6; k++) {
+        const char *norm = k == 0 ? bg.image : k == 1 ? bg.position : k == 2 ? bg.size : k == 3 ? bg.repeat :
+                           k == 4 ? bg.clip : bg.origin;
+        int given = k == 0 ? bg.has_image : k == 1 ? bg.has_position : k == 2 ? bg.has_size : k == 3 ? bg.has_repeat :
+                    k == 4 ? bg.has_clip : bg.has_origin;
         wf_site_rule_t *m = &g_more[g_nmore];
         *m = *proto;
         if (!long_proto(d, kinds[k], norm, given, m)) { g_nmore = 0; return 0; }
@@ -1949,6 +1958,8 @@ static int long_decl(const wf_site_t *d, const char *prop, const char *val, wf_s
     else if (eq(prop, "background-size")) { kind = WF_SITE_K_BGSIZE; l = wf_cssbg_size(val, norm, (int)sizeof(norm)); }
     else if (eq(prop, "background-repeat")) { kind = WF_SITE_K_BGREP; l = wf_cssbg_repeat(val, norm, (int)sizeof(norm)); }
     else if (eq(prop, "list-style-image")) { kind = WF_SITE_K_LIMG; l = wf_cssbg_list_image(val, norm, (int)sizeof(norm)); }
+    else if (eq(prop, "background-clip")) { kind = WF_SITE_K_BGCLIP; l = wf_cssbg_box(val, norm, (int)sizeof(norm)); }
+    else if (eq(prop, "background-origin")) { kind = WF_SITE_K_BGORIGIN; l = wf_cssbg_box(val, norm, (int)sizeof(norm)); }
     else if (eq(prop, "list-style-position")) {
         kind = WF_SITE_K_LPOS;
         if (eq(val, "inside") || eq(val, "outside")) { scopy(norm, WF_SITE_LONG, val, slen(val)); l = slen(norm); }
@@ -2117,14 +2128,14 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
 
 /* Lot 90: the rules one declaration gives (a shorthand gives several):
  * parse_decl, then the longhands it left in g_more; *nout entries copied
- * to out (at most 5) */
+ * to out (at most 7, Lot 91: background gives seven) */
 static int decl_rules(const wf_site_t *d, const char *body, int n, const wf_site_rule_t *base, wf_site_rule_t *out, int *nout) {
     int k;
     *nout = 0;
     out[0] = *base;
     if (!parse_decl(d, body, n, &out[0]) || !out[0].kind) { g_nmore = 0; return 0; }
     *nout = 1;
-    for (k = 0; k < g_nmore && *nout < 5; k++) out[(*nout)++] = g_more[k];
+    for (k = 0; k < g_nmore && *nout < 7; k++) out[(*nout)++] = g_more[k];
     g_nmore = 0;
     return 1;
 }
@@ -3244,7 +3255,7 @@ static void scope_decls(wf_site_t *d, const char *s, int n, uint8_t origin, int 
         wf_site_rule_t proto;
         int semi = p;
         while (semi < n && s[semi] != ';') semi++;
-        static wf_site_rule_t got[5];
+        static wf_site_rule_t got[7];
         int ng = 0, k;
         clear(&proto, (int)sizeof(proto));
         proto.origin = origin;
@@ -3333,7 +3344,7 @@ static int parse_sheet_in(wf_site_t *d, const char *s, int n, uint8_t origin, in
             {
                 int p = 0;
                 while (p < body_n) {
-                    static wf_site_rule_t got[5];
+                    static wf_site_rule_t got[7];
                     int semi = p, ng = 0, k;
                     while (semi < body_n && s[body + semi] != ';') semi++;
                     clear(&proto, (int)sizeof(proto));
@@ -3370,7 +3381,7 @@ static void inline_node(wf_site_t *d, int i, int kind, int ceiling) {
     const char *st = d->node[i].style;
     int n = slen(st), p = 0;
     while (p < n) {
-        static wf_site_rule_t got[5];
+        static wf_site_rule_t got[7];
         wf_site_rule_t proto;
         int semi = p, ng = 0, k;
         while (semi < n && st[semi] != ';') semi++;
@@ -3420,7 +3431,7 @@ static void inline_vars(wf_site_t *d) {
  * element's custom properties; 0 when it is invalid there (dropped on
  * this element, as a sheet-wide invalid var() drops it everywhere) */
 static int defer_rule(wf_site_t *d, int idx, const wf_site_rule_t *r, wf_site_rule_t *out) {
-    static wf_site_rule_t got[5];
+    static wf_site_rule_t got[7];
     char text[20 + WF_SITE_VAL + 4];
     wf_site_rule_t p;
     int n = 0, ok, k, ng = 0, j;
@@ -3502,7 +3513,7 @@ static void copy_kind(wf_site_node_t *nd, const wf_site_node_t *par, int kind) {
         nd->tok_val[kind - WF_SITE_K_LIST] = par->tok_val[kind - WF_SITE_K_LIST];
         break;
     case WF_SITE_K_BGIMG: case WF_SITE_K_BGPOS: case WF_SITE_K_BGSIZE: case WF_SITE_K_BGREP:
-    case WF_SITE_K_LIMG: case WF_SITE_K_LPOS:
+    case WF_SITE_K_LIMG: case WF_SITE_K_LPOS: case WF_SITE_K_BGCLIP: case WF_SITE_K_BGORIGIN:
         nd->lv[kind - WF_SITE_K_BGIMG] = par->lv[kind - WF_SITE_K_BGIMG];
         nd->lv_val[kind - WF_SITE_K_BGIMG] = par->lv_val[kind - WF_SITE_K_BGIMG];
         break;

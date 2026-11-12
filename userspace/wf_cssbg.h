@@ -14,8 +14,8 @@
  *     that is a multiple of 90deg (or a quarter turn), then 2 to 4 colour
  *     stops "colour [N%]" (0..100);
  *   - radial-gradient: an optional shape argument (circle or ellipse, an
- *     extent keyword, "at" and a position), then 2 to 4 stops; explicit
- *     radii are refused;
+ *     extent keyword or explicit radii, "at" and a position), then 2 to
+ *     4 stops;
  *   - a position is one or two values (left, center, right, top, bottom,
  *     a length in px, a percentage, 0), given back as "X Y";
  *   - a size is cover, contain, auto, or one or two lengths (auto allowed);
@@ -25,8 +25,13 @@
  *   - a url is 1..100 printable bytes without spaces, quotes, parentheses,
  *     backslash, ';', '<' or '>' (a quoted url loses its quotes).
  * The background shorthand is split into its longhands; attachment
- * (scroll, fixed, local) and box keywords (border-box, padding-box,
- * content-box) are accepted and not passed on. A colour is only allowed in
+ * (scroll, fixed, local) is accepted and not passed on. Lot 91: box
+ * keywords (border-box, padding-box, content-box) set the origin and the
+ * clip (one keyword both, two the origin then the clip); every layer must
+ * end with the same pair, since the engine has one origin and one clip
+ * box per element, else the shorthand is refused.
+ * Lot 91 also takes explicit radial radii (circle 40px, ellipse 30px 20%,
+ * 40px, 30% 20%) and angles in gradians (a multiple of 100grad). A colour is only allowed in
  * the last layer and is given back as text for the caller to check.
  * Freestanding, no heap. Host tested (test_lot90_bg*.c). */
 #ifndef WF_CSSBG_H
@@ -47,6 +52,11 @@ typedef struct {
     /* 1 when a layer gave that part; 0: every layer has its initial
      * value (none, 0% 0%, auto, repeat) */
     uint8_t has_image, has_position, has_size, has_repeat;
+    /* Lot 91: background-origin and background-clip of the layers
+     * ("padding-box" and "border-box" when no layer gave a box) */
+    char origin[16];
+    char clip[16];
+    uint8_t has_origin, has_clip;
 } wf_cssbg_t;
 
 /* Each returns the length of the normal form written to out (1..cap-1),
@@ -63,6 +73,11 @@ int wf_cssbg_list_image(const char *v, char *out, int cap);
  * #rrggbbaa, rgb()/rgba() with 3 or 4 numbers, transparent, or one of
  * the engine's fifteen names. */
 int wf_cssbg_color(const char *v, int n);
+/* Lot 91: background-clip and background-origin: border-box,
+ * padding-box or content-box, or a list of up to WF_CSSBG_LAYERS of them
+ * that all name the same box (the engine paints every layer in one box);
+ * given back as the one keyword. text and differing lists are refused. */
+int wf_cssbg_box(const char *v, char *out, int cap);
 /* The background shorthand: 1 and out filled, 0 invalid. */
 int wf_cssbg_shorthand(const char *v, wf_cssbg_t *out);
 #endif

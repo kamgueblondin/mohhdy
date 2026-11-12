@@ -29,6 +29,10 @@ static void test_l90_short_0(void) {
     TEST_ASSERT_EQUAL_STRING("auto 0, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat-y", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#55e", g_bg.color);
 }
 
@@ -43,6 +47,10 @@ static void test_l90_short_1(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat-x", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(4 ,139, 151)", g_bg.color);
 }
 
@@ -57,6 +65,10 @@ static void test_l90_short_2(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("no-repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("green", g_bg.color);
 }
 
@@ -71,6 +83,10 @@ static void test_l90_short_3(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(46 ,168 ,118)", g_bg.color);
 }
 
@@ -85,6 +101,10 @@ static void test_l90_short_4(void) {
     TEST_ASSERT_EQUAL_STRING("933%, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space no-repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -99,6 +119,10 @@ static void test_l90_short_5(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space no-repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#441f5b", g_bg.color);
 }
 
@@ -113,6 +137,10 @@ static void test_l90_short_6(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#e76db029", g_bg.color);
 }
 
@@ -127,6 +155,10 @@ static void test_l90_short_7(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(132, 128, 232)", g_bg.color);
 }
 
@@ -141,6 +173,10 @@ static void test_l90_short_8(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#08ee7d9a", g_bg.color);
 }
 
@@ -155,6 +191,10 @@ static void test_l90_short_9(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round, repeat, repeat-y, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -169,6 +209,10 @@ static void test_l90_short_10(void) {
     TEST_ASSERT_EQUAL_STRING("1947px 232px, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round, repeat, round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#66dcc431", g_bg.color);
 }
 
@@ -188,21 +232,16 @@ static void test_l90_short_12(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("orange", g_bg.color);
 }
 
 static void test_l90_short_13(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("spacE  noNE  border-box,  nOne,  NONE SPACE round,  RouNd spAce CENTER local none", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 0% 0%, 0% 0%, center center", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("space, repeat, space round, round space", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("spacE  noNE  border-box,  nOne,  NONE SPACE round,  RouNd spAce CENTER local none", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_14(void) {
@@ -216,21 +255,16 @@ static void test_l90_short_14(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_15(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("PaddING-BoX URL(Ub5), 822.3PX BOTtoM / aUto  round  url(abb_Rxav), nOnE BorDer-Box, centEr botToM #b2f none", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(Ub5), url(abb_Rxav), none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 822.3px bottom, 0% 0%, center bottom", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, round, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("#b2f", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("PaddING-BoX URL(Ub5), 822.3PX BOTtoM / aUto  round  url(abb_Rxav), nOnE BorDer-Box, centEr botToM #b2f none", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_16(void) {
@@ -244,6 +278,10 @@ static void test_l90_short_16(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(118, 151, 57, 0.4)", g_bg.color);
 }
 
@@ -258,6 +296,10 @@ static void test_l90_short_17(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-x, space round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("blue", g_bg.color);
 }
 
@@ -272,6 +314,10 @@ static void test_l90_short_18(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -286,6 +332,10 @@ static void test_l90_short_19(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -300,6 +350,10 @@ static void test_l90_short_20(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto, 1815px 254%", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#ff0bac", g_bg.color);
 }
 
@@ -314,21 +368,16 @@ static void test_l90_short_21(void) {
     TEST_ASSERT_EQUAL_STRING("auto, cover, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, no-repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(61, 59, 192, 0.0)", g_bg.color);
 }
 
 static void test_l90_short_22(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("ROUND url('GaH_') bordeR-bOX, 1631% bottom url(qG7Ys2-2NJUJD50AiDkaJByJL70gI) repeat	REPEAT", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(GaH_), url(qG7Ys2-2NJUJD50AiDkaJByJL70gI)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 1631% bottom", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("round, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("ROUND url('GaH_') bordeR-bOX, 1631% bottom url(qG7Ys2-2NJUJD50AiDkaJByJL70gI) repeat	REPEAT", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_23(void) {
@@ -342,6 +391,10 @@ static void test_l90_short_23(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat-x", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -356,6 +409,10 @@ static void test_l90_short_24(void) {
     TEST_ASSERT_EQUAL_STRING("contain, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round space, round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(62, 165, 128, 0.6)", g_bg.color);
 }
 
@@ -370,6 +427,10 @@ static void test_l90_short_25(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#b0a452", g_bg.color);
 }
 
@@ -384,21 +445,16 @@ static void test_l90_short_26(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-y", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#e74", g_bg.color);
 }
 
 static void test_l90_short_27(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("LEFT -1343px 	 repEat 	 none,	url(XTA)	pADDinG-box	SPACE ROUND,	rEpeaT rounD  url(\"gE6_r7E.bmBKr9S5Y.-GCaeGZ\")", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, url(XTA), url(gE6_r7E.bmBKr9S5Y.-GCaeGZ)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("left -1343px, 0% 0%, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, space round, repeat round", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("LEFT -1343px 	 repEat 	 none,	url(XTA)	pADDinG-box	SPACE ROUND,	rEpeaT rounD  url(\"gE6_r7E.bmBKr9S5Y.-GCaeGZ\")", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_28(void) {
@@ -412,6 +468,10 @@ static void test_l90_short_28(void) {
     TEST_ASSERT_EQUAL_STRING("195% auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space round, repeat, space no-repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#9ca973", g_bg.color);
 }
 
@@ -426,6 +486,10 @@ static void test_l90_short_29(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#1ad", g_bg.color);
 }
 
@@ -445,21 +509,16 @@ static void test_l90_short_31(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_32(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("0	0 url(gwxgFn0ApYCVOFhAI), 1356.1PX top / ConTain, Left center LOCAL, RIGHT 733.11PX /Cover 	 url(  7.w1yASbsB.nyLet ) 	 content-box", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(gwxgFn0ApYCVOFhAI), none, none, url(7.w1yASbsB.nyLet)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0 0, 1356.1px top, left center, right 733.11px", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, contain, auto, cover", g_bg.size);
-    TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("0	0 url(gwxgFn0ApYCVOFhAI), 1356.1PX top / ConTain, Left center LOCAL, RIGHT 733.11PX /Cover 	 url(  7.w1yASbsB.nyLet ) 	 content-box", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_33(void) {
@@ -473,49 +532,26 @@ static void test_l90_short_33(void) {
     TEST_ASSERT_EQUAL_STRING("1618px", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_34(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("none 	 fiXeD 	 CENTER	right / 963Px 0,	bottom CEntEr/232.71px 1417px  SPACE 	 Repeat  Local,	bOrDer-box NONE,	WHITE	RouNd", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("right center, center bottom, 0% 0%, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("963px 0, 232.71px 1417px, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, space repeat, repeat, round", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("white", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("none 	 fiXeD 	 CENTER	right / 963Px 0,	bottom CEntEr/232.71px 1417px  SPACE 	 Repeat  Local,	bOrDer-box NONE,	WHITE	RouNd", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_35(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("border-box	SCrolL	rouNd 	 repeat	LEFT 	 433% /auto auto	NONE, rgB(126, 2,205) 	 NONE", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("left 433%, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("round repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("rgb(126, 2,205)", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("border-box	SCrolL	rouNd 	 repeat	LEFT 	 433% /auto auto	NONE, rgB(126, 2,205) 	 NONE", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_36(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("url( E55BemaT ), NONe REPEAT	ROUND local, RGB(61,80,195) nonE bottom CONTENT-BOX", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(E55BemaT), none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 0% 0%, center bottom", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat round, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("rgb(61,80,195)", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("url( E55BemaT ), NONe REPEAT	ROUND local, RGB(61,80,195) nonE bottom CONTENT-BOX", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_37(void) {
@@ -529,6 +565,10 @@ static void test_l90_short_37(void) {
     TEST_ASSERT_EQUAL_STRING("282%", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#0ec962", g_bg.color);
 }
 
@@ -548,6 +588,10 @@ static void test_l90_short_39(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(121, 132, 118, 0.1)", g_bg.color);
 }
 
@@ -562,6 +606,10 @@ static void test_l90_short_40(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat-x", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#ebc09b", g_bg.color);
 }
 
@@ -576,6 +624,10 @@ static void test_l90_short_41(void) {
     TEST_ASSERT_EQUAL_STRING("0", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#aa19bc22", g_bg.color);
 }
 
@@ -590,6 +642,10 @@ static void test_l90_short_42(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, space repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -604,6 +660,10 @@ static void test_l90_short_43(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space, repeat-x", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#cd2b8c", g_bg.color);
 }
 
@@ -618,21 +678,16 @@ static void test_l90_short_44(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat space", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_45(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("FIXED, none leFt 	 0 COnTEnt-box, 629%  top", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, left 0, 629% top", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("FIXED, none leFt 	 0 COnTEnt-box, 629%  top", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_46(void) {
@@ -646,21 +701,16 @@ static void test_l90_short_46(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, cover", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round, repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_47(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("rIghT 1259px /AUTO 	 AuTo  NO-RepeaT round  NONE  bOrdeR-BOX, #dBe 	 url(	4wKOwdq 	 ) 	 LEFT 1781PX 	 COnTenT-box", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, url(4wKOwdq)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("right 1259px, left 1781px", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("no-repeat round, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("#dbe", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("rIghT 1259px /AUTO 	 AuTo  NO-RepeaT round  NONE  bOrdeR-BOX, #dBe 	 url(	4wKOwdq 	 ) 	 LEFT 1781PX 	 COnTenT-box", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_48(void) {
@@ -674,6 +724,10 @@ static void test_l90_short_48(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round, no-repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(127, 133, 169, 0.2)", g_bg.color);
 }
 
@@ -688,6 +742,10 @@ static void test_l90_short_49(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#5e90c9ff", g_bg.color);
 }
 
@@ -702,6 +760,10 @@ static void test_l90_short_50(void) {
     TEST_ASSERT_EQUAL_STRING("41px auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("no-repeat round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -716,35 +778,21 @@ static void test_l90_short_51(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat, round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_52(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("LEFT bottOm/AUTO auto 	 nOne 	 round 	 SPACE, RIGHT -503.8%/cOntAin  BOrder-Box  space 	 rePeat  none, url( 	 dXmL64rvNv  ) left 	 815.12%/845%	aUto", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, url(dXmL64rvNv)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("left bottom, right -503.8%, left 815.12%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, contain, 845% auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("round space, space repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("LEFT bottOm/AUTO auto 	 nOne 	 round 	 SPACE, RIGHT -503.8%/cOntAin  BOrder-Box  space 	 rePeat  none, url( 	 dXmL64rvNv  ) left 	 815.12%/845%	aUto", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_53(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("ConteNT-BOx	url( 3Hd	), PADDING-BOX REPEAT 	 space, linear-gradient(to toP,	rgb(122,32,36)  33.7%,	#5bacEf  99%,	rgba(148, 135, 155, 0.7),	#cB2b6bF9 21.6%)", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(3Hd), none, linear-gradient(to top, rgb(122,32,36) 33.7%, #5bacef 99%, rgba(148, 135, 155, 0.7), #cb2b6bf9 21.6%)", g_bg.image);
-    TEST_ASSERT_EQUAL(0, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 0% 0%, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat space, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("ConteNT-BOx	url( 3Hd	), PADDING-BOX REPEAT 	 space, linear-gradient(to toP,	rgb(122,32,36)  33.7%,	#5bacEf  99%,	rgba(148, 135, 155, 0.7),	#cB2b6bF9 21.6%)", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_54(void) {
@@ -758,6 +806,10 @@ static void test_l90_short_54(void) {
     TEST_ASSERT_EQUAL_STRING("contain", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round no-repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#cb2", g_bg.color);
 }
 
@@ -772,6 +824,10 @@ static void test_l90_short_55(void) {
     TEST_ASSERT_EQUAL_STRING("auto, cover, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, no-repeat space, repeat, no-repeat round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#4d79ada8", g_bg.color);
 }
 
@@ -786,6 +842,10 @@ static void test_l90_short_56(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, space repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -800,6 +860,10 @@ static void test_l90_short_57(void) {
     TEST_ASSERT_EQUAL_STRING("auto, 0", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#aaaec2", g_bg.color);
 }
 
@@ -814,6 +878,10 @@ static void test_l90_short_58(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(95 ,26 ,183)", g_bg.color);
 }
 
@@ -828,21 +896,16 @@ static void test_l90_short_59(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, space round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(45, 86, 109, 0.3)", g_bg.color);
 }
 
 static void test_l90_short_60(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("RIGht 433px / auto autO	roUnd	space	none, BORDER-BOX  lOcal", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("right 433px, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("round space, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("RIGht 433px / auto autO	roUnd	space	none, BORDER-BOX  lOcal", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_61(void) {
@@ -856,6 +919,10 @@ static void test_l90_short_61(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -870,6 +937,10 @@ static void test_l90_short_62(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -884,6 +955,10 @@ static void test_l90_short_63(void) {
     TEST_ASSERT_EQUAL_STRING("cover, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("grey", g_bg.color);
 }
 
@@ -898,6 +973,10 @@ static void test_l90_short_64(void) {
     TEST_ASSERT_EQUAL_STRING("contain", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-y", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -912,6 +991,10 @@ static void test_l90_short_65(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -926,6 +1009,10 @@ static void test_l90_short_66(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -940,6 +1027,10 @@ static void test_l90_short_67(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, round no-repeat, repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -954,21 +1045,16 @@ static void test_l90_short_68(void) {
     TEST_ASSERT_EQUAL_STRING("cover, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-x, repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#634", g_bg.color);
 }
 
 static void test_l90_short_69(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("CONTENT-BOX url('V4iIM') fixed left cEnter / Auto 652PX no-repeat 	 SPacE, 	 SCROLL 	 CENTER 1202PX /1803%  1385Px 	 url(\"DTQuV1fzsrdzGj\"), 	 Repeat	NO-REPEAT  0 BOTTOM /298%, 	 1628%	CENTER	repEat-x", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(V4iIM), url(DTQuV1fzsrdzGj), none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("left center, center 1202px, 0 bottom, 1628% center", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto 652px, 1803% 1385px, 298%, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("no-repeat space, repeat, repeat-x, repeat-x", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("CONTENT-BOX url('V4iIM') fixed left cEnter / Auto 652PX no-repeat 	 SPacE, 	 SCROLL 	 CENTER 1202PX /1803%  1385Px 	 url(\"DTQuV1fzsrdzGj\"), 	 Repeat	NO-REPEAT  0 BOTTOM /298%, 	 1628%	CENTER	repEat-x", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_70(void) {
@@ -982,6 +1068,10 @@ static void test_l90_short_70(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(0 58 167)", g_bg.color);
 }
 
@@ -996,6 +1086,10 @@ static void test_l90_short_71(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space no-repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#d5f161ad", g_bg.color);
 }
 
@@ -1010,6 +1104,10 @@ static void test_l90_short_72(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("lime", g_bg.color);
 }
 
@@ -1024,6 +1122,10 @@ static void test_l90_short_73(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space no-repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(146,106 103)", g_bg.color);
 }
 
@@ -1038,6 +1140,10 @@ static void test_l90_short_74(void) {
     TEST_ASSERT_EQUAL_STRING("1614px", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#961af4", g_bg.color);
 }
 
@@ -1052,21 +1158,16 @@ static void test_l90_short_75(void) {
     TEST_ASSERT_EQUAL_STRING("866% 1185px", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("red", g_bg.color);
 }
 
 static void test_l90_short_76(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("NO-REPEAT  rOund -181%	bottom nOnE,	#ab1346 	 bOrdER-boX 	 LINEAR-GRADIENT(to  bottom,  #3b1,  #Ab57Bd 17%,  #0a15FbDE 46%)", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, linear-gradient(to bottom, #3b1, #ab57bd 17%, #0a15fbde 46%)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("-181% bottom, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("no-repeat round, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("#ab1346", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("NO-REPEAT  rOund -181%	bottom nOnE,	#ab1346 	 bOrdER-boX 	 LINEAR-GRADIENT(to  bottom,  #3b1,  #Ab57Bd 17%,  #0a15FbDE 46%)", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_77(void) {
@@ -1080,6 +1181,10 @@ static void test_l90_short_77(void) {
     TEST_ASSERT_EQUAL_STRING("271.2px 1736.8%, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#1cc8df", g_bg.color);
 }
 
@@ -1094,35 +1199,21 @@ static void test_l90_short_78(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_79(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("noNe Space repEat padding-box, 	 url(\"PFmxVSfxAIfDJskseJ/xna2ESE\") 	 No-rEpEat  ROUND, 	 CENTER	CENTER  no-rEpEat no-repeat", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, url(PFmxVSfxAIfDJskseJ/xna2ESE), none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 0% 0%, center center", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("space repeat, no-repeat round, no-repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("noNe Space repEat padding-box, 	 url(\"PFmxVSfxAIfDJskseJ/xna2ESE\") 	 No-rEpEat  ROUND, 	 CENTER	CENTER  no-rEpEat no-repeat", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_80(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("local NONe, rEPeat	1458PX/auTO, url( AEj  ) cEnteR	left, url(\"/QPhfqbXG7_wTiOBFI_Z_zX\") paDDiNG-box space  REPEAT rgba(33, 184, 56, 0.1)", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, url(AEj), url(/QPhfqbXG7_wTiOBFI_Z_zX)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 1458px center, left center, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat, space repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("rgba(33, 184, 56, 0.1)", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("local NONe, rEPeat	1458PX/auTO, url( AEj  ) cEnteR	left, url(\"/QPhfqbXG7_wTiOBFI_Z_zX\") paDDiNG-box space  REPEAT rgba(33, 184, 56, 0.1)", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_81(void) {
@@ -1136,21 +1227,16 @@ static void test_l90_short_81(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-x", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#ae6eed", g_bg.color);
 }
 
 static void test_l90_short_82(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("1868px 	 top  url('ul_b')  PadDing-box, RADIAL-GRADIENT(ellipse, SiLver, rgba(173, 146, 67, 0.4) 43.4%) 	 roUnD space", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(ul_b), radial-gradient(ellipse, silver, rgba(173, 146, 67, 0.4) 43.4%)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("1868px top, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, round space", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("1868px 	 top  url('ul_b')  PadDing-box, RADIAL-GRADIENT(ellipse, SiLver, rgba(173, 146, 67, 0.4) 43.4%) 	 roUnD space", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_83(void) {
@@ -1164,21 +1250,16 @@ static void test_l90_short_83(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round repeat, repeat, repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("grey", g_bg.color);
 }
 
 static void test_l90_short_84(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("URL(6vcLLQP7H25C6MvV/LHzb5g),  nOne,  nOne NO-REPEAT No-repEat,  CENTER  439Px/220% 	 rgb(141,146, 4) 	 URL(Q_8-) 	 repeat no-repeat 	 CONTENT-BOX", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(6vcLLQP7H25C6MvV/LHzb5g), none, none, url(Q_8-)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 0% 0%, 0% 0%, center 439px", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto, 220%", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, no-repeat, repeat-x", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("rgb(141,146, 4)", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("URL(6vcLLQP7H25C6MvV/LHzb5g),  nOne,  nOne NO-REPEAT No-repEat,  CENTER  439Px/220% 	 rgb(141,146, 4) 	 URL(Q_8-) 	 repeat no-repeat 	 CONTENT-BOX", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_85(void) {
@@ -1192,6 +1273,10 @@ static void test_l90_short_85(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat space, repeat, space repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#bbe", g_bg.color);
 }
 
@@ -1206,6 +1291,10 @@ static void test_l90_short_86(void) {
     TEST_ASSERT_EQUAL_STRING("auto, 651.9%, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("maroon", g_bg.color);
 }
 
@@ -1220,6 +1309,10 @@ static void test_l90_short_87(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#10653d9f", g_bg.color);
 }
 
@@ -1234,6 +1327,10 @@ static void test_l90_short_88(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(34,232 122)", g_bg.color);
 }
 
@@ -1248,35 +1345,21 @@ static void test_l90_short_89(void) {
     TEST_ASSERT_EQUAL_STRING("720px auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, space round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_90(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("repeat-x,	boRDer-box	LEFT -1615%	url(CD6mjJk2a3uEoZwd21Yt-BwMJNW)	fixED,	url(vnfmu2) RiGHt 1770%/ auto,	1007PX	0/conTAiN rePeAt REPEAT RGb(144 102,3) url(uAIc8B)", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, url(CD6mjJk2a3uEoZwd21Yt-BwMJNW), url(vnfmu2), url(uAIc8B)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, left -1615%, right 1770%, 1007px 0", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto, contain", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat-x, repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("rgb(144 102,3)", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("repeat-x,	boRDer-box	LEFT -1615%	url(CD6mjJk2a3uEoZwd21Yt-BwMJNW)	fixED,	url(vnfmu2) RiGHt 1770%/ auto,	1007PX	0/conTAiN rePeAt REPEAT RGb(144 102,3) url(uAIc8B)", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_91(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("990% 	 tOp  None,  TOP RigHT / AUTO NONE,  BORDER-BOX noNe pURPLe", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("990% top, right top, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("purple", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("990% 	 tOp  None,  TOP RigHT / AUTO NONE,  BORDER-BOX noNe pURPLe", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_92(void) {
@@ -1290,6 +1373,10 @@ static void test_l90_short_92(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, no-repeat round, repeat round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#a9a3fed1", g_bg.color);
 }
 
@@ -1304,6 +1391,10 @@ static void test_l90_short_93(void) {
     TEST_ASSERT_EQUAL_STRING("0 auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-x, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(169 146, 249)", g_bg.color);
 }
 
@@ -1318,21 +1409,16 @@ static void test_l90_short_94(void) {
     TEST_ASSERT_EQUAL_STRING("cover", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#aa219e9f", g_bg.color);
 }
 
 static void test_l90_short_95(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("leFt 902.6PX /1976px	repEAt sPACe,	BORDER-BOX NoNe ScrolL spaCe 	 no-repeat,	yellow url( 	 AmJTPami7cYn4e-b459cWBg_g ) SpAce rOund", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, url(AmJTPami7cYn4e-b459cWBg_g)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("left 902.6px, 0% 0%, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("1976px, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat space, space no-repeat, space round", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("yellow", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("leFt 902.6PX /1976px	repEAt sPACe,	BORDER-BOX NoNe ScrolL spaCe 	 no-repeat,	yellow url( 	 AmJTPami7cYn4e-b459cWBg_g ) SpAce rOund", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_96(void) {
@@ -1346,6 +1432,10 @@ static void test_l90_short_96(void) {
     TEST_ASSERT_EQUAL_STRING("contain, 1250px 924px, auto, 709.37% 786.2%", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, round, round, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#ed520c", g_bg.color);
 }
 
@@ -1360,6 +1450,10 @@ static void test_l90_short_97(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(200,8 ,229)", g_bg.color);
 }
 
@@ -1374,21 +1468,16 @@ static void test_l90_short_98(void) {
     TEST_ASSERT_EQUAL_STRING("0 752px", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("navy", g_bg.color);
 }
 
 static void test_l90_short_99(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("CENTER center repeat PADDING-BOX,	url(sSMkg.XANw.OwPW7OePh.7iyu-OxL),	ceNTer 54px / aUtO LIME", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, url(sSMkg.XANw.OwPW7OePh.7iyu-OxL), none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("center center, 0% 0%, center 54px", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("lime", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("CENTER center repeat PADDING-BOX,	url(sSMkg.XANw.OwPW7OePh.7iyu-OxL),	ceNTer 54px / aUtO LIME", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_100(void) {
@@ -1402,21 +1491,16 @@ static void test_l90_short_100(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-y, repeat-x", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#b9f", g_bg.color);
 }
 
 static void test_l90_short_101(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("BOTTOM left/ 1701.4px, url('qU_7Bib6ya-l4JsJyIhf') round repEat, 931% CeNTeR  ConTent-bOx, center center 	 #Bb5f0935", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, url(qU_7Bib6ya-l4JsJyIhf), none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("left bottom, 0% 0%, 931% center, center center", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("1701.4px, auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, round repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("#bb5f0935", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("BOTTOM left/ 1701.4px, url('qU_7Bib6ya-l4JsJyIhf') round repEat, 931% CeNTeR  ConTent-bOx, center center 	 #Bb5f0935", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_102(void) {
@@ -1430,6 +1514,10 @@ static void test_l90_short_102(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-y", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(71, 84,252)", g_bg.color);
 }
 
@@ -1444,35 +1532,21 @@ static void test_l90_short_103(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, 519% 0, 0 0", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-y, repeat, repeat, repeat-y", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_104(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("left 235px	no-repeat	SPACE	padding-box	nOnE, Right 	 TOP /auto 	 580%	no-repeat 	 No-RePEat, 1980%/ 661Px 	 1494px, rgba(253, 134, 64, 0.9)", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("left 235px, right top, 1980% center, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto 580%, 661px 1494px, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("no-repeat space, no-repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("rgba(253, 134, 64, 0.9)", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("left 235px	no-repeat	SPACE	padding-box	nOnE, Right 	 TOP /auto 	 580%	no-repeat 	 No-RePEat, 1980%/ 661Px 	 1494px, rgba(253, 134, 64, 0.9)", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_105(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("No-rePEat rEpeat, 	 url(u59jRqMBRoJ) content-box ROund 	 RepEAt local", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, url(u59jRqMBRoJ)", g_bg.image);
-    TEST_ASSERT_EQUAL(0, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat-y, round repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("No-rePEat rEpeat, 	 url(u59jRqMBRoJ) content-box ROund 	 RepEAt local", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_106(void) {
@@ -1486,6 +1560,10 @@ static void test_l90_short_106(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat, space round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -1500,21 +1578,16 @@ static void test_l90_short_107(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round, repeat round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_108(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("None 720%  CENTER /826%	auTo, 1965% 1632.25px none BORDER-BOX, border-box	no-repeat	scroll, ROUND	rEPeat	0 	 1679%", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("720% center, 1965% 1632.25px, 0% 0%, 0 1679%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("826% auto, auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, no-repeat, round repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("None 720%  CENTER /826%	auTo, 1965% 1632.25px none BORDER-BOX, border-box	no-repeat	scroll, ROUND	rEPeat	0 	 1679%", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_109(void) {
@@ -1528,6 +1601,10 @@ static void test_l90_short_109(void) {
     TEST_ASSERT_EQUAL_STRING("0 1289.7px, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, round space", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -1542,6 +1619,10 @@ static void test_l90_short_110(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("content-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -1556,21 +1637,16 @@ static void test_l90_short_111(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto 197px", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("no-repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_112(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("padding-box spACe	REPeaT,  url(hNa531DvhK),  rEpeAt  url(JI7aUk9vpo),  PaDDing-bOx  NONE", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, url(hNa531DvhK), url(JI7aUk9vpo), none", g_bg.image);
-    TEST_ASSERT_EQUAL(0, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 0% 0%, 0% 0%, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("space repeat, repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("padding-box spACe	REPeaT,  url(hNa531DvhK),  rEpeAt  url(JI7aUk9vpo),  PaDDing-bOx  NONE", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_113(void) {
@@ -1584,6 +1660,10 @@ static void test_l90_short_113(void) {
     TEST_ASSERT_EQUAL_STRING("auto, 0 0", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-y, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(201, 223, 100, 0.2)", g_bg.color);
 }
 
@@ -1598,21 +1678,16 @@ static void test_l90_short_114(void) {
     TEST_ASSERT_EQUAL_STRING("901.9% 0, 1397.5px, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round repeat, space no-repeat, round space", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#ece0ef13", g_bg.color);
 }
 
 static void test_l90_short_115(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("url(\"Ef.oR98vpEAbp0EB0Dmf\"), none 	 content-box, RepeaT-y 	 LEFT  1897PX 	 none", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(Ef.oR98vpEAbp0EB0Dmf), none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 0% 0%, left 1897px", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat-y", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("url(\"Ef.oR98vpEAbp0EB0Dmf\"), none 	 content-box, RepeaT-y 	 LEFT  1897PX 	 none", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_116(void) {
@@ -1626,6 +1701,10 @@ static void test_l90_short_116(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#37f", g_bg.color);
 }
 
@@ -1640,21 +1719,16 @@ static void test_l90_short_117(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, space no-repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_118(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("url( eQMedFaP4YCgEvgEQ ) centEr 	 bottoM/69% 	 AUTO, tOP 	 content-box 	 url('Hj55P'), none 1450% 679px", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(eQMedFaP4YCgEvgEQ), url(Hj55P), none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("center bottom, center top, 1450% 679px", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("69% auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("url( eQMedFaP4YCgEvgEQ ) centEr 	 bottoM/69% 	 AUTO, tOP 	 content-box 	 url('Hj55P'), none 1450% 679px", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_119(void) {
@@ -1668,6 +1742,10 @@ static void test_l90_short_119(void) {
     TEST_ASSERT_EQUAL_STRING("1935.8px auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("no-repeat space", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -1682,6 +1760,10 @@ static void test_l90_short_120(void) {
     TEST_ASSERT_EQUAL_STRING("0 1341px, auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#e92", g_bg.color);
 }
 
@@ -1696,21 +1778,16 @@ static void test_l90_short_121(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#ebc", g_bg.color);
 }
 
 static void test_l90_short_122(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("LOCAL 1591PX BOTTOM/0 573.1% CONTENT-BOX RepEaT  spAcE none,  SPACe,  repeat-y 	 None,  url('yt/FZs.KhAeeR98c_Bk1qd3')", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, none, url(yt/FZs.KhAeeR98c_Bk1qd3)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("1591px bottom, 0% 0%, 0% 0%, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("0 573.1%, auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat space, space, repeat-y, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("LOCAL 1591PX BOTTOM/0 573.1% CONTENT-BOX RepEaT  spAcE none,  SPACe,  repeat-y 	 None,  url('yt/FZs.KhAeeR98c_Bk1qd3')", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_123(void) {
@@ -1724,35 +1801,21 @@ static void test_l90_short_123(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, contain", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(191,161,60)", g_bg.color);
 }
 
 static void test_l90_short_124(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("url(  sNM1deyWKM0x8mdgsvHj54w/RWp ) tOP RiGhT / auTo borDer-box no-rePEAT	nO-Repeat, url('Llh4Jt0ZjZ3mLwp') left center /0 autO SPACE #cEE", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(sNM1deyWKM0x8mdgsvHj54w/RWp), url(Llh4Jt0ZjZ3mLwp)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("right top, left center", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, 0 auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("no-repeat, space", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("#cee", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("url(  sNM1deyWKM0x8mdgsvHj54w/RWp ) tOP RiGhT / auTo borDer-box no-rePEAT	nO-Repeat, url('Llh4Jt0ZjZ3mLwp') left center /0 autO SPACE #cEE", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_125(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("noNe 	 scroll 	 cEnteR 0/cover, 	 #d5c radIal-GRadieNt(FARTHEST-CORNER	elliPse, whiTE  81%, rgba(221, 21, 100, 0.9)) pADdiNG-bOx roUnd	space", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, radial-gradient(farthest-corner ellipse, white 81%, rgba(221, 21, 100, 0.9))", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("center 0, 0% 0%", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("cover, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, round space", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("#d5c", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("noNe 	 scroll 	 cEnteR 0/cover, 	 #d5c radIal-GRadieNt(FARTHEST-CORNER	elliPse, whiTE  81%, rgba(221, 21, 100, 0.9)) pADdiNG-bOx roUnd	space", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_126(void) {
@@ -1766,21 +1829,16 @@ static void test_l90_short_126(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#e7ce08d3", g_bg.color);
 }
 
 static void test_l90_short_127(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("fixeD URL(Ggn96oAfzGf0) 1632%/ AUTO 	 autO border-box,  url(\"GCo.1ch818lAfDq\"),  0	TOP	NONE,  SCROLL space  repeat #D81 BOTTOM LEfT", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(Ggn96oAfzGf0), url(GCo.1ch818lAfDq), none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("1632% center, 0% 0%, 0 top, left bottom", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat, space repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("#d81", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("fixeD URL(Ggn96oAfzGf0) 1632%/ AUTO 	 autO border-box,  url(\"GCo.1ch818lAfDq\"),  0	TOP	NONE,  SCROLL space  repeat #D81 BOTTOM LEfT", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_128(void) {
@@ -1794,35 +1852,21 @@ static void test_l90_short_128(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#4ffc32f2", g_bg.color);
 }
 
 static void test_l90_short_129(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("paDdinG-box nonE SPACE sPacE,	TOP/AUTO  AutO nO-REpeat  RePEat", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, center top", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("space, repeat-y", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("paDdinG-box nonE SPACE sPacE,	TOP/AUTO  AutO nO-REpeat  RePEat", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_130(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("repeat-y	url(OfsvH7ykOikNW6vDM/8gkK)	PADDING-BOX, tOp  right /1584%	BORDER-BOX	REPEAT no-repeat", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(OfsvH7ykOikNW6vDM/8gkK), none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, right top", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, 1584%", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat-y, repeat-x", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("repeat-y	url(OfsvH7ykOikNW6vDM/8gkK)	PADDING-BOX, tOp  right /1584%	BORDER-BOX	REPEAT no-repeat", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_131(void) {
@@ -1836,21 +1880,16 @@ static void test_l90_short_131(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto, 0", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round, round, repeat, repeat-x", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_132(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("REPEAT-Y,  LoCal	0 0/contain	CONTENT-BOX	round 	 rounD	LINEAR-GRADIENT(#93D,	#aaA69ad7 94.3%)	#9FF48B", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, linear-gradient(#93d, #aaa69ad7 94.3%)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, 0 0", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, contain", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat-y, round", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("#9ff48b", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("REPEAT-Y,  LoCal	0 0/contain	CONTENT-BOX	round 	 rounD	LINEAR-GRADIENT(#93D,	#aaA69ad7 94.3%)	#9FF48B", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_133(void) {
@@ -1864,6 +1903,10 @@ static void test_l90_short_133(void) {
     TEST_ASSERT_EQUAL_STRING("0", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#cd012e7b", g_bg.color);
 }
 
@@ -1878,21 +1921,16 @@ static void test_l90_short_134(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_135(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("no-repeat	URL(uyMd2)	CONTENT-BOX	1342px top, 0 752Px 	 NONE, MaROon 	 rIgHt	bOttoM/ AUTO 	 noNe", &g_bg));
-    TEST_ASSERT_EQUAL(3, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(uyMd2), none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("1342px top, 0 752px, right bottom", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("no-repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("maroon", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("no-repeat	URL(uyMd2)	CONTENT-BOX	1342px top, 0 752Px 	 NONE, MaROon 	 rIgHt	bOttoM/ AUTO 	 noNe", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_136(void) {
@@ -1906,6 +1944,10 @@ static void test_l90_short_136(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, 161px 1408.9px, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("no-repeat, repeat, repeat, round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(169, 67, 50, 0.6)", g_bg.color);
 }
 
@@ -1920,6 +1962,10 @@ static void test_l90_short_137(void) {
     TEST_ASSERT_EQUAL_STRING("0 auto, cover", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat round, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#eaf", g_bg.color);
 }
 
@@ -1934,6 +1980,10 @@ static void test_l90_short_138(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -1948,21 +1998,16 @@ static void test_l90_short_139(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-y", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#fd0", g_bg.color);
 }
 
 static void test_l90_short_140(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("PADDING-BOX -968PX -1808px/386PX 537PX,  1380px/274px	511px	url(\"Cp/BoO4aJoxU_qToR07CM3rdRm\")	NO-REPEAT  repeat,  URL(/glOgs0bqANKw7HZfPlMdNkstYmWV) -568%  top,  None 	 bOtToM  LEFT 	 fIXed 	 No-rePeat 	 space 	 BLUE", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, url(Cp/BoO4aJoxU_qToR07CM3rdRm), url(/glOgs0bqANKw7HZfPlMdNkstYmWV), none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("-968px -1808px, 1380px center, -568% top, left bottom", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("386px 537px, 274px 511px, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat-y, repeat, no-repeat space", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("blue", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("PADDING-BOX -968PX -1808px/386PX 537PX,  1380px/274px	511px	url(\"Cp/BoO4aJoxU_qToR07CM3rdRm\")	NO-REPEAT  repeat,  URL(/glOgs0bqANKw7HZfPlMdNkstYmWV) -568%  top,  None 	 bOtToM  LEFT 	 fIXed 	 No-rePeat 	 space 	 BLUE", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_141(void) {
@@ -1976,21 +2021,16 @@ static void test_l90_short_141(void) {
     TEST_ASSERT_EQUAL_STRING("609% 1792.3%, auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#fdc95201", g_bg.color);
 }
 
 static void test_l90_short_142(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("0	botTom/ 1458% 	 324PX, locAl 	 NONE, paDdinG-boX url(\"pWqg1Ca6iyaTHf3xpOc.CACC6Llrq\") BotTom 	 right / auto 1195.4px, PADDING-BOX noNe TOP left ORANGE", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none, url(pWqg1Ca6iyaTHf3xpOc.CACC6Llrq), none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0 bottom, 0% 0%, right bottom, left top", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("1458% 324px, auto, auto 1195.4px, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat, repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("orange", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("0	botTom/ 1458% 	 324PX, locAl 	 NONE, paDdinG-boX url(\"pWqg1Ca6iyaTHf3xpOc.CACC6Llrq\") BotTom 	 right / auto 1195.4px, PADDING-BOX noNe TOP left ORANGE", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_143(void) {
@@ -2004,6 +2044,10 @@ static void test_l90_short_143(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-x, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(188, 103, 85, 0.1)", g_bg.color);
 }
 
@@ -2018,21 +2062,16 @@ static void test_l90_short_144(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, cover, 226px", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space repeat, repeat, space, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#99ea2401", g_bg.color);
 }
 
 static void test_l90_short_145(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("borDer-box fIxeD SpacE url(\"wEnZAqZlV\") top  left/ 1384PX 203%,	content-bOX  ROUND	NO-REPEAT  1931%  1344.88px,	bORdER-boX,	REPEAT nO-rEPeAt bottom right /aUto auto #dA7 linear-gradient(#B9e806, #Ab94AA, rgb(12, 37 ,63)  86%, GREEN 29.9%) SCROLL", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("url(wEnZAqZlV), none, none, linear-gradient(#b9e806, #ab94aa, rgb(12, 37 ,63) 86%, green 29.9%)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("left top, 1931% 1344.88px, 0% 0%, right bottom", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("1384px 203%, auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("space, round no-repeat, repeat, repeat-x", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("#da7", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("borDer-box fIxeD SpacE url(\"wEnZAqZlV\") top  left/ 1384PX 203%,	content-bOX  ROUND	NO-REPEAT  1931%  1344.88px,	bORdER-boX,	REPEAT nO-rEPeAt bottom right /aUto auto #dA7 linear-gradient(#B9e806, #Ab94AA, rgb(12, 37 ,63)  86%, GREEN 29.9%) SCROLL", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_146(void) {
@@ -2046,6 +2085,10 @@ static void test_l90_short_146(void) {
     TEST_ASSERT_EQUAL_STRING("541% 632.7%", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("no-repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -2060,6 +2103,10 @@ static void test_l90_short_147(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(207, 48, 181, 0.8)", g_bg.color);
 }
 
@@ -2074,6 +2121,10 @@ static void test_l90_short_148(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat, space, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(1, 67, 197, 0.4)", g_bg.color);
 }
 
@@ -2088,6 +2139,10 @@ static void test_l90_short_149(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat, space", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#8bdbf4ce", g_bg.color);
 }
 
@@ -2102,6 +2157,10 @@ static void test_l90_short_150(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -2116,6 +2175,10 @@ static void test_l90_short_151(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat-x", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -2130,6 +2193,10 @@ static void test_l90_short_152(void) {
     TEST_ASSERT_EQUAL_STRING("auto, 257px 0", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space repeat, no-repeat round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgb(206 ,194, 59)", g_bg.color);
 }
 
@@ -2144,6 +2211,10 @@ static void test_l90_short_153(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, round repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -2158,6 +2229,10 @@ static void test_l90_short_154(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("no-repeat space", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#06f743ac", g_bg.color);
 }
 
@@ -2172,6 +2247,10 @@ static void test_l90_short_155(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#d5ac7ab7", g_bg.color);
 }
 
@@ -2186,6 +2265,10 @@ static void test_l90_short_156(void) {
     TEST_ASSERT_EQUAL_STRING("1786px auto, auto 1059px, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, space, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("#78d2a8", g_bg.color);
 }
 
@@ -2200,6 +2283,10 @@ static void test_l90_short_157(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -2214,6 +2301,10 @@ static void test_l90_short_158(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("orange", g_bg.color);
 }
 
@@ -2228,6 +2319,10 @@ static void test_l90_short_159(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, round", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("rgba(59, 108, 230, 0.3)", g_bg.color);
 }
 
@@ -2242,6 +2337,10 @@ static void test_l90_short_160(void) {
     TEST_ASSERT_EQUAL_STRING("1037%", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -2256,6 +2355,10 @@ static void test_l90_short_161(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -2270,21 +2373,16 @@ static void test_l90_short_162(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_163(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("BORDER-BOX,  url(bhepkpU5.2O2wTEUt5LKGXBj1P5AAb) no-repeat round BOTTOM LEFT Fixed,  LEFT  ToP 	 url(  NzAQD9lK0JTPBA ),  CONTENT-BOX ceNter -404PX url(GOwIGc.ISirNobCE8rqdVieqo) rgb(215,152 ,235) ROuND 	 NO-REPEAT", &g_bg));
-    TEST_ASSERT_EQUAL(4, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, url(bhepkpU5.2O2wTEUt5LKGXBj1P5AAb), url(NzAQD9lK0JTPBA), url(GOwIGc.ISirNobCE8rqdVieqo)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("0% 0%, left bottom, left top, center -404px", g_bg.position);
-    TEST_ASSERT_EQUAL(0, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, no-repeat round, repeat, round no-repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("rgb(215,152 ,235)", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("BORDER-BOX,  url(bhepkpU5.2O2wTEUt5LKGXBj1P5AAb) no-repeat round BOTTOM LEFT Fixed,  LEFT  ToP 	 url(  NzAQD9lK0JTPBA ),  CONTENT-BOX ceNter -404PX url(GOwIGc.ISirNobCE8rqdVieqo) rgb(215,152 ,235) ROuND 	 NO-REPEAT", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_164(void) {
@@ -2298,6 +2396,10 @@ static void test_l90_short_164(void) {
     TEST_ASSERT_EQUAL_STRING("725px 1958%", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("space", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("purple", g_bg.color);
 }
 
@@ -2312,21 +2414,16 @@ static void test_l90_short_165(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(1, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(1, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_166(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("LEFT  892%/ 299%,	content-box raDIal-GrAdiENt(ellipse, #26d 43%, rGb(247, 69, 247), #C4897afB, #Fc2) cenTer  1446PX", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(1, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, radial-gradient(ellipse, #26d 43%, rgb(247, 69, 247), #c4897afb, #fc2)", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("left 892%, center 1446px", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("299%, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("LEFT  892%/ 299%,	content-box raDIal-GrAdiENt(ellipse, #26d 43%, rGb(247, 69, 247), #C4897afB, #Fc2) cenTer  1446PX", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_167(void) {
@@ -2340,21 +2437,16 @@ static void test_l90_short_167(void) {
     TEST_ASSERT_EQUAL_STRING("auto", g_bg.size);
     TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
 static void test_l90_short_168(void) {
-    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand("CENTER 0 / 1984.45% 1503.4px, PAdDing-BoX #f53AC5 190.4%  top", &g_bg));
-    TEST_ASSERT_EQUAL(2, g_bg.layers);
-    TEST_ASSERT_EQUAL(0, g_bg.has_image);
-    TEST_ASSERT_EQUAL_STRING("none, none", g_bg.image);
-    TEST_ASSERT_EQUAL(1, g_bg.has_position);
-    TEST_ASSERT_EQUAL_STRING("center 0, 190.4% top", g_bg.position);
-    TEST_ASSERT_EQUAL(1, g_bg.has_size);
-    TEST_ASSERT_EQUAL_STRING("1984.45% 1503.4px, auto", g_bg.size);
-    TEST_ASSERT_EQUAL(0, g_bg.has_repeat);
-    TEST_ASSERT_EQUAL_STRING("repeat, repeat", g_bg.repeat);
-    TEST_ASSERT_EQUAL_STRING("#f53ac5", g_bg.color);
+    TEST_ASSERT_EQUAL(0, wf_cssbg_shorthand("CENTER 0 / 1984.45% 1503.4px, PAdDing-BoX #f53AC5 190.4%  top", &g_bg));
+    TEST_ASSERT_EQUAL(0, g_bg.layers);
 }
 
 static void test_l90_short_169(void) {
@@ -2368,6 +2460,10 @@ static void test_l90_short_169(void) {
     TEST_ASSERT_EQUAL_STRING("auto, auto, auto, auto", g_bg.size);
     TEST_ASSERT_EQUAL(1, g_bg.has_repeat);
     TEST_ASSERT_EQUAL_STRING("repeat, round no-repeat, repeat, space", g_bg.repeat);
+    TEST_ASSERT_EQUAL(0, g_bg.has_origin);
+    TEST_ASSERT_EQUAL_STRING("padding-box", g_bg.origin);
+    TEST_ASSERT_EQUAL(0, g_bg.has_clip);
+    TEST_ASSERT_EQUAL_STRING("border-box", g_bg.clip);
     TEST_ASSERT_EQUAL_STRING("", g_bg.color);
 }
 
@@ -2573,12 +2669,12 @@ static void test_l90_short_209(void) {
 
 static void test_l90_short_210(void) {
     const char *s = style_of("<html><head><style>body p { background-repeat: repeat  no-repeat } p { background-position: lEft	Top } p { background: padding-box 	 NAVY 	 url(\"6U2cSw6h\") 	 repEAt roUnd 	 0  0 }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000080;background-image:url(6U2cSw6h);background-position:0 0;background-repeat:repeat-x\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000080;background-image:url(6U2cSw6h);background-position:0 0;background-repeat:repeat-x;background-clip:padding-box;background-origin:padding-box\"", s);
 }
 
 static void test_l90_short_211(void) {
     const char *s = style_of("<html><head><style>p { background-position: 61.1Px CeNteR } p { background: fixed  padding-box  #C36  url(W8j9v_fPgn_oNpnR8nkCAw) }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#cc3366;background-image:url(W8j9v_fPgn_oNpnR8nkCAw)\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#cc3366;background-image:url(W8j9v_fPgn_oNpnR8nkCAw);background-clip:padding-box;background-origin:padding-box\"", s);
 }
 
 static void test_l90_short_212(void) {
@@ -2598,7 +2694,7 @@ static void test_l90_short_214(void) {
 
 static void test_l90_short_215(void) {
     const char *s = style_of("<html><head><style>p { background: LINEAR-GRADIENT(#Af910A62, 	 #46924a, 	 ORANGE  17%, 	 #1cfC95ca  17%) 	 PaDdinG-box 	 rEPeaT  repeat } .k { background-color: #4eFA74 } #t { background-repeat: rEPEat-X }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#4efa74;background-image:linear-gradient(#af910a62, #46924a, orange 17%, #1cfc95ca 17%);background-repeat:repeat-x\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#4efa74;background-image:linear-gradient(#af910a62, #46924a, orange 17%, #1cfc95ca 17%);background-repeat:repeat-x;background-clip:padding-box;background-origin:padding-box\"", s);
 }
 
 static void test_l90_short_216(void) {
@@ -2608,12 +2704,12 @@ static void test_l90_short_216(void) {
 
 static void test_l90_short_217(void) {
     const char *s = style_of("<html><head><style>p.k { background: url( bGj7DI )  local } body p { background: REPeat NO-REPEAT	1490.6px boTtOM, url(/ewF0L7RYTj4) rePeAt 	 no-repeat paddIng-box blue !important } p { background-position: 753%	TOP !important }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff;background-image:none, url(/ewF0L7RYTj4);background-position:1490.6px bottom, 0% 0%;background-repeat:repeat-x, repeat-x\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:url(bGj7DI);background-position:753% top\"", s);
 }
 
 static void test_l90_short_218(void) {
     const char *s = style_of("<html><head><style>body p { background-color: #a86 !important } body p { background: Linear-gRadient(to Top, limE, #a28EeAE1, #f11 	 6%) 	 scroll 	 #F24 	 REPEAT-Y } #t { background: url(5F1F/-8VywlL/GpY8XogD0RZi.) border-box }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#aa8866;background-image:url(5F1F/-8VywlL/GpY8XogD0RZi.)\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#aa8866;background-image:url(5F1F/-8VywlL/GpY8XogD0RZi.);background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_219(void) {
@@ -2623,7 +2719,7 @@ static void test_l90_short_219(void) {
 
 static void test_l90_short_220(void) {
     const char *s = style_of("<html><head><style>body p { background: url(\"R8z8mToSvIRD7JVl.rrymMic_.b48R\")  #a41AaD  cEnteR / aUtO AuTO } #t { background-color: #AFAc6B } body p { background: padding-box WhiTE TOP CenTer ROUnd	spACE }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#afac6b;background-position:center top;background-repeat:round space\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#afac6b;background-position:center top;background-repeat:round space;background-clip:padding-box;background-origin:padding-box\"", s);
 }
 
 static void test_l90_short_221(void) {
@@ -2633,12 +2729,12 @@ static void test_l90_short_221(void) {
 
 static void test_l90_short_222(void) {
     const char *s = style_of("<html><head><style>p { background: URL(/6E7g7ynncHI0h2qWI), url(QB46bFxcGyfoxRCq8b) #1Dddd5 paddIng-box -1132pX BOTTOM !important } #t { background-size: cONTain }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#1dddd5;background-image:url(/6E7g7ynncHI0h2qWI), url(QB46bFxcGyfoxRCq8b);background-position:0% 0%, -1132px bottom\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-size:contain\"", s);
 }
 
 static void test_l90_short_223(void) {
     const char *s = style_of("<html><head><style>#t { background: padding-box 6.36%	TOp /1621.6pX 	 90px NO-REPEAT	repEaT, PaddIng-Box  space  #9cdece }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#9cdece;background-position:6.36% top, 0% 0%;background-size:1621.6px 90px, auto;background-repeat:repeat-y, space\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#9cdece;background-position:6.36% top, 0% 0%;background-size:1621.6px 90px, auto;background-repeat:repeat-y, space;background-clip:padding-box;background-origin:padding-box\"", s);
 }
 
 static void test_l90_short_224(void) {
@@ -2648,7 +2744,7 @@ static void test_l90_short_224(void) {
 
 static void test_l90_short_225(void) {
     const char *s = style_of("<html><head><style>.k { background: URL(ZsGKgqwp4jceKbB-BB--U)  BORDER-BOX  #1CF } body p { background-image: url('G98TgG9CLOyT1WxHv-mqSeKJiM.xY') }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#11ccff;background-image:url(ZsGKgqwp4jceKbB-BB--U)\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#11ccff;background-image:url(ZsGKgqwp4jceKbB-BB--U);background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_226(void) {
@@ -2663,7 +2759,7 @@ static void test_l90_short_227(void) {
 
 static void test_l90_short_228(void) {
     const char *s = style_of("<html><head><style>.k { background-repeat: no-repeat	REPEAT } .k { background: center 	 665%	round 	 RepEat	#59f	NOnE	bordEr-box !important } p { background-color: RED }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5599ff;background-image:none;background-position:center 665%;background-repeat:round repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5599ff;background-image:none;background-position:center 665%;background-repeat:round repeat;background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_229(void) {
@@ -2673,7 +2769,7 @@ static void test_l90_short_229(void) {
 
 static void test_l90_short_230(void) {
     const char *s = style_of("<html><head><style>#t { background: BordeR-bOx center 1602.89PX /602.3Px	auto BlUe }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff;background-position:center 1602.89px;background-size:602.3px auto\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff;background-position:center 1602.89px;background-size:602.3px auto;background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_231(void) {
@@ -2683,7 +2779,7 @@ static void test_l90_short_231(void) {
 
 static void test_l90_short_232(void) {
     const char *s = style_of("<html><head><style>body p { background: BOrDeR-box  none  #DDe  0	1984% } p.k { background-color: #944f6a }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#944f6a;background-image:none;background-position:0 1984%\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#944f6a;background-image:none;background-position:0 1984%;background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_233(void) {
@@ -2718,7 +2814,7 @@ static void test_l90_short_238(void) {
 
 static void test_l90_short_239(void) {
     const char *s = style_of("<html><head><style>.k { background: PADDING-BOX #8Ba url(\"llwOdH\") SPACE }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#88bbaa;background-image:url(llwOdH);background-repeat:space\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#88bbaa;background-image:url(llwOdH);background-repeat:space;background-clip:padding-box;background-origin:padding-box\"", s);
 }
 
 static void test_l90_short_240(void) {
@@ -2793,7 +2889,7 @@ static void test_l90_short_253(void) {
 
 static void test_l90_short_254(void) {
     const char *s = style_of("<html><head><style>p.k { background: border-box rePEaT-x, bottom LEFT url(O6PdhT0_) BLUE boRder-box !important } .k { background: URL(TTwn_8jGmGzS.jg5NL7ISO.pOgO) ConteNt-box REPEAT 	 REPEAT -587.6%	cEnter, 1516%	bottom / auto BLACK radIal-GRaDienT(rgba(99, 126, 97, 0.8) 66%,	puRpLE	1%) } #t { background: ROuNd	ROUND 	 491% 1552.7% /aUTo 	 AUTO 	 #615 	 nonE }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff;background-image:none, url(O6PdhT0_);background-position:0% 0%, left bottom;background-repeat:repeat-x, repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff;background-image:none, url(O6PdhT0_);background-position:0% 0%, left bottom;background-repeat:repeat-x, repeat;background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_255(void) {
@@ -2838,7 +2934,7 @@ static void test_l90_short_262(void) {
 
 static void test_l90_short_263(void) {
     const char *s = style_of("<html><head><style>#t { background: NONE	#db1	no-repeat	borDer-BoX !important }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ddbb11;background-image:none;background-repeat:no-repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ddbb11;background-image:none;background-repeat:no-repeat;background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_264(void) {
@@ -2853,7 +2949,7 @@ static void test_l90_short_265(void) {
 
 static void test_l90_short_266(void) {
     const char *s = style_of("<html><head><style>p.k { background: repeat	space  URL(7KFb)  SCROLL, padDing-box 	 #f13 	 RIGHT } #t { background-color: #ca7fff } #t { background-repeat: RoUND }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ca7fff;background-image:url(7KFb), none;background-position:0% 0%, right center;background-repeat:round\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ca7fff;background-repeat:round\"", s);
 }
 
 static void test_l90_short_267(void) {
@@ -2868,7 +2964,7 @@ static void test_l90_short_268(void) {
 
 static void test_l90_short_269(void) {
     const char *s = style_of("<html><head><style>#t { background-repeat: nO-rEpeat } p { background: no-repeat	no-repeat NONE, content-boX  url('L')  no-repeat  1439.6px	-1203pX }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:none, url(L);background-position:0% 0%, 1439.6px -1203px;background-repeat:no-repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-repeat:no-repeat\"", s);
 }
 
 static void test_l90_short_270(void) {
@@ -2878,12 +2974,12 @@ static void test_l90_short_270(void) {
 
 static void test_l90_short_271(void) {
     const char *s = style_of("<html><head><style>.k { background: spAce BORDER-BOX none, 626px	1991px #a2a none !important } p { background: fIxED 	 nO-repeat ROund 	 RADial-gradIeNt(fartHEsT-sidE 	 ELLIPSE 	 at 	 1982% BOTTOM,	rgB(53,54 ,155) 76%,	RED) 	 Green 	 325% top /1769% }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#aa22aa;background-image:none, none;background-position:0% 0%, 626px 1991px;background-repeat:space, repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING("", s);
 }
 
 static void test_l90_short_272(void) {
     const char *s = style_of("<html><head><style>#t { background: NO-REPEAT spacE CENTER top NONE, local content-box NONE !important }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:none, none;background-position:center top, 0% 0%;background-repeat:no-repeat space, repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING("", s);
 }
 
 static void test_l90_short_273(void) {
@@ -2983,7 +3079,7 @@ static void test_l90_short_291(void) {
 
 static void test_l90_short_292(void) {
     const char *s = style_of("<html><head><style>p { background-position: 1429.1PX  536px } p.k { background: paDdinG-bOX  NAVY  lefT 0  nONe !important }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000080;background-image:none;background-position:left 0\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000080;background-image:none;background-position:left 0;background-clip:padding-box;background-origin:padding-box\"", s);
 }
 
 static void test_l90_short_293(void) {
@@ -3028,7 +3124,7 @@ static void test_l90_short_300(void) {
 
 static void test_l90_short_301(void) {
     const char *s = style_of("<html><head><style>p.k { background: RepeaT space 	 none 	 BordER-box, NonE repeat } p { background-size: AUTo }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:none, none;background-repeat:repeat space, repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-size:auto\"", s);
 }
 
 static void test_l90_short_302(void) {
@@ -3058,7 +3154,7 @@ static void test_l90_short_306(void) {
 
 static void test_l90_short_307(void) {
     const char *s = style_of("<html><head><style>p.k { background-color: bLue } p { background: scroll BORDER-BOX URL(EZmButGbN/Z/H/HvZ5xXd0viFi) rIGht BottOM /695.1% 	 1692.98px }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff;background-image:url(EZmButGbN/Z/H/HvZ5xXd0viFi);background-position:right bottom;background-size:695.1% 1692.98px\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff;background-image:url(EZmButGbN/Z/H/HvZ5xXd0viFi);background-position:right bottom;background-size:695.1% 1692.98px;background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_308(void) {
@@ -3073,7 +3169,7 @@ static void test_l90_short_309(void) {
 
 static void test_l90_short_310(void) {
     const char *s = style_of("<html><head><style>.k { background: bordER-bOx radial-gradient(eLlipsE,  GREY,  rgb(67 ,148,42),  LIME,  rgb(70, 6 155)	63.1%) #b38 CeNTeR  -1496PX } p { background: NonE NO-REPEAT scrOlL BOrder-bOx, REPEAT-X	bordeR-box	LOCAL } #t { background-color: naVy }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000080;background-image:radial-gradient(ellipse, grey, rgb(67 ,148,42), lime, rgb(70, 6 155) 63.1%);background-position:center -1496px\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000080;background-image:radial-gradient(ellipse, grey, rgb(67 ,148,42), lime, rgb(70, 6 155) 63.1%);background-position:center -1496px;background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_311(void) {
@@ -3158,7 +3254,7 @@ static void test_l90_short_326(void) {
 
 static void test_l90_short_327(void) {
     const char *s = style_of("<html><head><style>.k { background-color: #5b1 } p { background: #d3ab7c No-REpeaT rOUnD LEFT 	 1116px /1110% LINEAR-GRADIENT(to 	 right, #FEf2b9aC, rgba(193, 93, 18, 0.5), rgba(188, 254, 14, 0.0) 55%) } p { background: rePeat  NO-REPEAT 	 content-BOx 	 bottom	RIGHT, #f9bF3b  local  url(\"4urpoDaCQZToJ2modJ2\")  top  NO-REPEAT repeat !important }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f9bf3b;background-image:none, url(4urpoDaCQZToJ2modJ2);background-position:right bottom, center top;background-repeat:repeat-x, repeat-y\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#55bb11\"", s);
 }
 
 static void test_l90_short_328(void) {
@@ -3193,7 +3289,7 @@ static void test_l90_short_333(void) {
 
 static void test_l90_short_334(void) {
     const char *s = style_of("<html><head><style>#t { background: BORDER-BOX NO-REPEAT 	 spACE CenTeR	TOP / 1154.8%	660.27px }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-position:center top;background-size:1154.8% 660.27px;background-repeat:no-repeat space\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-position:center top;background-size:1154.8% 660.27px;background-repeat:no-repeat space;background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_335(void) {
@@ -3273,7 +3369,7 @@ static void test_l90_short_349(void) {
 
 static void test_l90_short_350(void) {
     const char *s = style_of("<html><head><style>body p { background: url('PqKMOiSwUw6Hu1U6P1'), content-box local NONE } .k { background-color: GRey }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#808080;background-image:url(PqKMOiSwUw6Hu1U6P1), none\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#808080\"", s);
 }
 
 static void test_l90_short_351(void) {
@@ -3328,7 +3424,7 @@ static void test_l90_short_360(void) {
 
 static void test_l90_short_361(void) {
     const char *s = style_of("<html><head><style>body p { background: linear-gradient(to top, #2D47ff 34%, #b59) 	 #F14a8e !important } .k { background: CONTENT-BOX radiAL-GRaDieNT(CLOSEST-CORNER, #b9Cb04F2, #fE170b1E, blAck) 401% 	 -1229.4PX / 0 	 394% repEaT-Y !important }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:radial-gradient(closest-corner, #b9cb04f2, #fe170b1e, black);background-position:401% -1229.4px;background-size:0 394%;background-repeat:repeat-y\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:radial-gradient(closest-corner, #b9cb04f2, #fe170b1e, black);background-position:401% -1229.4px;background-size:0 394%;background-repeat:repeat-y;background-clip:content-box;background-origin:content-box\"", s);
 }
 
 static void test_l90_short_362(void) {
@@ -3348,7 +3444,7 @@ static void test_l90_short_364(void) {
 
 static void test_l90_short_365(void) {
     const char *s = style_of("<html><head><style>p { background: url(\"kFnFC3.PJvSNdF4.fflSOaWUjq\") 555PX, no-repeaT	rouNd border-box left top /COVER #1aa6B8 url(\"7w3QGdX6wYqDaS.\") } .k { background-image: nonE, URL(C3IMNrF3H8kq7H34) } .k { background-size: CoNtain }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#1aa6b8;background-image:none, url(C3IMNrF3H8kq7H34);background-position:555px center, left top;background-size:contain;background-repeat:repeat, no-repeat round\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:none, url(C3IMNrF3H8kq7H34);background-size:contain\"", s);
 }
 
 static void test_l90_short_366(void) {
@@ -3363,7 +3459,7 @@ static void test_l90_short_367(void) {
 
 static void test_l90_short_368(void) {
     const char *s = style_of("<html><head><style>p.k { background: paDDing-BoX 565PX -20.3PX/ AUtO auto } #t { background-position: 1482% bottoM }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-position:1482% bottom;background-size:auto\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-position:1482% bottom;background-size:auto;background-clip:padding-box;background-origin:padding-box\"", s);
 }
 
 static void test_l90_short_369(void) {
@@ -3373,7 +3469,7 @@ static void test_l90_short_369(void) {
 
 static void test_l90_short_370(void) {
     const char *s = style_of("<html><head><style>.k { background: BOTTOM } #t { background: 5px 	 boTtOm	pADding-boX	Blue }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff;background-position:5px bottom\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff;background-position:5px bottom;background-clip:padding-box;background-origin:padding-box\"", s);
 }
 
 static void test_l90_short_371(void) {
@@ -3398,7 +3494,7 @@ static void test_l90_short_374(void) {
 
 static void test_l90_short_375(void) {
     const char *s = style_of("<html><head><style>.k { background-image: lInear-graDient(to  BoTTOM, #9961BF 	 88%, purple 34%, RGB(170, 100,237), bLacK) !important } body p { background: repeat 	 roUnd 	 GReen 	 lEft 1446% 	 border-box }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#008000;background-image:linear-gradient(to bottom, #9961bf 88%, purple 34%, rgb(170, 100,237), black);background-position:left 1446%;background-repeat:repeat round\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#008000;background-image:linear-gradient(to bottom, #9961bf 88%, purple 34%, rgb(170, 100,237), black);background-position:left 1446%;background-repeat:repeat round;background-clip:border-box;background-origin:border-box\"", s);
 }
 
 static void test_l90_short_376(void) {
@@ -3428,7 +3524,7 @@ static void test_l90_short_380(void) {
 
 static void test_l90_short_381(void) {
     const char *s = style_of("<html><head><style>p.k { background-size: CONTAIN } p { background-repeat: ROUND rePeaT !important } body p { background: url(Sm8S4sr), LINEAR-GRADIENT(0.75turn, #5cA, maroon) 	 fIxEd 	 PAddIng-box }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:url(Sm8S4sr), linear-gradient(0.75turn, #5ca, maroon);background-size:contain;background-repeat:round repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-size:contain;background-repeat:round repeat\"", s);
 }
 
 static void test_l90_short_382(void) {
@@ -3443,12 +3539,12 @@ static void test_l90_short_383(void) {
 
 static void test_l90_short_384(void) {
     const char *s = style_of("<html><head><style>p.k { background: paDdIng-boX url(\"-VEzuVoUb_N-wNp2zOM\") -740.8PX 	 center /coVer repeat-y, RIGHT TOP repeat REPEAT NonE #1c5 } p { background: LInear-GRAdiEnT(rGB(106, 212 181), rgb(72 ,134, 181)) #E8eddc ROUND	REPEAT }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#11cc55;background-image:url(-VEzuVoUb_N-wNp2zOM), none;background-position:-740.8px center, right top;background-size:cover, auto;background-repeat:repeat-y, repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#e8eddc;background-image:linear-gradient(rgb(106, 212 181), rgb(72 ,134, 181));background-repeat:round repeat\"", s);
 }
 
 static void test_l90_short_385(void) {
     const char *s = style_of("<html><head><style>p { background: linear-gradient(180deg,  #CDD  89%,  rgba(48, 226, 195, 0.6)  51%) conTenT-box }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(180deg, #cdd 89%, rgba(48, 226, 195, 0.6) 51%)\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(180deg, #cdd 89%, rgba(48, 226, 195, 0.6) 51%);background-clip:content-box;background-origin:content-box\"", s);
 }
 
 static void test_l90_short_386(void) {
@@ -3458,7 +3554,7 @@ static void test_l90_short_386(void) {
 
 static void test_l90_short_387(void) {
     const char *s = style_of("<html><head><style>p.k { background: round None, repeat	round  bottOM CENTER  BORDER-BOX  GREEN  url(\"e3PC/Ok2/L5jdY\") } #t { background-image: url( vaAjiO3SlJXvzEN.	) } p { background-size: auto auto }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#008000;background-image:url(vaAjiO3SlJXvzEN.);background-position:0% 0%, center bottom;background-repeat:round, repeat round\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:url(vaAjiO3SlJXvzEN.);background-size:auto\"", s);
 }
 
 static void test_l90_short_388(void) {
@@ -3468,7 +3564,7 @@ static void test_l90_short_388(void) {
 
 static void test_l90_short_389(void) {
     const char *s = style_of("<html><head><style>body p { background: no-REpEAt CONTENT-BOX, #d0C 	 NO-REPEAT no-repEAt } p { background: right top 	 #0cb }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#dd00cc;background-repeat:no-repeat, no-repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ccbb;background-position:right top\"", s);
 }
 
 static void test_l90_short_390(void) {
@@ -3498,7 +3594,7 @@ static void test_l90_short_394(void) {
 
 static void test_l90_short_395(void) {
     const char *s = style_of("<html><head><style>p.k { background: content-box repeAt 	 spaCe locaL } .k { background: FIXED RounD round, #aac url(	bUaHGAdO/x8JswFA7PB9Sxa3nJ  ) SPace	no-repeat 1024.92% 	 top }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-repeat:repeat space\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-repeat:repeat space;background-clip:content-box;background-origin:content-box\"", s);
 }
 
 static void test_l90_short_396(void) {
@@ -3583,7 +3679,7 @@ static void test_l90_short_411(void) {
 
 static void test_l90_short_412(void) {
     const char *s = style_of("<html><head><style>#t { background: NO-REPEAT rouND  CENTER	centEr  url( 5	), Red contenT-box url(\"UH-yK_WMOQIRLM2CaV5cvRO5\") cENter	0/ coNtaIN Repeat  spacE } p { background: url(\".36BXXWsb.FB-uq63swH6\"), round  1480Px BOTTOM }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff0000;background-image:url(5), url(UH-yK_WMOQIRLM2CaV5cvRO5);background-position:center center, center 0;background-size:auto, contain;background-repeat:no-repeat round, repeat space\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:url(.36BXXWsb.FB-uq63swH6), none;background-position:0% 0%, 1480px bottom;background-repeat:repeat, round\"", s);
 }
 
 static void test_l90_short_413(void) {
@@ -3598,7 +3694,7 @@ static void test_l90_short_414(void) {
 
 static void test_l90_short_415(void) {
     const char *s = style_of("<html><head><style>.k { background-size: AUTO AUTO } .k { background: spAce roUnD, cEnter bOttOM/AUTO  #5B6e02  lineaR-GRadient(to	left,	#c23dEa,	rgB(237 ,130,130),	#14ac185d 3%,	LIME) } p.k { background: URL(xbcbg) 	 padding-box, LOCaL #b34a9A URL(rQwwNyt2KXpfIjgnS7) RePeat ROUND 1017% 225%/50.1% }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#b34a9a;background-image:url(xbcbg), url(rQwwNyt2KXpfIjgnS7);background-position:0% 0%, 1017% 225%;background-size:auto, 50.1%;background-repeat:repeat, repeat round\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5b6e02;background-image:none, linear-gradient(to left, #c23dea, rgb(237 ,130,130), #14ac185d 3%, lime);background-position:0% 0%, center bottom;background-size:auto, auto;background-repeat:space round, repeat\"", s);
 }
 
 static void test_l90_short_416(void) {
@@ -3618,7 +3714,7 @@ static void test_l90_short_418(void) {
 
 static void test_l90_short_419(void) {
     const char *s = style_of("<html><head><style>body p { background-repeat: repeat-y } #t { background: nonE TOP right, RIGHT	1362px	BORDER-BOX	space round	#3F7	url(\"6nezZU5o.XmV\") !important } #t { background-color: #9BBBbd }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#33ff77;background-image:none, url(6nezZU5o.XmV);background-position:right top, right 1362px;background-repeat:repeat, space round\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#9bbbbd;background-repeat:repeat-y\"", s);
 }
 
 static void test_l90_short_420(void) {
@@ -3638,7 +3734,7 @@ static void test_l90_short_422(void) {
 
 static void test_l90_short_423(void) {
     const char *s = style_of("<html><head><style>body p { background-size: 1074px 0 } #t { background: rAdIaL-gradient(at 	 -1667PX 1558PX, lime 81%, yellow 82%, rgba(183, 7, 190, 0.8) 82%, purple) } .k { background: REPEAT 	 roUnd, #4DaFC8  content-box  url( 	 -DkpJ1Bw10ZW27ACLbxej  ) !important }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#4dafc8;background-image:none, url(-DkpJ1Bw10ZW27ACLbxej);background-repeat:repeat round, repeat\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:radial-gradient(at -1667px 1558px, lime 81%, yellow 82%, rgba(183, 7, 190, 0.8) 82%, purple)\"", s);
 }
 
 static void test_l90_short_424(void) {
@@ -3693,7 +3789,7 @@ static void test_l90_short_433(void) {
 
 static void test_l90_short_434(void) {
     const char *s = style_of("<html><head><style>p { background: left / AUTO Auto none, rIght  -1487%/auto  pADding-boX  #aF5  NONE !important }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#aaff55;background-image:none, none;background-position:left center, right -1487%;background-size:auto, auto\"", s);
+    TEST_ASSERT_EQUAL_STRING("", s);
 }
 
 static void test_l90_short_435(void) {
@@ -3703,7 +3799,7 @@ static void test_l90_short_435(void) {
 
 static void test_l90_short_436(void) {
     const char *s = style_of("<html><head><style>p { background: -720.8PX 311%  padding-box  rEpEat  none, linear-gradient(0.5turn,  #C59FeBDd 61%,  gray,  #10A) FIXED REPEAT sPace } #t { background-image: URL(5ri9ogmfKpQxk1s/s), URL(djqgLdyU8zFwhMhF.) }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:url(5ri9ogmfKpQxk1s/s), url(djqgLdyU8zFwhMhF.);background-position:-720.8px 311%, 0% 0%;background-repeat:repeat, repeat space\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:url(5ri9ogmfKpQxk1s/s), url(djqgLdyU8zFwhMhF.)\"", s);
 }
 
 static void test_l90_short_437(void) {
@@ -3783,7 +3879,7 @@ static void test_l90_short_451(void) {
 
 static void test_l90_short_452(void) {
     const char *s = style_of("<html><head><style>p.k { background-repeat: space 	 SPACE } body p { background: rOund ROuNd	CONTENT-BOX	RADIAL-GRADIENT(at 1771.76PX toP,	black,	#7FD7fef8 	 87.1%) }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:radial-gradient(at 1771.76px top, black, #7fd7fef8 87.1%);background-repeat:space\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:radial-gradient(at 1771.76px top, black, #7fd7fef8 87.1%);background-repeat:space;background-clip:content-box;background-origin:content-box\"", s);
 }
 
 static void test_l90_short_453(void) {
@@ -3793,7 +3889,7 @@ static void test_l90_short_453(void) {
 
 static void test_l90_short_454(void) {
     const char *s = style_of("<html><head><style>body p { background: url(\"no1S3g7\"), BOTTOM  right/ coveR URL(gij3Lf7Su) white } #t { background: grEEn url(	VU2RNZ 	 ) leFT 1881px/0 1551% content-box } p.k { background-position: LEFT 1068PX }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#008000;background-image:url(VU2RNZ);background-position:left 1881px;background-size:0 1551%\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#008000;background-image:url(VU2RNZ);background-position:left 1881px;background-size:0 1551%;background-clip:content-box;background-origin:content-box\"", s);
 }
 
 static void test_l90_short_455(void) {
@@ -3868,7 +3964,7 @@ static void test_l90_short_468(void) {
 
 static void test_l90_short_469(void) {
     const char *s = style_of("<html><head><style>body p { background: NONE	0 1086.3%/auto, round	sPAcE  GREEN  url('UC.CijPt') } .k { background-image: url(NzymjngsS5), radial-GrAdient(RGB(58, 45 ,99),  #0aA,  #CeA90A 99%,  #BBb 14.3%) !important } p.k { background: url(Zm/j) 	 CONTENT-BOX }</style></head><body><p id=t class=k>x</p></body></html>", "t");
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:url(NzymjngsS5), radial-gradient(rgb(58, 45 ,99), #0aa, #cea90a 99%, #bbb 14.3%)\"", s);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:url(NzymjngsS5), radial-gradient(rgb(58, 45 ,99), #0aa, #cea90a 99%, #bbb 14.3%);background-clip:content-box;background-origin:content-box\"", s);
 }
 
 int main(void) {

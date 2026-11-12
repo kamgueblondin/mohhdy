@@ -93,7 +93,7 @@
 #define WF_SITE_VAL 128             /* Lot 90: a declaration value, NUL included (Lot 89: 48) */
 #define WF_SITE_LONGS 32            /* Lot 90: long values (backgrounds, list images) */
 #define WF_SITE_LONG 128
-#define WF_SITE_LKINDS 6            /* Lot 90: the kinds kept in the pool */
+#define WF_SITE_LKINDS 8            /* Lot 90: the kinds kept in the pool (Lot 91: + clip, origin) */
 
 enum {
     WF_SITE_DISP_NONE = 3,
@@ -163,9 +163,12 @@ enum {
     WF_SITE_K_BGREP = 20,     /* background-repeat */
     WF_SITE_K_LIMG = 21,      /* list-style-image, inherits */
     WF_SITE_K_LPOS = 22,      /* list-style-position, inherits */
-    WF_SITE_K_MAX = 22,
-    WF_SITE_K_ALL = 23,       /* the all shorthand: a CSS-wide keyword on every kind */
-    WF_SITE_K_VAR = 24        /* Lot 89: a custom property set on the elements a rule matches */
+    /* Lot 91 */
+    WF_SITE_K_BGCLIP = 23,    /* background-clip: one box keyword */
+    WF_SITE_K_BGORIGIN = 24,  /* background-origin: one box keyword */
+    WF_SITE_K_MAX = 24,
+    WF_SITE_K_ALL = 25,       /* the all shorthand: a CSS-wide keyword on every kind (Lot 90: 23) */
+    WF_SITE_K_VAR = 26        /* Lot 89: a custom property set on the elements a rule matches (Lot 90: 24) */
 };
 /* Lot 89: a compound that names the scoping root */
 enum {

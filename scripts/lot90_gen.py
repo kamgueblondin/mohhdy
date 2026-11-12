@@ -424,7 +424,9 @@ def shorthand_layer(rng, last, reader_colour=True):
     if rng.random() < 0.2:
         comps.append([rcase(rng, rng.choice(["scroll", "fixed", "local"]))])
     if rng.random() < 0.2:
-        comps.append([rcase(rng, rng.choice(["border-box", "padding-box", "content-box"]))])
+        b = rng.choice(["border-box", "padding-box", "content-box"])
+        comps.append([rcase(rng, b)])
+        parts["box"] = b          # Lot 91: one box keyword sets the origin and the clip
     if last and rng.random() < 0.6:
         t, n, v = colour(rng, reader=reader_colour)
         comps.append([t])
@@ -438,12 +440,21 @@ def shorthand_layer(rng, last, reader_colour=True):
 
 
 def shorthand_expect(layers):
+    """Lot 91 (converted): None when the layers end with different origin
+    or clip boxes (the engine has one of each per element): the shorthand
+    is refused. Lot 90 accepted box keywords and passed nothing on."""
     out = {}
     for key, init in (("image", "none"), ("position", "0% 0%"), ("size", "auto"), ("repeat", "repeat")):
         if any(key in p for p in layers):
             out[key] = ", ".join(p.get(key, init) for p in layers)
     if "colour" in layers[-1]:
         out["colour"] = layers[-1]["colour"]
+    boxes = set((p["box"], p["box"]) if "box" in p else ("padding-box", "border-box") for p in layers)
+    if len(boxes) > 1:
+        return None
+    if any("box" in p for p in layers):
+        origin, clip = boxes.pop()
+        out["origin"], out["clip"] = origin, clip
     return out
 
 
@@ -487,7 +498,8 @@ def write_sheet(rng):
         layers = [shorthand_layer(rng, i == n - 1, reader_colour=False) for i in range(n)]
         text = ("," + sp(rng)).join(l[0] for l in layers)
         exp = shorthand_expect([l[1] for l in layers])
-        too_long = any(len(v) > 127 for k, v in exp.items() if k != "colour")
+        # Lot 91: refused too when the layers end in different boxes
+        too_long = exp is None or any(len(v) > 127 for k, v in exp.items() if k != "colour")
         name = "test_l90_short_%d" % idx
         idx += 1
         names.append(name)
@@ -500,13 +512,15 @@ def write_sheet(rng):
         o.append("    TEST_ASSERT_EQUAL(1, wf_cssbg_shorthand(%s, &g_bg));" % cstr(text))
         o.append("    TEST_ASSERT_EQUAL(%d, g_bg.layers);" % n)
         for key, init, fld in (("image", "none", "image"), ("position", "0% 0%", "position"), ("size", "auto", "size"),
-                               ("repeat", "repeat", "repeat")):
+                               ("repeat", "repeat", "repeat"), ("origin", "padding-box", "origin"),
+                               ("clip", "border-box", "clip")):
             if key in exp:
                 o.append("    TEST_ASSERT_EQUAL(1, g_bg.has_%s);" % fld)
                 o.append("    TEST_ASSERT_EQUAL_STRING(%s, g_bg.%s);" % (cstr(exp[key]), fld))
             else:
                 o.append("    TEST_ASSERT_EQUAL(0, g_bg.has_%s);" % fld)
-                o.append("    TEST_ASSERT_EQUAL_STRING(%s, g_bg.%s);" % (cstr(", ".join([init] * n)), fld))
+                o.append("    TEST_ASSERT_EQUAL_STRING(%s, g_bg.%s);" %
+                         (cstr(init if fld in ("origin", "clip") else ", ".join([init] * n)), fld))
         o.append("    TEST_ASSERT_EQUAL_STRING(%s, g_bg.color);" % cstr(exp["colour"][0] if "colour" in exp else ""))
         o.append("}")
         o.append("")
@@ -520,9 +534,9 @@ def write_sheet(rng):
               "    TEST_ASSERT_EQUAL(0, g_bg.layers);", "}", ""]
     # 2. the cascade in the sheet
     sels = [("p", 1), (".k", 10), ("#t", 100), ("p.k", 11), ("body p", 2)]
-    order = ["colour", "image", "position", "size", "repeat"]
+    order = ["colour", "image", "position", "size", "repeat", "clip", "origin"]
     props = {"image": "background-image", "position": "background-position", "size": "background-size",
-             "repeat": "background-repeat"}
+             "repeat": "background-repeat", "clip": "background-clip", "origin": "background-origin"}
     for _ in range(260):
         rules = []
         nr = rng.randrange(1, 4)
@@ -536,6 +550,8 @@ def write_sheet(rng):
                 exp = shorthand_expect([l[1] for l in layers])
                 kinds = {}
                 for k in order:
+                    if exp is None:
+                        break           # Lot 91: refused, the declaration is dropped
                     if k == "colour":
                         kinds[k] = ("given", exp["colour"][1]) if "colour" in exp else ("initial", None)
                     else:

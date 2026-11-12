@@ -297,6 +297,9 @@ static int angle(const char *s, int n) {
     if (fd == 1) f *= 10;
     if (bis(s + i, n - i, "deg")) return (fd == 0 && v % 90 == 0 && v <= 3600) ? 1 : -1;
     if (bis(s + i, n - i, "turn")) return (v <= 10 && (v * 100 + f) % 25 == 0) ? 1 : -1;
+    /* Lot 91: gradians, a multiple of 100grad (the engine's tf_angle
+     * turns 100grad into exactly 90deg) */
+    if (bis(s + i, n - i, "grad")) return (fd == 0 && v % 100 == 0 && v <= 4000) ? 1 : -1;
     return -1;
 }
 
@@ -320,33 +323,53 @@ static int stop_ok(const char *s, int a, int b) {
 }
 
 /* radial shape argument: 1 it is one (valid), 0 it is not a shape
- * argument, -1 a shape argument that is not valid */
+ * argument, -1 a shape argument that is not valid.
+ * Lot 91: explicit radii as the engine draws them (webeng radial_shape):
+ * circle with one length (px, not a percentage), ellipse with two
+ * lengths or percentages; with no shape word one length is a circle and
+ * two are an ellipse. The two radii are adjacent, sizes and an extent
+ * keyword do not mix, and a radius is never negative. */
 static int radial_shape(const char *s, int a, int b) {
     static const char *const ext[] = { "closest-side", "closest-corner", "farthest-side", "farthest-corner", 0 };
-    int wa[8], wb[8], c = bsplit(s, a, b, ' ', 0, wa, wb, 8), k, form = 0, extent = 0, j;
+    int wa[8], wb[8], c = bsplit(s, a, b, ' ', 0, wa, wb, 8), k, form = -1, extent = 0, j;
+    int nsz = 0, pct0 = 0, prev_size = 0, sizes_done = 0;
     if (c < 1) return -1;
     for (k = 0; k < c; k++) {
-        int l = wb[k] - wa[k];
+        int l = wb[k] - wa[k], z;
         if (bis(s + wa[k], l, "at")) {
             char t[40];
             bo_t o;
             if (k == c - 1) return -1;
             bo_init(&o, t, (int)sizeof(t));
-            return pos_words(s, wa + k + 1, wb + k + 1, c - k - 1, &o) ? 1 : -1;
+            if (!pos_words(s, wa + k + 1, wb + k + 1, c - k - 1, &o)) return -1;
+            break;
         }
         if (bis(s + wa[k], l, "circle") || bis(s + wa[k], l, "ellipse")) {
-            if (form) return -1;
-            form = 1;
+            if (form >= 0) return -1;
+            form = bis(s + wa[k], l, "circle");
+            if (nsz) sizes_done = 1;
+            prev_size = 0;
             continue;
         }
         for (j = 0; ext[j] && !bis(s + wa[k], l, ext[j]); j++) {}
         if (ext[j]) {
-            if (extent) return -1;
+            if (extent || nsz) return -1;
             extent = 1;
+            prev_size = 0;
+            continue;
+        }
+        if (blen(s + wa[k], l, 1, 0, &z)) {
+            if (extent || sizes_done || nsz >= 2 || (nsz == 1 && !prev_size)) return -1;
+            if (nsz == 0) pct0 = s[wb[k] - 1] == '%';
+            nsz++;
+            prev_size = 1;
             continue;
         }
         return k == 0 ? 0 : -1;
     }
+    if (form == 1 && (nsz == 2 || (nsz == 1 && pct0))) return -1;
+    if (form == 0 && nsz == 1) return -1;
+    if (form < 0 && nsz == 1 && pct0) return -1;
     return 1;
 }
 
@@ -473,8 +496,46 @@ static int wclass(const char *s, int a, int b) {
     return W_COL;
 }
 
+/* ---- Lot 91: background-clip and background-origin ------------------- */
+
+enum { BOX_BORDER = 1, BOX_PADDING, BOX_CONTENT };
+
+static int box_code(const char *s, int n) {
+    if (bis(s, n, "border-box")) return BOX_BORDER;
+    if (bis(s, n, "padding-box")) return BOX_PADDING;
+    if (bis(s, n, "content-box")) return BOX_CONTENT;
+    return 0;
+}
+
+static void box_text(int code, char *out) {
+    const char *t = code == BOX_BORDER ? "border-box" : code == BOX_PADDING ? "padding-box" : "content-box";
+    int i;
+    for (i = 0; t[i]; i++) out[i] = t[i];
+    out[i] = 0;
+}
+
+int wf_cssbg_box(const char *v, char *out, int cap) {
+    int ia[WF_CSSBG_LAYERS], ib[WF_CSSBG_LAYERS], c, k, code = 0;
+    bo_t o;
+    bo_init(&o, out, cap);
+    if (!v) return 0;
+    c = bsplit(v, 0, bslen(v), ',', 0, ia, ib, WF_CSSBG_LAYERS);
+    if (c < 1) return 0;
+    for (k = 0; k < c; k++) {
+        int b = box_code(v + ia[k], ib[k] - ia[k]);
+        if (!b || (k && b != code)) return 0;
+        code = b;
+    }
+    {
+        char t[16];
+        box_text(code, t);
+        bo_s(&o, t, bslen(t));
+    }
+    return bo_end(&o);
+}
+
 int wf_cssbg_shorthand(const char *v, wf_cssbg_t *out) {
-    int la[WF_CSSBG_LAYERS], lb[WF_CSSBG_LAYERS], nl, L;
+    int la[WF_CSSBG_LAYERS], lb[WF_CSSBG_LAYERS], nl, L, org = BOX_PADDING, clp = BOX_BORDER;
     bo_t img, pos, siz, rep;
     if (!v || !out) return 0;
     bclear((char *)out, (int)sizeof(*out));
@@ -486,7 +547,7 @@ int wf_cssbg_shorthand(const char *v, wf_cssbg_t *out) {
     bo_init(&rep, out->repeat, WF_CSSBG_VAL);
     for (L = 0; L < nl; L++) {
         int wa[12], wb[12], nw = bsplit(v, la[L], lb[L], ' ', 1, wa, wb, 12), k;
-        int got_img = 0, att = 0, box = 0, col = 0;
+        int got_img = 0, att = 0, box = 0, col = 0, bx[2] = { 0, 0 }, lo, lc;
         int rep_a = -1, rep_n = 0, pos_a = -1, pos_n = 0, siz_a = -1, siz_n = 0, last = 0;
         int last_layer = L == nl - 1;
         if (nw < 1) return 0;
@@ -532,7 +593,8 @@ int wf_cssbg_shorthand(const char *v, wf_cssbg_t *out) {
             } else if (c == W_ATT) {
                 if (++att > 1) return 0;
             } else if (c == W_BOX) {
-                if (++box > 2) return 0;
+                if (box >= 2) return 0;
+                bx[box++] = box_code(v + wa[k], wb[k] - wa[k]);
             } else {
                 int l = wb[k] - wa[k];
                 if (!last_layer || col || !wf_cssbg_color(v + wa[k], l) || l >= (int)sizeof(out->color)) return 0;
@@ -558,7 +620,17 @@ int wf_cssbg_shorthand(const char *v, wf_cssbg_t *out) {
             if (!size_words(v, wa + siz_a, wb + siz_a, siz_n, &siz)) return 0;
             out->has_size = 1;
         } else bo_s(&siz, "auto", 4);
+        /* Lot 91: one box keyword sets the origin and the clip, two set
+         * the origin then the clip; the engine paints every layer in one
+         * origin box and one clip box, so the layers must agree */
+        lo = box ? bx[0] : BOX_PADDING;
+        lc = box ? bx[box - 1] : BOX_BORDER;
+        if (box) { out->has_origin = 1; out->has_clip = 1; }
+        if (L == 0) { org = lo; clp = lc; }
+        else if (lo != org || lc != clp) { bclear((char *)out, (int)sizeof(*out)); return 0; }
     }
+    box_text(org, out->origin);
+    box_text(clp, out->clip);
     if (img.bad || pos.bad || siz.bad || rep.bad) { bclear((char *)out, (int)sizeof(*out)); return 0; }
     out->layers = nl;
     return 1;
