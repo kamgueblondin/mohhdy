@@ -130,7 +130,7 @@ def eval_fn93(n):
     name = n["name"]
     if name not in ("pow", "sqrt", "hypot", "log", "exp"):
         return LOT92_EVAL(n)
-    args = [G.evaluate(a) for a in n["args"]]
+    args = G.lp_args(name, [G.evaluate(a) for a in n["args"]])
     if not args or any(a[0] is None for a in args):
         return None, None
     t = args[0][0]
@@ -550,7 +550,8 @@ def write_sheet():
             text, kind, ptype, v = val
             if G.sheet_match(st, kind, ptype):
                 b = G.sheet_computed(st, text, kind, ptype, v)
-                if G.known(ptype, v):
+                # Lot 95 (converted): counted when the computed text differs
+                if b != text:
                     simplified += 1
                 return b
             return inherited

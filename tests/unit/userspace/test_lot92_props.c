@@ -120,7 +120,8 @@ static void test_units_and_bounds(void) {
     TEST_ASSERT_EQUAL_STRING("0.3333px", ev("calc(1px / 3)"));
     TEST_ASSERT_EQUAL_STRING("0.9999px", ev("calc(1px / 3 * 3)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", ev("calc(1px / 0)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", ev("calc(1px + 5%)"));
+    /* Lot 95 (converted): a length and a percentage give a known mix (Lot 92: KEEP) */
+    TEST_ASSERT_EQUAL_STRING("calc(5% + 1px)", ev("calc(1px + 5%)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", ev("calc(1vw)"));
     TEST_ASSERT_EQUAL_STRING("0px", ev("calc(-0.00004px)"));
     TEST_ASSERT_EQUAL_STRING("20px", ev("clamp(1px, 50px, 20px)"));
@@ -134,11 +135,12 @@ static void test_compute_alternatives(void) {
     TEST_ASSERT_EQUAL_STRING("-3", cv("'<integer>'", "calc(-7 / 2)"));     /* half toward +infinity */
     TEST_ASSERT_EQUAL_STRING("3.5", cv("'<number> | <integer>'", "calc(7 / 2)"));
     TEST_ASSERT_EQUAL_STRING("4", cv("'<integer> | <number>'", "calc(7 / 2)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length>+'", "calc(1px + 2px)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length># | <length>'", "calc(1px + 2px)"));
+    /* Lot 95 (converted): list items are computed (Lot 92: KEEP) */
+    TEST_ASSERT_EQUAL_STRING("3px", cv("'<length>+'", "calc(1px + 2px)"));
+    TEST_ASSERT_EQUAL_STRING("3px", cv("'<length># | <length>'", "calc(1px + 2px)"));
     TEST_ASSERT_EQUAL_STRING("3px", cv("'auto | <length>'", "calc(1px + 2px)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'*'", "calc(1px + 2px)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length-percentage>'", "calc(1px + 2%)"));
+    TEST_ASSERT_EQUAL_STRING("calc(2% + 1px)", cv("'<length-percentage>'", "calc(1px + 2%)"));   /* Lot 95 (converted) */
     TEST_ASSERT_EQUAL_STRING("3%", cv("'<length-percentage>'", "calc(1% + 2%)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length>'", "calc(1px + 2%)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length>'", "12px"));

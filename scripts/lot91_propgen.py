@@ -42,6 +42,10 @@ CNAME = {BAD: "WF_CSSPROP_BAD", ANY: "WF_CSSPROP_ANY", LENGTH: "WF_CSSPROP_LENGT
          KEYWORD: "WF_CSSPROP_KEYWORD", COMPLEX: "WF_CSSPROP_COMPLEX"}
 TYPE_NAMES = {LENGTH: "<length>", PERCENT: "<percentage>", LENPCT: "<length-percentage>", NUMBER: "<number>",
               INTEGER: "<integer>", COLOR: "<color>", ANGLE: "<angle>", TIME: "<time>", CIDENT: "<custom-ident>"}
+# Lot 95 (converted): three of the Lot 91 faults are types now
+URL, RESOLUTION, TLIST = 13, 15, 17
+CNAME.update({URL: "WF_CSSPROP_URL", RESOLUTION: "WF_CSSPROP_RESOLUTION", TLIST: "WF_CSSPROP_TLIST"})
+LOT95_TYPES = {"<resolution>": RESOLUTION, "<transform-list>": TLIST, "<url>": URL}
 ONE, PLUS, HASH = 0, 1, 2
 RESERVED = ["initial", "inherit", "unset", "revert", "revert-layer", "default"]
 KEYWORDS = ["auto", "none", "small", "big", "x", "left-side", "_under", "-moz-thing", "a1", "stretch", "thin", "red"]
@@ -85,7 +89,7 @@ def syntax_case(rng):
             alts.append((t, rng.choice([ONE, ONE, PLUS, HASH]), ""))
         else:
             alts.append((KEYWORD, rng.choice([ONE, ONE, ONE, PLUS, HASH]), rng.choice(KEYWORDS)))
-    valid = n <= 4
+    valid = n <= 8                                          # Lot 95 (converted): 8 alternatives (Lot 91: 4)
     texts = []
     for t, m, ident in alts:
         w = rcase(rng, TYPE_NAMES[t]) if t != KEYWORD else rcase(rng, ident)
@@ -99,7 +103,10 @@ def syntax_case(rng):
     elif fault < 0.09:
         k = rng.randrange(n)
         texts[k] = rng.choice(["1abc", "-1x", "a.b", "<resolution>", "<transform-list>", "<url>", "-", "*", "a#b"])
-        valid = False
+        if texts[k] in LOT95_TYPES:
+            alts[k] = (LOT95_TYPES[texts[k]], ONE, "")      # Lot 95 (converted): valid now
+        else:
+            valid = False
     elif fault < 0.12:
         k = rng.randrange(n)
         texts[k] = "abcdefghijklmnop"                       # 16 bytes: longer than WF_CSSPROP_IDENT - 1

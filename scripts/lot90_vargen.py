@@ -133,6 +133,31 @@ def matches(syntax, v):
     raise ValueError(syntax)
 
 
+def canon(v):
+    """a plain number written as computed (sign dropped when +, no trailing
+    zeros, at most 4 decimals)"""
+    from fractions import Fraction
+    x = Fraction(v)
+    sign = "-" if x < 0 else ""
+    x = abs(x)
+    whole = int(x)
+    frac = x - whole
+    out = sign + str(whole) if (whole or frac) else "0"
+    if frac:
+        out += "." + ("%04d" % round(frac * 10000)).rstrip("0")
+    return out
+
+
+def computed(syntax, v):
+    """Lot 95 (converted): a plain value of a registered type is bound as its
+    computed value (a unitless zero <length> is 0px); Lot 90 kept the text"""
+    if syntax == "<length>":
+        return canon(v[:-2] if v.endswith("px") else v) + "px"
+    if syntax == "<number>":
+        return canon(v)
+    return v
+
+
 # ---- one case -------------------------------------------------------------
 
 def gen_tree(rng):
@@ -325,6 +350,7 @@ def model(nodes, names, regs, rules):
                 continue
             v = b[nm]
             if v is not INVALID and v is not None and matches(reg[0], v):
+                b[nm] = computed(reg[0], v)
                 continue
             b[nm] = inherited(i, nm)
     # what wf_site_node_var returns

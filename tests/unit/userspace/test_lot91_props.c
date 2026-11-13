@@ -47,9 +47,12 @@ static void test_syntax_parse_fields(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_HASH, g_p.alt[2].mult);
     /* a keyword alone is COMPLEX (it has no type code) */
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'auto'", (int)strlen("'auto'")));
-    /* four alternatives at most, idents of 15 bytes at most */
+    /* eight alternatives at most (Lot 95, converted: Lot 91 took four and
+     * refused 'a|b|c|d|e'), idents of 15 bytes at most */
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'a|b|c|d'", (int)strlen("'a|b|c|d'")));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'a|b|c|d|e'", (int)strlen("'a|b|c|d|e'")));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'a|b|c|d|e'", (int)strlen("'a|b|c|d|e'")));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'a|b|c|d|e|f|g|h'", (int)strlen("'a|b|c|d|e|f|g|h'")));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'a|b|c|d|e|f|g|h|i'", (int)strlen("'a|b|c|d|e|f|g|h|i'")));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'abcdefghijklmno'", (int)strlen("'abcdefghijklmno'")));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'abcdefghijklmnop'", (int)strlen("'abcdefghijklmnop'")));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'inherit'", (int)strlen("'inherit'")));
@@ -129,16 +132,19 @@ static void test_sheet_lists_and_calc(void) {
          "<div id=o><p id=i>i</p><p id=j>j</p></div><p id=q>q</p>");
     TEST_ASSERT_EQUAL_STRING("3px, 4px", nv("o", "--l"));
     TEST_ASSERT_EQUAL_STRING("3px, 4px", nv("i", "--l"));
-    TEST_ASSERT_EQUAL_STRING("calc(1px + 5px), 0", nv("j", "--l"));
+    /* Lot 95 (converted): the items of a list are computed (Lot 91 kept
+     * "calc(1px + 5px), 0") */
+    TEST_ASSERT_EQUAL_STRING("6px, 0px", nv("j", "--l"));
     TEST_ASSERT_EQUAL_STRING("1px, 2px", nv("q", "--l"));
 }
 
 static void test_sheet_rejects_bad_rules(void) {
-    /* initial-value outside the syntax, a reserved keyword, five
-     * alternatives: rejected and counted, the name stays unregistered */
+    /* initial-value outside the syntax, a reserved keyword, nine
+     * alternatives: rejected and counted, the name stays unregistered.
+     * Lot 95 (converted): nine alternatives (Lot 91: five) */
     prep("@property --a { syntax: '<length>+'; inherits: false; initial-value: red }"
          "@property --b { syntax: 'inherit | <length>'; inherits: false; initial-value: 1px }"
-         "@property --c { syntax: 'a | b | c | d | e'; inherits: false; initial-value: a }"
+         "@property --c { syntax: 'a | b | c | d | e | f | g | h | i'; inherits: false; initial-value: a }"
          "@property --d { syntax: '<angle>'; inherits: true; initial-value: 90deg }",
          "<p id=p>p</p>");
     TEST_ASSERT_EQUAL(1, g_d.nprops);

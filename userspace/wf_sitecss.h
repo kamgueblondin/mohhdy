@@ -72,10 +72,11 @@
 #define WF_SITE_TOKS 4            /* list, font-size, text-indent, letter-spacing */
 #define WF_SITE_ALT 2
 #define WF_SITE_VARS 16
-#define WF_SITE_VNAMES 24         /* custom property names set per element (Lot 89: 12) */
-#define WF_SITE_EVARS 64          /* distinct (name, value) pairs bound to elements (Lot 89: 32) */
-#define WF_SITE_VVAL 64           /* a custom property value, NUL included (Lot 89: 32) */
-#define WF_SITE_PROPS 8           /* Lot 90: @property registrations */
+#define WF_SITE_VNAMES 32         /* custom property names set per element (Lot 89: 12, Lot 90: 24) */
+#define WF_SITE_EVARS 96          /* distinct (name, value) pairs bound to elements (Lot 89: 32, Lot 90: 64) */
+#define WF_SITE_VVAL 128          /* a custom property value, NUL included (Lot 89: 32, Lot 90: 64) */
+#define WF_SITE_VNAME 32          /* Lot 95: a custom property name, NUL included (Lot 89: 24) */
+#define WF_SITE_PROPS 16          /* @property registrations (Lot 90: 8) */
 #define WF_SITE_VINVALID 255      /* Lot 90: vbind of a guaranteed-invalid value */
 #define WF_SITE_LINKS 6
 #define WF_SITE_HREF 160
@@ -317,7 +318,7 @@ typedef struct {
 } wf_site_scope_t;
 
 typedef struct {
-    char name[24];
+    char name[WF_SITE_VNAME];
     char value[WF_SITE_VVAL];
     uint8_t invalid;              /* Lot 90: its var() did not resolve where it was declared */
 } wf_site_var_t;
@@ -356,7 +357,7 @@ typedef struct {
     int nstyles;
     int scoped_hits;              /* Lot 88: scoped rule matches painted */
     /* Lot 89: per-element custom properties */
-    char vname[WF_SITE_VNAMES][24];
+    char vname[WF_SITE_VNAMES][WF_SITE_VNAME];
     int nvnames;
     wf_site_var_t evar[WF_SITE_EVARS];
     int nevars;

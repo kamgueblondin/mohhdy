@@ -111,7 +111,16 @@ def trunc(x):
 
 
 def fits(v):
+    if isinstance(v, tuple):
+        return all(fits(x) for x in v)
     return v is not None and -LIM <= v <= LIM
+
+
+def parts(t, v):
+    """Lot 95 (converted): (percent, px) of a known L, P or LP value"""
+    if t == LP:
+        return v
+    return (v, 0) if t == P else (0, v)
 
 
 def tadd(a, b):
@@ -125,10 +134,15 @@ def tadd(a, b):
 
 
 def known(t, v):
-    return t is not None and t != LP and v is not None
+    """Lot 95 (converted): a length mixed with a percentage is known as the
+    pair (percent, px) (Lot 92: never known)"""
+    return t is not None and v is not None and (t != LP or isinstance(v, tuple))
 
 
 def fmt(v, t):
+    if t == LP:
+        p, x = v
+        return "calc(%s %s %s)" % (fmt(p, P), "-" if x < 0 else "+", fmt(abs(x), L))
     sign = "-" if v < 0 else ""
     v = abs(v)
     whole, frac = divmod(v, S)
@@ -318,12 +332,24 @@ def evaluate(n):
                 nt = ut if t == N else (t if ut == N else None)
                 if nt is None:
                     return None, None
-                v = rha(F(v) * uv / S) if (v is not None and uv is not None) else None
+                if v is None or uv is None:
+                    v = None
+                elif isinstance(v, tuple) or isinstance(uv, tuple):
+                    # Lot 95 (converted): a mix scales both parts
+                    x, f = (v, uv) if isinstance(v, tuple) else (uv, v)
+                    v = tuple(rha(F(y) * f / S) for y in x)
+                else:
+                    v = rha(F(v) * uv / S)
                 t = nt
             else:
                 if ut != N:
                     return None, None
-                v = rha(F(v) * S / uv) if (v is not None and uv is not None and uv != 0) else None
+                if v is None or uv is None or uv == 0:
+                    v = None
+                elif isinstance(v, tuple):
+                    v = tuple(rha(F(y) * S / uv) for y in v)
+                else:
+                    v = rha(F(v) * S / uv)
             if not fits(v):
                 v = None
         return t, v
@@ -334,8 +360,14 @@ def evaluate(n):
             nt = tadd(t, ut)
             if nt is None:
                 return None, None
-            if v is not None and uv is not None and nt == t == ut:
+            if v is not None and uv is not None and nt == t == ut and nt != LP:
                 v = v + uv if op == "+" else v - uv
+                if not fits(v):
+                    v = None
+            elif v is not None and uv is not None and nt == LP:
+                # Lot 95 (converted): a length and a percentage give a known mix
+                a, b = parts(t, v), parts(ut, uv)
+                v = tuple(x + y if op == "+" else x - y for x, y in zip(a, b))
                 if not fits(v):
                     v = None
             else:
@@ -345,8 +377,15 @@ def evaluate(n):
     return eval_fn(n)
 
 
+def lp_args(name, args):
+    """Lot 95 (converted): a mix argument is known only inside calc()"""
+    if name == "calc":
+        return args
+    return [(t, None if t == LP else v) for t, v in args]
+
+
 def eval_fn(n):
-    name, args = n["name"], [evaluate(a) for a in n["args"]]
+    name, args = n["name"], lp_args(n["name"], [evaluate(a) for a in n["args"]])
     if not args or any(a[0] is None for a in args):
         return None, None
     t = args[0][0]
@@ -597,7 +636,9 @@ def compute_model(alts, tt, v):
     for name, at, mult in alts:
         if at is None or not alt_matches(at, tt):
             continue
-        if mult or not known(tt, v):
+        # Lot 95 (converted): a list alternative computes its items too (a
+        # single math value is a list of one item); Lot 92 kept lists
+        if not known(tt, v):
             return None
         if at == "I":
             k = floor(F(2 * v + S, 2 * S))
@@ -740,7 +781,8 @@ def write_sheet():
             text, kind, ptype, v = val
             if sheet_match(st, kind, ptype):
                 b = sheet_computed(st, text, kind, ptype, v)
-                if kind == "math" and known(ptype, v):
+                # Lot 95 (converted): counted when the computed text differs
+                if b != text:
                     simplified += 1
                 return b
             return inherited

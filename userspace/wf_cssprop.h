@@ -59,13 +59,36 @@
  * 62-bit fixed point with 128-bit intermediates (no libm, no 64-bit
  * division) and are within about 1e-12 (relative) of the exact value
  * before the final rounding half away from zero to 1/10000.
+ * Lot 95: a syntax takes up to WF_CSSPROP_ALTS (8) alternatives (Lot 91:
+ * 4) and the types '<url>' (url(...), quoted or not), '<string>' (a
+ * quoted string), '<image>' (a url() or a linear, radial or conic
+ * gradient, repeating or not, with balanced parentheses; the stops are
+ * not checked here), '<resolution>' (dpi, dpcm, dppx, x; 96dpi is
+ * 1dppx), '<transform-function>' (translate, translatex, translatey,
+ * translatez, translate3d, scale, scalex, scaley, scalez, scale3d, rotate,
+ * rotatex, rotatey, rotatez, skew, skewx, skewy, matrix, perspective,
+ * with typed arguments) and '<transform-list>' (one or more transform
+ * functions separated by white space; no multiplier). Names may have 31
+ * bytes and values 127 (Lot 90: 23 and 63).
+ * The computed value (wf_cssprop_compute_ctx) is the value with each
+ * numeric part in its canonical unit: plain dimensions too (1in -> 96px,
+ * 100grad -> 90deg, 500ms -> 0.5s, 96dpi -> 1dppx, 0 -> 0px, +1.50 ->
+ * 1.5), each item of a '+' or '#' list (joined by one space or ", "),
+ * the arguments of transform functions (translate(1in, 10%) ->
+ * translate(96px, 10%), rotate(0) -> rotate(0deg)), a length mixed with
+ * a percentage as calc(P% + Lpx) (calc(1in - 6px + 5%) -> calc(5% +
+ * 90px); min(), max(), clamp() and the other functions of a mix are not
+ * known), and vw, vh, vmin and vmax with the viewport of the context.
+ * em, rem, ex and ch are still not known; an item that is not known
+ * keeps its text. Colors, idents, keywords, urls, strings and images keep
+ * their text.
  * Names and values are compared lower case. No heap. */
 #ifndef WF_CSSPROP_H
 #define WF_CSSPROP_H
 
-#define WF_CSSPROP_NAME 24
-#define WF_CSSPROP_VAL 64
-#define WF_CSSPROP_ALTS 4         /* Lot 91: alternatives in a syntax */
+#define WF_CSSPROP_NAME 32        /* Lot 95: 31 bytes (Lot 90: 24) */
+#define WF_CSSPROP_VAL 128        /* Lot 95: 127 bytes (Lot 90: 64) */
+#define WF_CSSPROP_ALTS 8         /* alternatives in a syntax (Lot 91: 4, Lot 95: 8) */
 #define WF_CSSPROP_IDENT 16       /* Lot 91: a keyword of a syntax, NUL included */
 
 enum {
@@ -82,8 +105,19 @@ enum {
     WF_CSSPROP_TIME = 9,
     WF_CSSPROP_CIDENT = 10,       /* <custom-ident> */
     WF_CSSPROP_KEYWORD = 11,      /* a keyword of the syntax (alt_ident) */
-    WF_CSSPROP_COMPLEX = 12       /* several alternatives, a multiplier or a keyword */
+    WF_CSSPROP_COMPLEX = 12,      /* several alternatives, a multiplier or a keyword */
+    /* Lot 95 */
+    WF_CSSPROP_URL = 13,
+    WF_CSSPROP_IMAGE = 14,
+    WF_CSSPROP_RESOLUTION = 15,
+    WF_CSSPROP_TFUNC = 16,        /* <transform-function> */
+    WF_CSSPROP_TLIST = 17,        /* <transform-list> */
+    WF_CSSPROP_STRING = 18
 };
+
+/* Lot 95: what a computed value may use: the viewport in px (0: vw, vh,
+ * vmin and vmax are not known) */
+typedef struct { int vw, vh; } wf_cssprop_ctx_t;
 
 /* Lot 91: the multiplier of an alternative */
 enum { WF_CSSPROP_ONE = 0, WF_CSSPROP_PLUS = 1, WF_CSSPROP_HASH = 2 };
@@ -136,6 +170,13 @@ int wf_cssprop_math_eval(const char *value, int *type, char *out, int cap);
  * (the caller keeps the text). */
 int wf_cssprop_compute(const wf_cssprop_t *p, const char *value, char *out, int cap);
 
+/* Lot 95: the computed value of a registered value (see the header
+ * comment): 1 and out written when it differs from value, 0 when value
+ * is kept as it is (it does not match, nothing in it is computed, or out
+ * is too small). c may be 0 (no viewport). wf_cssprop_compute is this
+ * with c 0. */
+int wf_cssprop_compute_ctx(const wf_cssprop_t *p, const char *value, const wf_cssprop_ctx_t *c, char *out, int cap);
+
 /* The syntax descriptor value, quotes included ("'<length>'"), n bytes:
  * the type code when the syntax is one type without a multiplier,
  * WF_CSSPROP_ANY for '*', Lot 91: WF_CSSPROP_COMPLEX for alternatives, a
@@ -144,7 +185,8 @@ int wf_cssprop_compute(const wf_cssprop_t *p, const char *value, char *out, int 
 int wf_cssprop_syntax(const char *s, int n);
 
 /* 1 when value (lower case, trimmed) matches one type (a code from
- * WF_CSSPROP_ANY to WF_CSSPROP_CIDENT, no multiplier). */
+ * WF_CSSPROP_ANY to WF_CSSPROP_CIDENT, Lot 95 also WF_CSSPROP_URL to
+ * WF_CSSPROP_STRING, no multiplier). */
 int wf_cssprop_match(int syntax, const char *value);
 
 /* 1 when value is computationally independent (no em, rem, ex, ch unit
