@@ -7,6 +7,19 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 92 (13 November 2026, base 4def6ce, Lot 91 head)
+
+US-031 partial, phase3_complete=false. The reader types and simplifies
+abs(), sign(), round(), mod() and rem(), types the trigonometric
+functions, and computes registered numeric values that are one math
+function (in px, deg, s, numbers or percentages, 1/10000 steps), so a
+registered calc() reaches a radial radius or a gradient angle as a plain
+value. linear-gradient angles in radians within half a degree of a
+quarter turn are written as whole degrees. A QEMU page (`make
+qemu-lot92`, CI job lot92-reader) checks both. US-068/073, US-076,
+US-080 and US-081 stay partial. US-078 and US-097 stay simule. See
+docs/lot92_plan.md.
+
 ### Lot 91 (12 November 2026, base 0576849, Lot 90 with the text-scale fix)
 
 US-031 partial, phase3_complete=false. The reader passes radial
