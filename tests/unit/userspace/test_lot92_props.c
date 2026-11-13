@@ -156,8 +156,12 @@ static void test_compute_alternatives(void) {
     TEST_ASSERT_EQUAL_STRING("6px", g_o);
     TEST_ASSERT_EQUAL(0, wf_cssprop_compute(&g_p, "calc(2deg * 3)", g_o, (int)sizeof(g_o)));
     TEST_ASSERT_EQUAL_STRING("", g_o);
-    /* too small an output: kept */
-    TEST_ASSERT_EQUAL(0, wf_cssprop_compute(&g_p, "calc(2px * 3)", g_o, 4));
+    /* too small an output: kept. Lot 95 (converted): the length is exact
+     * now, so "6px" and its NUL fit 4 bytes; 3 is too small */
+    TEST_ASSERT_EQUAL(0, wf_cssprop_compute(&g_p, "calc(2px * 3)", g_o, 3));
+    TEST_ASSERT_EQUAL_STRING("", g_o);
+    TEST_ASSERT_EQUAL(1, wf_cssprop_compute(&g_p, "calc(2px * 3)", g_o, 4));
+    TEST_ASSERT_EQUAL_STRING("6px", g_o);
 }
 
 static void test_sheet_computed_and_inherited(void) {

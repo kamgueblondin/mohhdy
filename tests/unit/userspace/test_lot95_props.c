@@ -394,6 +394,114 @@ static void test_sheet_counts_changed_text_only(void) {
     TEST_ASSERT_EQUAL_STRING("", tail());
 }
 
+/* every cap from 1 to the length + 1: written whole when it fits, else
+ * refused; nothing is written at or past cap */
+static void sweep(const char *syn, const char *v, const char *want) {
+    char buf[160];
+    int cap, r, len = (int)strlen(want), k;
+    memset(&g_p, 0, sizeof(g_p));
+    g_p.syntax = (unsigned char)wf_cssprop_syntax_parse(syn, (int)strlen(syn), &g_p);
+    TEST_ASSERT_TRUE(g_p.syntax != WF_CSSPROP_BAD);
+    for (cap = 1; cap <= len + 1; cap++) {
+        memset(buf, 'Z', sizeof(buf));
+        r = wf_cssprop_compute(&g_p, v, buf, cap);
+        if (cap > len) {
+            TEST_ASSERT_EQUAL(1, r);
+            TEST_ASSERT_EQUAL_STRING(want, buf);
+        } else {
+            TEST_ASSERT_EQUAL(0, r);
+            TEST_ASSERT_EQUAL(0, buf[0]);
+        }
+        for (k = cap; k < (int)sizeof(buf); k++) TEST_ASSERT_EQUAL('Z', buf[k]);
+    }
+}
+
+static void test_compute_caps(void) {
+    sweep("'<length>'", "1in", "96px");
+    sweep("'<length>'", "-0.375pt", "-0.5px");
+    sweep("'<length>'", "0.5pt", "0.6667px");
+    sweep("'<length>'", "0.06pt", "0.08px");
+    sweep("'<length>#'", "1in, 2pt", "96px, 2.6667px");
+    sweep("'<length>+'", "1in 1em", "96px 1em");
+    sweep("'<length>+'", "1em 1in", "1em 96px");
+    sweep("'<length-percentage>'", "calc(1px + 5%)", "calc(5% + 1px)");
+    sweep("'<length-percentage>'", "calc(5% - 1.5pt)", "calc(5% - 2px)");
+    sweep("'<length-percentage>#'", "calc(1px + 5%), 0", "calc(5% + 1px), 0px");
+    sweep("'<transform-list>'", "translate(1in, 10%) rotate(0)", "translate(96px, 10%) rotate(0deg)");
+    sweep("'<transform-function>'", "rotate3d(1,0,0,0.25turn)", "rotate3d(1, 0, 0, 90deg)");
+    sweep("'<transform-function>'", "skew(0)", "skew(0deg)");
+    sweep("'<transform-function>'", "scale(2,50%)", "scale(2, 50%)");
+    sweep("'<integer>#'", "calc(3 / 2), +3", "2, 3");
+    sweep("'<resolution>'", "96dpi", "1dppx");
+    {
+        int r;
+        char buf[32];
+        memset(buf, 'Z', sizeof(buf));
+        r = wf_cssprop_math_eval("calc(1px + 5%)", 0, buf, 15);
+        TEST_ASSERT_EQUAL(1, r);
+        TEST_ASSERT_EQUAL_STRING("calc(5% + 1px)", buf);
+        memset(buf, 'Z', sizeof(buf));
+        r = wf_cssprop_math_eval("calc(1px + 5%)", 0, buf, 14);
+        TEST_ASSERT_EQUAL(0, r);
+        TEST_ASSERT_EQUAL('Z', buf[14]);
+    }
+}
+
+static void test_more_edges(void) {
+    char text[256];
+    int k;
+    /* strings and urls */
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_STRING, "'a\nb'"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_STRING, "'a\rb'"));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_STRING, "'a\\\nb'") == 0 ? 1 : 0);
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_URL, "url(a(b.png)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_URL, "url(a\tb)"));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_URL, "url(\t'a b'\t)"));
+    /* quotes inside a gradient do not close it */
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red, ')')"));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red, '\\')')"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient("));
+    /* transform arguments: counts, math functions, digits in names */
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TFUNC, "translate(1px, 2px, 0)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TFUNC, "matrix(1, 0, 0, 1, 0, 0, 0)"));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "translate(max(1px, 2px), 0)"));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "translate3d(1px, 2%, 0)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TFUNC, "rotate(1)"));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TLIST, "rotate(1deg)scale(2)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TLIST, "red rotate(1deg)"));
+    TEST_ASSERT_EQUAL_STRING("translate(2px, 0px)", cv("'<transform-function>'", "translate(max(1px, 2px), 0)"));
+    /* a keyword list and '*' keep their text */
+    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'a+'", "a  a"));
+    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'*'", " 1in"));
+    /* the viewport needs both sides */
+    TEST_ASSERT_EQUAL_STRING("KEEP", cvp("'<length>'", "50vw", 800, 0));
+    TEST_ASSERT_EQUAL_STRING("KEEP", cvp("'<length>'", "20000vw", 800, 600));
+    /* a mix past 100000 units in either part */
+    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length-percentage>'", "calc(1px + 60000% + 60000%)"));
+    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length-percentage>'", "calc(1% + 60000px + 60000px)"));
+    TEST_ASSERT_EQUAL_STRING("calc(1% + 100000px)", cv("'<length-percentage>'", "calc(1% + 60000px + 40000px)"));
+    /* the viewport is gone after the call */
+    {
+        wf_cssprop_ctx_t c;
+        int t;
+        c.vw = 800; c.vh = 600;
+        TEST_ASSERT_EQUAL_STRING("8px", cvx("'<length>'", "1vw", &c));
+        TEST_ASSERT_EQUAL(0, wf_cssprop_math_eval("calc(1vw)", &t, g_o, (int)sizeof(g_o)));
+        TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, t);
+    }
+    /* a 31-byte name in var() */
+    {
+        char name31[40];
+        name31[0] = '-'; name31[1] = '-';
+        fill(name31 + 2, 'k', 29);
+        snprintf(g_css, sizeof(g_css), ":root { %s: 21px } p { font-size: var(%s) }", name31, name31);
+        prep(g_css, "<p id=p>p</p>", 0, 0);
+        k = wf_site_report(&g_d, text, (int)sizeof(text));
+        TEST_ASSERT_TRUE(k > 0);
+        TEST_ASSERT_NOT_NULL(strstr(text, "node p #p display auto size 21px\n"));
+    }
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_limits);
@@ -409,6 +517,8 @@ int main(void) {
     RUN_TEST(test_compute_api);
     RUN_TEST(test_sheet_viewport_and_inheritance);
     RUN_TEST(test_sheet_counts_changed_text_only);
+    RUN_TEST(test_compute_caps);
+    RUN_TEST(test_more_edges);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

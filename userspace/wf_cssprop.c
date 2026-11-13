@@ -985,6 +985,16 @@ int wf_cssprop_math_type(const char *v) {
     return q.t;
 }
 
+/* Lot 95: append w[0..n) at out[*len] when it fits with the NUL (cap
+ * bytes); 0 when it does not (nothing written) */
+static int cp_put(char *out, int *len, int cap, const char *w, int n) {
+    int k;
+    if (*len + n >= cap) return 0;
+    for (k = 0; k < n; k++) out[(*len)++] = w[k];
+    out[*len] = 0;
+    return 1;
+}
+
 /* Lot 92: "N[.dddd]" and the unit for a value in 1/10000 */
 static int cp_fmt(long long v, const char *unit, char *out, int cap) {
     char d[24];
@@ -1019,19 +1029,16 @@ static int cp_fmt_q(const cp_q_t *q, char *out, int cap) {
     const char *unit;
     int n, k;
     if (q->t == WF_CSSPROP_LENPCT) {
-        if (cap < 8) return -1;
-        out[0] = 'c'; out[1] = 'a'; out[2] = 'l'; out[3] = 'c'; out[4] = '(';
-        n = 5;
+        n = 0;
+        if (!cp_put(out, &n, cap, "calc(", 5)) return -1;
         k = cp_fmt(q->p, "%", out + n, cap - n);
         if (k < 0) return -1;
         n += k;
-        if (n + 4 >= cap) return -1;
-        out[n++] = ' '; out[n++] = q->v < 0 ? '-' : '+'; out[n++] = ' ';
+        if (!cp_put(out, &n, cap, q->v < 0 ? " - " : " + ", 3)) return -1;
         k = cp_fmt(q->v < 0 ? -q->v : q->v, "px", out + n, cap - n);
-        if (k < 0 || n + k + 2 > cap) return -1;
+        if (k < 0) return -1;
         n += k;
-        out[n++] = ')';
-        out[n] = 0;
+        if (!cp_put(out, &n, cap, ")", 1)) return -1;
         return n;
     }
     switch (q->t) {
@@ -1164,7 +1171,7 @@ static int cp_image(const char *s, int a, int b) {
     if (cp_url(s, a, b)) return 1;
     for (k = 0; g[k]; k++) {
         int l = cp_len(g[k]);
-        if (b - a <= l || !cp_eqn(s + a, l, g[k])) continue;
+        if (!cp_eqn(s + a, l, g[k])) continue;
         if (cp_group_end(s, a + l - 1, b) != b) return 0;
         for (i = a + l; i < b - 1; i++) if (!cp_sp(s[i])) return 1;
         return 0;
@@ -1238,8 +1245,8 @@ static int cp_tfunc(const char *s, int a, int b) {
  * -1 when none starts there */
 static int cp_tfunc_end(const char *s, int a, int b) {
     int i = a, e;
-    while (i < b && s[i] != '(' && !cp_sp(s[i])) i++;
-    if (i >= b || s[i] != '(') return -1;
+    while (i < b && s[i] != '(') i++;
+    if (i >= b) return -1;
     e = cp_group_end(s, i, b);
     if (e < 0 || cp_tfunc(s, a, e) < 0) return -1;
     return e;
@@ -1377,11 +1384,7 @@ static int cp_num_item(int t, const char *s, int a, int b, char *out, int cap) {
         /* a unitless zero length is 0px */
         if (q.t == WF_CSSPROP_NUMBER && (t == WF_CSSPROP_LENGTH || t == WF_CSSPROP_LENPCT)) q.t = WF_CSSPROP_LENGTH;
     }
-    if (q.t && cp_known(&q) && cp_fits(q.v)) {
-        int k = cp_fmt_q(&q, out, cap);
-        if (k >= 0) return k;
-        return -1;
-    }
+    if (q.t && cp_known(&q)) return cp_fmt_q(&q, out, cap);
     if (n >= cap) return -1;
     for (a = 0; a <= n; a++) out[a] = item[a];
     return n;
@@ -1406,10 +1409,9 @@ static int cp_item(int t, const char *s, int a, int b, char *out, int cap) {
             k = i;
             while (s[k] != '(') k++;
             fn = cp_tfn(s, i, k - i);
-            if (len && len + 1 < cap) out[len++] = ' ';
-            if (len + cp_len(cp_tfns[fn].name) + 2 >= cap) return -1;
-            for (n = 0; cp_tfns[fn].name[n]; n++) out[len++] = cp_tfns[fn].name[n];
-            out[len++] = '(';
+            if (len && !cp_put(out, &len, cap, " ", 1)) return -1;
+            if (!cp_put(out, &len, cap, cp_tfns[fn].name, cp_len(cp_tfns[fn].name)) || !cp_put(out, &len, cap, "(", 1))
+                return -1;
             for (start = k + 1; start < e; start++) {
                 int depth = 0, x = start, typ;
                 char kind;
@@ -1420,28 +1422,21 @@ static int cp_item(int t, const char *s, int a, int b, char *out, int cap) {
                 }
                 kind = cp_tfns[fn].args[arg++];
                 if (cp_copy_item(item, (int)sizeof(item), s, start, x) < 0) return -1;
-                typ = kind == 'P' ? WF_CSSPROP_LENPCT : kind == 'L' ? WF_CSSPROP_LENGTH :
-                      kind == 'A' ? WF_CSSPROP_ANGLE :
-                      (kind == 'S' && wf_cssprop_match(WF_CSSPROP_PERCENT, item)) ? WF_CSSPROP_PERCENT :
-                      WF_CSSPROP_NUMBER;
+                /* only a length takes a unitless zero as 0px; the other
+                 * kinds keep the unit of their item */
+                typ = kind == 'P' ? WF_CSSPROP_LENPCT : kind == 'L' ? WF_CSSPROP_LENGTH : WF_CSSPROP_NUMBER;
                 if (kind == 'A' && !wf_cssprop_match(WF_CSSPROP_ANGLE, item)) {
                     /* a zero angle */
-                    if (len + 5 >= cap) return -1;
-                    out[len++] = '0'; out[len++] = 'd'; out[len++] = 'e'; out[len++] = 'g';
+                    if (!cp_put(out, &len, cap, "0deg", 4)) return -1;
                 } else {
                     k = cp_num_item(typ, s, start, x, out + len, cap - len);
                     if (k < 0) return -1;
                     len += k;
                 }
-                if (x < e - 1) {
-                    if (len + 3 >= cap) return -1;
-                    out[len++] = ','; out[len++] = ' ';
-                }
+                if (x < e - 1 && !cp_put(out, &len, cap, ", ", 2)) return -1;
                 start = x;
             }
-            if (len + 2 >= cap) return -1;
-            out[len++] = ')';
-            out[len] = 0;
+            if (!cp_put(out, &len, cap, ")", 1)) return -1;
             i = e;
         }
         return len;
@@ -1494,11 +1489,8 @@ int wf_cssprop_compute_ctx(const wf_cssprop_t *p, const char *v, const wf_csspro
             while (x < y && cp_sp(v[x])) x++;
             while (y > x && cp_sp(v[y - 1])) y--;
             if (y > x) {
-                if (len) {
-                    if (al->mult == WF_CSSPROP_HASH) { if (len + 2 >= cap) { len = -1; break; } out[len++] = ','; }
-                    if (len + 1 >= cap) { len = -1; break; }
-                    out[len++] = ' ';
-                }
+                if (len && !cp_put(out, &len, cap, al->mult == WF_CSSPROP_HASH ? ", " : " ",
+                                   al->mult == WF_CSSPROP_HASH ? 2 : 1)) { len = -1; break; }
                 k = cp_item(al->type, v, x, y, out + len, cap - len);
                 len = k < 0 ? -1 : len + k;
             }
