@@ -282,16 +282,25 @@ static void bo_collapse(bo_t *o, const char *s, int a, int b) {
     }
 }
 
-/* Lot 92: radians, at most two integer digits and four decimals. The
- * engine's tf_angle rounds to whole degrees and draws a multiple of 90,
- * and pi is irrational, so a value within half a degree of a multiple of
- * pi/2 (|x - k pi/2| <= 0.0087266 rad, |k| <= 40) is taken as k quarter
- * turns and *quarters set; -1 for any other radian value, 0 when s is not
- * one. */
-#define WF_RAD_QUARTER 15707963   /* pi / 2 in 1e-7 rad */
-#define WF_RAD_HALF_DEG 87266     /* 0.5 deg in 1e-7 rad */
-static int rad_quarters(const char *s, int n, int *quarters) {
-    int i = 0, neg = 0, v = 0, d = 0, fd = 0, k, diff;
+/* n / d (d > 0) by shift and subtract: the freestanding guest has no
+ * 64-bit division helper */
+static uint64_t bdiv64(uint64_t n, uint64_t d) {
+    uint64_t q = 0, r = 0;
+    int b;
+    for (b = 63; b >= 0; b--) {
+        r = (r << 1) | ((n >> b) & 1u);
+        if (r >= d) { r -= d; q |= (uint64_t)1 << b; }
+    }
+    return q;
+}
+
+/* Lot 92, Lot 94: radians, at most two integer digits and four decimals,
+ * as whole degrees (x * 180 / pi rounded half away from zero; the engine's
+ * own factor 57.3 is not used). 1 and *deg set, -1 any other radian
+ * value, 0 when s is not one. */
+#define WF_DEG_PER_RAD 5729577951ULL  /* degrees per 1e-4 rad, in 1e-12 */
+static int rad_degrees(const char *s, int n, int *deg) {
+    int i = 0, neg = 0, v = 0, d = 0, fd = 0;
     /* "grad" also ends in "rad": the unit follows a digit or a point */
     if (n < 4 || !bis(s + n - 3, 3, "rad") || !((s[n - 4] >= '0' && s[n - 4] <= '9') || s[n - 4] == '.')) return 0;
     n -= 3;
@@ -308,40 +317,78 @@ static int rad_quarters(const char *s, int n, int *quarters) {
         if (!fd) return -1;
     }
     if (i != n || !(d + fd)) return -1;
-    v *= 1000;
-    k = (v + WF_RAD_QUARTER / 2) / WF_RAD_QUARTER;
-    diff = v - k * WF_RAD_QUARTER;
-    if (diff < 0) diff = -diff;
-    if (diff > WF_RAD_HALF_DEG || k > 40) return -1;
-    *quarters = neg ? -k : k;
+    /* v is in 1e-4 rad; degrees = v * 0.005729577951 (1e-12 units) */
+    *deg = (int)bdiv64((uint64_t)v * WF_DEG_PER_RAD + 500000000000ULL, 1000000000000ULL);
+    if (neg) *deg = -*deg;
     return 1;
 }
 
-/* degrees or quarter turns: 1 a multiple of 90deg / 0.25turn, 0 not an
- * angle, -1 an angle the engine does not draw */
+/* Lot 94: any angle the engine's tf_angle reads exactly: 1 an angle, 0
+ * not an angle, -1 an angle out of range or with too many decimals.
+ * deg: |v| <= 3600 with at most four decimals; turn: |v| <= 10 and grad:
+ * |v| <= 4000, at most two decimals. (Lots 90-92 took only quarter turns.) */
 static int angle(const char *s, int n) {
     int i = 0, v = 0, f = 0, fd = 0, d = 0;
     if (i < n && s[i] == '-') i++;
     while (i < n && s[i] >= '0' && s[i] <= '9') { v = v * 10 + (s[i] - '0'); if (v > 9999) return -1; i++; d++; }
     if (i < n && s[i] == '.') {
         i++;
-        while (i < n && s[i] >= '0' && s[i] <= '9') { if (fd < 2) { f = f * 10 + (s[i] - '0'); fd++; } else return -1; i++; d++; }
+        while (i < n && s[i] >= '0' && s[i] <= '9') { if (fd < 4) { f = f * 10 + (s[i] - '0'); fd++; } else return -1; i++; d++; }
         if (!fd) return -1;
     }
     if (!d) return 0;
-    if (fd == 1) f *= 10;
-    if (bis(s + i, n - i, "deg")) return (fd == 0 && v % 90 == 0 && v <= 3600) ? 1 : -1;
-    if (bis(s + i, n - i, "turn")) return (v <= 10 && (v * 100 + f) % 25 == 0) ? 1 : -1;
-    /* Lot 91: gradians, a multiple of 100grad (the engine's tf_angle
-     * turns 100grad into exactly 90deg) */
-    if (bis(s + i, n - i, "grad")) return (fd == 0 && v % 100 == 0 && v <= 4000) ? 1 : -1;
+    if (bis(s + i, n - i, "deg")) return (v < 3600 || (v == 3600 && f == 0)) ? 1 : -1;
+    if (bis(s + i, n - i, "turn")) return fd <= 2 && (v < 10 || (v == 10 && f == 0)) ? 1 : -1;
+    if (bis(s + i, n - i, "grad")) return fd <= 2 && (v < 4000 || (v == 4000 && f == 0)) ? 1 : -1;
     return -1;
 }
 
-/* "colour [N%]" with N 0..100 and at most one decimal */
-static int stop_ok(const char *s, int a, int b) {
+/* Lot 94: "to" with one side, or one vertical and one horizontal side in
+ * either order (a corner); s[a..b) follows "to" */
+static int to_sides(const char *s, int a, int b) {
+    int wa[3], wb[3], c = bsplit(s, a, b, ' ', 0, wa, wb, 3), k, vert = 0, horiz = 0;
+    if (c < 1 || c > 2) return 0;
+    for (k = 0; k < c; k++) {
+        int l = wb[k] - wa[k];
+        if (bis(s + wa[k], l, "top") || bis(s + wa[k], l, "bottom")) vert++;
+        else if (bis(s + wa[k], l, "left") || bis(s + wa[k], l, "right")) horiz++;
+        else return 0;
+    }
+    return vert <= 1 && horiz <= 1;
+}
+
+/* Lot 94: the conic first argument, "from ANGLE", "at POSITION" or both
+ * in that order: 1 it is one, 0 it is not, -1 not valid. A radian "from"
+ * is not taken (the reader writes radians only as a linear angle). */
+static int conic_shape(const char *s, int a, int b) {
+    int wa[8], wb[8], c = bsplit(s, a, b, ' ', 0, wa, wb, 8), k = 0;
+    char t[40];
+    bo_t o;
+    if (c < 1) return -1;
+    if (bis(s + wa[0], wb[0] - wa[0], "from")) {
+        if (c < 2 || angle(s + wa[1], wb[1] - wa[1]) != 1) return -1;
+        k = 2;
+        if (c == 2) return 1;
+    }
+    if (!bis(s + wa[k], wb[k] - wa[k], "at")) return k ? -1 : 0;
+    if (k + 1 >= c) return -1;
+    bo_init(&o, t, (int)sizeof(t));
+    return pos_words(s, wa + k + 1, wb + k + 1, c - k - 1, &o) ? 1 : -1;
+}
+
+/* "colour [N%]" with N 0..100 and at most one decimal; Lot 94: a conic
+ * stop may also be "colour Ndeg" with N a whole number 0..360 */
+static int stop_ok(const char *s, int a, int b, int conic) {
     int wa[3], wb[3], c = bsplit(s, a, b, ' ', 0, wa, wb, 3);
     if (c < 1 || c > 2 || !wf_cssbg_color(s + wa[0], wb[0] - wa[0])) return 0;
+    if (c == 2 && conic && wb[1] - wa[1] > 3 && bis(s + wb[1] - 3, 3, "deg")) {
+        int i = wa[1], v = 0;
+        for (; i < wb[1] - 3; i++) {
+            if (s[i] < '0' || s[i] > '9' || i - wa[1] >= 3) return 0;
+            v = v * 10 + (s[i] - '0');
+        }
+        return v <= 360;
+    }
     if (c == 2) {
         int i = wa[1], v = 0, d = 0;
         while (i < wb[1] && s[i] >= '0' && s[i] <= '9') { v = v * 10 + (s[i] - '0'); if (v > 100) return 0; i++; d++; }
@@ -409,30 +456,33 @@ static int radial_shape(const char *s, int a, int b) {
 }
 
 int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
-    int a = 0, b = n, ia[6], ib[6], c, k, first = 0, radial, rad = 0, quarters = 0;
+    int a = 0, b = n, ia[6], ib[6], c, k, first = 0, radial, conic, rad = 0, degrees = 0, pl = 16;
     bo_t o;
     bo_init(&o, out, cap);
     if (!v) return 0;
     btrim(v, &a, &b);
     radial = bpre(v + a, b - a, "radial-gradient(");
-    if (!radial && !bpre(v + a, b - a, "linear-gradient(")) return 0;
+    conic = bpre(v + a, b - a, "conic-gradient(");
+    if (conic) pl = 15;
+    if (!radial && !conic && !bpre(v + a, b - a, "linear-gradient(")) return 0;
     if (v[b - 1] != ')') return 0;
-    c = bsplit(v, a + 16, b - 1, ',', 0, ia, ib, 6);
+    c = bsplit(v, a + pl, b - 1, ',', 0, ia, ib, 6);
     if (c < 2) return 0;
-    if (radial) {
+    if (conic) {
+        int r = conic_shape(v, ia[0], ib[0]);
+        if (r < 0) return 0;
+        first = r;
+    } else if (radial) {
         int r = radial_shape(v, ia[0], ib[0]);
         if (r < 0) return 0;
         first = r;
     } else {
         int l = ib[0] - ia[0];
         if (bpre(v + ia[0], l, "to ") || bpre(v + ia[0], l, "to\t")) {
-            int x = ia[0] + 3, y = ib[0];
-            btrim(v, &x, &y);
-            if (!bis(v + x, y - x, "top") && !bis(v + x, y - x, "right") && !bis(v + x, y - x, "bottom") &&
-                !bis(v + x, y - x, "left")) return 0;
+            if (!to_sides(v, ia[0] + 3, ib[0])) return 0;
             first = 1;
         } else {
-            int g = rad_quarters(v + ia[0], l, &quarters);
+            int g = rad_degrees(v + ia[0], l, &degrees);
             if (g == 0) g = angle(v + ia[0], l);
             else if (g > 0) rad = 1;
             if (g < 0) return 0;
@@ -440,15 +490,15 @@ int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
         }
     }
     if (c - first < 2 || c - first > 4) return 0;
-    for (k = first; k < c; k++) if (!stop_ok(v, ia[k], ib[k])) return 0;
-    bo_s(&o, radial ? "radial-gradient(" : "linear-gradient(", 16);
+    for (k = first; k < c; k++) if (!stop_ok(v, ia[k], ib[k], conic)) return 0;
+    bo_s(&o, conic ? "conic-gradient(" : radial ? "radial-gradient(" : "linear-gradient(", pl);
     for (k = 0; k < c; k++) {
         if (k) bo_s(&o, ", ", 2);
         if (k == 0 && rad) {
             /* Lot 92: a radian angle is written as its whole degrees */
             char deg[8];
-            int dn = 0, q = quarters < 0 ? -quarters : quarters, dv = q * 90, p = 1000;
-            if (quarters < 0) deg[dn++] = '-';
+            int dn = 0, dv = degrees < 0 ? -degrees : degrees, p = 1000;
+            if (degrees < 0) deg[dn++] = '-';
             while (p > 1 && dv < p) p /= 10;
             for (; p; p /= 10) deg[dn++] = (char)('0' + dv / p % 10);
             bo_s(&o, deg, dn);
@@ -534,7 +584,7 @@ static int wclass(const char *s, int a, int b) {
     int l = b - a;
     if (l == 1 && s[a] == '/') return W_SLASH;
     if (bis(s + a, l, "none") || bpre(s + a, l, "url(") || bpre(s + a, l, "linear-gradient(") ||
-        bpre(s + a, l, "radial-gradient(")) return W_IMG;
+        bpre(s + a, l, "radial-gradient(") || bpre(s + a, l, "conic-gradient(")) return W_IMG;
     if (rword(s + a, l)) return W_REP;
     if (pword(s + a, l)) return W_POS;
     if (bis(s + a, l, "scroll") || bis(s + a, l, "fixed") || bis(s + a, l, "local")) return W_ATT;

@@ -69,7 +69,9 @@ static void test_radial_radii(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", grad("radial-gradient(10em, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", grad("radial-gradient(circle circle 4px, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", grad("radial-gradient(4px at, red, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("conic-gradient(red, blue)"));
+    /* Lot 94 (converted): conic-gradient is read; one stop is not */
+    TEST_ASSERT_EQUAL_STRING("conic-gradient(red, blue)", grad("conic-gradient(red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("conic-gradient(red)"));
 }
 
 static void test_gradians(void) {
@@ -78,11 +80,15 @@ static void test_gradians(void) {
     TEST_ASSERT_EQUAL_STRING("linear-gradient(-300grad, red, blue)", grad("linear-gradient(-300grad, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(4000grad, red, blue)", grad("linear-gradient(4000grad, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(4100grad, red, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(50grad, red, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(100.0grad, red, blue)"));
+    /* Lot 94 (converted): any gradian value with at most two decimals */
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(50grad, red, blue)", grad("linear-gradient(50grad, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(100.0grad, red, blue)", grad("linear-gradient(100.0grad, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(100.125grad, red, blue)"));
     /* Lot 92 (converted): a radian quarter turn is taken as 90deg */
     TEST_ASSERT_EQUAL_STRING("linear-gradient(90deg, red, blue)", grad("linear-gradient(1.5708rad, red, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(45deg, red, blue)"));
+    /* Lot 94 (converted): any angle is drawn (in cells) */
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(45deg, red, blue)", grad("linear-gradient(45deg, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(45px, red, blue)"));
 }
 
 static void test_box_longhands(void) {

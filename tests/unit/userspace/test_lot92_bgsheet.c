@@ -19,27 +19,27 @@ static const char *st(const char *css) {
 }
 
 static void test_l92_bgsheet_0(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: linear-gradient(  -9.44RAD,rgb(63, 243, 0) 77%,teal,white  ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-541deg, rgb(63, 243, 0) 77%, teal, white)\"", st("#t { background-image: linear-gradient(  -9.44RAD,rgb(63, 243, 0) 77%,teal,white  ) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LINEAR-GRADIENT( 62.83995rad, #02c2c1, red  ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-1710deg, gray 40%, rgb(9, 118, 92), rgb(165, 21, 83) 7%, navy)\"", st("#t { background: linear-gradient(  -29.8509rad,gray 40%,rgb(9, 118, 92),rgb(165, 21, 83) 7%,navy ) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: linear-gradient(  31.3831RAD, rgb(166, 158, 239) 85%, #de7fc5, rgb(247, 28, 48), rgb(61, 76, 130)  ) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LiNeaR-GradiENT(  -34.5RAD,\trgb(141, 243, 148) 38%,\trgb(154, 121, 84) ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(1798deg, rgb(166, 158, 239) 85%, #de7fc5, rgb(247, 28, 48), rgb(61, 76, 130))\"", st("#t { background: linear-gradient(  31.3831RAD, rgb(166, 158, 239) 85%, #de7fc5, rgb(247, 28, 48), rgb(61, 76, 130)  ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-1977deg, rgb(141, 243, 148) 38%, rgb(154, 121, 84))\"", st("#t { background-image: LiNeaR-GradiENT(  -34.5RAD,\trgb(141, 243, 148) 38%,\trgb(154, 121, 84) ) }"));
 }
 
 static void test_l92_bgsheet_1(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: LINEAR-GRADIENT(59.7RAD,teal,rgb(193, 33, 49) 77%  ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(3421deg, teal, rgb(193, 33, 49) 77%)\"", st("#t { background: LINEAR-GRADIENT(59.7RAD,teal,rgb(193, 33, 49) 77%  ) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LineAr-grAdIenT( 29.84513RAD,teal 20%,rgb(96, 87, 237) ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(990deg, rgb(61, 9, 8), #54c 19%, rgb(19, 97, 52), #7c8)\"", st("#t { background: LINEAR-GRADIENT(17.2788rad, rgb(61, 9, 8), #54c 19%, rgb(19, 97, 52), #7c8) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LINEAR-GRADIENT(  -47.1rad,  #10a,  rgb(19, 240, 142)\t) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: LiNEar-GRAdIeNT( -65.97RaD,#8f6,rgb(14, 62, 185)\t) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-2699deg, #10a, rgb(19, 240, 142))\"", st("#t { background-image: LINEAR-GRADIENT(  -47.1rad,  #10a,  rgb(19, 240, 142)\t) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-3780deg, #8f6, rgb(14, 62, 185))\"", st("#t { background: LiNEar-GRAdIeNT( -65.97RaD,#8f6,rgb(14, 62, 185)\t) }"));
 }
 
 static void test_l92_bgsheet_2(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: linear-gradient(\t9RAD,\trgb(132, 48, 79),\trgb(253, 103, 3),\twhite,\t#9265e3 52%  ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(516deg, rgb(132, 48, 79), rgb(253, 103, 3), white, #9265e3 52%)\"", st("#t { background: linear-gradient(\t9RAD,\trgb(132, 48, 79),\trgb(253, 103, 3),\twhite,\t#9265e3 52%  ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-2340deg, rgb(187, 108, 157), rgb(82, 187, 73))\"", st("#t { background-image: linear-gradient(\t-40.84RAD, rgb(187, 108, 157), rgb(82, 187, 73) ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-2070deg, rgb(109, 81, 98) 66%, gray)\"", st("#t { background: LINEAR-GRADIENT(  -36.1283RaD, rgb(109, 81, 98) 66%, gray ) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { background: linear-gradient(  3.13216RAD,\tblue,\t#fc3 7%,\t#95d0e9 50%,\t#214 44% ) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LIneAr-GrADIENt( -44raD, blue, rgb(76, 154, 16)  ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-2521deg, blue, rgb(76, 154, 16))\"", st("#t { background-image: LIneAr-GrADIENt( -44raD, blue, rgb(76, 154, 16)  ) }"));
 }
 
 static void test_l92_bgsheet_3(void) {
@@ -51,26 +51,26 @@ static void test_l92_bgsheet_3(void) {
 }
 
 static void test_l92_bgsheet_4(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: LINEAR-GRADIENT( 13rad, rgb(189, 169, 210), #bc7f21, rgb(238, 124, 149) 94%, white\t) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: LIneAr-GRAdiENt(  51.8rad,red,rgb(165, 109, 108),rgb(86, 34, 23),#a23 62% ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(745deg, rgb(189, 169, 210), #bc7f21, rgb(238, 124, 149) 94%, white)\"", st("#t { background: LINEAR-GRADIENT( 13rad, rgb(189, 169, 210), #bc7f21, rgb(238, 124, 149) 94%, white\t) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(2968deg, red, rgb(165, 109, 108), rgb(86, 34, 23), #a23 62%)\"", st("#t { background: LIneAr-GRAdiENt(  51.8rad,red,rgb(165, 109, 108),rgb(86, 34, 23),#a23 62% ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(1530deg, teal, rgb(74, 19, 39) 52%, #70753a)\"", st("#t { background: linear-gradient( 26.701rad,teal,rgb(74, 19, 39) 52%,#70753a ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(90deg, #c5f2ce, #d00, red)\"", st("#t { background-image: linear-gradient(\t1.5743RAD, #c5f2ce, #d00, red\t) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: linear-gradient(  31.44rAD,\trgb(224, 75, 119),\t#656 80%\t) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(1801deg, rgb(224, 75, 119), #656 80%)\"", st("#t { background: linear-gradient(  31.44rAD,\trgb(224, 75, 119),\t#656 80%\t) }"));
 }
 
 static void test_l92_bgsheet_5(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(1350deg, #393, teal 26%, rgb(14, 12, 246), rgb(56, 99, 191))\"", st("#t { background-image: LiNear-GRaDIeNt( 23.5619Rad,\t#393,\tteal 26%,\trgb(14, 12, 246),\trgb(56, 99, 191)) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-2700deg, rgb(116, 66, 161) 89%, #7d3, green)\"", st("#t { background: linear-gradient(-47.1213rad,  rgb(116, 66, 161) 89%,  #7d3,  green ) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LINEAR-GRADIENT(  -14Rad,#659,#092,rgb(58, 42, 79),orange ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-802deg, #659, #092, rgb(58, 42, 79), orange)\"", st("#t { background-image: LINEAR-GRADIENT(  -14Rad,#659,#092,rgb(58, 42, 79),orange ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-3420deg, navy, rgb(44, 225, 197), rgb(5, 244, 246) 85%)\"", st("#t { background-image: linear-gradient(-59.690rad, navy, rgb(44, 225, 197), rgb(5, 244, 246) 85%\t) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LINEAR-GRADIENT( 37.70633Rad,\tred,\trgb(100, 246, 16),\trgb(191, 121, 129),\t#d19\t) }"));
 }
 
 static void test_l92_bgsheet_6(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: LINEAR-GRADIENT(  66rad,white,red,blue 46% ) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: linear-gradient(\t-39Rad,green 78%,#6a3a74,rgb(134, 144, 24),#db5 82% ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(3782deg, white, red, blue 46%)\"", st("#t { background: LINEAR-GRADIENT(  66rad,white,red,blue 46% ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-2235deg, green 78%, #6a3a74, rgb(134, 144, 24), #db5 82%)\"", st("#t { background: linear-gradient(\t-39Rad,green 78%,#6a3a74,rgb(134, 144, 24),#db5 82% ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-90deg, black, white 68%)\"", st("#t { background-image: linear-gradient(-1.5708rad,\tblack,\twhite 68%\t) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: LINear-gRAdIENT(\t-3Rad,gray,#bb93ad 46% ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-172deg, gray, #bb93ad 46%)\"", st("#t { background: LINear-gRAdIENT(\t-3Rad,gray,#bb93ad 46% ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(90deg, #3f6 58%, #df694a)\"", st("#t { background-image: linear-gradient( 1.571rad, #3f6 58%, #df694a  ) }"));
 }
 
@@ -85,24 +85,24 @@ static void test_l92_bgsheet_7(void) {
 static void test_l92_bgsheet_8(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-2340deg, rgb(128, 74, 114) 45%, #279cdb, #b98, rgb(138, 157, 24))\"", st("#t { background-image: linear-gradient( -40.84RAD,rgb(128, 74, 114) 45%,#279cdb,#b98,rgb(138, 157, 24)) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(630deg, black, red 20%)\"", st("#t { background: linear-gradient(\t10.99RAD,black,red 20%\t) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LINEAR-GRADIENT( -61RAD,  #26b6bd,  rgb(106, 153, 196)\t) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-3495deg, #26b6bd, rgb(106, 153, 196))\"", st("#t { background-image: LINEAR-GRADIENT( -61RAD,  #26b6bd,  rgb(106, 153, 196)\t) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-1350deg, teal, rgb(222, 253, 206))\"", st("#t { background: LInEAR-gRADient(\t-23.56rAD,\tteal,\trgb(222, 253, 206)  ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(1530deg, orange, rgb(58, 46, 122), gray)\"", st("#t { background: linear-gradient(26.7rad, orange, rgb(58, 46, 122), gray ) }"));
 }
 
 static void test_l92_bgsheet_9(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LineAr-gradIENt(\t69rad,  rgb(165, 206, 251) 59%,  rgb(136, 216, 9),  #bdc481,  rgb(180, 160, 115)  ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(3953deg, rgb(165, 206, 251) 59%, rgb(136, 216, 9), #bdc481, rgb(180, 160, 115))\"", st("#t { background-image: LineAr-gradIENt(\t69rad,  rgb(165, 206, 251) 59%,  rgb(136, 216, 9),  #bdc481,  rgb(180, 160, 115)  ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-3330deg, rgb(104, 10, 170) 14%, rgb(3, 242, 137) 65%)\"", st("#t { background: LINEAR-GRADIENT(-58.1154rAd, rgb(104, 10, 170) 14%, rgb(3, 242, 137) 65%  ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-3420deg, rgb(59, 171, 179), red 85%)\"", st("#t { background: linear-gradient(\t-59.6847rad,\trgb(59, 171, 179),\tred 85% ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-450deg, #a8e85c, #f73ba9)\"", st("#t { background-image: LINEAR-GRADIENT( -7.856RAD,#a8e85c,#f73ba9  ) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: linear-gradient( 13rad,#c2e,gray 17% ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(745deg, #c2e, gray 17%)\"", st("#t { background: linear-gradient( 13rad,#c2e,gray 17% ) }"));
 }
 
 static void test_l92_bgsheet_10(void) {
     TEST_ASSERT_EQUAL_STRING("", st("#t { background: linear-gradient( 20.42035rad,  #fbef15,  #9b2870,  rgb(210, 252, 212),  #3d6a03 ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-1530deg, navy, rgb(81, 186, 5), gray)\"", st("#t { background-image: LINEAR-GRADIENT(-26.6952rad,  navy,  rgb(81, 186, 5),  gray  ) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LINEAR-GRADIENT( 44.0rAd,\twhite,\trgb(23, 71, 187) 80%\t) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: LiNeaR-GRaDiEnt( 31RAD, rgb(86, 238, 200), rgb(238, 155, 137) 36%, navy) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(2521deg, white, rgb(23, 71, 187) 80%)\"", st("#t { background-image: LINEAR-GRADIENT( 44.0rAd,\twhite,\trgb(23, 71, 187) 80%\t) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(1776deg, rgb(86, 238, 200), rgb(238, 155, 137) 36%, navy)\"", st("#t { background: LiNeaR-GRaDiEnt( 31RAD, rgb(86, 238, 200), rgb(238, 155, 137) 36%, navy) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(630deg, #0c4, teal)\"", st("#t { background: linear-gradient( 10.9983RAD,  #0c4,  teal) }"));
 }
 
@@ -115,10 +115,10 @@ static void test_l92_bgsheet_11(void) {
 }
 
 static void test_l92_bgsheet_12(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LIneaR-gRadIEnT(\t12.5763rad, blue 55%, red 33%, #926ced 35%) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(721deg, blue 55%, red 33%, #926ced 35%)\"", st("#t { background-image: LIneaR-gRadIEnT(\t12.5763rad, blue 55%, red 33%, #926ced 35%) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { background: LINEAR-GRADIENT( -28.27433rad,\tgreen,\trgb(56, 10, 13)  ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-1080deg, #e70539, #f56384)\"", st("#t { background-image: linear-gradient(-18.8496RAD,  #e70539,  #f56384 ) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: linear-gradient( 62.8RAD, navy 56%, gray, rgb(104, 254, 217) 55%, rgb(226, 117, 65) ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(3598deg, navy 56%, gray, rgb(104, 254, 217) 55%, rgb(226, 117, 65))\"", st("#t { background-image: linear-gradient( 62.8RAD, navy 56%, gray, rgb(104, 254, 217) 55%, rgb(226, 117, 65) ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(3420deg, rgb(168, 99, 237), navy 47%, #877c5a 53%, #306 81%)\"", st("#t { background: linear-gradient( 59.696rad,  rgb(168, 99, 237),  navy 47%,  #877c5a 53%,  #306 81% ) }"));
 }
 
@@ -127,20 +127,20 @@ static void test_l92_bgsheet_13(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(1800deg, #177503, rgb(110, 137, 236), white 68%)\"", st("#t { background: LINEAR-GRADIENT(31.4159RAD, #177503, rgb(110, 137, 236), white 68% ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(900deg, #eab, rgb(84, 221, 163))\"", st("#t { background: LINEAR-GRADIENT(\t15.7rad, #eab, rgb(84, 221, 163)  ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(630deg, orange 29%, #cf6, rgb(83, 209, 88))\"", st("#t { background-image: linear-gradient(  10.9956rad, orange 29%, #cf6, rgb(83, 209, 88)\t) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: LINEAR-GRADIENT( 64.3866rad, #1d5584, #298 61%\t) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(3689deg, #1d5584, #298 61%)\"", st("#t { background: LINEAR-GRADIENT( 64.3866rad, #1d5584, #298 61%\t) }"));
 }
 
 static void test_l92_bgsheet_14(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(1800deg, rgb(122, 190, 7), #6fb)\"", st("#t { background: linear-gradient(31.4140rad, rgb(122, 190, 7), #6fb) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(990deg, red, lime, rgb(235, 140, 91))\"", st("#t { background-image: LinEAR-GrAdIenT(17.282rad, red, lime, rgb(235, 140, 91) ) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LINEAR-GRADIENT( 66rad,\t#f78586 2%,\t#7c8,\t#40b54c) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: LINEAR-GRADIENT( -64rad, #076ba8 19%, rgb(190, 231, 186), orange 89%) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(3782deg, #f78586 2%, #7c8, #40b54c)\"", st("#t { background-image: LINEAR-GRADIENT( 66rad,\t#f78586 2%,\t#7c8,\t#40b54c) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-3667deg, #076ba8 19%, rgb(190, 231, 186), orange 89%)\"", st("#t { background: LINEAR-GRADIENT( -64rad, #076ba8 19%, rgb(190, 231, 186), orange 89%) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { background: LINEAR-GRADIENT(-47.12389rad,\trgb(101, 217, 164),\tred,\tlime,\t#b5ca0c 16%) }"));
 }
 
 static void test_l92_bgsheet_15(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: lineAr-gRADienT(63Rad,#d7ba6a 45%,#1ea212 47%,#a96,#352de8 52% ) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LINEAR-GRADIENT( -54.9401RAD, rgb(145, 178, 142), #722b51, rgb(132, 158, 164), lime 29%  ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(3610deg, #d7ba6a 45%, #1ea212 47%, #a96, #352de8 52%)\"", st("#t { background-image: lineAr-gRADienT(63Rad,#d7ba6a 45%,#1ea212 47%,#a96,#352de8 52% ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-3148deg, rgb(145, 178, 142), #722b51, rgb(132, 158, 164), lime 29%)\"", st("#t { background-image: LINEAR-GRADIENT( -54.9401RAD, rgb(145, 178, 142), #722b51, rgb(132, 158, 164), lime 29%  ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-2520deg, navy, rgb(76, 73, 180), #b4a)\"", st("#t { background-image: LiNeAr-Gradient(  -43.98rad,\tnavy,\trgb(76, 73, 180),\t#b4a ) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: linear-gradient( 34.55341Rad, gray, #417  ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(1440deg, red, #2a0 1%, #b88bec, #e0a)\"", st("#t { background: linear-gradient( 25.13RAD,\tred,\t#2a0 1%,\t#b88bec,\t#e0a ) }"));
@@ -150,15 +150,15 @@ static void test_l92_bgsheet_16(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(2700deg, #c88 87%, green 52%, #e4d124 3%, rgb(138, 120, 30))\"", st("#t { background-image: linear-gradient(\t47.1239rad,#c88 87%,green 52%,#e4d124 3%,rgb(138, 120, 30)\t) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { background: lInear-gRADiENt(-37.70019RAD, black, #77c86a, white 81% ) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { background: linear-gradient(-9.42323rAd, black, gray 80%, rgb(45, 183, 206)\t) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: linear-gradient(\t-63rad, rgb(57, 120, 151) 36%, orange  ) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-3610deg, rgb(57, 120, 151) 36%, orange)\"", st("#t { background-image: linear-gradient(\t-63rad, rgb(57, 120, 151) 36%, orange  ) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-3330deg, navy, orange, #63cf1a)\"", st("#t { background-image: linear-gradient( -58.1125rad,navy,orange,#63cf1a\t) }"));
 }
 
 static void test_l92_bgsheet_17(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(2430deg, orange, teal, rgb(211, 42, 45))\"", st("#t { background-image: linear-gradient(\t42.4149rad, orange, teal, rgb(211, 42, 45)\t) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(2430deg, orange, #cd59ce 52%)\"", st("#t { background: LINEAR-GRADIENT(42.4115rad,\torange,\t#cd59ce 52%\t) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background: linear-gradient(\t25.1232RAD, rgb(145, 171, 218) 16%, #f8f, rgb(116, 185, 139), rgb(224, 10, 213)\t) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("#t { background-image: LINEAR-GRADIENT(  61.3rAd, #5d1 75%, teal\t) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(1439deg, rgb(145, 171, 218) 16%, #f8f, rgb(116, 185, 139), rgb(224, 10, 213))\"", st("#t { background: linear-gradient(\t25.1232RAD, rgb(145, 171, 218) 16%, #f8f, rgb(116, 185, 139), rgb(224, 10, 213)\t) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(3512deg, #5d1 75%, teal)\"", st("#t { background-image: LINEAR-GRADIENT(  61.3rAd, #5d1 75%, teal\t) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-1620deg, #b170aa, teal 64%)\"", st("#t { background-image: linear-gradient(  -28.27RAD, #b170aa, teal 64% ) }"));
 }
 
@@ -183,7 +183,7 @@ static void test_l92_bgsheet_20(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-720deg, rgb(125, 124, 192) 17%, green, #0f7, #d5a)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-400grad + -400grad); background-image: linear-gradient(var(--a), rgb(125, 124, 192) 17%, green, #0f7, #d5a) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(-270deg + 10deg); background-image: linear-gradient(var(--a), rgb(153, 211, 144), red 89%, rgb(94, 112, 44) 41%) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(630deg, rgb(129, 200, 246), #60b 70%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(7turn / 4); background-image: linear-gradient(var(--a), rgb(129, 200, 246), #60b 70%) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(450deg + 45deg); background-image: linear-gradient(var(--a), rgb(169, 148, 240), rgb(231, 95, 44), blue, #4fb) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(495deg, rgb(169, 148, 240), rgb(231, 95, 44), blue, #4fb)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(450deg + 45deg); background-image: linear-gradient(var(--a), rgb(169, 148, 240), rgb(231, 95, 44), blue, #4fb) }"));
 }
 
 static void test_l92_bgsheet_21(void) {
@@ -196,30 +196,30 @@ static void test_l92_bgsheet_21(void) {
 
 static void test_l92_bgsheet_22(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(450deg, #a88296, red, rgb(222, 156, 220), rgb(80, 161, 117) 34%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(150deg * 3); background-image: linear-gradient(var(--a), #a88296, red, rgb(222, 156, 220), rgb(80, 161, 117) 34%) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-270deg + 30deg); background-image: linear-gradient(var(--a), gray 17%, rgb(16, 131, 90), rgb(105, 36, 241), black) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-240deg, gray 17%, rgb(16, 131, 90), rgb(105, 36, 241), black)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-270deg + 30deg); background-image: linear-gradient(var(--a), gray 17%, rgb(16, 131, 90), rgb(105, 36, 241), black) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(250grad + 250grad); background-image: linear-gradient(var(--a), rgb(253, 85, 170) 1%, #79ccbe, #2fe, rgb(194, 61, 159)) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(450deg, #812, #7ce 37%, orange 95%, gray 93%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(250grad + 250grad); background-image: linear-gradient(var(--a), #812, #7ce 37%, orange 95%, gray 93%) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(360deg, #f36aed 99%, #228, rgb(90, 112, 163))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(200grad + 200grad); background-image: linear-gradient(var(--a), #f36aed 99%, #228, rgb(90, 112, 163)) }"));
 }
 
 static void test_l92_bgsheet_23(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(0deg + 45deg); background-image: linear-gradient(var(--a), rgb(188, 149, 86) 25%, #13c) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(45deg, rgb(188, 149, 86) 25%, #13c)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(0deg + 45deg); background-image: linear-gradient(var(--a), rgb(188, 149, 86) 25%, #13c) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: max(360deg, 270deg); background-image: linear-gradient(var(--a), rgb(216, 163, 95), #568d72, navy) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(180deg + 30deg); background-image: linear-gradient(var(--a), #d3b4fe, #24a32a, rgb(173, 192, 68)) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(210deg, #d3b4fe, #24a32a, rgb(173, 192, 68))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(180deg + 30deg); background-image: linear-gradient(var(--a), #d3b4fe, #24a32a, rgb(173, 192, 68)) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(90deg * 3); background-image: linear-gradient(var(--a), #06f 48%, rgb(52, 75, 145)) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(630deg + 45deg); background-image: linear-gradient(var(--a), rgb(158, 70, 62) 96%, rgb(136, 55, 142), rgb(49, 8, 229), rgb(98, 6, 19)) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(675deg, rgb(158, 70, 62) 96%, rgb(136, 55, 142), rgb(49, 8, 229), rgb(98, 6, 19))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(630deg + 45deg); background-image: linear-gradient(var(--a), rgb(158, 70, 62) 96%, rgb(136, 55, 142), rgb(49, 8, 229), rgb(98, 6, 19)) }"));
 }
 
 static void test_l92_bgsheet_24(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(0deg, #60ed03, rgb(70, 192, 33))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: max(0deg, -90deg); background-image: linear-gradient(var(--a), #60ed03, rgb(70, 192, 33)) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(0deg + 30deg); background-image: linear-gradient(var(--a), #b43, #0c9cfa) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(30deg, #b43, #0c9cfa)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(0deg + 30deg); background-image: linear-gradient(var(--a), #b43, #0c9cfa) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-270deg, #82bb40, #7f07ca 74%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: max(-270deg, -360deg); background-image: linear-gradient(var(--a), #82bb40, #7f07ca 74%) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-720deg, rgb(255, 35, 206) 74%, white, gray)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-240deg * 3); background-image: linear-gradient(var(--a), rgb(255, 35, 206) 74%, white, gray) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(630deg, rgb(196, 159, 207) 64%, #b14c9f, blue)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(210deg * 3); background-image: linear-gradient(var(--a), rgb(196, 159, 207) 64%, #b14c9f, blue) }"));
 }
 
 static void test_l92_bgsheet_25(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-360deg + 10deg); background-image: linear-gradient(var(--a), #8d4, blue, #f55 3%) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-350deg, #8d4, blue, #f55 3%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-360deg + 10deg); background-image: linear-gradient(var(--a), #8d4, blue, #f55 3%) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(90deg, rgb(3, 121, 103), navy 53%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(30deg * 3); background-image: linear-gradient(var(--a), rgb(3, 121, 103), navy 53%) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(-4turn / 4); background-image: linear-gradient(var(--a), green, rgb(176, 189, 65) 5%, blue) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(240deg * 3); background-image: linear-gradient(var(--a), rgb(53, 195, 180), #0be450) }"));
@@ -231,7 +231,7 @@ static void test_l92_bgsheet_26(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(0deg, gray, #846134 47%, #8f798b)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(0deg * 3); background-image: linear-gradient(var(--a), gray, #846134 47%, #8f798b) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(0deg, #1309d5 92%, rgb(79, 31, 210) 52%, #37730b, rgb(104, 183, 247))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: max(0deg, -90deg); background-image: linear-gradient(var(--a), #1309d5 92%, rgb(79, 31, 210) 52%, #37730b, rgb(104, 183, 247)) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-450deg, #306195, #33a 64%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-5turn / 4); background-image: linear-gradient(var(--a), #306195, #33a 64%) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(90deg + 45deg); background-image: linear-gradient(var(--a), rgb(124, 199, 175) 21%, white 73%) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(135deg, rgb(124, 199, 175) 21%, white 73%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(90deg + 45deg); background-image: linear-gradient(var(--a), rgb(124, 199, 175) 21%, white 73%) }"));
 }
 
 static void test_l92_bgsheet_27(void) {
@@ -268,7 +268,7 @@ static void test_l92_bgsheet_30(void) {
 
 static void test_l92_bgsheet_31(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-180deg, #612 33%, #f3f 84%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-100grad + -100grad); background-image: linear-gradient(var(--a), #612 33%, #f3f 84%) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-360deg + 30deg); background-image: linear-gradient(var(--a), rgb(216, 217, 29) 67%, #93e, #760a1f 91%) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-330deg, rgb(216, 217, 29) 67%, #93e, #760a1f 91%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-360deg + 30deg); background-image: linear-gradient(var(--a), rgb(216, 217, 29) 67%, #93e, #760a1f 91%) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(180deg, rgb(107, 145, 39) 75%, gray)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: max(180deg, 90deg); background-image: linear-gradient(var(--a), rgb(107, 145, 39) 75%, gray) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(-50grad + -50grad); background-image: linear-gradient(var(--a), rgb(82, 174, 246), gray 6%) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-720deg, #2d767d, rgb(133, 61, 123), rgb(236, 63, 131))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-400grad + -400grad); background-image: linear-gradient(var(--a), #2d767d, rgb(133, 61, 123), rgb(236, 63, 131)) }"));
@@ -276,7 +276,7 @@ static void test_l92_bgsheet_31(void) {
 
 static void test_l92_bgsheet_32(void) {
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(200grad + 200grad); background-image: linear-gradient(var(--a), green, rgb(71, 217, 173) 36%, #7fe, #09b 86%) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(540deg + 10deg); background-image: linear-gradient(var(--a), #c33816 57%, black 66%, #98a1b3, rgb(138, 77, 48) 65%) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(550deg, #c33816 57%, black 66%, #98a1b3, rgb(138, 77, 48) 65%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(540deg + 10deg); background-image: linear-gradient(var(--a), #c33816 57%, black 66%, #98a1b3, rgb(138, 77, 48) 65%) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(540deg, black 7%, blue)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(300grad + 300grad); background-image: linear-gradient(var(--a), black 7%, blue) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-450deg, rgb(164, 33, 65) 70%, black, #612)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: max(-450deg, -540deg); background-image: linear-gradient(var(--a), rgb(164, 33, 65) 70%, black, #612) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-360deg, white, gray, rgb(131, 121, 97), navy)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-120deg * 3); background-image: linear-gradient(var(--a), white, gray, rgb(131, 121, 97), navy) }"));
@@ -291,7 +291,7 @@ static void test_l92_bgsheet_33(void) {
 }
 
 static void test_l92_bgsheet_34(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(450deg + 45deg); background-image: linear-gradient(var(--a), rgb(205, 7, 200) 48%, #5bf 58%, rgb(129, 24, 76)) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(495deg, rgb(205, 7, 200) 48%, #5bf 58%, rgb(129, 24, 76))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(450deg + 45deg); background-image: linear-gradient(var(--a), rgb(205, 7, 200) 48%, #5bf 58%, rgb(129, 24, 76)) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(540deg, rgb(7, 178, 140), rgb(90, 218, 14) 35%, #843, rgb(203, 119, 139))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(6turn / 4); background-image: linear-gradient(var(--a), rgb(7, 178, 140), rgb(90, 218, 14) 35%, #843, rgb(203, 119, 139)) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(180deg, red, rgb(39, 234, 146))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(100grad + 100grad); background-image: linear-gradient(var(--a), red, rgb(39, 234, 146)) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-720deg, #808508, #f473f5 83%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-400grad + -400grad); background-image: linear-gradient(var(--a), #808508, #f473f5 83%) }"));
@@ -299,7 +299,7 @@ static void test_l92_bgsheet_34(void) {
 }
 
 static void test_l92_bgsheet_35(void) {
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-90deg + 45deg); background-image: linear-gradient(var(--a), rgb(167, 23, 161), rgb(157, 79, 25) 57%, #6f7) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-45deg, rgb(167, 23, 161), rgb(157, 79, 25) 57%, #6f7)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-90deg + 45deg); background-image: linear-gradient(var(--a), rgb(167, 23, 161), rgb(157, 79, 25) 57%, #6f7) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(90deg + 45deg); background-image: linear-gradient(var(--a), #eb1 71%, lime) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-720deg, blue 21%, rgb(10, 102, 226))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-400grad + -400grad); background-image: linear-gradient(var(--a), blue 21%, rgb(10, 102, 226)) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-630deg, rgb(148, 8, 129), rgb(228, 209, 80), gray)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: max(-630deg, -720deg); background-image: linear-gradient(var(--a), rgb(148, 8, 129), rgb(228, 209, 80), gray) }"));
@@ -311,14 +311,14 @@ static void test_l92_bgsheet_36(void) {
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(-150deg * 3); background-image: linear-gradient(var(--a), rgb(85, 172, 203), rgb(167, 164, 65), rgb(147, 150, 188), teal) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-450deg, rgb(40, 98, 212), rgb(236, 171, 29))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-250grad + -250grad); background-image: linear-gradient(var(--a), rgb(40, 98, 212), rgb(236, 171, 29)) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(0deg, rgb(79, 116, 216), rgb(208, 183, 79) 10%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(0deg * 3); background-image: linear-gradient(var(--a), rgb(79, 116, 216), rgb(208, 183, 79) 10%) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(630deg + 10deg); background-image: linear-gradient(var(--a), rgb(198, 97, 172) 30%, gray, #f15) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(640deg, rgb(198, 97, 172) 30%, gray, #f15)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(630deg + 10deg); background-image: linear-gradient(var(--a), rgb(198, 97, 172) 30%, gray, #f15) }"));
 }
 
 static void test_l92_bgsheet_37(void) {
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(-7turn / 4); background-image: linear-gradient(var(--a), #d741ad, white) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: max(360deg, 270deg); background-image: linear-gradient(var(--a), rgb(189, 112, 227), #89ce88) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(-540deg + 45deg); background-image: linear-gradient(var(--a), rgb(38, 44, 216), black) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-450deg + 30deg); background-image: linear-gradient(var(--a), navy 89%, teal, #42c, #ee5fef) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-420deg, navy 89%, teal, #42c, #ee5fef)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-450deg + 30deg); background-image: linear-gradient(var(--a), navy 89%, teal, #42c, #ee5fef) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(-7turn / 4); background-image: linear-gradient(var(--a), rgb(212, 64, 227) 74%, rgb(43, 36, 83), rgb(172, 29, 236) 73%) }"));
 }
 
@@ -326,15 +326,15 @@ static void test_l92_bgsheet_38(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(540deg, #a5e 60%, #e4a 95%, red 1%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: max(540deg, 450deg); background-image: linear-gradient(var(--a), #a5e 60%, #e4a 95%, red 1%) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(120deg * 3); background-image: linear-gradient(var(--a), rgb(34, 201, 32) 70%, #22a, #6afacd 38%, rgb(18, 128, 119)) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-540deg, rgb(18, 225, 207), rgb(117, 237, 185) 73%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: max(-540deg, -630deg); background-image: linear-gradient(var(--a), rgb(18, 225, 207), rgb(117, 237, 185) 73%) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-180deg + 45deg); background-image: linear-gradient(var(--a), teal 87%, orange, green 52%) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-450deg + 10deg); background-image: linear-gradient(var(--a), rgb(234, 93, 218), rgb(158, 200, 153)) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-135deg, teal 87%, orange, green 52%)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-180deg + 45deg); background-image: linear-gradient(var(--a), teal 87%, orange, green 52%) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-440deg, rgb(234, 93, 218), rgb(158, 200, 153))\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-450deg + 10deg); background-image: linear-gradient(var(--a), rgb(234, 93, 218), rgb(158, 200, 153)) }"));
 }
 
 static void test_l92_bgsheet_39(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(0deg, lime 41%, #830ec1)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(0deg * 3); background-image: linear-gradient(var(--a), lime 41%, #830ec1) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(-150grad + -150grad); background-image: linear-gradient(var(--a), rgb(152, 185, 251) 15%, #ebc3f8 51%) }"));
     TEST_ASSERT_EQUAL_STRING("", st("#t { --a: calc(-350grad + -350grad); background-image: linear-gradient(var(--a), rgb(8, 137, 15), gray) }"));
-    TEST_ASSERT_EQUAL_STRING("", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(360deg + 45deg); background-image: linear-gradient(var(--a), blue, white 83%, #414f51) }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(405deg, blue, white 83%, #414f51)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(360deg + 45deg); background-image: linear-gradient(var(--a), blue, white 83%, #414f51) }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:linear-gradient(-360deg, rgb(90, 193, 190) 38%, teal)\"", st("@property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg } #t { --a: calc(-120deg * 3); background-image: linear-gradient(var(--a), rgb(90, 193, 190) 38%, teal) }"));
 }
 
