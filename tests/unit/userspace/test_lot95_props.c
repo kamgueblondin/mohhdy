@@ -417,6 +417,8 @@ static void sweep(const char *syn, const char *v, const char *want) {
 }
 
 static void test_compute_caps(void) {
+    /* as-written items (colours) in a list */
+    sweep("'<color>#'", "red,blue", "red, blue");
     sweep("'<length>'", "1in", "96px");
     sweep("'<length>'", "-0.375pt", "-0.5px");
     sweep("'<length>'", "0.5pt", "0.6667px");
@@ -488,6 +490,28 @@ static void test_more_edges(void) {
         TEST_ASSERT_EQUAL_STRING("8px", cvx("'<length>'", "1vw", &c));
         TEST_ASSERT_EQUAL(0, wf_cssprop_math_eval("calc(1vw)", &t, g_o, (int)sizeof(g_o)));
         TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, t);
+    }
+    /* Lot 95 mutation witnesses (run 1 survivors) */
+    TEST_ASSERT_EQUAL_STRING("KEEP", cvp("'<length>'", "10vmax", 0, 600));       /* no width: not known */
+    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length-percentage>'", "calc(1% + 60000px + 60000px - 60000px)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TFUNC, "rotate(0degX"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TFUNC, "scale(1x"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TFUNC, "translate3d(1px, 2px, 10%)"));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "translate3d(1px, 2%, 3px)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TLIST, "  "));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_URL, "url(a\\)"));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_URL, "url(a\\)b)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_URL, "url(a\001b)"));
+    /* a 31-byte name set on the element and read there */
+    {
+        char name31[40];
+        name31[0] = '-'; name31[1] = '-';
+        fill(name31 + 2, 'm', 29);
+        snprintf(g_css, sizeof(g_css), "#p { %s: 22px } #p { font-size: var(%s) }", name31, name31);
+        prep(g_css, "<p id=p>p</p>", 0, 0);
+        k = wf_site_report(&g_d, text, (int)sizeof(text));
+        TEST_ASSERT_TRUE(k > 0);
+        TEST_ASSERT_NOT_NULL(strstr(text, "node p #p display auto size 22px\n"));
     }
     /* a 31-byte name in var() */
     {

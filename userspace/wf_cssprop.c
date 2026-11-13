@@ -1379,8 +1379,7 @@ static int cp_num_item(int t, const char *s, int a, int b, char *out, int cap) {
     } else {
         cp_mp_t m;
         m.s = item; m.i = 0; m.depth = 0;
-        cp_mleaf(&m, &q);
-        if (item[m.i]) q.t = 0;
+        cp_mleaf(&m, &q);   /* the item matches t, so the leaf is all of it */
         /* a unitless zero length is 0px */
         if (q.t == WF_CSSPROP_NUMBER && (t == WF_CSSPROP_LENGTH || t == WF_CSSPROP_LENPCT)) q.t = WF_CSSPROP_LENGTH;
     }
