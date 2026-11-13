@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Lot 91 in QEMU, offline. One boot at ui-scale 1x with the guest clock
-set to 2026-07-01 10:30 UTC (-rtc base=...); the Lot 67 test server runs
+set to 2026-07-01 10:30 UTC (-rtc base=...,clock=vm); the Lot 67 test server runs
 on the host and the guest reaches it as 10.0.2.2 (slirp).
 
   * reader backgrounds (/lot91/bg.html): radial gradients with explicit
@@ -159,11 +159,25 @@ def step_expiry(mon, proc):
     if u + tz >= 1440:
         raise RuntimeError("setup too slow: local midnight passed before the first offer list was checked")
     need(out, ["autofill offer 0 exp91 host", "autofill offers 1"], "the value one day old is offered")
-    # wait on the guest clock until local midnight has passed
-    time.sleep(max(0, (1440 - (u + tz)) * 60 - s) + 3)
-    u, s = guest_utc(mon, proc)
-    if u + tz < 1440:
-        raise RuntimeError("the guest clock did not reach local midnight: utc minute %d tz %d" % (u, tz))
+    # Wait on the guest clock until local midnight has passed. A single
+    # host sleep is not enough: with QEMU's default clock=host, a pause
+    # of the host jumps the guest RTC (one run reached 12:35 UTC, 755 min,
+    # and failed the tz -720 window). clock=vm keeps the RTC on virtual
+    # time. Poll the guest date until midnight, and fail only if that
+    # clock stops advancing (not if the host wall clock jumps).
+    last = u * 60 + s
+    stagnant = 0
+    while u + tz < 1440:
+        time.sleep(5)
+        u, s = guest_utc(mon, proc)
+        now = u * 60 + s
+        if now <= last:
+            stagnant += 1
+            if stagnant > 60:
+                raise RuntimeError("the guest clock did not reach local midnight: utc minute %d tz %d" % (u, tz))
+        else:
+            stagnant = 0
+            last = now
     out = lw.run(mon, proc, "autofill offers https://www.example.org/ user", "autofill offers ", 20)
     need(out, ["autofill offers 0"], "expiry before the offers after midnight")
     refuse(out, ["exp91"], "expiry before the offers after midnight")
@@ -177,7 +191,7 @@ def step_expiry(mon, proc):
 
 
 def boot_reader(hp):
-    proc, mon, qmp = l88.boot(4, hp, extra=["-rtc", "base=%s" % RTC])
+    proc, mon, qmp = l88.boot(4, hp, extra=["-rtc", "base=%s,clock=vm" % RTC])
     try:
         g.wait_for(proc, "net-driver stack ring3 ready", g.CMD_TIMEOUT)
         time.sleep(0.5)
