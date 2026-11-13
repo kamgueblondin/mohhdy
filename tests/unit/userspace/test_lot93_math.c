@@ -74,6 +74,13 @@ static void test_sin(void) {
     TEST_ASSERT_EQUAL_STRING("0.5064", ev("sin(-100)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", ev("sin(100.0001)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", ev("sin(-100.0001)"));
+    /* reduced angles near pi/4, where a short series would show */
+    TEST_ASSERT_EQUAL_STRING("0.7548", ev("sin(49.0036deg)"));
+    TEST_ASSERT_EQUAL_STRING("-0.7881", ev("sin(-52.0037deg)"));
+    TEST_ASSERT_EQUAL_STRING("-0.8479", ev("sin(237.9786deg)"));
+    TEST_ASSERT_EQUAL_STRING("1.0984", ev("tan(47.6835deg)"));
+    TEST_ASSERT_EQUAL_STRING("0.9529", ev("tan(43.6199deg)"));
+    TEST_ASSERT_EQUAL_STRING("-0.9374", ev("tan(136.8492deg)"));
 }
 
 /* cos() */
@@ -173,6 +180,8 @@ static void test_pow(void) {
     TEST_ASSERT_EQUAL_STRING("10000", ev("pow(0.01, -2)"));
     TEST_ASSERT_EQUAL_STRING("0.0002", ev("pow(3, -8)"));
     TEST_ASSERT_EQUAL_STRING("0.0001", ev("pow(3, -9)"));
+    TEST_ASSERT_EQUAL_STRING("3814.6973", ev("pow(0.4, -9)"));      /* past -8: through exp(B ln A) */
+    TEST_ASSERT_EQUAL_STRING("50805.2634", ev("pow(0.3, -9)"));
     TEST_ASSERT_EQUAL_STRING("-0.0001", ev("pow(-3, -9)"));
     TEST_ASSERT_EQUAL_STRING("22015.456", ev("pow(1.0001, 100000)"));
     TEST_ASSERT_EQUAL_STRING("3.5738", ev("pow(1.01, 128)"));
@@ -185,6 +194,20 @@ static void test_pow(void) {
     TEST_ASSERT_EQUAL_STRING("1", ev("pow(1.1, 0.0001)"));
     TEST_ASSERT_EQUAL_STRING("7.3892", ev("pow(e, 2)"));
     TEST_ASSERT_EQUAL_STRING("99997.1946", ev("pow(2, 16.6096)"));
+    /* exact ties of integer exponents (exp(B ln A) may land on either side) */
+    TEST_ASSERT_EQUAL_STRING("525.2188", ev("pow(3.5, 5)"));
+    TEST_ASSERT_EQUAL_STRING("-11602.9063", ev("pow(-6.5, 5)"));
+    TEST_ASSERT_EQUAL_STRING("77378.0938", ev("pow(9.5, 5)"));
+    TEST_ASSERT_EQUAL_STRING("0.7813", ev("pow(1.28, -1)"));
+    TEST_ASSERT_EQUAL_STRING("0.0063", ev("pow(160, -1)"));
+    TEST_ASSERT_EQUAL_STRING("-0.0013", ev("pow(-800, -1)"));
+    /* 2^64 * 10000: past the limit, its low word is 0 */
+    TEST_ASSERT_EQUAL_STRING("KEEP", ev("pow(65536, 4)"));
+    TEST_ASSERT_EQUAL_STRING("65536", ev("pow(65536, 1)"));
+    /* the decimals past the fourth are truncated, then rounded once */
+    TEST_ASSERT_EQUAL_STRING("0.1176", ev("pow(0.7, 6)"));          /* 0.117649 */
+    TEST_ASSERT_EQUAL_STRING("0", ev("pow(0.007, 2)"));             /* 0.000049 */
+    TEST_ASSERT_EQUAL_STRING("26.8435", ev("pow(1.6, 7)"));         /* 26.8435456 */
 }
 
 /* sqrt(): exact integer square root, rounded half away from zero */
@@ -262,6 +285,8 @@ static void test_types(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("pow(2, 3)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("pow(2px, 3)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("pow(2, 3deg)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("pow(2px, 3px)"));   /* one type, still not numbers */
+    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("pow(1deg, 2deg)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("pow(2)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("pow(2, 3, 4)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("sqrt(4px)"));

@@ -334,13 +334,11 @@ static void cp_round(cp_q_t *a, const cp_q_t *b, int how) {
 typedef struct { unsigned long long hi, lo; } cp_w_t;   /* two's complement */
 
 #define CP_ONE (1LL << 62)
-/* pi/2, pi/4, tan(pi/8) and ln 2 in 1/2^62; _LO the next 62 bits */
+/* pi/2, pi/4, tan(pi/8) and ln 2 in 1/2^62, rounded to nearest */
 #define CP_PIO2 7244019458077122842LL
-#define CP_PIO2_LO 1772391103515558810LL
 #define CP_PIO4 3622009729038561421LL
 #define CP_TANPI8 1910222894239003202LL
 #define CP_LN2 3196577161300663915LL
-#define CP_LN2_LO (-243692211680628885LL)
 
 static cp_w_t cp_w(long long v) {
     cp_w_t r;
@@ -394,7 +392,7 @@ static cp_w_t cp_wmul(cp_w_t a, long long m) {
     return neg ? cp_wneg(r) : r;
 }
 
-/* a / d for 0 < d <= 2^63: mode 0 rounded half away from zero, 1 floor */
+/* a / d for 0 < d <= 2^63: mode 0 rounded half away from zero, 1 truncated */
 static cp_w_t cp_wdivu(cp_w_t a, unsigned long long d, int mode) {
     int neg = cp_wneg_p(a), b;
     unsigned long long r = 0;
@@ -410,7 +408,7 @@ static cp_w_t cp_wdivu(cp_w_t a, unsigned long long d, int mode) {
             else q.lo |= 1ULL << b;
         }
     }
-    if ((mode == 0 && r >= d - r) || (mode == 1 && neg && r)) {
+    if (mode == 0 && r >= d - r) {
         q.lo++;
         if (!q.lo) q.hi++;
     }
@@ -563,7 +561,6 @@ static int cp_trig(int fn, int ang, long long v, long long *out) {
         x = cp_wdiv(cp_wmul(cp_w(v), CP_ONE), 10000, 0);
         k = cp_wdiv(x, CP_PIO2, 0);
         x = cp_wsub(x, cp_wmul(cp_w(CP_PIO2), (long long)k.lo));
-        x = cp_wsub(x, cp_wshr(cp_wmul(cp_w(CP_PIO2_LO), (long long)k.lo), 62));
         r = (long long)x.lo;
         q = (int)(k.lo & 3);
     }
@@ -591,7 +588,7 @@ static cp_w_t cp_ln(long long v) {
     m = (long long)cp_wdivu(cp_wshl(cp_w(v), 62 - k), 10000, 0).lo;
     /* ln m = 2 atanh((m - 1) / (m + 1)) */
     s = (long long)cp_wdivu(cp_wmul(cp_w(m - CP_ONE), CP_ONE), (unsigned long long)m + (unsigned long long)CP_ONE, 0).lo;
-    r = cp_wadd(cp_wmul(cp_w(CP_LN2), k), cp_wshr(cp_wmul(cp_w(CP_LN2_LO), k), 62));
+    r = cp_wmul(cp_w(CP_LN2), k);
     return cp_wadd(r, cp_w(2 * cp_oddser(s, 0)));
 }
 
@@ -604,14 +601,15 @@ static int cp_exp(cp_w_t t, long long *out) {
     /* t = k ln 2 + r, |r| <= ln 2 / 2 */
     k = (int)(long long)cp_wdiv(t, CP_LN2, 0).lo;
     t = cp_wsub(t, cp_wmul(cp_w(CP_LN2), k));
-    t = cp_wsub(t, cp_wshr(cp_wmul(cp_w(CP_LN2_LO), k), 62));
     r = (long long)t.lo;
     e = CP_ONE; term = CP_ONE;
     for (j = 1; j <= 30 && term; j++) {
         term = cp_div(cp_xmul(term, r), j, 0);
         e += term;
     }
-    return cp_wout(cp_wshr(cp_wmul(cp_w(e), 10000), 62 - k), out);
+    /* at most e^12 = 162755 (1.7e9): cp_margs refuses it past the limit */
+    *out = (long long)cp_wshr(cp_wmul(cp_w(e), 10000), 62 - k).lo;
+    return 1;
 }
 
 /* sqrt of n (1/10^8 units squared) into 1/10000, rounded half away */
@@ -619,8 +617,7 @@ static int cp_sqrtw(cp_w_t n, long long *out) {
     unsigned long long s = cp_isqrt(n);
     cp_w_t rem = cp_wsub(n, cp_umul(s, s));
     if (cp_wlt(cp_w(0), cp_wsub(rem, cp_umul(s, 1)))) s++;
-    if (s > (unsigned long long)CP_LIM) return 0;
-    *out = (long long)s;
+    *out = (long long)s;            /* past the limit: cp_margs refuses it */
     return 1;
 }
 
