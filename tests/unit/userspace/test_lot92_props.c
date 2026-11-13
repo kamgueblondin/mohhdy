@@ -93,9 +93,11 @@ static void test_abs_sign_and_trig_types(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("atan2(1s, 2ms)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("ATAN(1)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("atan2(1px)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", ev("sin(30deg)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("pow(2, 3)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(pi)"));
+    /* Lot 93 (converted): sin() is simplified, pow() and pi are numbers */
+    TEST_ASSERT_EQUAL_STRING("0.5", ev("sin(30deg)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("pow(2, 3)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(pi)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(-pi)"));
 }
 
 static void test_units_and_bounds(void) {
@@ -143,7 +145,8 @@ static void test_compute_alternatives(void) {
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<angle>'", "calc(1px)"));
     TEST_ASSERT_EQUAL_STRING("180deg", cv("'<angle> | <length>'", "calc(0.25turn * 2)"));
     TEST_ASSERT_EQUAL_STRING("0.25s", cv("'<time>'", "max(250ms, 0.1s)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number>'", "sin(30deg)"));
+    TEST_ASSERT_EQUAL_STRING("0.5", cv("'<number>'", "sin(30deg)"));   /* Lot 93 (converted): was KEEP */
+    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number>'", "tan(90deg)"));
     /* a one-type registration filled in by hand (nalt 0) */
     memset(&g_p, 0, sizeof(g_p));
     g_p.syntax = WF_CSSPROP_LENGTH;

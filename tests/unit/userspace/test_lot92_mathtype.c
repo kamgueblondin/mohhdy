@@ -10,7 +10,7 @@ static void test_l92_mtype_0(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("MIn((-36.2% *-3.57537 -  1050%/  726.08680)  /3.245  - \t 14.0%,(  8% \t + 9.57%)  -\tcalc(5.79820%  + 14%* 29 - 1.9395%\t* 6 )/137\t)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("CLAMP( 779720.113deg*rem(2  /-5.1758/  23.357  - 24.595\t/17,\t23  - 3/22 -\t2  ) +\t3deg, 73566.483DEG  /\tcAlc(0.536  /  18.76562  ) +\tcalc(.7343  /830.11/  -179.61788 \t +\t1.38309\t+  3.17)*round(  up,  36DEG,  CLAMP( 9deg \t + 12.3deg/  869.90083,  -2.769deg*187.835 -  9.02828RAD \t +\t44.4406turn/-139702.1153,  4.84* 3.215grad +\t0.4rad\t/\t-2.1/8.879) )/\t-178, -1.49162deg  )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("round(ROUND( up,6.6/\t-402319.94522  - \t 1259.0\t*\t8.1 /\t-4.3 \t + -1.49\t* 4.027,243223.586/6.38921\t+ \t -12.32/  359 )\t*(19px )/claMp(-1773.2541 *2.9,1.43/ 72.413  * 30.3,1519.20162*  +37.9  /187.490 + \t -9.12150\t),  (CALC(-.4Q \t + \t -32rem  + 710.77mm\t/ -8.10))\t)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(pi)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(pi)"));
 }
 
 static void test_l92_mtype_1(void) {
@@ -18,7 +18,7 @@ static void test_l92_mtype_1(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(+8.7 / -1.6pX)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("SIGN(629.13"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(51.43928px * -49050PX)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(pi)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(pi)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("round(6.72turn)"));
 }
 
@@ -118,7 +118,7 @@ static void test_l92_mtype_12(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("mod(-227.3791px)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(4 + round(  686.44 \t -\tabs((-147\t*1051.32*\t164.043)  -\tround(0.45981 - \t 7.4839,384*\t-3.85* -1.207)*1332/\t32856.3012  ) -\t-8.90942  *rem(sign(6.7  *-.8288grad* 6.4336)  /\t-9.444 -\t3.57644  *  29.3726,-2.289/-73.0987\t-\t-8.69 )\t/ 1.1) /4.61\t)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("aBS(35.48253, 0.8)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("HYPOT(4.89, -8)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("HYPOT(4.89, -8)"));
 }
 
 static void test_l92_mtype_13(void) {
@@ -186,7 +186,7 @@ static void test_l92_mtype_19(void) {
 
 static void test_l92_mtype_20(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("sin(6MS)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("pow(6.7, 2)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("pow(6.7, 2)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("calc( rem( 2.7PX  /9.600,90.4px  - 20PX\t)/ 1\t+ CALC(\t-20.990*  111.52838pc\t*7 \t -\t27.16042  *  4.74642PX*24.4874))"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("calc(\t(  7.472 *(-0.72%*6.56606\t+ -651907.2  *9.5701%)*  +1139.51  - 3.780% )\t/\t0.5547\t)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("sin(6.81918in)"));
@@ -241,7 +241,7 @@ static void test_l92_mtype_25(void) {
 static void test_l92_mtype_26(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("rem( round(\tmin( 29.07868\t*20.2%)/-192.06271 \t + \t min(\t39.99  * 24.074% \t - \t 0.9868% - 127%/.8, 1.7%\t+ 3.4%, 2.76%\t/  213 + \t -9.002%/-336.58822, 142979.3%*169.055\t)/  34,MAx(\t3.8763% \t + 78% - \t 20%*109215.346,  1%  /  +24,  -0.35320%,  -65.8%  /  4.99038  /-0.5  ) )/  MAX(\t-3.26962\t+ 0\t- -3,221.484*145832 / 9.13 -\t-5.2659/1.66306*\t6.68,-131058/\t70.53395  +  1*\t93,851604  *8.27 ) \t - -7.59946%*(-7.28  /9.079  ) + \t 830%,30%  )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENPCT, wf_cssprop_math_type("round(  TO-ZERO,  ROUND(\tnEarest,\t59742pt  /\t1.648/17,\tclamp( 29*  13.2px -\t-834pc -  149.3825cm*  -133,  1q\t/-34.59 \t + -6.2219*9.1655PX\t*2\t+\t-25.2660*\t-19.5962px,  3PX\t+  22.00488q) *1686.04  + \t ROUnd(30PX,\t119537.5691PX  )  /105.725)/1 - \t 17.93%,  6.65306px  +  1Mm  )"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(e)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(e)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("max(7.482%/-4.11,8%/(-29 /0.36073))"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("clAMP(8.0435grad,abs(-32.525deg  - \t (  1739.33014deg  +  2.54* 16.128*47.00930rad \t - 7.4589\t*  21.9329deg/1.49  ))\t/ 34.19,(\tround(\tUP,\t25.88583* 205.81TURn\t* 3.53751 - 7.4DEG\t/  26\t+  8.3089Deg/ 114,\t776.92deg \t - -19DEG*-72.34221 /-123150.0978\t)\t/22.97368\t) *945.6698 \t +  475deg/ 19.4\t- round(nearest,\t-6.221rAD + asin(  -27.004* 53.36\t-\t7*\t1232.2027 + -1\t)\t*  174.8887,\tcalc(906turn / +8.989 /0.0543)\t*23 \t +\t3.0881deg\t/ 109.6268/  9.6 ))"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("min(\tREM(  31.3610%\t- 41%/1.4,-8% \t - 1.01%/1287 \t + \t 7%/6.63067)/ 12 - 113.42519 *MOD( -26%,5.5%)\t+ 109.97727%\t/2,rem(3.86% \t +\t38  *  6%,629% /2.0 \t -\t4.408  * 151.7%* -110.33 )  /\t111 / +202334.3954 - (35%  )  )"));
@@ -261,7 +261,7 @@ static void test_l92_mtype_28(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("rOUnd(  6.45648mM /\tsign(roUND(102.7207S  /.47,  22.29142ms/  .8613\t- 200.37482*28.272*  3.87s + \t -1771.92 *  -29.1716S ))/max(\t1609.80*  447.99479) - 34.2px,-3PC\t*REM(8,  30.0 \t + 1*  1.311*21.1)\t)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("CLAMP(  2px,clamp(1891px,19in*\t-3.0,(  max(1.0407mm/7.3 +\t12.446REM, 1977vmax\t)\t+  ( 121662.95912px)/6.18563\t* -8 + 120.7358*abs(-3.17522PX  )  )\t+ \t -3.5712px* 1.1161*  116.73 \t + max(39.23 *-20.370\t*\t(  2px  *-37.0284\t+\t7.6cm /\t-3.323),-6.8PX - \t CLAMP(1PX/ -99,  3.1IN - -24PX*17.45180\t*961599.228,  1146.8045VMAX  *\t-786.42934\t/ 13),38.04210*93pc  / 1.78 ))\t- \t abs(\tABS((\t23.41213pt + \t -3.173 *-.0456PC\t) \t + -2* 187.3px \t + \t -21.4565  *(115247.59291px /26.0196 )  )\t/ 0.08 \t +\t( abs(  2.14173PX\t) /5.60019\t+ calc(2.2PX  /\t-3*122.776\t- -0.773\t*-19.83px\t*9\t- 85.11PC)/ 1112.6523*\t5.20)/-196555.0832 +\t( 1873.2  *calc(30.96903Q  *27.615/1 \t - 122481.235PX*31.526) \t - 32.3*-6PX)) /\t3,rem(\t5.86869PX/-28.55, (  calc(  -26px / -2.9831  *5.1 \t +\t-2.7540*  1784.18PX)\t) /(  26\t/-.52850 \t -\t32.4/-457.0 ) + 1045.6738cm\t+ \t ( 206.838*4.4  * -891.4660pc  +\t-12.94107Q -  calc(-5*\t-12.75MM \t + 119709.898px + 7.6cm\t/-9.300/ 0.372)* 376.114) /(-668541*32.8 )) /8)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("min(asin(2/\t15.2413  - calc(3.4061*992.94987 -\t29.3160*\t24.6339/  -205.2\t) )\t*ABS( -1.8  *26.03098  ),  cLAmp(\t-1,-227.6381,-5.4119\t/23.89\t)*31.79800DEG /  12 \t -  -8.55turn)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("pow(30, -54.8226)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("pow(30, -54.8226)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("MOD(3.66In, -420.324PX, -1.54VMIN)"));
 }
 
@@ -294,7 +294,7 @@ static void test_l92_mtype_31(void) {
 
 static void test_l92_mtype_32(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("calc(  -120.72884*  ( 19px)/\t5.7 \t + \t mIN(  13.64026PX,  1.8376*  1.4in  /  (-4/  18.7  )\t-  7px/\tcalc(-5\t- 1.4*  30.50\t/\t2.32)  )* ABS(\t1.4394* +2.98\t)/\tround((0\t) \t -\t1876.070  *-25.6464 +\t0, -32.800*  66 *34.433 - \t max(\t16.30 +\t5.380,-1.44) /\t9.158/ 19.68188\t) \t - \t round(down,6  *(  2.52*28.7\t/2.6534  -\t6  )\t)  *\tMOD(max(-4px, 3*( 341.0px  / -2.32868 \t - 1351.7\t*  9.33cm * +1992 ) *180.53 \t +\tcalc( 18.95Q/1.06423)\t- round(3.256PX  -  8pt  /149.52293,  -33.96792*  2vmax )  *  24.57387, 23.0* max( 3.069pt,\t-24.9q  -  -869.6138\t*1.4085px*-1067), mOd(3\t* -17.35048PT \t +  -7.14162cm,\t427.6262q/-8.43586 -\t6.66181Vmin\t*\t5.539\t)/7.53413 - -28.408pT  /-4/-31.5 \t -  -9.98221px  ),  20.91937*  (3px \t - 4.0383PX  )  * calc( -206.5 \t +\t14.90  *34.5/29) + 34PX\t*\t3  ))"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(e)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(e)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("round(nearest)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(abs((79.7535  *485 /-1656  ) /\t8) + \t calc( 32.99760\t+ -65  /  -934  / -220.0505) * 0.46610/clAmp(1.3688,8.976/32.7932\t-\t-6.04/16026.466,176 *3)  + 33.53*-35.5 )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("round(to-zero, 39.95pT/  -334.84867  -\t176.3737\t*  -26.37px*\t1.03, MIN(\t9pc/  9 + 2.9* 4.04387pX\t-\t-16.1PX\t/ 290.51,-3.0*176.2in *  -35,81.553in + -0.3517px  / 2.67\t)  /32 *\t6 - max(  +1.6px\t)  )"));
@@ -302,7 +302,7 @@ static void test_l92_mtype_32(void) {
 }
 
 static void test_l92_mtype_33(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("log(913, -19.326)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("log(913, -19.326)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("atan2(147885)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("SQRT(9, 6.6)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("clamp( 1*-3.3grad/\t8.7328 \t +  24.0grad\t/\t-3.4048*\t5  -\tROUND(0.9705* 14.903Grad  /\t9,-25deg  /2.57\t-  3.40deG/\t0.44)*33,  calc(  39turn\t+ -7*\t+191RaD  ) \t -\t14grAd/  1.121 \t - (\t1885.94723DEG\t-  37.009deg/224.63\t),  calc(+71deg\t-\t3rad \t + 27.3*  7.146grad)/93.72 + -1222DEG)"));
@@ -316,7 +316,7 @@ static void test_l92_mtype_34(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("abs(\t0.07271%)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("sign( -22.98* -247.6deg/0.136)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("round(  +5.1877PT  *  -1857.887\t- -199.347In \t - \t 35.1vh/0.036,-8*\t38 *  -1487.7mM +  4.8VH  -  -63.7836PX /1.310)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(nan)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(nan)"));
 }
 
 static void test_l92_mtype_35(void) {
@@ -331,7 +331,7 @@ static void test_l92_mtype_35(void) {
 static void test_l92_mtype_36(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("round(ceil, -393437.8164, -160.6)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_TIME, wf_cssprop_math_type("ROUND(rem(round(  UP,calc(0.0631s - -31.655s  -\t62.76S/40.4) + round(  dOWn,-630.4329ms + -11.752S  *-34.9064/\t98.42,-13Ms*  -1.01 + 4.2131MS)\t/23/+6.7094 \t - \t 26.05  *  ABS(0.1151ms + +8.13421  *-1.2023S  /-2.96  + 16.87523  *10S),(284.71579S *  +4.95 /\t3.4 + 5.4185s/-3.8)  /1.28\t-\t9.021*CALC(1ms))  + \t sign(6.47583DEG/\t-162670.2 /5) * 7.9  *1099.847s,\t-36.0641ms  -\tclamp( 5.42151s,round(-7.62486*3.91MS\t- 21.82S* +24.8/  -6,-27.186s\t- 1426ms +\t-6.348s  )*0/4.01423 \t + mAX(-21s *-3.75962/1.64\t+  5.10977s/ 38.5105, 1.53268*  .7728mS\t),896s\t/  3.6494)/Max( -8.50388  -\t-9.84/\t230.872,90.126/  9.432,5  *  19.9878  - \t 1762.5  )  -\t-1048.138ms)/24 \t -  CALC(\tABS(-7.1S /37 * -1\t- -2.0*\tCLAMP(-241s/ 8.60345/\t11.696 \t -  2.743S,\t-.1466s*238  +  -218\t* 11.2380s/  34.9906,\t-34.52ms )/ 9.184) +\tround(1.960 *\t13.69325s/21.3514,\trem(  0* 45.4072S\t*3.692\t- 33.4843S \t -  244.01853*-5.2821s,9MS)  *  20 /8.52086  + \t mod(30S  - \t 3.5997MS,-157.7304s /-3.01 - 0.30926s /\t+3.48) *-26.40980))*-7.482,1.3s \t +  (\t161.95986s*40.45/clamp(5* 1.50099, 5 /1.55, 5.3632  ) )/  -1918.85081 -\t0.74ms/ cALC(  mod(.9  + 8.38049*6, +0) \t - mod(245,\t1349.55479  *\t-4.6*-2.4916)  +  SIN(0.86845grad*  0.2  + 88rad)) )"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(e)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(e)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("round((\t-29.96Vh\t/\t194780.74342  -\tCLAMP(\t-2cm * 38 + 43.9EM,225.8413\t*301271vmin  /3,59.032EX  ))  *\t-0 + mod(-48Q, 11.028  *7 *(\t4.6924cm/1\t+ 8vW  /\t178  )\t+ -967vh  ),\t104782.11px \t + 15.709pX  )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_TIME, wf_cssprop_math_type("CALC( 80s\t/ (  Sign(\t215deg) - \t MOD(\t-3.511\t-  2.23610 / 56.26,\t2.463 \t -  59.385/0.642\t)\t/ -3.554)\t)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("CLAMP( aBS(-112.1  *5turn \t -\t(647823.28/  125\t)*237.71076DEG)/\t38  +\tROUND(\tup, min(564830.85*cALC(  -3.73graD\t/754.95514  +\t5.8deg ) \t + \t MAX(  228.297turn \t -  242.6deG  /-9,  1655.550DEG/  -4* 17.94465  -\t-153.667GRAD/35.810  / -3.7  )*\t1648.263,max(-2deg,242.0910deg,8.4292*6.8020\t*-2.57deg  -  1739deg/1780 +\t587.4685turn,2.94turn + 7.3390  *228.38111turn)) -  10turn  -  -9.6959deg  *\t35, -7.96deg \t -\tround(UP, -229 \t - 2\t/ 16.16998, -15.898* 16.17\t)*178.06646DEG /\tclamp(  4, 35.335*-19.851/  1786.43338, 68.2006*3.42 )  - 4rad *\tSIGN(-25s) )*calc(  -2.62*\t119.636 -\t1.19\t*ABS(-9.64721/6.6*30.53160  ) /  7),\t-2 *CALC(  8.18deG)  /\tMin(  SIgN( 9.9s*  13535.56\t+ 0s )  -\t2.7590*  mOd(2.882 *6.81178,1261.75*\t2  ),  sign(  1941.930cm\t+ \t 4.3463Pt* 0  / 40)  +\tCLAMP(25.3539,91.9360* 8.4338,-24.46177)*  357355.4,  31.835 * 145.350\t/  -216.06\t- -523* 5 +  calc(4/ 15.70/+5.11729 - 1\t/\t-593.69652\t)*117.841\t/  -2.10309,  7.9*  4.29* 2  ),\t7.7073deg  )"));
@@ -401,7 +401,7 @@ static void test_l92_mtype_43(void) {
 }
 
 static void test_l92_mtype_44(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("LOG(3.578, 25.9895)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("LOG(3.578, 25.9895)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("clamp(  227.51345,(  CALC( (\t-9.2 \t - 1*-34.334)/ 11246 +\t1.79)* 97.6  +  -36.96540/\t-39)/ 1.5 + clamp(4.9579/  48.7 +  mod(-6.472/\t1759 \t + 393.703,( 29.2 /2.6 +\t99.32436 ) +  (31.0586)*  13.6/ 116)\t+ 20.7/rem(\t-5\t+ 1541.33679,\t308.67997*  26.09 - 5.29388), round(  to-zero, 0.22756\t+ \t min(210 /5.45,  4.66590\t*\t-1654  - 0  *-508.2061,  1.17 + 3.78,  195.24  /-1.2314  /  3.14 -\t25.0354\t*19.533 )/  -789, aBS( 95501/\t1.67696  /  7.127)\t+\tCOS(  1.3TURN*-0.40478\t)  +  4/ 1.84/+.46075 )\t+ \t 33  / (398212  *196.476\t), sin(\t(-40*18.65549/1 +\t52200.667)/-1728  / .60 \t -  abs( 1.2449 \t + 1968.5*  48*42 +  4.39\t* -244.18835) + CALC(3.88\t)) + 249.063* 213.446  ),SIGN( ((\t-17.47739 *93001.56\t/  248.05052)) +  29\t+ cLAMP(163.7606 + 75.501\t*35.2441  /-4.4925  -\t+2.6537, 1042*2.9383 + \t 15.45  - 3  *-1373.9170, 50.4 /2/  31.24 - 2  )*123003.308  /\trem(\t-5*  -3.9872, -174.267\t*0.034 +  -9.83*  858.1\t)) )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("round(  NEarEsT,  51.3402  /  3.08250,  -3)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("sqrt(18.50205, -5.92)"));
@@ -459,7 +459,7 @@ static void test_l92_mtype_50(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("mod(2.987Px+-4.89937PT)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(-322.15100PX * 2.1pX)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENPCT, wf_cssprop_math_type("rOUnD(to-zero,\tmod(mod(30.7459px* -209 -  34.6* 7.7229pt,1.87926  * 32.26pc \t - 6.69em  /18 ) /11 \t - \t max(  -207.51px,  189418q*804\t+ 27\t*5.1004vmIN /-221),2 *(818.2px/  -232.05890  + \t -14.878\t*  -40.69PC) - \t mIN(30px\t+  68.91921px\t/  -189.1467,18PC/\t-1097.5203,-1426.45227px,-1mm\t- -6.2921q /-94947* 1851.73 )*2)*max(-35  *-13 + \t 919,\t-8.60/\t240.3\t/\t3.3514,\t176  -  2.81/-200.61840)  /3.65,\t(\t-89085.7% \t + 238.477*abs(29%*2.2702\t/  9.8) \t + 35.28269%  *\t6  /31) *32.888 )"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("LOG(2.59, -0.31692)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("LOG(2.59, -0.31692)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("mod(  .865pc/ +941.709 \t -\t-1.9546*27.242VMIN *calc(191.240\t*-2.87\t/-98653.7425 \t +  3.2094  *\t-40.32\t+ 131\t),  (  151*  rem(6.44cm /  7,-4.508In + 9.08PX  /\t4.99)/208.42)\t)"));
 }
 
@@ -486,13 +486,13 @@ static void test_l92_mtype_53(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("rem(9q, 1.26832pc, -6.2PX)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("round(+8.1133s)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_TIME, wf_cssprop_math_type("abs(\t-15.86S  /4.313 - (  1655.5ms\t+  -7.3815S/+21.2935 /123\t- -7.29187s  /-2.618)/-514.334 /\t-3\t+ -50s)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(infinity)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(infinity)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("mod(\t385.223deg,402613*\t5dEG\t/34.7)"));
 }
 
 static void test_l92_mtype_54(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENPCT, wf_cssprop_math_type("rem(-1q \t + MOD(\t502.9191pc, 20.08px - -7*0.78px\t)\t/16.6,  CLAMP(6.74955%,-19.9235% -  1210.92%/28\t+ -131.57%,-1.12612%\t/\t20.190 \t - 217.630%  )/\t1.14\t- \t abs(79864.3 * 181% -\t124.05%/403.7 )  *8.16835/  40)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(infinity)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(infinity)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("cos(1.69S)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("round(63.9801S)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("asin(445.067VH)"));
@@ -545,7 +545,7 @@ static void test_l92_mtype_59(void) {
 }
 
 static void test_l92_mtype_60(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(nan)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(nan)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("rOUnd(TO-ZERO,119  * (\t36.169 *22.95px ) - \t round(0pt  *1513.12220 + \t +237MM  /\t-22.822 -  -1.663px,\t4.8123  * -6.3506px ),5.921cm  + abs(\t-17.147px/\t5.3 )/ -0.8  +\t1435.25929Ex  )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("max( max(12705dEg/  677.4) * -18.91  /\t6.37127 + 38.57  *mAX(\t9*\t721.21061deg,  733DEG)/-3,CLAMP(0.7deg/  3.2399 - \t 1534*  4.20605deg, -21.1*9.2 *  23.133turn, -9grad*  -932)/\t3.4*-6.10312,1.4181*  2rad\t- round( -0.64\t*17.56*  -111.45320rad,24.1040\t*109.7turn  /\t-0.604 -  +4*8deg)\t+  1.48deg  /\t-8.9243)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("ROUND(TO-ZERO, 1283%\t*2.65, clamp(1.4%\t/\t3\t- -5.5178%  /-3.77068,1.6%  + 697.6  *  1615.92% +  -34.15\t* -6  *37.775%,-19.1%)* 977)"));
@@ -808,7 +808,7 @@ static void test_l92_mtype_88(void) {
 static void test_l92_mtype_89(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("MiN(34.280%,clamp(\t188.2350%/  35 * -71.3778 \t +\t6%, -1607.6%  /1.01\t+ \t -278.2%  /24 \t + 34.1%, 11.7%  )/2.357)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(-21px * -1.667pc)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(infinity)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(infinity)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENPCT, wf_cssprop_math_type("CLamp(6.75000vmin\t/ 7.1324  + .324%, CALC(((  8%\t+  1\t*6.48%*\t1180.8670 ) )  )/  CLAMP((-0.314  - 30.58130\t)\t/+39.8747\t*4.84689,  43 + calc(\t92.65280 *\t3  *-.560  -  3\t-  1.05\t*1276\t/ 0.12840),  2  * -219.5\t+ ( -898.60*  234.5\t*-189.66949 - -5))  *226, calc( 1858.303px *  224.8  )*calc(\t+5.315*  6.564  *-22.40014 - 974) *\t-9.6853)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("RouND(To-ZEro, rem(3.0 / 106.4123 \t - \t 2.6* 245.171  *1887,1641.846/884.78959/0.0 + -2.68717  *14.374 + \t -54.55\t)*calc(7.071grad - 5.148 *  2.364deg* -3.8411\t)/\t(  23.27046\t*  4.94 \t -\t0.6\t*16 \t + 4.257/1\t) -\t(-4\t*\t5.76deg  + REM( 168.1deg/  2 + \t -0.5DEG\t-\t+0.97DEG  /7.22*40.07,0rad/  -8\t/184.492 +  361.70660deg  * 1401.9090/3.4\t- 2.4*8.4846grad)/\t4 \t + \t 16.667 * atan(1.4\t)), 1.125RAD  )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("ABS( 4.43495%  *ROUND( down,0.623*514.9588,2.60)  )"));
@@ -817,7 +817,7 @@ static void test_l92_mtype_89(void) {
 static void test_l92_mtype_90(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENPCT, wf_cssprop_math_type("round(to-zero,calc(163.33727in/-1229.476\t)/\t8.4935 + 9.0*Calc( 1318.736*2% +\t142.0075%/ .9705*37\t+\tMAX(  40.6883% -  6.4% /7.875,0.99  *32% - -192.6673% -\t-14.2395%*  -33.17,1.12861% /206/.12 + 8.9%  / -1.89  / 3\t)) \t + \t MiN(2.5CH +\t-11.5387 *1210.5%,-3.146*calc(18.8%*\t21 )/\t2 + \t MIN(\t-1538.038mM / 2.57,1617.3714mm  )*3 + ( 9px + \t 0*31.85815pC)/224.00,-35\t*clamp(15.414px / 1285.079 + 196.4*9.42px /  -4.33 - -78.188px*\t.6,1.23490*\t1.8px -  .1PX,-34.4vh + \t 1870q/ 3.51066  -  7.40in*-3)),calc(\t9\t/\t+235)\t*rem(0%\t+  (37\t*1% )*-9.1480,\t-69.7077*calc(396%/\t-2.9 -\t1260%\t*\t12.8\t)/  1754)/\tcalc(31.83 \t -\t16\t)  )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("calc(2Cm  / 218.9)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("log(676.840, -111.0)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("log(676.840, -111.0)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("mod(40.4197iN, 1.0477DEG)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("sin(  ( 124 *\t15/+25.78663 +\t1.1296 \t + \t 1231.0  )  )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(20.4q * -24.217iN)"));
@@ -842,7 +842,7 @@ static void test_l92_mtype_92(void) {
 }
 
 static void test_l92_mtype_93(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(e)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(e)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(35.3px * 243.2294mm)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("abs( 1862.86*\t-7 -\ttan(2  )  *\t6.164  )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("ABS(\t4.37154PX\t-  abs(1.9  *  MaX(37.9 *5.00757/55751.1974 - \t 35.4828*6.63, .53\t/  8.71, 35.145  +\t3.3849/232.92273 -  2, 19.68709 \t + +23.5458/\t7.3  +  167.3*4\t)  )*  -35.684pc  /22578.742\t)"));
@@ -905,7 +905,7 @@ static void test_l92_mtype_99(void) {
 }
 
 static void test_l92_mtype_100(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(nan)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(nan)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("CALC(511550.5569%\t+ clamp( +2.20%\t/ -228.2 -\t-34*MOD( 218% + -36%/5  + 36*\t5.051%,33*5%  /5.63 \t + -38% *3.61*7.9075),\t14.06% /  5.899\t/  -27\t+\t.5*  ROUND(\t1.45 * 256.35173%,-7.55% / 87.3  * 139.011 + \t 0.81030\t* 3.50929% \t + 6%)/-971.74285,\tmin(100\t*7.011 *+1710%,-29  *25%/-5.7 \t -  262573.420%\t/ 6.33495*\t10.8) /-1000.5 + \t 80.7094%))"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_math_type("min((\t227.34%\t*+189)\t- 13.8927%\t/\t-9.5, 1*-5.29%*-4.332, caLC(-1 *mod(1.59039% *-2.207*16.15319 - \t 202.5%,-40.18%\t/+14 \t - -3.80  *-2.70%\t)  - (18.60502% + -513336%*-6/  1.12\t)  )\t+  -8%\t)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("mod(211.1PX+-5px)"));
@@ -951,7 +951,7 @@ static void test_l92_mtype_104(void) {
 
 static void test_l92_mtype_105(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(35.1853Px + 1GrAD)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("pow(-0.2, 8.484)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("pow(-0.2, 8.484)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("cALC((  3.0 +  -1 )*CLAMP(196PX  /\t5.2083,28cm *\t40.22\t- 131.00pt\t*186.965  /  +7.2\t+ Calc( -7.58PX \t + 20*-2px )/\t-1321.460\t*144,(33.96740iN) /-3) \t +  20.04PT/2)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("min(max(  128.0*1419.91165RAD \t - -3grad - \t clamp(3.55549* -560  *  -1569DEG \t - 5.148DeG\t/  38/  1096.694,  -6.62787deg/115.47,  144DEG),  3.4497*MOD(-1.5TURN \t -  -.93907RAD, -3.95261 *4.2882dEG + 30.4DEG /1597.6556 /\t7.962  ) -\t1942deg,  -5.4*(  1542.42deg  - -9.5085*  2.942\t*+3.0grad)/\t1 -  21.3deg/138.101 - 17  *-4.5420turn)/-5.61 /\tclamp(30/3.5301\t*1.172\t-\t2.22964  + -4.5,33.489* 16.67  - 1332  *  -6.91,1.6/418176.4542 \t -\t54.75446*\t+65.077 ),-18.47*  calc(.5628*-4.58DEG /\t-3.5  )/ -13.2 - \t +9.0deg\t*SIGN(461.950DEG),3.43796deg/  clamp( -1.310,2.44757\t* -18.6,-191.1365/-7 / 4.80451 -  7*  6.0/  -2 +  1712* 5 /\t13  )  )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("ROUND(\tnearest,MAX(\tcLAMp(10.80405grad/38.795 - -6.81034deg, +995.87115turN /20.16, 39  * 12.8TURN *-159.7130)*24.50 \t -  ATAN2(9\t/0.63/ 1693.2 - \t 2.0,+0.3597\t/\t+2/33.6543 + 6.235\t))/\tREM(\t-34.07236  *10.9\t+ 1.38759*6/  813.16196, 0.1\t) \t - ( 1.24302grad) \t + \t ABs(  ABS(575.31319deg\t-\t6.9turn)  /  15),ABS(19 +\t21.34*1 +\t-5  )* 194.3106DEG\t+ \t -1103.53deg *sign(\t325turn  + \t 512GRAD/0.8  -  19* 0.6734RAD)/(  427  +\t5.4  /3.566 )  )"));
@@ -1040,7 +1040,7 @@ static void test_l92_mtype_114(void) {
 }
 
 static void test_l92_mtype_115(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(nan)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(nan)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("sign(6.8  *27.67  )"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("atan2(3.13)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("atan2(16.97)"));
@@ -1096,7 +1096,7 @@ static void test_l92_mtype_120(void) {
 static void test_l92_mtype_121(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("clamp(  max(\t136DEG  /\t1915.35 + (204.33055GRAD/-0.74)  )/ -4 /  -3.28,\t-230.2turn -\tclamp(  0.9DEG/  71,0.75DeG/8.39 \t -  4.4038rad,( -1860.22deg  *+1300.0) )/22.16992\t-\t208.081deg*590,\t9.946tURN)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENPCT, wf_cssprop_math_type("mod(  -4px  *mod(1.420  /3.48 +  6.63,  465.66 *  0.7*196  +  36\t)/ -1890.4 - round(CALC(  7.68% /4.6  - \t 40.67%\t/  36220.5361 + 3%\t/-31.05969/\t1918.6929  ),-176.2403px/  +7  - 1pC /1),( round(\tup,625.7px\t+  27.79px \t +\t9.75093px  *  459.8/-31,137mm  -  27.23552  *  1694.901PX\t)  *-477119.10213 \t + \t clamp(17.2008cm -  -1324.1Q,\t139.2  *\t-7px,\t24.500PC  -  -9.7In - 21.00644* -2.7012in  /0.1206))  )"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(infinity)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("calc(infinity)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_math_type("mod( 14.3rad  +\tmod( 9  *round(85433) *3.39 + calc(110.49669 + -36*  1.8),  -6  )\t*abs(-0.2850deg /\t208.151  /  (  -0.36 /-11.5 \t - 1.674*\t29.7  )\t+ \t round(up,ROUND(  +3.861DEG/\t2,4.730deg/1372.358 )/28.3478,6rad\t)/\t4.6246 )/ 31.08,  9DEg*  225\t- calc(  -195.87021/1630\t+\t1027.9* mod( 2.84979  -  4.298 + 1, 249.739 -\t-9.61787\t* 24.71509\t*48.604\t) )* -2.54GRAD)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("ROUND(8.745Mm+588.44567px)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("siGn(15.584, -24.86027)"));
@@ -1150,7 +1150,7 @@ static void test_l92_mtype_126(void) {
 static void test_l92_mtype_127(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("REM(0.8Cm)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("MOD(-7.6pt, -1588.7PT, 2.03393in)"));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("hypot(105.82, 1374.11)"));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_NUMBER, wf_cssprop_math_type("hypot(105.82, 1374.11)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("round(-2.77072PX+1911mm)"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_math_type("CALC(  -974.14961PX \t + \t (7PX - MIN( max(-23ex/  1431.15136  -  1230.56pc + 169.211cm,  6.07208pc\t- \t 25.5619pc/5,  4.4cM -\t-1IN  ),2.3PX/-0.39244\t/-205 ) +  clamp(\tmod(  0in + 9.6cm\t- 45.8 *-12PX,225.0491REM \t - \t -168.6714  *\t-9.78Pc*12.69), (-9.3621pX *-1028.15 + 10.4in/  -4.300  )\t*+1 \t +  mod(28.16*\t9px  - \t 84.1q /31.59100  /\t0.2956,-28.1PT )  * -3, calc(\t1.159PX\t/\t6.8264 +  23.1544in/14.635\t)/31.12381 \t -\t9386.4945  *31.52in/ 37.015) /(  4.74 *  -23.5879\t+ .875/3.70533)*1862.58))"));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_math_type("calc(23.267IN + 9.95402DEG)"));

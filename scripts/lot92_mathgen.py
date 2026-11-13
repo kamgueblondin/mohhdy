@@ -22,6 +22,13 @@ Rules modelled (CSS Values 4, restricted to what the reader keeps):
   angle and give a number; asin, acos, atan take a number and give an
   angle; atan2 takes two values of one type and gives an angle. Anything
   else (pow, exp, an identifier, a missing argument) is invalid.
+  Lot 93 (converted): the trigonometric functions are simplified, with
+  the values of scripts/lot93_mathmodel.py; pow(A, B), log(A, B),
+  hypot(A, B) and the constants pi, e, infinity and nan are valid numbers
+  (exp() and sqrt() with two arguments and -pi stay invalid). A case whose
+  exact value lies too near a rounding boundary for the 62-bit C side
+  (lot93_mathmodel.Ambiguous) is dropped after its text is written, so the
+  random sequence of the other cases does not change.
 * values: each value is kept in 1/10000 of its canonical unit (px, deg, s,
   %, or a number). A literal is rounded half away from zero at its fourth
   decimal; units: in = 96px, cm = 4800/127 px, mm = 480/127 px, q = 120/127
@@ -29,8 +36,8 @@ Rules modelled (CSS Values 4, restricted to what the reader keeps):
   1800000000/31415927 deg, ms = 1/1000 s; each conversion and each * and /
   rounds half away from zero; a value past 100000 units is not known.
   Relative lengths (em, rem, ex, ch, vw, vh, vmin, vmax), a mix of length
-  and percentage, a division or a round()/mod()/rem() step of zero and the
-  trigonometric functions are typed but not known.
+  and percentage, a division or a round()/mod()/rem() step of zero are
+  typed but not known (Lot 92 also kept the trigonometric functions).
 * round(): nearest rounds half toward +infinity, up toward +infinity, down
   toward -infinity, to-zero toward zero, to a multiple of |B|. mod() takes
   the sign of B (A - B floor(A / B)), rem() the sign of A (A - B trunc(A / B)).
@@ -43,7 +50,13 @@ Run: python3 scripts/lot92_mathgen.py
 """
 import os
 import random
+import sys
 from fractions import Fraction as F
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import lot93_mathmodel as M93  # noqa: E402  (Lot 93: trigonometric values)
+
+AMBIG = [False]   # set when a case met lot93_mathmodel.Ambiguous
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "tests", "unit", "userspace")
@@ -400,19 +413,29 @@ def eval_fn(n):
         k = floor(q) if name == "mod" else trunc(q)
         v = a[1] - b[1] * k
         return t, (v if fits(v) else None)
+    # Lot 93 (converted): the trigonometric functions are simplified
     if name in ("sin", "cos", "tan"):
         if len(args) != 1 or t not in (N, A):
             return None, None
-        return N, None
+        return N, amb(lambda: M93.trig(name, t == A, vals[0]))
     if name in ("asin", "acos", "atan"):
         if len(args) != 1 or t != N:
             return None, None
-        return A, None
+        return A, amb(lambda: M93.arc(name, vals[0]))
     if name == "atan2":
         if len(args) != 2:
             return None, None
-        return A, None
+        return A, (amb(lambda: M93.atan2(vals[0], vals[1])) if allv else None)
     return None, None
+
+
+def amb(f):
+    """f() of the Lot 93 model; None and AMBIG set near a boundary"""
+    try:
+        return f()
+    except M93.Ambiguous:
+        AMBIG[0] = True
+        return None
 
 
 def wrap_fn(rng, t, depth):
@@ -452,11 +475,15 @@ def broken(rng):
     if k == 12:
         return rcase(rng, rng.choice(["asin", "acos", "atan"])) + "(%s)" % a(rng.choice([A, L])), "arc of a dimension"
     if k == 13:
-        return rcase(rng, rng.choice(["pow", "exp", "log", "sqrt", "hypot"])) + "(%s, %s)" % (a(N), a(N)), "unknown"
+        # Lot 93 (converted): pow, log and hypot of two numbers are numbers
+        nm = rng.choice(["pow", "exp", "log", "sqrt", "hypot"])
+        return rcase(rng, nm) + "(%s, %s)" % (a(N), a(N)), ("valid" if nm in ("pow", "log", "hypot") else "two arguments")
     if k == 14:
         return rcase(rng, rng.choice(["abs", "round", "mod"])) + "(%s+%s)" % (a(L), a(L)), "no spaces around +"
     if k == 15:
-        return "calc(%s)" % rng.choice(["pi", "e", "infinity", "nan", "-pi"]), "a constant (not read)"
+        # Lot 93 (converted): pi, e, infinity and nan are numbers; -pi is not a constant
+        c = rng.choice(["pi", "e", "infinity", "nan", "-pi"])
+        return "calc(%s)" % c, ("valid" if c != "-pi" else "not a constant")
     if k == 16:
         return rcase(rng, rng.choice(["abs", "sign", "clamp"])) + "(%s" % a(N), "unbalanced"
     return "atan2(%s)" % a(N), "atan2 with one argument"
@@ -471,8 +498,8 @@ def write_type():
         tt, _ = evaluate(n)
         cases.append((write(rng, n), tt))
     for _ in range(280):
-        text, _ = broken(rng)
-        cases.append((text, None))
+        text, why = broken(rng)
+        cases.append((text, N if why == "valid" else None))
     rng.shuffle(cases)
     o = [HEADER % "Lot 92: the types of abs, sign, round, mod, rem and the trigonometric functions",
          '#include "../../framework/unity.h"', "#include <string.h>", '#include "wf_cssprop.h"', ""]
@@ -503,9 +530,10 @@ def write_eval():
     for _ in range(1500):
         t = rng.choice([N, N, L, L, L, P, A, A, T, T])
         n = wrap_fn(rng, t, rng.choice([0, 0, 1, 1, 2]))
+        AMBIG[0] = False
         tt, v = evaluate(n)
         text = write(rng, n)
-        if len(text) > 200:
+        if len(text) > 200 or AMBIG[0]:
             continue
         cases.append((text, expect_eval(tt, v)))
     o = [HEADER % "Lot 92: math functions simplified to their canonical unit",
@@ -592,9 +620,10 @@ def write_compute():
             if numeric and rng.random() < 0.75:
                 t = {"I": N, LP: rng.choice([L, P, LP])}.get(numeric[0], numeric[0])
             n = wrap_fn(rng, t, rng.choice([0, 0, 0, 1]))
+            AMBIG[0] = False
             tt, v = evaluate(n)
             text = write(rng, n).lower()
-            if tt is None or len(text) >= 63:
+            if tt is None or len(text) >= 63 or AMBIG[0]:
                 continue
             e = compute_model(alts, tt, v)
         else:
@@ -646,8 +675,9 @@ def sheet_value(rng, want):
         text = text.replace("( ", "(").replace(" )", ")")
         if "em" in text or "rem" in text or "ex" in text or "ch" in text or "v" in text:
             continue
+        AMBIG[0] = False
         tt, v = evaluate(n)
-        if tt is None or len(text) > 50:
+        if tt is None or len(text) > 50 or AMBIG[0]:
             continue
         # spaces were normalised: check the structure still reads the same
         return text, tt, v
@@ -690,8 +720,9 @@ def write_sheet():
             mt = {L: L, P: P, LP: L, N: N, "I": N, A: A, T: T}[st]
             n = wrap_fn(rng, mt, 0)
             itext = " ".join(write(rng, n).lower().split()).replace("( ", "(").replace(" )", ")")
+            AMBIG[0] = False
             it, iv = evaluate(n)
-            if it is None or any(u in itext for u in ("em", "ex", "ch", "v")) or len(itext) > 50:
+            if AMBIG[0] or it is None or any(u in itext for u in ("em", "ex", "ch", "v")) or len(itext) > 50:
                 continue
             init = itext
             init_b = sheet_computed(st, itext, "math", it, iv)
