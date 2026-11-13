@@ -27,4 +27,7 @@ int shell_desk_offer_at(const char *url, const char *name, int idx, char *out, i
 /* Lot 87: forget one value of the key (Delete on the desktop list) and
  * save the session file; values left, 0 when the key went, -1. */
 int shell_desk_offer_drop(const char *url, const char *name, const char *value);
+/* Lot 90: a remembered value accepted from the list (dated today, newest
+ * of its key); 0 own host, 1 another host of the site, -1 none. */
+int shell_desk_offer_touch(const char *url, const char *name, const char *value);
 #endif

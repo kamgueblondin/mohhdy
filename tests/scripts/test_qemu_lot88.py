@@ -139,9 +139,10 @@ def tv_edid():
     return bytes(base + cea)
 
 
-def boot(scale, srv_port, edid=None):
+def boot(scale, srv_port, edid=None, extra=None):
     """One QEMU at this ui-scale (quarters, 4 = 1x; None: no pin), with an
-    EDID blob through fw_cfg when edid is a path; returns proc, mon, qmp."""
+    EDID blob through fw_cfg when edid is a path and extra QEMU arguments
+    (Lot 91: -rtc base=...); returns proc, mon, qmp."""
     for path in (g.LOG, g.MON_SOCK, g.QMP_SOCK):
         try:
             os.remove(path)
@@ -154,6 +155,7 @@ def boot(scale, srv_port, edid=None):
         pins += ["-fw_cfg", "name=opt/mohhdy/ui-scale,string=%d" % scale]
     if edid:
         pins += ["-fw_cfg", "name=opt/mohhdy/edid,file=%s" % edid]
+    pins += list(extra or [])
     proc = subprocess.Popen([
         "qemu-system-i386"] + pins + [
         "-cpu", os.environ.get("LOT88_CPU", "max"),

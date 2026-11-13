@@ -121,8 +121,12 @@ static void test_in_the_sheet(void) {
     TEST_ASSERT_EQUAL_STRING("18px", by_id("a")->tok[WF_SITE_K_FSIZE - WF_SITE_K_LIST]);
     TEST_ASSERT_EQUAL_STRING("2px", by_id("b")->tok[WF_SITE_K_INDENT - WF_SITE_K_LIST]);
     TEST_ASSERT_EQUAL_STRING("4px", by_id("f")->tok[WF_SITE_K_LSPACE - WF_SITE_K_LIST]);
-    /* the cycle: the declaration is dropped, the fallback is not used */
-    TEST_ASSERT_EQUAL_STRING("", by_id("d")->tok[WF_SITE_K_LSPACE - WF_SITE_K_LIST]);
+    /* Lot 90 (converted, was ""): a property in a cycle is computed on
+     * the root and is guaranteed-invalid there, so var(--a, 1px) takes its
+     * fallback (CSS Variables 1, section 2.3 and 3) */
+    TEST_ASSERT_EQUAL_STRING("1px", by_id("d")->tok[WF_SITE_K_LSPACE - WF_SITE_K_LIST]);
+    TEST_ASSERT_NULL(wf_site_var(&g_d, "--a"));
+    TEST_ASSERT_NULL(wf_site_var(&g_d, "--b"));
     {
         char style[200];
         const char *p = strstr(html, "<p id=c>");

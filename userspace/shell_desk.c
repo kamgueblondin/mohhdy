@@ -40,10 +40,16 @@ static void print_int(int v) {
 /* Lot 89: autofill dates follow the CMOS clock; read again
  * before a store or an expiry, so a session across midnight dates right */
 extern int shell_rtc_utc(char out[16]);
+static int save_fill(void);
+/* Lot 90: the local date (the offset the operator set, saved in the
+ * session file), and the automatic expiry once a day when it is on */
 static void fill_clock(void) {
     char utc[16];
+    int gone;
     utc[0] = 0;
-    wf_autofill_set_today(&g_fill, shell_rtc_utc(utc) == 0 ? wf_autofill_day(utc) : 0U);
+    /* Lot 91: with the summer time rule the operator set */
+    gone = wf_autofill_tick(&g_fill, shell_rtc_utc(utc) == 0 ? wf_autofill_day_rule(utc, g_fill.tz_min, g_fill.dst) : 0U);
+    if (gone > 0) (void)save_fill();
 }
 
 static void ready(void) {
@@ -55,7 +61,6 @@ static void ready(void) {
     wf_nav_init(&g_nav);
     wf_tabs_init(&g_tabs);
     wf_autofill_init(&g_fill);
-    fill_clock();
     n = osui_gui_persist_read("/persist/settings.cfg", buf, (int)sizeof(buf) - 1);
     if (n > 0) { buf[n] = 0; (void)desk_cfg_load(&g_cfg, buf, n); }
     n = osui_gui_persist_read("/persist/nav.txt", buf, (int)sizeof(buf) - 1);
@@ -65,6 +70,8 @@ static void ready(void) {
         n = osui_gui_persist_read("/persist/autofill.txt", fillb, (int)sizeof(fillb) - 1);
         if (n > 0) (void)wf_autofill_load(&g_fill, fillb, n);
     }
+    /* Lot 90: after the load (time zone and expiry come from the file) */
+    fill_clock();
 }
 
 static int save_fill(void) {
@@ -85,21 +92,53 @@ int shell_desk_remember_form(const wf_form_page_t *p, int form, const char *url)
 
 int shell_desk_offers(const wf_form_page_t *p, int field, const char *url, wf_fill_offer_t *o, int cap) {
     ready();
+    /* Lot 91: a new day starts the expiry before anything is offered
+     * (Lot 90 ran it on stores and settings only, so a value past its
+     * limit was still offered after midnight until the next store) */
+    fill_clock();
     return wf_formfill_offers(&g_fill, p, field, url, o, cap);
+}
+
+/* Lot 90: an offer accepted: the value becomes the newest of its key
+ * (on the host that holds it) and is dated today */
+static void accepted(const wf_fill_offer_t *o) {
+    fill_clock();
+    if (wf_autofill_touch(&g_fill, o->host, o->name, o->value) == 0) (void)save_fill();
 }
 
 int shell_desk_apply_offer(wf_form_page_t *p, int field, int offer, const char *url) {
     wf_fill_offer_t o[WF_FILL_OFFERS];
     int n;
     ready();
+    fill_clock();          /* Lot 91: the expiry before an offer */
     n = wf_formfill_offers(&g_fill, p, field, url, o, WF_FILL_OFFERS);
     if (offer < 0 || offer >= n) return -1;
-    return wf_formfill_apply(p, field, &o[offer]);
+    if (wf_formfill_apply(p, field, &o[offer]) != 0) return -1;
+    accepted(&o[offer]);
+    return 0;
 }
 
 int shell_desk_fill_key(wf_form_page_t *p, int field, const char *url) {
+    wf_fill_offer_t o[1];
+    int n;
     ready();
-    return wf_formfill_key(&g_fill, p, field, url);
+    fill_clock();          /* Lot 91: the expiry before an offer */
+    n = wf_formfill_offers(&g_fill, p, field, url, o, 1);
+    if (wf_formfill_key(&g_fill, p, field, url) != 0) return -1;
+    if (n == 1) accepted(&o[0]);
+    return 0;
+}
+
+int shell_desk_offer_touch(const char *url, const char *name, const char *value) {
+    char host[WF_AF_HOST];
+    int r;
+    if (!url || !name || !name[0] || !value) return -1;
+    ready();
+    if (wf_formfill_host(url, host, (int)sizeof(host)) != 0) return -1;
+    fill_clock();
+    r = wf_autofill_touch_site(&g_fill, host, name, value);
+    if (r >= 0) (void)save_fill();
+    return r;
 }
 
 int shell_desk_offer_at(const char *url, const char *name, int idx, char *out, int cap) {
@@ -110,6 +149,7 @@ int shell_desk_offer_at(const char *url, const char *name, int idx, char *out, i
     if (!url || !name || !name[0] || idx < 0) return -1;
     ready();
     if (wf_formfill_host(url, host, (int)sizeof(host)) != 0) return -1;
+    if (idx == 0) fill_clock();   /* Lot 91: the expiry before the list is offered */
     /* Lot 88: the host's values, then the other hosts of its site */
     if (wf_autofill_get_site(&g_fill, host, name, idx, out, cap, 0) != 0) { out[0] = 0; return -1; }
     for (n = 0; out[n]; n++) {}
@@ -298,6 +338,7 @@ int shell_desk_line(const char *line) {
                     print_string("autofill error not an absolute URL\n");
                     return 1;
                 }
+                fill_clock();      /* Lot 91: the expiry before the offers */
                 for (i = 0; i < WF_AF_SITE_MAX; i++) {
                     if (wf_autofill_get_site(&g_fill, host, w2, i, v, (int)sizeof(v), &other) != 0) break;
                     print_string("autofill offer ");
@@ -311,6 +352,93 @@ int shell_desk_line(const char *line) {
                 print_int(n);
                 print_string("\n");
             }
+            return 0;
+        }
+        if (pre(a, "dst")) {
+            /* Lot 91: autofill dst eu|us|au|off: the summer time rule on top
+             * of the tz offset (the standard time) */
+            int r;
+            a += 3;
+            skip(&a);
+            r = wf_autofill_dst_parse(a);
+            if (r < 0 || wf_autofill_set_dst(&g_fill, r) != 0) {
+                print_string("autofill error usage: autofill dst eu|us|au|off\n");
+                return 1;
+            }
+            fill_clock();
+            print_string("autofill dst ");
+            print_string(wf_autofill_dst_name(r));
+            print_string(" today ");
+            print_int((int)g_fill.today);
+            print_string("\n");
+            (void)save_fill();
+            return 0;
+        }
+        if (pre(a, "status")) {
+            fill_clock();
+            if (wf_autofill_status(&g_fill, text, (int)sizeof(text)) < 0) { print_string("autofill error\n"); return 1; }
+            print_string(text);
+            return 0;
+        }
+        if (pre(a, "expire")) {
+            /* Lot 90: autofill expire DAYS (1..36500) | off: values older
+             * than that go once a day, on their own */
+            uint32_t days = 0;
+            int k = 0, gone;
+            a += 6;
+            skip(&a);
+            if (pre(a, "off") && !a[3]) days = 0;
+            else {
+                while (a[k] >= '0' && a[k] <= '9' && k < 6) { days = days * 10U + (uint32_t)(a[k] - '0'); k++; }
+                if (k == 0 || a[k] || days == 0 || wf_autofill_set_expire(&g_fill, days) != 0) {
+                    print_string("autofill error usage: autofill expire DAYS (1..36500) | off\n");
+                    return 1;
+                }
+            }
+            if (!days) (void)wf_autofill_set_expire(&g_fill, 0U);
+            gone = g_fill.expired;
+            fill_clock();
+            print_string("autofill expire ");
+            if (days) print_int((int)days); else print_string("off");
+            print_string(" forgot ");
+            print_int((int)g_fill.expired - gone);
+            print_string(g_fill.today ? "\n" : " no clock\n");
+            (void)save_fill();
+            return 0;
+        }
+        if (pre(a, "tz")) {
+            /* Lot 90: autofill tz MINUTES (-720..840) | utc: the local date
+             * the values are dated with (the CMOS clock is UTC) */
+            int k = 0, neg = 0, m = 0;
+            a += 2;
+            skip(&a);
+            if (pre(a, "utc") && !a[3]) m = 0;
+            else {
+                if (*a == '-' || *a == '+') { neg = *a == '-'; a++; }
+                while (a[k] >= '0' && a[k] <= '9' && k < 4) { m = m * 10 + (a[k] - '0'); k++; }
+                if (k == 0 || a[k] || wf_autofill_set_tz(&g_fill, neg ? -m : m) != 0) {
+                    print_string("autofill error usage: autofill tz MINUTES (-720..840) | utc\n");
+                    return 1;
+                }
+                if (neg) m = -m;
+            }
+            (void)wf_autofill_set_tz(&g_fill, m);
+            fill_clock();
+            print_string("autofill tz ");
+            print_string(m < 0 ? "-" : "+");
+            print_int(m < 0 ? -m : m);
+            print_string(" today ");
+            print_int((int)g_fill.today);
+            print_string("\n");
+            (void)save_fill();
+            return 0;
+        }
+        if (pre(a, "ages values")) {
+            /* Lot 90: the age of every value */
+            static char vages[32 * 3 * 180 + 16];
+            fill_clock();
+            if (wf_autofill_value_ages(&g_fill, vages, (int)sizeof(vages)) < 0) { print_string("autofill error\n"); return 1; }
+            print_string(vages);
             return 0;
         }
         if (pre(a, "ages")) {
@@ -379,7 +507,7 @@ int shell_desk_line(const char *line) {
             (void)save_fill();
             return 0;
         }
-        print_string("autofill error usage: autofill [list|ages|forget HOST [NAME [VALUE]]|forget-older DAYS|add HOST NAME VALUE|offers URL NAME]\n");
+        print_string("autofill error usage: autofill [list|ages [values]|status|expire DAYS|off|tz MINUTES|utc|dst eu|us|au|off|forget HOST [NAME [VALUE]]|forget-older DAYS|add HOST NAME VALUE|offers URL NAME]\n");
         return 1;
     }
     if (pre(line, "web-back")) return go(1);

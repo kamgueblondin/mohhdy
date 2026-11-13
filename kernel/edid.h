@@ -144,4 +144,9 @@ void edid_cea_summarize(const edid_cea_t *c, int parse_rc, int tag, edid_cea_sum
  * hint (underscan, a native VIC among the CTA TV formats, or no
  * physical size in the base block). */
 int edid_cea_is_tv(const edid_cea_sum_t *s, int size_mm_w);
+/* Lot 90 (US-080): the overscan margin per side for a w x h mode: 2.5% of
+ * each dimension (5% in all) when the sink is a TV (edid_cea_is_tv) that
+ * does not set the underscan bit; 0 otherwise. Returns 1 when a margin
+ * applies. mx / my may be 0. */
+int edid_overscan_margin(const edid_cea_sum_t *s, int size_mm_w, int w, int h, int *mx, int *my);
 #endif

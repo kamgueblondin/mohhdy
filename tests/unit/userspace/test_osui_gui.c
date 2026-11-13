@@ -2049,6 +2049,82 @@ static void test_lot74_gui_fragment(void) {
     osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
 }
 
+
+/* Lot 90: a value picked from the list and kept is accepted: the store is
+ * told (page_offer_touch) so it dates that value today. Down with one
+ * value, a click on a row, and Down / Up then leaving the field (Tab,
+ * Esc) count; a pick the operator typed over does not. */
+static int g_l90_touch;
+static char g_l90_val[32], g_l90_url[128];
+static int l90_touch(const char *url, const char *name, const char *value) {
+    g_l90_touch++;
+    snprintf(g_l90_val, sizeof(g_l90_val), "%s", value);
+    snprintf(g_l90_url, sizeof(g_l90_url), "%s", url);
+    return strcmp(name, "q") == 0 || strcmp(name, "p") == 0 ? 0 : -1;
+}
+static void test_lot90_offer_touch(void) {
+    static const osui_web_page_ops_t ops = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, f_request,
+                                             0, 0, 0, 0, l87_offer, l87_offer_at, 0, l90_touch };
+    os_fb_web_item_t it[8];
+    char ev[64];
+    int x, y, n;
+    unsigned base;
+    setup();
+    osui_gui_set_web_fetch(f_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    g_l90_touch = 0;
+    base = osui_gui_offer_touches();
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/dir/page", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT(f_box("q", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    /* Down twice: previews, nothing accepted while the list is open */
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, g_l90_touch);
+    /* Tab away with "kernel" in the field: accepted */
+    osui_gui_web_command("web-fkey tab", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, g_l90_touch);
+    TEST_ASSERT_EQUAL_STRING("kernel", g_l90_val);
+    TEST_ASSERT_EQUAL_STRING("https://ex.am/dir/page", g_l90_url);
+    TEST_ASSERT_EQUAL(base + 1U, osui_gui_offer_touches());
+    /* back on q (the list lists the two others), click the second row */
+    osui_gui_web_command("web-fkey stab", g_out, (int)sizeof(g_out));
+    n = osui_gui_offer_items(it, 8);
+    TEST_ASSERT(n > 0);
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", it[0].x + 10, it[0].y + 2 + 12 + 5);
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(2, g_l90_touch);
+    TEST_ASSERT_EQUAL_STRING("qemu tablet", g_l90_val);
+    /* Down then Esc: accepted (the field keeps the value) */
+    osui_gui_web_command("web-fkey tab", g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-fkey stab", g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(3, g_l90_touch);
+    TEST_ASSERT_EQUAL_STRING("mohhdy os", g_l90_val);
+    /* Down, then the operator types over the pick, then Tab: not accepted */
+    osui_gui_web_command("web-fkey tab", g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-fkey stab", g_out, (int)sizeof(g_out));
+    TEST_ASSERT(osui_gui_offer_items(it, 8) > 0);
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-ftype x", g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-fkey tab", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(3, g_l90_touch);
+    /* p: one value, Down fills it and closes the list: accepted at once */
+    TEST_ASSERT(f_box("p", &x, &y));
+    snprintf(ev, sizeof(ev), "web-fclick %d %d", x, y);
+    osui_gui_web_command(ev, g_out, (int)sizeof(g_out));
+    osui_gui_web_command("web-fkey down", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(4, g_l90_touch);
+    TEST_ASSERT_EQUAL_STRING("old p", g_l90_val);
+    TEST_ASSERT_EQUAL(base + 4U, osui_gui_offer_touches());
+    osui_gui_web_command("web-fkey esc", g_out, (int)sizeof(g_out));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_web_page_ops(0);
+    osui_gui_set_web_fetch(0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_lot12_vfs_and_browser_inspection_views);
@@ -2089,6 +2165,7 @@ int main(void) {
     RUN_TEST(test_lot86_focus_offers_and_down);
     RUN_TEST(test_lot87_form2_autofill);
     RUN_TEST(test_lot87_offer_list);
+    RUN_TEST(test_lot90_offer_touch);
     RUN_TEST(test_lot87_offer_click);
     RUN_TEST(test_lot87_offer_delete);
     RUN_TEST(test_lot74_gui_fragment);

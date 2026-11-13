@@ -764,6 +764,21 @@ static int present_local(void) {
         }
     }
     dst = g_back ? g_back : (uint32_t *)g_lfb;
+    {
+        /* Lot 90 (US-080): the TV overscan margin, from the boot EDID */
+        static int logged_w, logged_h;
+        int sx = 0, sy = 0;
+        int on = edid_overscan_margin(&g_cea_sum, g_edid.ok ? g_edid.size_mm_w : 0, g_w, g_h, &sx, &sy);
+        gfx_desktop_set_safe(sx, sy);
+        if (on && (logged_w != g_w || logged_h != g_h)) {
+            print_string_serial("[GFX] tv safe area margin ");
+            serial_uint((unsigned)sx);
+            print_string_serial(" ");
+            serial_uint((unsigned)sy);
+            print_string_serial(" (no underscan bit)\n");
+            logged_w = g_w; logged_h = g_h;
+        }
+    }
     gfx_desktop_draw_no_cursor(&local, dst, g_w, g_h);
 
     {

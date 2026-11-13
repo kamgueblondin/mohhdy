@@ -50,9 +50,11 @@ static void test_background_color(void) {
     TEST_ASSERT(strstr(style_of("a"), "background-color:#ff8800") != 0);
     TEST_ASSERT_EQUAL(1, by_id("b")->bg_set);
     TEST_ASSERT_EQUAL(0x000080, by_id("b")->bg);
-    /* an image layer is not one colour: nothing is passed on */
-    TEST_ASSERT_EQUAL(0, by_id("c")->bg_set);
-    TEST_ASSERT_EQUAL_STRING("", style_of("c"));
+    /* an image layer and a colour: Lot 88 passed nothing on; Lot 90
+     * passes both (the shorthand is split into its longhands) */
+    TEST_ASSERT_EQUAL(1, by_id("c")->bg_set);
+    TEST_ASSERT_EQUAL(0xff0000, by_id("c")->bg);
+    TEST_ASSERT(strstr(style_of("c"), "background-color:#ff0000;background-image:url(x.png)") != 0);
     /* transparent, more specific, wins over the colour */
     TEST_ASSERT_EQUAL(0, by_id("d")->bg_set);
     /* not inherited */
@@ -73,8 +75,12 @@ static void test_list_style(void) {
     /* a word that is no list-style part makes the value invalid */
     TEST_ASSERT_EQUAL(0, by_id("bad")->tok_val[LIST]);
     TEST_ASSERT_EQUAL_STRING("none", by_id("none")->tok[LIST]);
-    /* an image alone gives no type */
-    TEST_ASSERT_EQUAL(0, by_id("img")->tok_val[LIST]);
+    /* an image alone gives no type: Lot 88 dropped the declaration;
+     * Lot 90 keeps the image and the position, the type is initial (1,
+     * not written out) */
+    TEST_ASSERT_EQUAL(1, by_id("img")->tok_val[LIST]);
+    TEST_ASSERT(strstr(style_of("img"), "list-style-image:url(dot.png);list-style-position:outside") != 0);
+    TEST_ASSERT(strstr(g_o, "list-style-type") == 0);
     /* the li itself carries nothing: the engine inherits from the ul */
     TEST_ASSERT_EQUAL(0, by_id("li")->tok_val[LIST]);
     prep("ul { list-style-type: lower-alpha } li.x { list-style-type: inherit }",

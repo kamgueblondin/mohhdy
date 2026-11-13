@@ -22,6 +22,9 @@ typedef struct {
     int nold;                                  /* Lot 87: 0..WF_AF_HIST-1 */
     char old[WF_AF_HIST - 1][WF_AF_VALUE];     /* older values, newest first */
     uint32_t day;                              /* Lot 89: last stored, wf_autofill_day; 0 undated */
+    /* Lot 90: the date of each older value (old[k]), day being the
+     * current value's: stored, typed again or accepted from the list */
+    uint32_t old_day[WF_AF_HIST - 1];
 } wf_af_ent_t;
 
 typedef struct {
@@ -29,6 +32,14 @@ typedef struct {
     int n;
     uint32_t stored, refused, hits;
     uint32_t today;   /* Lot 89: wf_autofill_day of the clock, 0 unknown */
+    /* Lot 90 */
+    uint32_t expire_days;   /* forget values older than this on a new day; 0 off */
+    uint32_t expire_ran;    /* the day the automatic expiry last ran */
+    int tz_min;             /* local time offset from UTC, minutes (-720..840) */
+    uint32_t touched;       /* values accepted from the list (wf_autofill_touch) */
+    uint32_t expired;       /* values the automatic expiry forgot */
+    /* Lot 91 */
+    int dst;                /* summer time rule, WF_AF_DST_* (0 none) */
 } wf_autofill_t;
 
 void wf_autofill_init(wf_autofill_t *a);
@@ -79,15 +90,84 @@ void wf_autofill_set_today(wf_autofill_t *a, uint32_t day);
 /* Days since the key was last stored, or -1 when it has no date, the
  * clock is unknown or the key is not there. A date after today reads 0. */
 int wf_autofill_age(const wf_autofill_t *a, const char *host, const char *name);
-/* Forget every key last stored more than days days ago (0..36500; 0
- * forgets what is older than today). An undated key is not forgotten: it
- * gets today's date, so it expires days days from now; *undated (may be
- * 0) counts them. Returns the keys forgotten, -1 when the clock is
- * unknown or days is out of range (nothing changes then). */
+/* Forget every value dated more than days days ago (0..36500; 0 forgets
+ * what is older than today; Lot 89 looked at the key's last store only).
+ * An undated value is not forgotten: it gets today's date, so it expires
+ * days days from now; *undated (may be 0) counts the keys that had one.
+ * Returns the keys forgotten (their last value went), -1 when the clock
+ * is unknown or days is out of range (nothing changes then). */
 int wf_autofill_forget_older(wf_autofill_t *a, uint32_t days, int *undated);
 /* One line per key: "autofill age HOST NAME Nd" or "... undated", then
  * "autofill ages N dated D". -1 when out is too small. */
 int wf_autofill_ages(const wf_autofill_t *a, char *out, int cap);
+
+/* ---- Lot 90: dates per value, accepted fills, automatic expiry, time
+ * zone -----------------------------------------------------------------
+ * Each value has its own date: a value typed again or accepted from the
+ * offer list is dated today, the others keep theirs. forget_older drops
+ * the values older than the limit one by one (a key goes with its last
+ * value) and still returns the keys that went. The session file is
+ * "MOHHDY-AUTOFILL 3" with optional " expire N" and " tz M" on the header
+ * line; each value line carries that value's day. Files of version 1 and
+ * 2 still load (every value of a key gets the key's day). */
+/* Days since value idx (0 the current one) of a key was dated; -1 as
+ * wf_autofill_age (no date, no clock, no such value). */
+int wf_autofill_value_age(const wf_autofill_t *a, const char *host, const char *name, int idx);
+/* A value offered and accepted (the desktop list, web-fill, the Down
+ * key): it becomes the current value of its key and is dated today. 0, or
+ * -1 when the key does not hold it (nothing changes). */
+int wf_autofill_touch(wf_autofill_t *a, const char *host, const char *name, const char *value);
+/* Same for a value offered from another host of the site: the host's own
+ * key first, then the host of the site that holds it. 0 own host, 1
+ * another host, -1 none. */
+int wf_autofill_touch_site(wf_autofill_t *a, const char *host, const char *name, const char *value);
+/* Values (not keys) forgotten by the last forget_older. */
+int wf_autofill_forget_older_values(wf_autofill_t *a, uint32_t days, int *undated, int *values);
+/* Automatic expiry after days days (1..36500), 0 off; -1 out of range. */
+int wf_autofill_set_expire(wf_autofill_t *a, uint32_t days);
+/* The clock: sets today and, when the automatic expiry is on and the day
+ * is new, runs forget_older once for that day. Values forgotten (0 when
+ * nothing ran), -1 when day is 0 (clock unknown: today becomes 0). */
+int wf_autofill_tick(wf_autofill_t *a, uint32_t day);
+/* Local time offset in minutes, -720..840 (UTC-12 to UTC+14); -1 out of
+ * range. */
+int wf_autofill_set_tz(wf_autofill_t *a, int minutes);
+/* Day number of the local date of "YYYYMMDDhhmm[ss]" (UTC) shifted by
+ * tz_min minutes; 0 when the text is not a valid date and time or the
+ * local date is outside 1970..2199. With tz_min 0, hh and mm may be
+ * missing (wf_autofill_day). */
+uint32_t wf_autofill_day_tz(const char *utc, int tz_min);
+/* "autofill status expire N tz M today D touched T expired E keys K values V" */
+int wf_autofill_status(const wf_autofill_t *a, char *out, int cap);
+/* One line per value: "autofill value HOST NAME IDX Nd" or "... undated". */
+int wf_autofill_value_ages(const wf_autofill_t *a, char *out, int cap);
+
+/* ---- Lot 91: summer time rules -------------------------------------
+ * Lot 90 took a fixed offset. A rule adds 60 minutes to the offset during
+ * summer time, so the local date follows the clock change:
+ *   eu: last Sunday of March 01:00 UTC to last Sunday of October 01:00 UTC;
+ *   us: second Sunday of March 02:00 local standard time to first Sunday
+ *       of November 02:00 local summer time (01:00 standard);
+ *   au: (south) first Sunday of October 02:00 standard to first Sunday
+ *       of April 03:00 summer time (02:00 standard).
+ * tz_min stays the standard offset. The session file header gains
+ * " dst R" and the status line " dst R" when a rule is set. */
+enum { WF_AF_DST_NONE = 0, WF_AF_DST_EU = 1, WF_AF_DST_US = 2, WF_AF_DST_AU = 3 };
+/* 0, or -1 when rule is not one of WF_AF_DST_* */
+int wf_autofill_set_dst(wf_autofill_t *a, int rule);
+/* "eu", "us", "au", "off" (none); "" for an unknown rule */
+const char *wf_autofill_dst_name(int rule);
+/* the rule of "eu", "us", "au", "off" or "none"; -1 otherwise */
+int wf_autofill_dst_parse(const char *s);
+/* minutes the rule adds at that UTC instant "YYYYMMDDhhmm[ss]" for a zone
+ * of standard offset tz_min: 0 or 60; -1 when the text, the offset or
+ * the rule is not valid */
+int wf_autofill_dst_offset(const char *utc, int tz_min, int rule);
+/* the local day number with the rule (rule 0: wf_autofill_day_tz); 0
+ * when the text is not a valid date and time, or the local date is out of
+ * 1970..2199 */
+uint32_t wf_autofill_day_rule(const char *utc, int tz_min, int rule);
+
 int wf_autofill_save(const wf_autofill_t *a, char *out, int cap);
 int wf_autofill_load(wf_autofill_t *a, const char *text, int len);
 int wf_autofill_text(const wf_autofill_t *a, char *out, int cap);

@@ -12,7 +12,7 @@ gcc -O1 -m32 -Wall -Werror -I"$ROOT/userspace" -I"$ROOT/kernel" -I"$ROOT/include
     "$ROOT/tests/host/wf_fetch_host.c" \
     "$ROOT"/userspace/wf_http.c "$ROOT"/userspace/wf_dns.c "$ROOT"/userspace/wf_tls.c "$ROOT"/userspace/wf_fetch.c "$ROOT"/userspace/wf_cache.c "$ROOT"/userspace/wf_cookie.c "$ROOT"/userspace/wf_inflate.c \
     "$ROOT"/userspace/wf_x509.c "$ROOT"/userspace/wf_bn.c "$ROOT"/userspace/wf_sha512.c "$ROOT"/userspace/wf_ec.c "$ROOT"/userspace/wf_p256.c "$ROOT"/userspace/wf_aead.c \
-    "$ROOT"/userspace/wf_rsa.c "$ROOT"/userspace/wf_html.c "$ROOT"/userspace/wf_sitecss.c "$ROOT"/userspace/wf_cssmath.c "$ROOT"/userspace/wf_cssvar.c "$ROOT"/userspace/wf_read.c "$ROOT"/userspace/wf_score.c "$ROOT"/userspace/wf_searchform.c "$ROOT"/userspace/wf_article.c "$ROOT"/userspace/wf_srcset.c "$ROOT"/userspace/wf_entity.c "$ROOT"/userspace/wf_form.c \
+    "$ROOT"/userspace/wf_rsa.c "$ROOT"/userspace/wf_html.c "$ROOT"/userspace/wf_sitecss.c "$ROOT"/userspace/wf_cssmath.c "$ROOT"/userspace/wf_cssvar.c "$ROOT"/userspace/wf_cssbg.c "$ROOT"/userspace/wf_cssprop.c "$ROOT"/userspace/wf_read.c "$ROOT"/userspace/wf_score.c "$ROOT"/userspace/wf_searchform.c "$ROOT"/userspace/wf_article.c "$ROOT"/userspace/wf_srcset.c "$ROOT"/userspace/wf_entity.c "$ROOT"/userspace/wf_form.c \
     "$ROOT"/userspace/wf_section.c "$ROOT"/userspace/wsearch_api.c "$ROOT"/userspace/wsearch.c "$ROOT"/userspace/wsearch_local.c "$ROOT"/kernel/sha256.c "$ROOT"/kernel/aes_gcm.c "$ROOT"/kernel/x25519.c || { echo "FAIL: build"; exit 1; }
 HP=$((20000 + $$ % 20000)); SP=$((HP + 1))
 python3 "$ROOT/scripts/lot67_web_server.py" "$W/pki" $HP $SP > server.log 2>&1 &

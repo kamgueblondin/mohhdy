@@ -50,6 +50,10 @@ int gfx_wm_mouse(gfx_wm_win_t *s, gfx_wm_rect_t placed, gfx_wm_rect_t base, int 
 void gfx_wm_restore(gfx_wm_win_t *s);   /* un-minimize / reopen */
 void gfx_wm_reset(gfx_wm_win_t *s);     /* default place and state */
 int gfx_wm_btn(int title_h, int scale);   /* Lot 69: scaled button side */
+/* Lot 90: title bar height for a scale (quarters >= 4, or 1..3 as an
+ * integer multiplier): base at 1x and below, base * q / 4 above, capped at
+ * twice base (the chrome scale stops at 2x). */
+int gfx_wm_title_h(int base, int scale);
 void gfx_wm_draw_grip(uint32_t *fb, int fw, int fh, int pitch, gfx_wm_rect_t win, int title_h, int scale, uint32_t ink);
 void gfx_wm_draw_buttons(uint32_t *fb, int fw, int fh, int pitch, gfx_wm_rect_t win, int title_h, int scale);
 /* Lot 86: 0 when the three title buttons sit inside the bar, do not

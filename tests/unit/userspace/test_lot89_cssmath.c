@@ -99,8 +99,9 @@ static void test_in_the_sheet(void) {
     TEST_ASSERT_EQUAL(0, wf_site_prepare_vw(&g_d, html, (int)strlen(html), 1000));
     TEST_ASSERT_EQUAL_STRING("21px", by_id("a")->tok[WF_SITE_K_FSIZE - WF_SITE_K_LIST]);
     TEST_ASSERT_EQUAL_STRING("1.5em", by_id("b")->tok[WF_SITE_K_INDENT - WF_SITE_K_LIST]);
-    /* px against em: not resolved, the declaration is dropped */
-    TEST_ASSERT_EQUAL_STRING("", by_id("c")->tok[WF_SITE_K_LSPACE - WF_SITE_K_LIST]);
+    /* px against em: Lot 89 dropped it; Lot 90 resolves it against the
+     * element's font size (0.1em of 16 px is 1.6 px, min is 1 px) */
+    TEST_ASSERT_EQUAL_STRING("1px", by_id("c")->tok[WF_SITE_K_LSPACE - WF_SITE_K_LIST]);
     /* resolved but out of the font-size bounds (96 px): dropped */
     TEST_ASSERT_EQUAL_STRING("", by_id("d")->tok[WF_SITE_K_FSIZE - WF_SITE_K_LIST]);
     TEST_ASSERT_EQUAL_STRING("20px", by_id("e")->tok[WF_SITE_K_FSIZE - WF_SITE_K_LIST]);

@@ -79,6 +79,24 @@ def run_spread(w, h, rgb, y0, y1):
     return runs[len(runs) // 2], runs[len(runs) * 99 // 100]
 
 
+def page_top(w, h, rgb):
+    """First row below the menu bar that is page background across the
+    window (90% of the sampled columns light). The web page starts under
+    the full screen window title bar, whose height follows the chrome
+    scale since Lot 90, so a fixed row would measure the title bar and
+    its gap (one dark run per column) instead of the page text."""
+    xs = range(w // 8, w * 7 // 8, 4)
+    for y in range(bar_height(w, h, rgb), h // 2):
+        light = 0
+        for x in xs:
+            r, gg, b = px(rgb, w, x, y)
+            if r + gg + b > 600:
+                light += 1
+        if light * 10 >= len(xs) * 9:
+            return y
+    raise RuntimeError("web page top not found under the title bar")
+
+
 def save_png(name, w, h, rgb):
     try:
         from PIL import Image
@@ -203,7 +221,8 @@ def main():
             time.sleep(2.0)
             w, h, rgb = g.screendump_rgb(monitor, "qemu-gui-scale-web.ppm")
             save_png("web-2x.png", w, h, rgb)
-            wrun1, _ = ink_runs(w, h, rgb, 90, h - 40, dark=True)
+            top1 = page_top(w, h, rgb)
+            wrun1, _ = ink_runs(w, h, rgb, top1, h - 40, dark=True)
             start = len(g.log_text())
             g.send_key(monitor, "ctrl-equal")
             g.wait_for(proc, "osui zoom web zoom 1.25x", g.CMD_TIMEOUT, start)
@@ -211,8 +230,9 @@ def main():
             time.sleep(2.0)
             w, h, rgb = g.screendump_rgb(monitor, "qemu-gui-scale-web-zoom.ppm")
             save_png("web-2x-ctrl-plus.png", w, h, rgb)
-            wrun2, _ = ink_runs(w, h, rgb, 90, h - 40, dark=True)
-            g.say("web glyph-run p98 %d -> %d after Ctrl+'+'" % (wrun1, wrun2))
+            top2 = page_top(w, h, rgb)
+            wrun2, _ = ink_runs(w, h, rgb, top2, h - 40, dark=True)
+            g.say("web page top y=%d/%d glyph-run p98 %d -> %d after Ctrl+'+'" % (top1, top2, wrun1, wrun2))
             if wrun2 <= wrun1:
                 raise RuntimeError("web zoom did not enlarge the page text: %d -> %d" % (wrun1, wrun2))
             start = len(g.log_text())
@@ -231,8 +251,9 @@ def main():
             time.sleep(2.0)
             w, h, rgb = g.screendump_rgb(monitor, "qemu-gui-scale-fonts.ppm")
             save_png("web-font-size-2x.png", w, h, rgb)
-            small, big = run_spread(w, h, rgb, 90, h - 40)
-            g.say("web font-size runs median=%d tallest=%d" % (small, big))
+            top3 = page_top(w, h, rgb)
+            small, big = run_spread(w, h, rgb, top3, h - 40)
+            g.say("web font-size page top y=%d runs median=%d tallest=%d" % (top3, small, big))
             if small == 0 or big < small * 2:
                 raise RuntimeError("CSS font-size not visible on screen: median %d tallest %d" % (small, big))
             start = len(g.log_text())

@@ -19,19 +19,34 @@
  *   the peer holding the most; a peer alone in the queue is refused as
  *   before;
  * - the time an entry waited is measured (last and largest, ms).
+ * Lot 90 (US-068/US-073):
+ * - sixteen slots instead of eight;
+ * - the class weights are set at run time (p2p_shape_set_weight: 1..16
+ *   bodies of 404 bytes per round; defaults 3 for messages, 1 for puts);
+ * - an optional age limit: an entry that waited longer than max_age_ms is
+ *   dropped at the next drain instead of being sent late (counted as
+ *   expired; off by default);
+ * - an optional per-peer cap: a peer may hold at most peer_cap entries; a
+ *   push beyond it is refused (counted as capped) even when slots are
+ *   free, so one peer cannot take the whole queue (off by default: cap =
+ *   P2P_SHAPE_Q);
+ * - p2p_shape_command parses "status", "weight msg|bulk N",
+ *   "age MS|off" and "cap N|off" for the p2p-shape shell command.
  * Fixed size, no heap, integer only, host tested
- * (tests/unit/userspace/test_lot88_shape.c). */
+ * (tests/unit/userspace/test_lot88_shape.c, test_lot90_shape.c). */
 #ifndef P2P_SHAPE_H
 #define P2P_SHAPE_H
 #include <stdint.h>
 
-#define P2P_SHAPE_Q 8
+#define P2P_SHAPE_Q 16              /* Lot 90: 16 (Lot 88: 8) */
 #define P2P_SHAPE_BODY 404
 #define P2P_SHAPE_CLASSES 2
 #define P2P_SHAPE_C_MSG 0
 #define P2P_SHAPE_C_BULK 1
 #define P2P_SHAPE_QUANTUM_MSG (3U * P2P_SHAPE_BODY)
 #define P2P_SHAPE_QUANTUM_BULK P2P_SHAPE_BODY
+#define P2P_SHAPE_WEIGHT_MAX 16     /* Lot 90: largest class weight */
+#define P2P_SHAPE_AGE_MAX 600000U   /* Lot 90: largest age limit, 10 minutes */
 
 /* enqueue results */
 #define P2P_SHAPE_QUEUED 1
@@ -65,6 +80,11 @@ typedef struct {
     uint32_t bytes_cls[P2P_SHAPE_CLASSES];
     uint32_t last_wait_ms, max_wait_ms;
     uint32_t passes, skips;
+    /* Lot 90 */
+    uint32_t weight[P2P_SHAPE_CLASSES];   /* bodies per round; 0 = default */
+    uint32_t max_age_ms;                  /* 0 = no age limit */
+    uint32_t peer_cap;                    /* 0 = P2P_SHAPE_Q */
+    uint32_t expired, capped;
 } p2p_shape_t;
 
 typedef int (*p2p_shape_send_fn)(void* ctx, uint32_t peer, int inner, const uint8_t* body, int len);
@@ -81,6 +101,21 @@ int p2p_shape_depth(const p2p_shape_t* q, uint32_t peer, int cls);
 /* drops every entry of a peer; returns the count */
 int p2p_shape_forget(p2p_shape_t* q, uint32_t peer);
 /* "depth D msg M bulk B queued Q sent S dropped X evicted E refused R
- *  msg_sent A bulk_sent K last_wait_ms L max_wait_ms W skips N" */
+ *  msg_sent A bulk_sent K last_wait_ms L max_wait_ms W skips N
+ *  weight WM/WB age_ms A cap C expired E capped P" (Lot 90 adds the
+ *  last five fields; age_ms 0 = off) */
 void p2p_shape_status(const p2p_shape_t* q, char* out, int cap);
+/* Lot 90: 0 ok, -1 out of range (weight 1..P2P_SHAPE_WEIGHT_MAX,
+ * age 0..P2P_SHAPE_AGE_MAX ms with 0 = off, cap 0..P2P_SHAPE_Q with
+ * 0 = off) */
+int p2p_shape_set_weight(p2p_shape_t* q, int cls, int weight);
+int p2p_shape_weight(const p2p_shape_t* q, int cls);
+int p2p_shape_set_max_age(p2p_shape_t* q, uint32_t ms);
+int p2p_shape_set_peer_cap(p2p_shape_t* q, int cap);
+/* drops the entries older than the age limit; returns the count */
+int p2p_shape_expire(p2p_shape_t* q, uint32_t now_ms);
+/* "status" (or nothing), "weight msg|bulk N", "age MS|off", "cap N|off".
+ * Writes "p2p shape ..." status (or "p2p shape error ...") into out;
+ * returns 0, or 1 on a bad command. */
+int p2p_shape_command(p2p_shape_t* q, int argc, const char* const* argv, char* out, int cap);
 #endif

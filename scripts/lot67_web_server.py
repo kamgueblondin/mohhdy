@@ -58,6 +58,14 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /lot89/stray.html   Lot 89: a page followed by an unsolicited second
                       response on the same keep-alive connection (the
                       server bug that exposed the NE2000 ring stall)
+  /lot90/bg.html      Lot 90: background shorthand with a gradient,
+                      list-style with an image, calc()/rem/clamp() font sizes
+  /lot90/props.html   Lot 90: @property and declaration-time values
+  /lot90/scope.html   Lot 90: a seven-selector @scope list, root proximity
+  /lot91/bg.html      Lot 91: radial gradients with explicit radii,
+                      gradians, background-clip and background-origin
+  /lot91/props.html   Lot 91: @property syntaxes with alternatives and
+                      lists, calc() type checking
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -121,6 +129,107 @@ PAGE = (b"<!doctype html><html><head><title>Mohhdy offline test page</title></he
         b"<body><h1>Hello from the Lot 67 test server</h1>"
         b"<p id=\"proof\">fetched over the network by Mohhdy</p>"
         b"<ul><li>chunked</li><li>redirect</li><li>tls</li></ul></body></html>\n")
+
+
+# Lot 90: reader pages (tests/scripts/test_qemu_lot90.py)
+_LOT90_NEST_NEAR = "<div>" * 8
+_LOT90_NEST_END = "</div>" * 8
+LOT90_PAGES = {
+    # background shorthand with a gradient, list-style with an image,
+    # font lengths in px (calc with em, rem, a long clamp())
+    "/lot90/bg.html": (
+        "<!doctype html><html style=\"font-size: 20px\"><head><title>Lot 90 backgrounds</title><style>"
+        "#bg90 { background: #102030 linear-gradient(to right, #ff0000, #0000ff) center / cover no-repeat }\n"
+        "#ls90 { list-style: square url(dot90.png) inside }\n"
+        ".par90 { font-size: 16px }\n"
+        "#em90 { font-size: calc(1.5em + 2px) }\n"
+        "#rem90 { font-size: 2rem }\n"
+        "#long90 { font-size: clamp(12.000px, calc(0.5000rem + 0.2500em + 1.5000px + 2.0000px), 40.000px) }\n"
+        "</style></head><body><h1>Fonds</h1>"
+        "<div id=\"bg90\"><p>bgkeep90</p></div>"
+        "<ul id=\"ls90\"><li>lskeep90</li></ul>"
+        "<div class=\"par90\"><p id=\"em90\">emkeep90</p></div>"
+        "<p id=\"rem90\">remkeep90</p>"
+        "<p id=\"long90\">longkeep90</p>"
+        "<p>fin90b</p></body></html>"),
+    # @property: a registered length that does not inherit, a refused
+    # initial-value, a custom property computed where it is declared
+    "/lot90/props.html": (
+        "<!doctype html><html style=\"font-size: 20px\"><head><title>Lot 90 @property</title><style>"
+        "@property --sz90 { syntax: '<length>'; inherits: false; initial-value: 15px }\n"
+        "@property --bad90 { syntax: '<length>'; inherits: false; initial-value: 2em }\n"
+        ":root { --base90: 10px; --dbl90: calc(var(--base90) * 2) }\n"
+        ".in90 { --base90: 30px }\n"
+        "#root90, #decl90 { font-size: var(--dbl90) }\n"
+        ".hold90 { --sz90: 30px }\n"
+        "#reg90 { font-size: var(--sz90) }\n"
+        "#wrong90 { --sz90: red; font-size: var(--dbl90); text-indent: var(--sz90) }\n"
+        "</style></head><body><h1>Proprietes</h1>"
+        "<p id=\"root90\">proot90</p>"
+        "<div class=\"in90\"><p id=\"decl90\">pdecl90</p></div>"
+        "<div class=\"hold90\"><p id=\"reg90\">preg90</p></div>"
+        "<p id=\"wrong90\">pwrong90</p>"
+        "<p>fin90p</p></body></html>"),
+    # @scope: a start list of seven selectors (six kept) and two roots,
+    # nine and eleven generations up (the nearer wins)
+    "/lot90/scope.html": (
+        "<!doctype html><html><head><title>Lot 90 @scope</title><style>"
+        "@scope (.s1, .s2, .s3, .s4, .s5, .s6, .s7) { p { display: none } }\n"
+        "@scope (.near90) { p { color: #00aa00 } }\n"
+        "@scope (.far90) { p { color: #aa0000 } }\n"
+        "</style></head><body><h1>Portee</h1>"
+        "<div class=\"s6\"><p>sixhide90</p></div>"
+        "<div class=\"s7\"><p>sevenkeep90</p></div>"
+        "<div class=\"far90\"><div><div class=\"near90\">" + _LOT90_NEST_NEAR +
+        "<p id=\"prox90\">proxkeep90</p>" + _LOT90_NEST_END + "</div></div></div>"
+        "<p>fin90s</p></body></html>"),
+}
+
+
+# Lot 91: reader pages (tests/scripts/test_qemu_lot91.py)
+LOT91_PAGES = {
+    # explicit radial radii, a gradian angle, the box keywords of the
+    # background shorthand and the longhands; two refused values
+    "/lot91/bg.html": (
+        "<!doctype html><html><head><title>Lot 91 backgrounds</title><style>"
+        "#rad91 { background: radial-gradient(circle 40px at center, #ff0000, #0000ff) no-repeat }\n"
+        "#ell91 { background-image: radial-gradient(ELLIPSE 30px 20% at left top, #00ff00, #000000) }\n"
+        "#grad91 { background-image: linear-gradient(100grad, #ff0000, #0000ff) }\n"
+        "#box91 { background: #eeeeee content-box padding-box }\n"
+        "#one91 { background: #dddddd border-box }\n"
+        "#clip91 { background-color: #ddeeff; background-clip: content-box; background-origin: border-box }\n"
+        "#badr91 { background-color: #123456; background-image: radial-gradient(circle 10%, #ff0000, #0000ff) }\n"
+        "#badc91 { background-color: #654321; background-clip: text }\n"
+        "</style></head><body><h1>Fonds 91</h1>"
+        "<div id=\"rad91\"><p>radkeep91</p></div>"
+        "<div id=\"ell91\"><p>ellkeep91</p></div>"
+        "<div id=\"grad91\"><p>gradkeep91</p></div>"
+        "<div id=\"box91\"><p>boxkeep91</p></div>"
+        "<div id=\"one91\"><p>onekeep91</p></div>"
+        "<div id=\"clip91\"><p>clipkeep91</p></div>"
+        "<div id=\"badr91\"><p>badrkeep91</p></div>"
+        "<div id=\"badc91\"><p>badckeep91</p></div>"
+        "<p>fin91b</p></body></html>"),
+    # @property: an alternative syntax (Lot 90 refused the rule), a
+    # list, five alternatives (refused), a calc() whose type is not a
+    # <length> (Lot 90 took it) and one that is
+    "/lot91/props.html": (
+        "<!doctype html><html><head><title>Lot 91 @property</title><style>"
+        "@property --w91 { syntax: 'auto | <length>'; inherits: false; initial-value: 11px }\n"
+        "@property --l91 { syntax: '<length>#'; inherits: true; initial-value: 1px, 2px }\n"
+        "@property --five91 { syntax: 'a | b | c | d | e'; inherits: false; initial-value: a }\n"
+        "@property --len91 { syntax: '<length>'; inherits: false; initial-value: 13px }\n"
+        "#alt91 { --w91: 24px; font-size: var(--w91) }\n"
+        "#altbad91 { --w91: red; font-size: var(--w91) }\n"
+        "#calcbad91 { --len91: calc(10px + 5%); font-size: var(--len91) }\n"
+        "#calcok91 { --len91: calc(2px * 3 + 4px); font-size: var(--len91) }\n"
+        "</style></head><body><h1>Proprietes 91</h1>"
+        "<p id=\"alt91\">altkeep91</p>"
+        "<p id=\"altbad91\">altbadkeep91</p>"
+        "<p id=\"calcbad91\">calcbadkeep91</p>"
+        "<p id=\"calcok91\">calcokkeep91</p>"
+        "<p>fin91p</p></body></html>"),
+}
 
 
 class H(http.server.BaseHTTPRequestHandler):
@@ -297,6 +406,12 @@ class H(http.server.BaseHTTPRequestHandler):
                     "<h1>Couches</h1><div class=\"keep87\">layerkeep87 visible</div>"
                     "<p class=\"gone87\">layergone87</p><p class=\"back87\">layerback87</p><p class=\"ini87\">layerinitial87</p><p>fin87</p></body></html>")
             self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT90_PAGES:
+            self._send(200, LOT90_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT91_PAGES:
+            self._send(200, LOT91_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

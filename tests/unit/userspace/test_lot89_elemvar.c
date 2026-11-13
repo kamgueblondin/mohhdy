@@ -122,7 +122,10 @@ static void test_root_only_unchanged_and_bounds(void) {
         "p { font-size: var(--r) }"
         ".a{--v1:1px}.a{--v2:1px}.a{--v3:1px}.a{--v4:1px}.a{--v5:1px}.a{--v6:1px}"
         ".a{--v7:1px}.a{--v8:1px}.a{--v9:1px}.a{--v10:1px}.a{--v11:1px}.a{--v12:1px}.a{--v13:1px}"
-        ".a { --long: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa }"
+        /* Lot 90 (converted): 24 names and 63-byte values (Lot 89: 12 and 31) */
+        ".a{--v14:1px}.a{--v15:1px}.a{--v16:1px}.a{--v17:1px}.a{--v18:1px}.a{--v19:1px}.a{--v20:1px}"
+        ".a{--v21:1px}.a{--v22:1px}.a{--v23:1px}.a{--v24:1px}.a{--v25:1px}"
+        ".a { --long: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa }"
         "</style></head><body><p id=a class=a>a</p></body></html>";
     char text[96];
     TEST_ASSERT_EQUAL(0, prep(html));
@@ -130,7 +133,7 @@ static void test_root_only_unchanged_and_bounds(void) {
     TEST_ASSERT_EQUAL(WF_SITE_VNAMES, g_d.nvnames);
     TEST_ASSERT(g_d.dropped_vars >= 2);
     TEST_ASSERT(wf_site_vars_text(&g_d, text, (int)sizeof(text)) > 0);
-    TEST_ASSERT_NOT_NULL(strstr(text, "names 12 "));
+    TEST_ASSERT_NOT_NULL(strstr(text, "names 24 "));
 }
 
 int main(void) {

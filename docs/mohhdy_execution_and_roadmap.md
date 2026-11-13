@@ -7,6 +7,35 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 91 (12 November 2026, base 0576849, Lot 90 with the text-scale fix)
+
+US-031 partial, phase3_complete=false. The reader passes radial
+gradients with explicit radii, gradian angles, background-clip and
+background-origin and the box keywords of the background shorthand, all
+of which the engine already drew. @property takes syntaxes with
+alternatives, lists and keywords, and calc(), min(), max() and clamp()
+are type checked. Autofill adds eu, us and au summer time rules to its
+time zone and runs the expiry before every offer list. A QEMU page
+(`make qemu-lot91`, CI job lot91-reader) sets the guest clock and crosses
+local midnight. US-068/073, US-076, US-080 and US-081 stay partial.
+US-078 and US-097 stay simule. See docs/lot91_plan.md.
+
+### Lot 90 (12 November 2026, base Lot 89 e051615, PR #247)
+
+US-031 partial, phase3_complete=false. The reader passes background
+images, gradients, positions, sizes and repeats and list marker images,
+keeps values up to 127 bytes and resolves mixed em/px and rem font sizes
+in px. Custom properties are computed where declared and @property is
+read. @scope lists hold six selectors and proximity counts 14
+generations. Autofill dates each value, expires on its own and knows a
+time zone; public suffixes follow the PSL wildcard and exception rules
+(360 hand-written entries). The net worker drains the NE2000 ring between
+relay ops. The mesh shaping queue has 16 slots and run-time settings.
+Title bars follow the chrome scale and a TV without the underscan bit
+keeps a 2.5% safe area (US-080 partial, kernel drawing change).
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097 stay
+simule. See docs/lot90_plan.md.
+
 ### Lot 89 (10 November 2026, in progress)
 
 US-031 partial, phase3_complete=false. The reader resolves calc(),

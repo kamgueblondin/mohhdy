@@ -28,6 +28,46 @@ void p2p_shape_init(p2p_shape_t* q) {
     for (i = 0; i < (uint32_t)sizeof(*q); i++) p[i] = 0;
 }
 
+static uint32_t quantum_of(const p2p_shape_t* q, int cls) {
+    uint32_t w = q->weight[cls];
+    if (w == 0U) return cls == P2P_SHAPE_C_MSG ? P2P_SHAPE_QUANTUM_MSG : P2P_SHAPE_QUANTUM_BULK;
+    return w * (uint32_t)P2P_SHAPE_BODY;
+}
+
+int p2p_shape_weight(const p2p_shape_t* q, int cls) {
+    if (!q || cls < 0 || cls >= P2P_SHAPE_CLASSES) return 0;
+    return (int)(quantum_of(q, cls) / (uint32_t)P2P_SHAPE_BODY);
+}
+
+int p2p_shape_set_weight(p2p_shape_t* q, int cls, int weight) {
+    if (!q || cls < 0 || cls >= P2P_SHAPE_CLASSES || weight < 1 || weight > P2P_SHAPE_WEIGHT_MAX) return -1;
+    q->weight[cls] = (uint32_t)weight;
+    return 0;
+}
+
+int p2p_shape_set_max_age(p2p_shape_t* q, uint32_t ms) {
+    if (!q || ms > P2P_SHAPE_AGE_MAX) return -1;
+    q->max_age_ms = ms;
+    return 0;
+}
+
+int p2p_shape_set_peer_cap(p2p_shape_t* q, int cap) {
+    if (!q || cap < 0 || cap > P2P_SHAPE_Q) return -1;
+    q->peer_cap = (uint32_t)cap;
+    return 0;
+}
+
+int p2p_shape_expire(p2p_shape_t* q, uint32_t now_ms) {
+    int i, n = 0;
+    if (!q || q->max_age_ms == 0U) return 0;
+    for (i = 0; i < P2P_SHAPE_Q; i++) {
+        p2p_shape_ent_t* e = &q->e[i];
+        if (e->used && now_ms - e->at_ms > q->max_age_ms) { e->used = 0; n++; }
+    }
+    q->expired += (uint32_t)n;
+    return n;
+}
+
 int p2p_shape_class(int is_put) {
     return is_put ? P2P_SHAPE_C_BULK : P2P_SHAPE_C_MSG;
 }
@@ -121,6 +161,12 @@ int p2p_shape_push(p2p_shape_t* q, uint32_t peer, int cls, int inner, const uint
         return P2P_SHAPE_REFUSED;
     }
     if (cls != P2P_SHAPE_C_BULK) cls = P2P_SHAPE_C_MSG;
+    /* Lot 90: the per-peer cap, before any slot or eviction */
+    if (q->peer_cap && p2p_shape_depth(q, peer, -1) >= (int)q->peer_cap) {
+        q->capped++;
+        q->refused++;
+        return P2P_SHAPE_REFUSED;
+    }
     for (i = 0; i < P2P_SHAPE_Q; i++) {
         if (!q->e[i].used) { slot = i; break; }
     }
@@ -183,12 +229,15 @@ static int next_slot(const p2p_shape_t* q, int cls, const uint32_t* skip, int ns
 }
 
 int p2p_shape_drain(p2p_shape_t* q, p2p_shape_send_fn fn, void* ctx, uint32_t now_ms, int* dropped) {
-    static const uint32_t quantum[P2P_SHAPE_CLASSES] = { P2P_SHAPE_QUANTUM_MSG, P2P_SHAPE_QUANTUM_BULK };
+    uint32_t quantum[P2P_SHAPE_CLASSES];
     uint32_t skip[P2P_SHAPE_Q];
     int nskip = 0, sent = 0, drops = 0, rounds, c;
     if (dropped) *dropped = 0;
     if (!q || !fn) return 0;
+    for (c = 0; c < P2P_SHAPE_CLASSES; c++) quantum[c] = quantum_of(q, c);
     q->passes++;
+    /* Lot 90: stale entries leave before the pass (not sent late) */
+    (void)p2p_shape_expire(q, now_ms);
     /* every round tops each busy class up by its quantum; a pass ends when
      * a round moved nothing (all refused or empty). Bounded: each round
      * either removes an entry or adds a peer to skip, or ends the pass. */
@@ -260,4 +309,63 @@ void p2p_shape_status(const p2p_shape_t* q, char* out, int cap) {
     cat(out, cap, " last_wait_ms "); cat_u(out, cap, q->last_wait_ms);
     cat(out, cap, " max_wait_ms "); cat_u(out, cap, q->max_wait_ms);
     cat(out, cap, " skips "); cat_u(out, cap, q->skips);
+    cat(out, cap, " weight "); cat_u(out, cap, (uint32_t)p2p_shape_weight(q, P2P_SHAPE_C_MSG));
+    cat(out, cap, "/"); cat_u(out, cap, (uint32_t)p2p_shape_weight(q, P2P_SHAPE_C_BULK));
+    cat(out, cap, " age_ms "); cat_u(out, cap, q->max_age_ms);
+    cat(out, cap, " cap "); cat_u(out, cap, q->peer_cap ? q->peer_cap : (uint32_t)P2P_SHAPE_Q);
+    cat(out, cap, " expired "); cat_u(out, cap, q->expired);
+    cat(out, cap, " capped "); cat_u(out, cap, q->capped);
+}
+
+static int same(const char* a, const char* b) {
+    while (*a && *a == *b) { a++; b++; }
+    return *a == *b;
+}
+
+/* a decimal number of at most 9 digits; -1 otherwise */
+static int32_t num(const char* s) {
+    int32_t v = 0;
+    int n = 0;
+    if (!s || !*s) return -1;
+    while (*s) {
+        if (*s < '0' || *s > '9' || ++n > 9) return -1;
+        v = v * 10 + (*s++ - '0');
+    }
+    return v;
+}
+
+static int fail(char* out, int cap, const char* why) {
+    if (out && cap > 0) {
+        out[0] = 0;
+        cat(out, cap, "p2p shape error ");
+        cat(out, cap, why);
+        cat(out, cap, "\n");
+    }
+    return 1;
+}
+
+int p2p_shape_command(p2p_shape_t* q, int argc, const char* const* argv, char* out, int cap) {
+    if (!q || !out || cap <= 0) return 1;
+    if (argc >= 1 && !same(argv[0], "status")) {
+        const char* v = argc >= 2 ? argv[argc - 1] : "";
+        if (same(argv[0], "weight")) {
+            int cls = argc == 3 && same(argv[1], "msg") ? P2P_SHAPE_C_MSG :
+                      argc == 3 && same(argv[1], "bulk") ? P2P_SHAPE_C_BULK : -1;
+            if (cls < 0) return fail(out, cap, "usage weight msg|bulk N");
+            if (p2p_shape_set_weight(q, cls, (int)num(v)) != 0) return fail(out, cap, "weight 1..16");
+        } else if (same(argv[0], "age") && argc == 2) {
+            int32_t ms = same(v, "off") ? 0 : num(v);
+            if (ms < 0 || p2p_shape_set_max_age(q, (uint32_t)ms) != 0) return fail(out, cap, "age 0..600000 ms or off");
+        } else if (same(argv[0], "cap") && argc == 2) {
+            int32_t c = same(v, "off") ? 0 : num(v);
+            if (c < 0 || p2p_shape_set_peer_cap(q, (int)c) != 0) return fail(out, cap, "cap 0..16 or off");
+        } else {
+            return fail(out, cap, "usage p2p-shape [status|weight msg|bulk N|age MS|off|cap N|off]");
+        }
+    }
+    out[0] = 0;
+    cat(out, cap, "p2p shape ");
+    p2p_shape_status(q, out + 10, cap - 10 > 0 ? cap - 10 : 0);
+    cat(out, cap, "\n");
+    return 0;
 }

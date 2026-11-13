@@ -8,6 +8,26 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 91 (reader radial radii, gradians and background boxes; @property syntaxes and calc() types; autofill summer time and expiry before offers; base 0576849)
+
+- Reader sheet: radial-gradient with explicit radii (circle one length, ellipse two lengths or percentages), linear-gradient angles in gradians (multiples of 100grad), background-clip and background-origin (one box per element), and the box keywords of the background shorthand passed on (one sets both, two set origin then clip; layers in different boxes refused). The engine draws them unchanged. Proof: test_lot91_bgradial.c, test_lot91_bgbox.c, test_lot91_reader.c, test_lot91_engine.c, `make qemu-lot91` (/lot91/bg.html).
+- @property: syntaxes with up to four '|' alternatives, '+' and '#' lists, keywords, <angle>, <time>, <custom-ident>; calc(), min(), max() and clamp() are type checked (calc(10px + 5%) is not a <length>). Proof: test_lot91_propsyn.c, test_lot91_calc.c, test_lot91_propmatch.c, test_lot91_proprule.c, test_lot91_props.c, `make qemu-lot91` (/lot91/props.html).
+- Autofill: `autofill dst eu|us|au|off` adds a summer time rule to the tz offset (three fixed rules, no tz database); the status line and the session file show it only when set. The expiry runs before every offer list, so a value past its limit is not offered after midnight. Proof: test_lot91_dst.c, test_lot91_dststore.c, test_lot91_fill.c, `make qemu-lot91` (guest clock set with -rtc base=...,clock=vm).
+- US-068/US-073, US-076, US-080 and US-081 unchanged (partial); US-078 and US-097 simule.
+- Detail and gaps: docs/lot91_plan.md.
+
+## Lot 90 (reader backgrounds and @property, autofill expiry, PSL rules, NE2000 idle drain, shaping settings, scaled title bars, TV safe area; base Lot 89 e051615, PR #247)
+
+- Reader sheet: background images (url(), linear and radial gradients, up to four layers), position, size and repeat, and the background shorthand split into them; list-style-image and list-style-position. Values up to 127 bytes (never cut); font sizes that mix em and px and rem with a root that is not 16 px are resolved in px. Proof: test_lot90_bgval.c, test_lot90_bgsheet.c, test_lot90_fontpx.c, test_lot90_reader.c, `make qemu-lot90` (/lot90/bg.html).
+- Custom properties are computed where they are declared (24 names, 63-byte values); @property registers a type, inherits and an initial value; a wrong-type value acts as unset. `web-css` prints a css-props line. Proof: test_lot90_props.c, test_lot90_vars.c, `make qemu-lot90` (/lot90/props.html).
+- @scope lists of six selectors; proximity counted to 14 generations. Proof: test_lot90_scopegen.c, `make qemu-lot90` (/lot90/scope.html).
+- Autofill: a date per value, refreshed when a value is typed again or accepted from the list; `autofill expire N|off`, `autofill tz MINUTES|utc`, `autofill status`, `autofill ages values`; session file version 3. Public suffixes: 360 hand-written entries with PSL wildcard and exception rules (not the full list). Proof: test_lot90_fill.c, test_lot90_fillgen.c, test_lot90_psl.c, `make qemu-lot90`.
+- NE2000: the Ring 3 worker drains the card into a 16-frame FIFO between relay ops (not during an LLM session) and prints an rxq line. Proof: test_lot90_rxq.c, `make qemu-lot90`.
+- Mesh shaping (US-068/US-073 partial): 16 slots, class weights, an age limit and a per-peer cap set with `p2p-shape`. Single node, no WAN. Proof: test_lot90_shape.c, `make qemu-lot90`.
+- US-080 stays partial: title bars follow the chrome scale (45 px at 1.5x, unchanged at 1x) and a TV without the EDID underscan bit gets a 2.5% safe area per side (windows clipped, dock raised, band dimmed). No DDC, mode set unchanged. Kernel drawing change, review point. Proof: test_lot90_title.c, `make qemu-lot90` (TV boot).
+- US-081 unchanged: no backlight, no watts, battery simulated.
+- Detail and gaps: docs/lot90_plan.md.
+
 ## Lot 89 (reader lengths and @scope lists, IDN sites, autofill dates, idle paint cost; in progress)
 
 - @scope: "&:first-child" and ":scope:last-child" keep the scoping root (the second pseudo-class used to replace the root mark, so the rule painted the root's first child instead); start and end take selector lists of up to three. Proof: test_lot89_scope2.c, `make qemu-lot89` (/lot89/scope.html).
