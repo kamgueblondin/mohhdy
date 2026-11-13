@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 94 (angled linear gradients, corners and conic gradients; base 8bc8ef5, Lot 93 head)
+
+- Engine (webeng.c): linear gradients at any angle (whole degrees) and to a corner, and conic gradients (from, at, % and degree stops) are painted in at most 32 flat cells per box (each cell takes the colour at its centre; integer sin table, CORDIC turns, shift-subtract division, no libgcc helper). Quarter turns keep their bands. Children of vertical boxes map the angle and corner to the logical frame; a conic child of a vertical box is refused. Proof: test_lot94_cells.c, test_lot94_sheet.c, test_lot94_engine.c, `make qemu-lot94` (/web/lot94.html, 94 rectangles checked against the model).
+- Reader (wf_cssbg.c): deg, turn and grad angles are passed on, radians are written as whole degrees, "to" a corner and conic-gradient() are read; every written gradient is read by the engine as the model says. Proof: test_lot94_bgval.c, test_lot94_accept.c, `make qemu-lot94` (/lot94/grad.html).
+- we_doc_t 870824 bytes (< 1 MiB). Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false; US-068/US-073, US-076, US-080 and US-081 unchanged (partial); US-078 and US-097 simule.
+- Detail and gaps: docs/lot94_plan.md.
+
 ## Lot 93 (math functions simplified: trigonometric functions, pow, sqrt, hypot, log, exp, constants; base ebb64fc, Lot 92 head)
 
 - Reader sheet: sin(), cos(), tan(), asin(), acos(), atan() and atan2() are simplified (angles reduced exactly, radians known up to 100, tan() at a pole and asin()/acos() past [-1, 1] kept); pow(), sqrt(), hypot(), log() and exp() are typed and simplified; e and pi are 2.7183 and 3.1416, infinity, -infinity and nan are typed and kept. Results are exact (sqrt, hypot, integer powers) or computed in 62-bit fixed point (no libm), then rounded to 1/10000. A registered value with these functions is computed where it is declared (Lot 92 rule). Proof: test_lot93_trig.c, test_lot93_powlog.c, test_lot93_mtype.c, test_lot93_nested.c, test_lot93_compute.c, test_lot93_propsheet.c, test_lot93_math.c, test_lot93_engine.c, `make qemu-lot93` (/lot93/math.html).
