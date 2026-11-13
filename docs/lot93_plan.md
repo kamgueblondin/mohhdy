@@ -53,7 +53,8 @@ docs). The regenerated Lot 92 suites change 68 assertions (review point
 7. webeng.c, the kernel, the ABI, wf_site_t, wf_cssprop_t and we_doc_t are unchanged. The engine still draws quarter turns only; a computed angle that is not a multiple of 90deg (atan2(1, 1) = 45deg) is not drawn, as for a written one (/lot93/math.html #init93).
 8. Mutations: 64 host mutations (rows A to D) and one QEMU mutation (atan2() ignores a negative x: #acos93 drew 0deg), all killed. The first host run (69 mutations) left 14 survivors; chunk 3 adds witnesses (a short sin/cos series, exact ties of integer exponents, a power whose low word is 0, pow() of two lengths, double rounding of integer powers), removes the redundant code of point 5 and adds a mutation on the final limit check. Four mutations are equivalent and are not counted (mutations.txt).
 9. CI: one new job, lot93-reader (make qemu-lot93, no guest clock option). The pull_request trigger keeps no branches filter.
-10. ASan (gcc -fsanitize=address,undefined): see Gates.
+10. ASan (gcc -fsanitize=address,undefined): the base and the head fail the same 5 suites (test_gpt2_infer, test_pmm, test_vfs_service, test_webrt, test_lot87_web); no new failure (see Gates).
+11. The box rebooted during the gate run; the toolchain was installed again and the gates after the reboot were run on the rebuilt tree (see Gates).
 
 ## Not done (first gaps for lot 94)
 
@@ -74,4 +75,58 @@ QEMU: tests/scripts/test_qemu_lot93.py, `make qemu-lot93` (one boot at 1x): /lot
 
 ## Gates on the box
 
-Run on the commit that adds this plan; the results are added by the next commit.
+Run on 49f2cfc (the code of this lot with its first docs commit) on 13 November 2026 (UTC+4), one QEMU guest at a time (scripts in /workspace/run/lot93: gates.sh, then gates3.sh). No gate failed and none was rerun for a flake.
+
+The box rebooted at about 14:32 while qemu-p2p was running (run 1 started 13:47; qemu-p2p started 14:22). The reboot removed the system packages (make, qemu-system-i386 and -arm, nasm, xorriso, grub-mkrescue, the ARM cross compiler, the 32-bit C library) and the build/ directory; the worktree and its commits were intact. The packages of scripts/ci-install-deps.sh and the CI ARM job were installed again with apt-get (build-essential, gcc-multilib, libc6-dev-i386, make, nasm, python3-cryptography, qemu-system-x86, qemu-system-arm, gcc-arm-none-eabi, libnewlib-arm-none-eabi, grub-pc-bin, grub-common, xorriso, mtools; gcc 14.2.0, QEMU 10.0.13, NASM 2.16.03). Run 2 (14:41 to 16:05) rebuilt the tree, ran make-all, test-all and qemu-lot93 again to check the reinstalled toolchain (same results), then the gates from qemu-p2p on. Gates of run 1 that finished before the reboot are kept; qemu-p2p is counted from run 2 only.
+
+| Gate | Result | Time | Run |
+|------|--------|------|-----|
+| make-all | pass | 0 s | 1 |
+| test-all | pass | 259 s | 1 |
+| roadmap-check | pass | 0 s | 1 |
+| font-check | pass | 0 s | 1 |
+| secrets | pass | 8 s | 1 |
+| strict-image | pass | 0 s | 1 |
+| qemu-lot93 | pass | 32 s | 1 |
+| qemu-lot92 | pass | 59 s | 1 |
+| qemu-lot91 | pass | 452 s | 1 |
+| qemu-lot90 | pass | 427 s | 1 |
+| qemu-gui-text-scale | pass | 166 s | 1 |
+| qemu-gui-parity | pass | 417 s | 1 |
+| qemu-lot89 | pass | 277 s | 1 |
+| make-all | pass | 33 s | 2 |
+| test-all | pass | 281 s | 2 |
+| qemu-lot93 | pass | 32 s | 2 |
+| qemu-p2p | pass | 584 s | 2 |
+| qemu-p2p-mesh | pass | 107 s | 2 |
+| qemu-p2p-phase5 | pass | 203 s | 2 |
+| qemu-net-wire | pass | 80 s | 2 |
+| qemu-lot67-web | pass | 277 s | 2 |
+| qemu-lot88-desk | pass | 416 s | 2 |
+| qemu-lot88-tv | pass | 222 s | 2 |
+| qemu-lot87 | pass | 208 s | 2 |
+| qemu-lot86 | pass | 174 s | 2 |
+| qemu-lot85 | pass | 152 s | 2 |
+| qemu-lot84 | pass | 146 s | 2 |
+| qemu-lot83 | pass | 107 s | 2 |
+| qemu-lot82 | pass | 98 s | 2 |
+| qemu-lot81 | pass | 117 s | 2 |
+| qemu-lot80 | pass | 96 s | 2 |
+| qemu-lot79 | pass | 60 s | 2 |
+| qemu-lot78 | pass | 39 s | 2 |
+| qemu-lot77 | pass | 25 s | 2 |
+| qemu-lot76 | pass | 20 s | 2 |
+| qemu-lot75 | pass | 91 s | 2 |
+| qemu-lot74 | pass | 96 s | 2 |
+| qemu-lot73 | pass | 170 s | 2 |
+| qemu-lot72 | pass | 265 s | 2 |
+| qemu-lot71 | pass | 284 s | 2 |
+| qemu-web-layout | pass | 552 s | 2 |
+| qemu-production | pass | 72 s | 2 |
+| tree-clean | pass | 0 s | 2 |
+
+make test-all: 20543 tests, 20543 passed, 0 failed in both runs (Lot 92 head: 19879).
+
+ASan and UBSan (TEST_CC="gcc -fsanitize=address,undefined -fno-sanitize-recover=all", make test-all on git archive copies of each tree, before the reboot): base ebb64fc 19794 tests, 5 failed (test_gpt2_infer, test_pmm, test_vfs_service, test_lot87_web, test_webrt), 690 s; head 49f2cfc 20458 tests, 5 failed (the same five), 747 s. All Lot 93 suites and the converted Lot 92 suites pass under ASan; no new failure. The ASan runs ran at the same time as the first QEMU gates.
+
+Mutations: 65 applied / 65 killed / 0 survived (64 host, 1 QEMU), see review point 8.
