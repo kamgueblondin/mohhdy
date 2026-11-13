@@ -463,6 +463,8 @@ def write_val():
                  ("linear-gradient(-0.0088rad, red, blue)", "linear-gradient(-1deg, red, blue)"),
                  ("linear-gradient(to left top, red, blue)", "linear-gradient(to left top, red, blue)"),
                  ("linear-gradient(to left left, red, blue)", None),
+                 ("linear-gradient(to top left top, red, blue)", None),
+                 ("linear-gradient(to top left top left, red, blue)", None),
                  ("conic-gradient(from 1rad, red, blue)", None),
                  ("conic-gradient(from -3600deg at 0 0, red, blue)", "conic-gradient(from -3600deg at 0 0, red, blue)"),
                  ("conic-gradient(at left, red, blue)", "conic-gradient(at left, red, blue)"),

@@ -1582,35 +1582,37 @@ static void test_l94_val_142(void) {
     TEST_ASSERT_EQUAL_STRING("linear-gradient(-1deg, red, blue)", run("grad", "linear-gradient(-0.0088rad, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(to left top, red, blue)", run("grad", "linear-gradient(to left top, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(to left left, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(to top left top, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(to top left top left, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "conic-gradient(from 1rad, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("conic-gradient(from -3600deg at 0 0, red, blue)", run("grad", "conic-gradient(from -3600deg at 0 0, red, blue)"));
-    TEST_ASSERT_EQUAL_STRING("conic-gradient(at left, red, blue)", run("grad", "conic-gradient(at left, red, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "conic-gradient(from 10deg, red, blue, lime, navy, black)"));
 }
 
 static void test_l94_val_143(void) {
+    TEST_ASSERT_EQUAL_STRING("conic-gradient(at left, red, blue)", run("grad", "conic-gradient(at left, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "conic-gradient(from 10deg, red, blue, lime, navy, black)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "CoNiC-gRaDIEnT(  FroM -252dEG at left center,blue 3DEg,bLACk\t), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "CoNiC-gRaDIEnT( #d40 281dEg, rgb(67, 205, 44) ), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient( from -18deg AT 37% 3px, #6a0c68 16.6%, rgb(247, 55, 5)), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient( At 65% 42px,\t#cd640e,\trgb(182, 78, 121)\t76.7%,\tTeal 140deg ), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "cONic-gradieNt(at 28% 15px,#aa608c,lime 26.6%,rgb(93, 153, 125),lime), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient(  AT 45px 60%,  rgb(229, 176, 218),  orange,  gray ), url(a.png)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "CONIC-GRADIENT(\t#c4f,\t#710 13.1%\t), url(a.png)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient( at left from 45deg, #83a4d9 57.8%, rgb(233, 143, 123), rgb(138, 127, 143)\t73.2%, navy 45.4%  ), url(a.png)"));
 }
 
 static void test_l94_val_144(void) {
+    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "CONIC-GRADIENT(\t#c4f,\t#710 13.1%\t), url(a.png)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient( at left from 45deg, #83a4d9 57.8%, rgb(233, 143, 123), rgb(138, 127, 143)\t73.2%, navy 45.4%  ), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "CONIC-GRADIENT( from 1rad,\t#fc7,\t#1d63d7 222deg), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "CoNIc-GradIeNt(\tfrom 1rad, #be881a 27.4%, rgb(50, 23, 110)  ), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient(  at 83% 39%, #881 89.9%, rgb(46, 58, 22), rgb(181, 224, 119), rgb(43, 40, 147)\t32.5%\t), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient(from 1rad,\tWHITE 53DEG,\tgray ), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient( frOM 44RAD, rgb(81, 129, 34) 173deg, #b49b74\t), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "CONIC-GRADIENT( from 81.55rad, rgb(246, 96, 171), #0c1715 ), url(a.png)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "CONIC-GRADIENT(  FROM 1192deg,  #fa5a1e,  #461,  GRAY 211DEG\t), url(a.png)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient(fRoM 2.1556rad,\trgb(84, 86, 247),\trgb(166, 129, 133)\t), url(a.png)"));
 }
 
 static void test_l94_val_145(void) {
+    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "CONIC-GRADIENT(  FROM 1192deg,  #fa5a1e,  #461,  GRAY 211DEG\t), url(a.png)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient(fRoM 2.1556rad,\trgb(84, 86, 247),\trgb(166, 129, 133)\t), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "ConIc-GrADIENt(\tfrom -37DEG at center top, rgb(194, 204, 222) 8deg, BlUe, rgb(44, 208, 93), black ), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient(  At 12px,rgb(127, 24, 156) 112DeG,#387 270deg,#bbdeb2,#fcd ), url(a.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient( AT top,\tlime,\trgb(134, 39, 183) 31.9%,\tgray), url(a.png)"));
