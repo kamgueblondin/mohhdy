@@ -516,7 +516,7 @@ static void test_l92_compute_55(void) {
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length-percentage># | <number>+'", "max( 1769.8%,+26.10px -\t247px  /\t1.4 +\t-356%\t/-19.4 /-5.19)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'none | <color>'", "sign(\t1189.37  /2)"));
     TEST_ASSERT_EQUAL_STRING("0s", cv("'<time>'", "calc(-0.66s / 27700.29)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<integer>'", "tan(-18.41397 )"));
+    TEST_ASSERT_EQUAL_STRING("0", cv("'<integer>'", "tan(-18.41397 )"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<integer># | <percentage>#'", "round(1233/+344  - 0.98  *-2/9.923 -  -1.62153,-10/-25.89)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<angle> | <length> | <length-percentage>'", "min(56.7deg /855 \t + 11.09623deg / +2*130131.01,1deg)"));
 }
@@ -642,7 +642,7 @@ static void test_l92_compute_69(void) {
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length-percentage> | <time>'", "12px"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<integer>'", "auto"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length-percentage> | <time>'", "calc(-4pc*  -4 *101519.21811 - 462827.738mm)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length> | <integer>'", "sin(\t-1119.59532deg/\t35.243  + 1.7857*26.6deg\t)"));
+    TEST_ASSERT_EQUAL_STRING("0", cv("'<length> | <integer>'", "sin(\t-1119.59532deg/\t35.243  + 1.7857*26.6deg\t)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<color> | <length>'", "abs(-515424\t*3.0in  )"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length> | <percentage>'", "rem(  1321.487px,4.0%*-20.35219  - 30in  )"));
 }
@@ -824,7 +824,7 @@ static void test_l92_compute_89(void) {
     TEST_ASSERT_EQUAL_STRING("0.504s", cv("'<length-percentage># | <number>+ | <percentage># | <time>'", "mod(6.0s\t/  -1,16.7s/20.54 )"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<angle>'", "calc(-7.23*-3.9s +  67.2ms\t*-208.218 )"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number>'", "red"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'auto | <number> | <angle>'", "tan( -1/\t7.219  - 2.522 \t + 34.6*-0.72/5)"));
+    TEST_ASSERT_EQUAL_STRING("-4.6669", cv("'auto | <number> | <angle>'", "tan( -1/\t7.219  - 2.522 \t + 34.6*-0.72/5)"));
 }
 
 static void test_l92_compute_90(void) {
@@ -929,7 +929,7 @@ static void test_l92_compute_100(void) {
 static void test_l92_compute_101(void) {
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<angle> | <number> | <percentage>+'", "1.5s"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number>+ | <angle> | <custom-ident> | <length>'", "round(nearest,169\t* 12.9\t/  23.25914 )"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<integer>'", "sin( 23.5deg  + 1.1745  *  1.816rad\t*-28.99 )"));
+    TEST_ASSERT_EQUAL_STRING("1", cv("'<integer>'", "sin( 23.5deg  + 1.1745  *  1.816rad\t*-28.99 )"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number>#'", "1.5s"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<custom-ident> | <color> | <integer>'", "calc(64in*  8.7686)"));
     TEST_ASSERT_EQUAL_STRING("0px", cv("'<color> | <length-percentage> | <number>'", "round(  down,  249.47px/32.59,  7.97px)"));
@@ -976,7 +976,7 @@ static void test_l92_compute_106(void) {
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'auto | <custom-ident>'", "clamp(-.19429*511 \t + \t 4.94548,\t202 +\t27,\t1.3)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number>'", "red"));
     TEST_ASSERT_EQUAL_STRING("-22767.3374", cv("'none | <number>'", "calc(3.01 \t + \t 178  *-127.9233)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number> | <time>'", "cos(-3.7turn  )"));
+    TEST_ASSERT_EQUAL_STRING("-0.309", cv("'<number> | <time>'", "cos(-3.7turn  )"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<percentage> | <length-percentage> | <number> | none'", "50%"));
 }
 
@@ -1044,7 +1044,7 @@ static void test_l92_compute_113(void) {
 }
 
 static void test_l92_compute_114(void) {
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<custom-ident> | <number>'", "tan(48.221 *  6grad /  1.77 \t -  (\t12.93turn)/\t38 /197\t)"));
+    TEST_ASSERT_EQUAL_STRING("-0.6621", cv("'<custom-ident> | <number>'", "tan(48.221 *  6grad /  1.77 \t -  (\t12.93turn)/\t38 /197\t)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<angle>+ | <length>'", "auto"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<integer>'", "50%"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<color> | <integer> | <time>'", "auto"));
@@ -1171,7 +1171,7 @@ static void test_l92_compute_127(void) {
 
 static void test_l92_compute_128(void) {
     TEST_ASSERT_EQUAL_STRING("313.7687s", cv("'auto | <time>'", "abs(  1s + 1687.29320s/\t5.39466)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<custom-ident> | auto | <number> | <integer>'", "sin(-4.23\t+  40.37812/\t17 - 0.5980\t)"));
+    TEST_ASSERT_EQUAL_STRING("-0.6356", cv("'<custom-ident> | auto | <number> | <integer>'", "sin(-4.23\t+  40.37812/\t17 - 0.5980\t)"));
     TEST_ASSERT_EQUAL_STRING("-5340.9799px", cv("'<length-percentage>'", "calc( -9.5927*\t-9px /5.21115  -\t1937.63  *2.765px)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number> | <time>'", "calc(\t-18.56732pc /37.50675)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length>+'", "rem(  -0.36589*1860.207\t*-9, -170.7835 )"));
@@ -1236,7 +1236,7 @@ static void test_l92_compute_135(void) {
     TEST_ASSERT_EQUAL_STRING("0.1072", cv("'<number>'", "clamp(-2/  3.7126 \t +  4 -  2  *1.8,0.1072,1764  )"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length-percentage>'", "auto"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<percentage>+ | <integer>'", "calc(  23.37192%  )"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<integer>'", "sin(73.13  /  7)"));
+    TEST_ASSERT_EQUAL_STRING("-1", cv("'<integer>'", "sin(73.13  /  7)"));
     TEST_ASSERT_EQUAL_STRING("2827.08deg", cv("'<angle> | <percentage>'", "max(7.853turn,8.4379grad  )"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<integer> | <length-percentage># | <number>#'", "50%"));
 }
@@ -1316,7 +1316,7 @@ static void test_l92_compute_143(void) {
 static void test_l92_compute_144(void) {
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<time># | <number>'", "calc(908.43s *  16.78  +  9s /-21.5)"));
     TEST_ASSERT_EQUAL_STRING("52932.3162", cv("'<number> | <percentage> | <length>'", "round(33.53 \t -\t-674.4  *78.38,-97.66106)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<angle>'", "atan(  -479.18/  1034.03 +\t465.56416*-0)"));
+    TEST_ASSERT_EQUAL_STRING("-24.863deg", cv("'<angle>'", "atan(  -479.18/  1034.03 +\t465.56416*-0)"));
     TEST_ASSERT_EQUAL_STRING("1155s", cv("'<time> | <percentage># | <integer>'", "round(down,7s*9.2857/9.36  - 102.58\t*\t-85.476ms*+131,-4.2s )"));
     TEST_ASSERT_EQUAL_STRING("552.909px", cv("'<length>'", "calc(-2.02358*  22.19q *-13  +  11.97969pt  / 11.94498)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length> | <time> | <angle> | none'", "red"));

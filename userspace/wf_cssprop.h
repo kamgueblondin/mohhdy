@@ -46,6 +46,19 @@
  * lengths (em, rem, ex, ch, vw, vh, vmin, vmax), a length mixed with a
  * percentage, a division or a round() step of zero, and the trigonometric
  * functions are kept as text.
+ * Lot 93: the trigonometric functions are simplified (an angle in deg is
+ * reduced exactly; a number in radians is known up to 100; tan() at an
+ * odd multiple of 90deg is infinite and kept; asin() and acos() past
+ * [-1, 1] are NaN and kept), and pow(A, B), sqrt(A), log(A), log(A, B),
+ * exp(A) (numbers in, a number out) and hypot(A, ...) (values of one type,
+ * that type out) are typed and simplified. The constants e and pi are
+ * 2.7183 and 3.1416 (1/10000, like every value here); infinity,
+ * -infinity and nan are numbers that are never known (kept). sqrt(),
+ * hypot() and pow() with an integer exponent (up to 127, down to -8, while
+ * the power fits 127 bits) are exact; the other results are computed in
+ * 62-bit fixed point with 128-bit intermediates (no libm, no 64-bit
+ * division) and are within about 1e-12 (relative) of the exact value
+ * before the final rounding half away from zero to 1/10000.
  * Names and values are compared lower case. No heap. */
 #ifndef WF_CSSPROP_H
 #define WF_CSSPROP_H
@@ -102,8 +115,8 @@ int wf_cssprop_syntax_parse(const char *s, int n, wf_cssprop_t *out);
 int wf_cssprop_match_prop(const wf_cssprop_t *p, const char *value);
 
 /* Lot 91: the type of a math function (calc, min, max, clamp; Lot 92 also
- * abs, sign, round, mod, rem, sin, cos, tan, asin, acos, atan, atan2; lower
- * case, the whole text): WF_CSSPROP_NUMBER, _LENGTH, _PERCENT, _LENPCT
+ * abs, sign, round, mod, rem, sin, cos, tan, asin, acos, atan, atan2; Lot
+ * 93 pow, sqrt, hypot, log, exp and the constants; the whole text): WF_CSSPROP_NUMBER, _LENGTH, _PERCENT, _LENPCT
  * (a length mixed with a percentage), _ANGLE, _TIME, or WF_CSSPROP_BAD
  * when it is not one or its types do not combine. */
 int wf_cssprop_math_type(const char *value);

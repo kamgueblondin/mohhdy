@@ -159,7 +159,9 @@ static int cp_unit_type(const char *u, int n) {
 
 enum {
     CP_F_CALC = 1, CP_F_MIN, CP_F_MAX, CP_F_CLAMP, CP_F_ABS, CP_F_SIGN, CP_F_ROUND, CP_F_MOD, CP_F_REM,
-    CP_F_SIN, CP_F_COS, CP_F_TAN, CP_F_ASIN, CP_F_ACOS, CP_F_ATAN, CP_F_ATAN2
+    CP_F_SIN, CP_F_COS, CP_F_TAN, CP_F_ASIN, CP_F_ACOS, CP_F_ATAN, CP_F_ATAN2,
+    /* Lot 93 */
+    CP_F_POW, CP_F_SQRT, CP_F_HYPOT, CP_F_LOG, CP_F_EXP
 };
 
 typedef struct { const char *s; int i, depth; } cp_mp_t;
@@ -167,12 +169,13 @@ typedef struct { const char *s; int i, depth; } cp_mp_t;
 typedef struct { int t, ok; long long v; } cp_q_t;
 
 static const char *const cp_fn_names[] = {"calc", "min", "max", "clamp", "abs", "sign", "round", "mod", "rem",
-                                          "sin", "cos", "tan", "asin", "acos", "atan", "atan2", 0};
+                                          "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
+                                          "pow", "sqrt", "hypot", "log", "exp", 0};
 
 /* the math function starting at s (its code), *len the bytes of its name
  * and '('; 0 when s does not start one. Lot 91 had calc, min, max and
  * clamp; Lot 92 adds abs, sign, round, mod, rem and the trigonometric
- * functions. */
+ * functions; Lot 93 pow, sqrt, hypot, log and exp. */
 static int cp_mfn_len(const char *s, int *len) {
     int k, j;
     for (k = 0; cp_fn_names[k]; k++) {
@@ -321,10 +324,379 @@ static void cp_round(cp_q_t *a, const cp_q_t *b, int how) {
     if (!cp_fits(a->v)) a->ok = 0;
 }
 
+/* ---- Lot 93: 128-bit integers and 62-bit fixed point ------------------
+ * The trigonometric functions, exp(), log() and pow() with an exponent
+ * that is not a small integer work on values in 1/2^62 (CP_ONE), with
+ * 128-bit intermediates made of two 64-bit words, and round the result
+ * half away from zero to 1/10000 at the end. No libm, no 64-bit division
+ * operator (shift-subtract, as cp_udiv). sqrt(), hypot() and pow() with
+ * a small integer exponent are exact integer computations. */
+typedef struct { unsigned long long hi, lo; } cp_w_t;   /* two's complement */
+
+#define CP_ONE (1LL << 62)
+/* pi/2, pi/4, tan(pi/8) and ln 2 in 1/2^62, rounded to nearest */
+#define CP_PIO2 7244019458077122842LL
+#define CP_PIO4 3622009729038561421LL
+#define CP_TANPI8 1910222894239003202LL
+#define CP_LN2 3196577161300663915LL
+
+static cp_w_t cp_w(long long v) {
+    cp_w_t r;
+    r.lo = (unsigned long long)v;
+    r.hi = v < 0 ? ~0ULL : 0;
+    return r;
+}
+
+static int cp_wneg_p(cp_w_t a) { return (int)(a.hi >> 63); }
+
+static cp_w_t cp_wneg(cp_w_t a) {
+    a.lo = ~a.lo + 1;
+    a.hi = ~a.hi + (a.lo == 0);
+    return a;
+}
+
+static cp_w_t cp_wadd(cp_w_t a, cp_w_t b) {
+    cp_w_t r;
+    r.lo = a.lo + b.lo;
+    r.hi = a.hi + b.hi + (r.lo < a.lo);
+    return r;
+}
+
+static cp_w_t cp_wsub(cp_w_t a, cp_w_t b) { return cp_wadd(a, cp_wneg(b)); }
+
+/* the value fits a signed 64-bit word */
+static int cp_wsmall(cp_w_t a) { return a.hi == (a.lo >> 63 ? ~0ULL : 0); }
+
+/* a < b */
+static int cp_wlt(cp_w_t a, cp_w_t b) { return cp_wneg_p(cp_wsub(a, b)); }
+
+/* unsigned 64 x 64 -> 128 bits, from four 32 x 32 products */
+static cp_w_t cp_umul(unsigned long long a, unsigned long long b) {
+    unsigned long long a0 = a & 0xffffffffULL, a1 = a >> 32, b0 = b & 0xffffffffULL, b1 = b >> 32;
+    unsigned long long p00 = a0 * b0, p01 = a0 * b1, p10 = a1 * b0, p11 = a1 * b1, mid;
+    cp_w_t r;
+    mid = (p00 >> 32) + (p01 & 0xffffffffULL) + (p10 & 0xffffffffULL);
+    r.lo = (p00 & 0xffffffffULL) | (mid << 32);
+    r.hi = p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32);
+    return r;
+}
+
+/* a * m, the low 128 bits (callers keep the product within 127 bits) */
+static cp_w_t cp_wmul(cp_w_t a, long long m) {
+    int neg = cp_wneg_p(a) != (m < 0);
+    unsigned long long um = (unsigned long long)(m < 0 ? -m : m);
+    cp_w_t r;
+    if (cp_wneg_p(a)) a = cp_wneg(a);
+    r = cp_umul(a.lo, um);
+    r.hi += a.hi * um;
+    return neg ? cp_wneg(r) : r;
+}
+
+/* a / d for 0 < d <= 2^63: mode 0 rounded half away from zero, 1 truncated */
+static cp_w_t cp_wdivu(cp_w_t a, unsigned long long d, int mode) {
+    int neg = cp_wneg_p(a), b;
+    unsigned long long r = 0;
+    cp_w_t q;
+    q.hi = 0; q.lo = 0;
+    if (neg) a = cp_wneg(a);
+    for (b = 127; b >= 0; b--) {
+        unsigned long long bit = b >= 64 ? (a.hi >> (b - 64)) & 1ULL : (a.lo >> b) & 1ULL;
+        r = (r << 1) | bit;
+        if (r >= d) {
+            r -= d;
+            if (b >= 64) q.hi |= 1ULL << (b - 64);
+            else q.lo |= 1ULL << b;
+        }
+    }
+    if (mode == 0 && r >= d - r) {
+        q.lo++;
+        if (!q.lo) q.hi++;
+    }
+    return neg ? cp_wneg(q) : q;
+}
+
+/* a / d, d a signed 64-bit word other than 0 (mode as cp_wdivu) */
+static cp_w_t cp_wdiv(cp_w_t a, long long d, int mode) {
+    if (d < 0) { a = cp_wneg(a); d = -d; }
+    return cp_wdivu(a, (unsigned long long)d, mode);
+}
+
+/* a / 2^sh rounded half away from zero, 0 < sh < 128 */
+static cp_w_t cp_wshr(cp_w_t a, int sh) {
+    int neg = cp_wneg_p(a);
+    cp_w_t h;
+    if (neg) a = cp_wneg(a);
+    h.hi = sh - 1 >= 64 ? 1ULL << (sh - 1 - 64) : 0;
+    h.lo = sh - 1 < 64 ? 1ULL << (sh - 1) : 0;
+    a = cp_wadd(a, h);
+    if (sh >= 64) { a.lo = a.hi >> (sh - 64); a.hi = 0; }
+    else { a.lo = (a.lo >> sh) | (a.hi << (64 - sh)); a.hi >>= sh; }
+    return neg ? cp_wneg(a) : a;
+}
+
+/* a * 2^sh for a >= 0, 0 < sh < 128 (no bit lost) */
+static cp_w_t cp_wshl(cp_w_t a, int sh) {
+    if (sh >= 64) { a.hi = a.lo << (sh - 64); a.lo = 0; }
+    else { a.hi = (a.hi << sh) | (a.lo >> (64 - sh)); a.lo <<= sh; }
+    return a;
+}
+
+/* fixed point: a * b and a / b in 1/2^62 */
+static long long cp_xmul(long long a, long long b) { return (long long)cp_wshr(cp_wmul(cp_w(a), b), 62).lo; }
+
+static long long cp_xdiv(long long a, unsigned long long b) {
+    return (long long)cp_wdivu(cp_wmul(cp_w(a), CP_ONE), b, 0).lo;
+}
+
+/* a / 2 for a >= 0 */
+static cp_w_t cp_whalf(cp_w_t a) {
+    a.lo = (a.lo >> 1) | (a.hi << 63);
+    a.hi >>= 1;
+    return a;
+}
+
+/* n / d for n >= 0 and d > 0, both 128-bit: rounded half away from zero */
+static cp_w_t cp_wdivw(cp_w_t n, cp_w_t d) {
+    cp_w_t q, r;
+    int b;
+    q.hi = 0; q.lo = 0; r.hi = 0; r.lo = 0;
+    for (b = 127; b >= 0; b--) {
+        unsigned long long bit = b >= 64 ? (n.hi >> (b - 64)) & 1ULL : (n.lo >> b) & 1ULL;
+        r.hi = (r.hi << 1) | (r.lo >> 63);
+        r.lo = (r.lo << 1) | bit;
+        if (!cp_wlt(r, d)) {
+            r = cp_wsub(r, d);
+            if (b >= 64) q.hi |= 1ULL << (b - 64);
+            else q.lo |= 1ULL << b;
+        }
+    }
+    if (!cp_wlt(r, cp_wsub(d, r))) { q.lo++; if (!q.lo) q.hi++; }
+    return q;
+}
+
+/* 1 and *out when a fits a 64-bit word and the 100000-unit limit */
+static int cp_wout(cp_w_t a, long long *out) {
+    if (!cp_wsmall(a) || !cp_fits((long long)a.lo)) return 0;
+    *out = (long long)a.lo;
+    return 1;
+}
+
+/* the floor of the square root of a >= 0 */
+static unsigned long long cp_isqrt(cp_w_t n) {
+    cp_w_t res, bit, t;
+    res.hi = 0; res.lo = 0;
+    bit.hi = 1ULL << 62; bit.lo = 0;
+    while (bit.hi || bit.lo) {
+        t = cp_wadd(res, bit);
+        res = cp_whalf(res);
+        if (!cp_wlt(n, t)) { n = cp_wsub(n, t); res = cp_wadd(res, bit); }
+        bit.lo = (bit.lo >> 2) | (bit.hi << 62);
+        bit.hi >>= 2;
+    }
+    return res.lo;
+}
+
+/* sin r and cos r for |r| <= pi/4 (and a little more) */
+static void cp_sincos(long long r, long long *s, long long *c) {
+    long long r2 = cp_xmul(r, r), ts = r, tc = CP_ONE;
+    int k;
+    *s = r; *c = CP_ONE;
+    for (k = 1; k <= 14; k++) {
+        ts = -cp_div(cp_xmul(ts, r2), (long long)(2 * k) * (2 * k + 1), 0);
+        tc = -cp_div(cp_xmul(tc, r2), (long long)(2 * k - 1) * (2 * k), 0);
+        *s += ts;
+        *c += tc;
+    }
+}
+
+/* the odd series sum z^(2k+1) / (2k+1), with the sign alternating when alt
+ * (atan) or not (atanh), |z| <= 0.42 */
+static long long cp_oddser(long long z, int alt) {
+    long long z2 = cp_xmul(z, z), p = z, sum = z;
+    int k;
+    for (k = 1; k <= 40 && p; k++) {
+        p = cp_xmul(p, z2);
+        if (alt) p = -p;
+        sum += cp_div(p, 2 * k + 1, 0);
+    }
+    return sum;
+}
+
+/* atan z for 0 <= z <= 1 */
+static long long cp_atan01(long long z) {
+    if (z <= CP_TANPI8) return cp_oddser(z, 1);
+    /* atan z = pi/4 + atan((z - 1) / (z + 1)) */
+    return CP_PIO4 + cp_oddser((long long)cp_wdivu(cp_wmul(cp_w(z - CP_ONE), CP_ONE),
+                                                   (unsigned long long)z + (unsigned long long)CP_ONE, 0).lo, 1);
+}
+
+/* atan2(y, x) in 1/10000 deg */
+static long long cp_atan2(long long y, long long x) {
+    unsigned long long ax = (unsigned long long)(x < 0 ? -x : x), ay = (unsigned long long)(y < 0 ? -y : y);
+    long long a;
+    cp_w_t w;
+    if (!ax && !ay) return 0;
+    if (ay <= ax) a = cp_atan01(cp_xdiv((long long)ay, ax));
+    else a = CP_PIO2 - cp_atan01(cp_xdiv((long long)ax, ay));
+    w = cp_w(a);
+    if (x < 0) w = cp_wsub(cp_wadd(cp_w(CP_PIO2), cp_w(CP_PIO2)), w);
+    if (y < 0) w = cp_wneg(w);
+    return (long long)cp_wdiv(cp_wmul(w, 900000), CP_PIO2, 0).lo;
+}
+
+/* sin, cos or tan of v (1/10000 deg when ang, else 1/10000 rad, at
+ * most 100 rad) into *out (1/10000); 0 when not known (a pole of tan) */
+static int cp_trig(int fn, int ang, long long v, long long *out) {
+    long long r, s, c, num, den;
+    int q;
+    if (ang) {
+        long long t = v - 3600000LL * cp_div(v, 3600000LL, 1), d;
+        long long k = cp_div(t + 450000, 900000, 1);
+        d = t - k * 900000;
+        q = (int)(k & 3);
+        r = (long long)cp_wdiv(cp_wmul(cp_w(d), CP_PIO2), 900000, 0).lo;
+    } else {
+        cp_w_t x, k;
+        if (v > 1000000 || v < -1000000) return 0;
+        x = cp_wdiv(cp_wmul(cp_w(v), CP_ONE), 10000, 0);
+        k = cp_wdiv(x, CP_PIO2, 0);
+        x = cp_wsub(x, cp_wmul(cp_w(CP_PIO2), (long long)k.lo));
+        r = (long long)x.lo;
+        q = (int)(k.lo & 3);
+    }
+    cp_sincos(r, &s, &c);
+    if (fn == CP_F_TAN) {
+        if (q & 1) { num = -c; den = s; }
+        else { num = s; den = c; }
+        if (!den) return 0;
+        return cp_wout(cp_wdiv(cp_wmul(cp_w(num), 10000), den, 0), out);
+    }
+    if (fn == CP_F_COS) q = (q + 1) & 3;
+    num = q == 0 ? s : q == 1 ? c : q == 2 ? -s : -c;
+    *out = (long long)cp_wshr(cp_wmul(cp_w(num), 10000), 62).lo;
+    return 1;
+}
+
+/* ln(v / 10000) for v > 0, in 1/2^62 */
+static cp_w_t cp_ln(long long v) {
+    long long m, s;
+    int k = 0;
+    cp_w_t r;
+    /* v / 10000 = m 2^k with m in (1/2, 1] */
+    while (v > (10000LL << k)) k++;
+    while (k <= 0 && (v << (1 - k)) <= 10000) k--;
+    m = (long long)cp_wdivu(cp_wshl(cp_w(v), 62 - k), 10000, 0).lo;
+    /* ln m = 2 atanh((m - 1) / (m + 1)) */
+    s = (long long)cp_wdivu(cp_wmul(cp_w(m - CP_ONE), CP_ONE), (unsigned long long)m + (unsigned long long)CP_ONE, 0).lo;
+    r = cp_wmul(cp_w(CP_LN2), k);
+    return cp_wadd(r, cp_w(2 * cp_oddser(s, 0)));
+}
+
+/* exp(t), t in 1/2^62, into *out (1/10000); 0 when past the limit */
+static int cp_exp(cp_w_t t, long long *out) {
+    long long r, e, term;
+    int k, j;
+    if (cp_wlt(cp_wmul(cp_w(CP_ONE), 12), t)) return 0;
+    if (cp_wlt(t, cp_wmul(cp_w(CP_ONE), -12))) { *out = 0; return 1; }
+    /* t = k ln 2 + r, |r| <= ln 2 / 2 */
+    k = (int)(long long)cp_wdiv(t, CP_LN2, 0).lo;
+    t = cp_wsub(t, cp_wmul(cp_w(CP_LN2), k));
+    r = (long long)t.lo;
+    e = CP_ONE; term = CP_ONE;
+    for (j = 1; j <= 30 && term; j++) {
+        term = cp_div(cp_xmul(term, r), j, 0);
+        e += term;
+    }
+    /* at most e^12 = 162755 (1.7e9): cp_margs refuses it past the limit */
+    *out = (long long)cp_wshr(cp_wmul(cp_w(e), 10000), 62 - k).lo;
+    return 1;
+}
+
+/* sqrt of n (1/10^8 units squared) into 1/10000, rounded half away */
+static int cp_sqrtw(cp_w_t n, long long *out) {
+    unsigned long long s = cp_isqrt(n);
+    cp_w_t rem = cp_wsub(n, cp_umul(s, s));
+    if (cp_wlt(cp_w(0), cp_wsub(rem, cp_umul(s, 1)))) s++;
+    *out = (long long)s;            /* past the limit: cp_margs refuses it */
+    return 1;
+}
+
+/* pow(a, b), both in 1/10000, into *out; 0 when not known */
+static int cp_pow(long long a, long long b, long long *out) {
+    unsigned long long r;
+    long long n, mag;
+    int neg = 0, k;
+    unsigned long long ua = (unsigned long long)(a < 0 ? -a : a);
+    cp_w_t p;
+    n = (long long)cp_udiv((unsigned long long)(b < 0 ? -b : b), 10000, &r);
+    if (b < 0) n = -n;
+    if (!r) {
+        /* an integer exponent */
+        if (!n) { *out = CP_S; return 1; }
+        if (!ua) {
+            if (n < 0) return 0;          /* infinity */
+            *out = 0;
+            return 1;
+        }
+        neg = a < 0 && (n & 1);
+        if (n > 0 && n <= 127) {
+            /* a^n / 10000^(n - 1), exact while a^n fits 127 bits */
+            p = cp_w(1);
+            for (k = 0; k < n && !(p.hi >> 32); k++) p = cp_wmul(p, (long long)ua);
+            if (k == n) {
+                int d = 4 * ((int)n - 1);
+                if (d) {
+                    for (k = 0; k < d - 1; k++) p = cp_wdivu(p, 10, 1);
+                    p = cp_wdivu(cp_wadd(p, cp_w(5)), 10, 1);
+                }
+                if (!cp_wout(p, &mag)) return 0;
+                *out = neg ? -mag : mag;
+                return 1;
+            }
+        } else if (n < 0 && n >= -8) {
+            /* 10000^(1 - n) / a^-n, exact while a^-n fits 127 bits */
+            cp_w_t num = cp_w(1);
+            p = cp_w(1);
+            for (k = 0; k < -n && !(p.hi >> 32); k++) p = cp_wmul(p, (long long)ua);
+            if (k == -n) {
+                for (k = 0; k < 4 * (1 - (int)n); k++) num = cp_wmul(num, 10);
+                if (!cp_wout(cp_wdivw(num, p), &mag)) return 0;
+                *out = neg ? -mag : mag;
+                return 1;
+            }
+        }
+    } else if (a < 0) {
+        return 0;                         /* NaN */
+    } else if (!ua) {
+        if (b < 0) return 0;
+        *out = 0;
+        return 1;
+    }
+    /* exp(b ln |a|) */
+    if (!cp_exp(cp_wdiv(cp_wmul(cp_ln((long long)ua), b), 10000, 0), &mag)) return 0;
+    *out = neg ? -mag : mag;
+    return 1;
+}
+
+/* log(a) or log(a, b) (hasb), in 1/10000, into *out */
+static int cp_log(long long a, int hasb, long long b, long long *out) {
+    cp_w_t la, lb;
+    if (a <= 0 || (hasb && b <= 0)) return 0;      /* -infinity or NaN */
+    la = cp_ln(a);
+    if (!hasb) return cp_wout(cp_wshr(cp_wmul(la, 10000), 62), out);
+    lb = cp_ln(b);                                 /* exactly 0 for b = 1 */
+    if (!lb.hi && !lb.lo) return 0;                /* a division by zero */
+    la = cp_wmul(la, 10000);
+    if (!cp_wsmall(lb)) { lb = cp_wshr(lb, 4); la = cp_wshr(la, 4); }
+    return cp_wout(cp_wdiv(la, (long long)lb.lo, 0), out);
+}
+
 /* the arguments of math function fn after its '(' into q */
 static void cp_margs(cp_mp_t *m, int fn, cp_q_t *q) {
     cp_q_t arg[3], u;
-    int n = 0, how = 0, t = 0;
+    int n = 0, how = 0, t = 0, hok = 1;
+    cp_w_t hsum = cp_w(0);
+    long long r = 0;
     cp_ws(m);
     if (fn == CP_F_ROUND) how = cp_strategy(m);
     for (;;) {
@@ -332,6 +704,10 @@ static void cp_margs(cp_mp_t *m, int fn, cp_q_t *q) {
         cp_ws(m);
         if (!u.t) { q->t = 0; return; }
         if (n < 3) arg[n] = u;
+        /* Lot 93: hypot() sums the squares of values of one type */
+        if (!u.ok || (n && u.t != arg[0].t)) hok = 0;
+        else hsum = cp_wadd(hsum, cp_umul((unsigned long long)(u.v < 0 ? -u.v : u.v),
+                                          (unsigned long long)(u.v < 0 ? -u.v : u.v)));
         n++;
         if (n == 1) { *q = u; t = u.t; }
         else {
@@ -383,22 +759,77 @@ static void cp_margs(cp_mp_t *m, int fn, cp_q_t *q) {
         else q->ok = 0;
         break;
     case CP_F_SIN: case CP_F_COS: case CP_F_TAN:
-        /* typed, not simplified */
+        /* Lot 93: simplified (Lot 92 typed them only) */
         if (n != 1 || (t != WF_CSSPROP_NUMBER && t != WF_CSSPROP_ANGLE)) { q->t = 0; return; }
-        t = WF_CSSPROP_NUMBER; q->ok = 0;
+        q->ok = q->ok && cp_trig(fn, t == WF_CSSPROP_ANGLE, q->v, &r);
+        q->v = r;
+        t = WF_CSSPROP_NUMBER;
         break;
     case CP_F_ASIN: case CP_F_ACOS: case CP_F_ATAN:
         if (n != 1 || t != WF_CSSPROP_NUMBER) { q->t = 0; return; }
-        t = WF_CSSPROP_ANGLE; q->ok = 0;
+        t = WF_CSSPROP_ANGLE;
+        if (fn == CP_F_ATAN) { if (q->ok) q->v = cp_atan2(q->v, CP_S); break; }
+        if (q->ok && q->v <= CP_S && q->v >= -CP_S) {
+            /* asin x = atan2(x, sqrt(1 - x^2)), acos x = atan2(sqrt(1 - x^2), x);
+             * both scaled by 10000 * 2^48 */
+            long long y = q->v * (1LL << 48), c = (long long)cp_isqrt(cp_wshl(cp_w(CP_S * CP_S - q->v * q->v), 96));
+            q->v = fn == CP_F_ASIN ? cp_atan2(y, c) : cp_atan2(c, y);
+        } else q->ok = 0;                 /* NaN past [-1, 1] */
         break;
     case CP_F_ATAN2:
         if (n != 2) { q->t = 0; return; }
-        t = WF_CSSPROP_ANGLE; q->ok = 0;
+        q->ok = q->ok && arg[1].ok && arg[0].t == arg[1].t;
+        if (q->ok) q->v = cp_atan2(q->v, arg[1].v);
+        t = WF_CSSPROP_ANGLE;
+        break;
+    /* Lot 93: pow(), sqrt(), log() and exp() take numbers; hypot() values
+     * of one type (its result) */
+    case CP_F_POW:
+        if (n != 2 || t != WF_CSSPROP_NUMBER) { q->t = 0; return; }
+        q->ok = q->ok && arg[1].ok && cp_pow(q->v, arg[1].v, &r);
+        q->v = r;
+        break;
+    case CP_F_SQRT:
+        if (n != 1 || t != WF_CSSPROP_NUMBER) { q->t = 0; return; }
+        q->ok = q->ok && q->v >= 0 && cp_sqrtw(cp_wmul(cp_w(q->v), CP_S), &r);
+        q->v = r;
+        break;
+    case CP_F_HYPOT:
+        q->ok = hok && cp_sqrtw(hsum, &r);
+        q->v = r;
+        break;
+    case CP_F_LOG:
+        if (n > 2 || t != WF_CSSPROP_NUMBER) { q->t = 0; return; }
+        q->ok = q->ok && (n == 1 || arg[1].ok) && cp_log(q->v, n == 2, n == 2 ? arg[1].v : 0, &r);
+        q->v = r;
+        break;
+    case CP_F_EXP:
+        if (n != 1 || t != WF_CSSPROP_NUMBER) { q->t = 0; return; }
+        q->ok = q->ok && cp_exp(cp_wdiv(cp_wmul(cp_w(q->v), CP_ONE), 10000, 0), &r);
+        q->v = r;
         break;
     default: break;
     }
     q->t = t;
     if (!cp_fits(q->v)) q->ok = 0;
+}
+
+/* Lot 93: the constants e and pi (in 1/10000, as every value here),
+ * infinity, -infinity and nan (numbers, never known); 0 when m->i does not
+ * start one (an identifier such as -pi or pi-1 is not one) */
+static int cp_mconst(cp_mp_t *m, cp_q_t *q) {
+    static const char *const w[] = {"e", "pi", "infinity", "-infinity", "nan", 0};
+    int j = m->i, k;
+    while (cp_ident(m->s[j])) j++;
+    for (k = 0; w[k]; k++) {
+        if (!cp_eqn(m->s + m->i, j - m->i, w[k])) continue;
+        m->i = j;
+        q->t = WF_CSSPROP_NUMBER;
+        q->ok = k < 2;
+        q->v = k == 0 ? 27183 : k == 1 ? 31416 : 0;
+        return 1;
+    }
+    return 0;
 }
 
 static void cp_mvalue(cp_mp_t *m, cp_q_t *q) {
@@ -423,7 +854,7 @@ static void cp_mvalue(cp_mp_t *m, cp_q_t *q) {
         m->depth--;
         return;
     }
-    cp_mleaf(m, q);
+    if (!cp_mconst(m, q)) cp_mleaf(m, q);
     m->depth--;
 }
 

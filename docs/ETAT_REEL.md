@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 93 (math functions simplified: trigonometric functions, pow, sqrt, hypot, log, exp, constants; base ebb64fc, Lot 92 head)
+
+- Reader sheet: sin(), cos(), tan(), asin(), acos(), atan() and atan2() are simplified (angles reduced exactly, radians known up to 100, tan() at a pole and asin()/acos() past [-1, 1] kept); pow(), sqrt(), hypot(), log() and exp() are typed and simplified; e and pi are 2.7183 and 3.1416, infinity, -infinity and nan are typed and kept. Results are exact (sqrt, hypot, integer powers) or computed in 62-bit fixed point (no libm), then rounded to 1/10000. A registered value with these functions is computed where it is declared (Lot 92 rule). Proof: test_lot93_trig.c, test_lot93_powlog.c, test_lot93_mtype.c, test_lot93_nested.c, test_lot93_compute.c, test_lot93_propsheet.c, test_lot93_math.c, test_lot93_engine.c, `make qemu-lot93` (/lot93/math.html).
+- The engine still draws quarter turns only (webeng.c unchanged): a computed 90deg or 180deg angle is drawn, 45deg is not.
+- US-068/US-073, US-076, US-080 and US-081 unchanged (partial); US-078 and US-097 simule.
+- Detail and gaps: docs/lot93_plan.md.
+
 ## Lot 92 (math functions and computed registered values; radian gradient angles; base 4def6ce, Lot 91 head)
 
 - Reader sheet: abs(), sign(), round() (nearest, up, down, to-zero), mod() and rem() are typed and simplified, sin(), cos(), tan(), asin(), acos(), atan() and atan2() are typed and kept as text. A registered numeric value that is one math function is computed where it is declared (absolute lengths in px, angles in deg, times in s, numbers, percentages alone; 1/10000 steps; <integer> rounded) and inherited as computed; a math initial value is computed. Relative lengths and length-percentage mixes keep the text. Proof: test_lot92_mathtype.c, test_lot92_matheval.c, test_lot92_compute.c, test_lot92_propsheet.c, test_lot92_props.c, test_lot92_engine.c, `make qemu-lot92` (/lot92/props.html).

@@ -439,9 +439,9 @@ static void test_l92_sheet_50(void) {
 
 static void test_l92_sheet_51(void) {
     prep("@property --p { syntax: '<integer>'; inherits: false; initial-value: cos(2.9 - -2) } #o { --p: round(to-zero, 6turn, -18deg / -6.5794) } #i { --p: calc(5.286 *26.28559*222.0241px - 3.3px*0) }");
-    TEST_ASSERT_EQUAL_STRING("cos(2.9 - -2)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("cos(2.9 - -2)", nv("i"));
-    TEST_ASSERT_EQUAL_STRING("cos(2.9 - -2)", nv("q"));
+    TEST_ASSERT_EQUAL_STRING("0", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("0", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("0", nv("q"));
     TEST_ASSERT_EQUAL_STRING("", tail());
 }
 
@@ -1104,9 +1104,9 @@ static void test_l92_sheet_133(void) {
 static void test_l92_sheet_134(void) {
     prep("@property --p { syntax: '<number>'; inherits: true; initial-value: 1 } #o { --p: calc(93.30092 + 4.44 *-39.33) } #i { --p: cos(0.54 - -46.7699) }");
     TEST_ASSERT_EQUAL_STRING("-81.3243", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("cos(0.54 - -46.7699)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("-0.9827", nv("i"));
     TEST_ASSERT_EQUAL_STRING("1", nv("q"));
-    TEST_ASSERT_EQUAL_STRING(" simplified 1", tail());
+    TEST_ASSERT_EQUAL_STRING(" simplified 2", tail());
 }
 
 static void test_l92_sheet_135(void) {
@@ -1288,9 +1288,9 @@ static void test_l92_sheet_156(void) {
 static void test_l92_sheet_157(void) {
     prep("@property --p { syntax: '<number>'; inherits: true; initial-value: 1 } #o { --p: mod(125 * 651% / 7, 2.93008%) } #i { --p: cos(3rad/9.7 /16 + 1370.10deg/ -1.913) }");
     TEST_ASSERT_EQUAL_STRING("1", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("cos(3rad/9.7 /16 + 1370.10deg/ -1.913)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("0.9963", nv("i"));
     TEST_ASSERT_EQUAL_STRING("1", nv("q"));
-    TEST_ASSERT_EQUAL_STRING("", tail());
+    TEST_ASSERT_EQUAL_STRING(" simplified 1", tail());
 }
 
 static void test_l92_sheet_158(void) {

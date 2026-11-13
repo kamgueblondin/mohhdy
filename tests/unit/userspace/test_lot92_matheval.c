@@ -109,7 +109,7 @@ static void test_l92_meval_10(void) {
     TEST_ASSERT_EQUAL_STRING("T9 36.68s", ev("calc(\t36.68S )"));
     TEST_ASSERT_EQUAL_STRING("T8 134.0598deg", ev("CLAMP(  7.0128grad  *-305.1612,37.554grad*1.98597  -  -6.924DEG /  1 + \t 3.29988*2turn,-4.90RAD/\t-34.7  + 25.23grad*5.28  - \t -1039deg\t/171  )"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("roUND(\tDown,-14.9pt \t -\t40.787Px*32.06608  *  4.338,7.33244ch/  0.61144)"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("sin(  6deg /0.69726  +  6.795deg\t+ \t 182rAD*2.3344\t)"));
+    TEST_ASSERT_EQUAL_STRING("T5 -0.8492", ev("sin(  6deg /0.69726  +  6.795deg\t+ \t 182rAD*2.3344\t)"));
     TEST_ASSERT_EQUAL_STRING("T8 1.6622deg", ev("REM(  rem(  1.9\t*120deg,\t5.4deg  /  27.0  )  + 0DEG /2 +\t1.66217DEG,99deg\t/sIGN(119.564S*  5\t*-50 ) +\t3.29781deg *round( 5/ 1,-28*  175.49368 - -8.8822) )"));
     TEST_ASSERT_EQUAL_STRING("T9 0s", ev("round(  to-zero,81*1ms/87653.0100,-4.8Ms\t)"));
 }
@@ -253,7 +253,7 @@ static void test_l92_meval_26(void) {
     TEST_ASSERT_EQUAL_STRING("T5 -0.041", ev("rem( -9/219.660,\t-108.7618/39)"));
     TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("sign(round(nearest, 6.50999S - 34.837S, -3.198*-.29443ms/ 1.27 - 21.35s + 4.9280S *166942 )\t+  rem(11.9 *  -101.48S  /111.94,  -1753.432S * 40.1\t) + \t 0.1628ms/1  )"));
     TEST_ASSERT_EQUAL_STRING("T8 9390.9933deg", ev("ABs(\t-27.96461TURN \t +\tmin(  -9.313rad\t/-26 / 9.8  - 4.2dEG  + \t 8.8813gRAd,-2.2003turn\t/27.417)  + \t calc(  705.1538deg\t))"));
-    TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("CAlC(  tan(28grad \t - -54.59070deg\t)* 8.2678px/  (\t-1227.902 \t - -373.533  /  -0.426\t/-6.9457 )\t+ (  7)*CALC(1.38pX) \t +  2*+23PT )"));
+    TEST_ASSERT_EQUAL_STRING("T2 70.9517px", ev("CAlC(  tan(28grad \t - -54.59070deg\t)* 8.2678px/  (\t-1227.902 \t - -373.533  /  -0.426\t/-6.9457 )\t+ (  7)*CALC(1.38pX) \t +  2*+23PT )"));
     TEST_ASSERT_EQUAL_STRING("T2 58.5884px", ev("mod(-.9828PX/1 + +8.888in,32.81150q  *3.2  )"));
     TEST_ASSERT_EQUAL_STRING("T8 2308.2581deg", ev("AbS(\t1942dEg / 1 \t + 366.25811deg)"));
 }
@@ -298,7 +298,7 @@ static void test_l92_meval_31(void) {
     TEST_ASSERT_EQUAL_STRING("T2 -8.2264px", ev("rem(-1.7510*\t1966PX\t*  12,32PT)"));
     TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("MOD(  calc(1172.6647grad \t - \t 19DEG*4\t) \t - aSin(11.88590\t+ \t 18.32*\t1769.1)*0.52628/3,ABS(5.87deg/  7.59\t) - abs( -3.175deg \t - 783deg/ 2\t) \t + \t 5.8rad /\t0.659  /\t0.848 )"));
     TEST_ASSERT_EQUAL_STRING("T5 -785.7911", ev("CALC( (\t327.52/4.242 - -198 )\t- 1061)"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("sin(\t9deg/\t152.26/\t3.9263 -\t0deg\t)"));
+    TEST_ASSERT_EQUAL_STRING("T5 0.0003", ev("sin(\t9deg/\t152.26/\t3.9263 -\t0deg\t)"));
     TEST_ASSERT_EQUAL_STRING("T2 1224.9345px", ev("abs(1296.389q\t)"));
     TEST_ASSERT_EQUAL_STRING("T2 8474.738px", ev("calc( -40* 0.730px\t*  1 \t -  9 *\t2.5cM\t*-10)"));
 }
@@ -307,7 +307,7 @@ static void test_l92_meval_32(void) {
     TEST_ASSERT_EQUAL_STRING("T9 4.929s", ev("RoUnD(\t4s,2.46451s)"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("clamp(\t1.142*MIN(25.7093px +\t+2cm  -\t32\t* -1855px,8px - 13.583* 4.44019mm,23.0IN,9.7637REM\t/4.2 - 1.404pc\t), -31.7446*-152.00px, (1665.52677px  )/37.94)"));
     TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("mod(\t-24.7  *7.7067\t/ 6.507\t+ 7\t*6.8\t/ 450906.2579,  3.0926 /+1.9483)"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("cos(22.11794/(\t359 \t + 9.63641\t/39.80)*\t210.4554)"));
+    TEST_ASSERT_EQUAL_STRING("T5 0.9219", ev("cos(22.11794/(\t359 \t + 9.63641\t/39.80)*\t210.4554)"));
     TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("AtAn2(calc(-2) \t + \t -2  /\t97  - -6.8*  (\t+39.3  *  6.55 +  2.83/261.46 \t - 6.9) *-1613.78521,19\t/  2 + -3.7* sign(214.62919Q))"));
     TEST_ASSERT_EQUAL_STRING("T3 56.5562%", ev("calc(\t6 *7%\t+ 14%  +\t.55620%)"));
 }
@@ -332,7 +332,7 @@ static void test_l92_meval_34(void) {
 
 static void test_l92_meval_35(void) {
     TEST_ASSERT_EQUAL_STRING("T8 -35.8048deg", ev("CALC(  -349.455deg/9.76  )"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("SIN(  8.2deg \t +\t86dEg  / 21.8818  )"));
+    TEST_ASSERT_EQUAL_STRING("T5 0.2101", ev("SIN(  8.2deg \t +\t86dEg  / 21.8818  )"));
     TEST_ASSERT_EQUAL_STRING("T8 0.2deg", ev("max(.2deg  )"));
     TEST_ASSERT_EQUAL_STRING("T9 13.5287s", ev("min(8.9559S  + 4.5728s,1321.1749s \t +\t981s/\t425.45,0.04995\t*4.61009s  /0.67\t+ 486.3499S *2.272/7.49033,115  *  92.3s - 19.3258 *10.71MS )"));
     TEST_ASSERT_EQUAL_STRING("T3 3.0015%", ev("rem(3.82443*\t191%,-3.40% -\t.01532%\t)"));
@@ -471,7 +471,7 @@ static void test_l92_meval_50(void) {
     TEST_ASSERT_EQUAL_STRING("T9 KEEP", ev("MAX( 634s + -29.55s,-6.859s  *  -0.59582 * 205  -\t0 *29.1024ms*\t0  - \t -9.1523s/235072\t)"));
     TEST_ASSERT_EQUAL_STRING("T9 20.4364s", ev("rem(20.43635s, -1.91585*23s \t + +2MS /32.7017)"));
     TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("CLAMP(-779874.7rad/  -1808.93 \t - -8.063TURN, 1852deg  *  6.034, 245TURN*\t0.054 )"));
-    TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("ATAN2(8*  (30.68px -\t17*-.5px/15.42 + 2px *0) +  ABS(\t208px /\t-18.3803\t)\t-\t512.51312PX /-3.82*-82,\t8.0211q/\t3.93)"));
+    TEST_ASSERT_EQUAL_STRING("T8 -89.9897deg", ev("ATAN2(8*  (30.68px -\t17*-.5px/15.42 + 2px *0) +  ABS(\t208px /\t-18.3803\t)\t-\t512.51312PX /-3.82*-82,\t8.0211q/\t3.93)"));
 }
 
 static void test_l92_meval_51(void) {
@@ -487,7 +487,7 @@ static void test_l92_meval_52(void) {
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("ROUND( 35.4603IN/  -2.9029, round( nearest,  28.85* -470494.757pX /86\t- \t 0PX /+142.46586,  29.928Q  + 217.93566\t*9.7106px/ -671596.0024 \t + -25  *\t-207.72816in\t))"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("ABS(  1860.2069* 11.95PC*  552.801)"));
     TEST_ASSERT_EQUAL_STRING("T9 0.1015s", ev("clamp( 204.20MS/6.7/1709 - -0.6Ms *3 - .980ms,27.238s/38.3404/ 7,29.00s\t*170.8 - \t -827 *143.4ms )"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("tan(8.02/\t-3.007  / -1.6 +  .8*-1.0)"));
+    TEST_ASSERT_EQUAL_STRING("T5 1.1779", ev("tan(8.02/\t-3.007  / -1.6 +  .8*-1.0)"));
     TEST_ASSERT_EQUAL_STRING("T3 94.9808%", ev("ABS(91.486 *1.239% - \t 18.3704% )"));
     TEST_ASSERT_EQUAL_STRING("T9 1s", ev("ROUND(down,76.0000s/  -8.8/-13 + 1102ms + 8.40579\t* +18.108MS,-1s)"));
 }
@@ -664,7 +664,7 @@ static void test_l92_meval_71(void) {
 }
 
 static void test_l92_meval_72(void) {
-    TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("mod(\tatan2(  -10.835grad,  -1.63206rad + 1332.44deG) /\t34,  (2.9DEG /35  + -24turn\t+  17rad ) )"));
+    TEST_ASSERT_EQUAL_STRING("T8 -0.0133deg", ev("mod(\tatan2(  -10.835grad,  -1.63206rad + 1332.44deG) /\t34,  (2.9DEG /35  + -24turn\t+  17rad ) )"));
     TEST_ASSERT_EQUAL_STRING("T3 KEEP", ev("REM(36%/  2.3  - \t -1229.862% *235.90,(  -73%/\t-12.79\t/  971.280 \t - 5.41198*1.81160%\t)* 6)"));
     TEST_ASSERT_EQUAL_STRING("T9 KEEP", ev("rem(519067.536s/1305.8976 -\t40.5877S  + 1  *\t-1885.7330S/23, 904.5mS \t -  5s/12/ .9463)"));
     TEST_ASSERT_EQUAL_STRING("T9 -0.1512s", ev("clamp(26.660ms*-5.663,  2.614\t*38.40 *  30.6s,  +71.355s/  -5 )"));
@@ -684,8 +684,8 @@ static void test_l92_meval_73(void) {
 static void test_l92_meval_74(void) {
     TEST_ASSERT_EQUAL_STRING("T8 0deg", ev("round( TO-ZERO,  4.5deg,  (39.663deg\t+ \t -6*33DEG* 145.82\t-\t-107.052deg/  31 )\t-\t3.11516turn  /239.223  )"));
     TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("sign(  +0.10\t*\t4.93% -  36%*\t2.34 *72624.4103 +\tCALC(21.75542%/7.2 )  )"));
-    TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("atan2( 15.2dEG  + \t CaLC( 3.7739deg  /0.10  +  abs( -30437DeG/ 38)\t),2.59rad)"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("TAn(\t21.84038/  17.1 +\t0.26 \t -\t5 )"));
+    TEST_ASSERT_EQUAL_STRING("T8 80.1414deg", ev("atan2( 15.2dEG  + \t CaLC( 3.7739deg  /0.10  +  abs( -30437DeG/ 38)\t),2.59rad)"));
+    TEST_ASSERT_EQUAL_STRING("T5 -0.3327", ev("TAn(\t21.84038/  17.1 +\t0.26 \t -\t5 )"));
     TEST_ASSERT_EQUAL_STRING("T2 0px", ev("round(-40.604Px\t/  36.264,\t-27  *\t1.07601px +  8mm  -  201.4pc\t/384.2 *-20.121\t)"));
     TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("calc(146920.9*-1.962grad  +\t-0.7deg*\t-1.91564)"));
 }
@@ -709,7 +709,7 @@ static void test_l92_meval_76(void) {
 }
 
 static void test_l92_meval_77(void) {
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("tan( +1460deg)"));
+    TEST_ASSERT_EQUAL_STRING("T5 0.364", ev("tan( +1460deg)"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("abs(  (\t67.79px\t/  139097.6  + 1.36px)*-32.4 /  6.71893 - \t 0.16mM\t)"));
     TEST_ASSERT_EQUAL_STRING("T9 1572.7398s", ev("clamp(21S  -  1859.29650s  /4.37052/1634.69334 + 1552S, 23s\t-  -6s, 28.088mS)"));
     TEST_ASSERT_EQUAL_STRING("T5 234.992", ev("ROUND( 241.2  -  40.5  / 9.1751,6/ -139.6609 + \t 14.73)"));
@@ -749,7 +749,7 @@ static void test_l92_meval_81(void) {
     TEST_ASSERT_EQUAL_STRING("T3 58.3824%", ev("rem(\t23.6823% /\t1585.9 +  58.3675%,53832%  -\t2.40%  )"));
     TEST_ASSERT_EQUAL_STRING("T9 -2044.9907s", ev("min( -1.4*  -1418.266s  / 32.81463,6S/0.91\t+ 1923.3  *-1.06666s\t)"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("CALC( -560240.35\t*315q  *1.41 \t + 19.3837q  /  9\t)"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("tan(  26.8917*1.4GRAD \t + 3.4rad\t*260.2440)"));
+    TEST_ASSERT_EQUAL_STRING("T5 -0.5572", ev("tan(  26.8917*1.4GRAD \t + 3.4rad\t*260.2440)"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("round(REM(-6.27730PX/ 31,303.11rem),1mm - round(  DOWN, 0px, 6* 119.66821pc/1 \t - 118cm/  9.28 -  +16.1in  )  -  7.2*41918iN\t/\t25.9  )"));
 }
 
@@ -766,7 +766,7 @@ static void test_l92_meval_83(void) {
     TEST_ASSERT_EQUAL_STRING("T2 -1.6828px", ev("clamp(-1.6828px,\t35.84*\t-7.2879cm,\t1IN  *  9.4\t/-2.10180 + 2*+3.62183in)"));
     TEST_ASSERT_EQUAL_STRING("T2 0.0038px", ev("abs(2PX/174.9831 / 3 )"));
     TEST_ASSERT_EQUAL_STRING("T9 -35.4566s", ev("calc(  149\t*  (\t35.6312\t*\t0.766s\t+ 354.4s\t) /\t-1604 \t + 0ms\t*\t3.5)"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("abs(\tcos( 77.6  /-4.5758)*12.11/  -246.27 )"));
+    TEST_ASSERT_EQUAL_STRING("T5 0.0155", ev("abs(\tcos( 77.6  /-4.5758)*12.11/  -246.27 )"));
     TEST_ASSERT_EQUAL_STRING("T2 3.8px", ev("aBs(-5.80pX\t-  -2px)"));
     TEST_ASSERT_EQUAL_STRING("T9 KEEP", ev("round(-2.9\t*  abs(2.4153ms - -40.68725MS\t/  227 -\t37.8156s)\t/\t-23.34 - (  -4.5396MS \t -  6S),5*\tROUND(  18.659 *30s\t* 59594.3373 \t - -15ms/23.58 -\t15.1150s, 243.38*-6.0 * 3s))"));
 }
@@ -928,7 +928,7 @@ static void test_l92_meval_101(void) {
     TEST_ASSERT_EQUAL_STRING("T5 201.827", ev("abs(  7 +\t-208.827\t)"));
     TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("MIN( 225.86242RAD, +3.59gRAD\t- -2.3gRAd\t/ +8 + \t 8grad, 15380.6 *457879.064deg *  338.19\t-\t2.6DEG*-29.41860, 122.432grad/  2.22)"));
     TEST_ASSERT_EQUAL_STRING("T3 -15.392%", ev("max( 2.9252 *CALC(-16.081%)*\t21.40980  + \t 18*round(\tUP,9.26514 *35.3110% \t + 5.6  *  880.989%,0.1%\t/21 /  -21.4  )/-39,-14%/  149.82  *164.79711 )"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("MIN(round(DOWN,3\t/  9.3 )\t*23.947*8.22\t-  SIN(+5.4808  *  4.4deg ),(34.774/\t18.94408\t)/\t5.71552/1019.1680,+11.398/  8.37 \t + \t sign(  0.65987Ms*\t4 - \t 3.3s  * 1315.323 + \t 0.57533MS)\t+ \t 199.1\t)"));
+    TEST_ASSERT_EQUAL_STRING("T5 -0.4086", ev("MIN(round(DOWN,3\t/  9.3 )\t*23.947*8.22\t-  SIN(+5.4808  *  4.4deg ),(34.774/\t18.94408\t)/\t5.71552/1019.1680,+11.398/  8.37 \t + \t sign(  0.65987Ms*\t4 - \t 3.3s  * 1315.323 + \t 0.57533MS)\t+ \t 199.1\t)"));
     TEST_ASSERT_EQUAL_STRING("T8 1.9586deg", ev("rem(5.53139DEG*222.631\t/  1.31, -8.4deg\t+ \t AbS(\t-3.18842deG))"));
     TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("rOUND(378572.4TURN\t/-210.6740,\t39.555turn/129480)"));
 }
@@ -1029,7 +1029,7 @@ static void test_l92_meval_112(void) {
     TEST_ASSERT_EQUAL_STRING("T9 KEEP", ev("abs(  (min(  -19.38767S\t+\t18.4856*  84.778s* 6.9967)  +  4.3S)  - 756409s\t/\t( 121.1 *1549) + \t CalC(ABS(  -879.8\t*-1.31s\t/ -1.8281 - \t 0.01 *2ms  )))"));
     TEST_ASSERT_EQUAL_STRING("T9 -5.6169s", ev("MAX(2.70s + 26ms/\t5.09476\t/  0.7\t+  1.16356* 93s /-13.0)"));
     TEST_ASSERT_EQUAL_STRING("T9 0.0543s", ev("rem(6.939ms\t*8.31  - 1ms* 3,  -116.66ms* 2.5)"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("coS(\t-0.3705 - \t 9.17125)"));
+    TEST_ASSERT_EQUAL_STRING("T5 -0.9932", ev("coS(\t-0.3705 - \t 9.17125)"));
 }
 
 static void test_l92_meval_113(void) {
@@ -1053,7 +1053,7 @@ static void test_l92_meval_114(void) {
 static void test_l92_meval_115(void) {
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("abs(27.0vh  - ( calc(\t1900.3 *  554pc\t+ \t 0.89px) -\t107260px \t - \t -0.676pc)  /979.49  +\t4.96841pt\t)"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("mod((  8923.293\t*\t30.4q +  245.7077*  63730px)  /\t457.9  / 145.6658 - \t rEm(  2EM,4.4519MM  /  3.92 \t + \t -73984.6cm ),\tROUND(  down,  3.247cm,  38In\t/\t1709.893* -459.18472)\t)"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("cOs(1deg\t)"));
+    TEST_ASSERT_EQUAL_STRING("T5 0.9998", ev("cOs(1deg\t)"));
     TEST_ASSERT_EQUAL_STRING("T5 35.4263", ev("abs(\t1 +\t78.9250/574.898* 16 -  38.6231\t)"));
     TEST_ASSERT_EQUAL_STRING("T3 3.771%", ev("rem(  22.34131% - 23%\t-  -1403.7367%  / 85.64/3.70025,\t1640.82% )"));
     TEST_ASSERT_EQUAL_STRING("T9 326.034s", ev("round(  30.7476*211s/20 \t + \t 25.62447* ( 65ms),1.55950s *-0.48245 /9.02 \t + mOD(7.5*9.5655s,-9s ) + (29.4401ms\t/-26\t) *\t-31.8950)"));
@@ -1101,7 +1101,7 @@ static void test_l92_meval_120(void) {
     TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("rOunD(neArEsT,34 \t - \t -1739\t*-152.280 -\t16.62  )"));
     TEST_ASSERT_EQUAL_STRING("T9 4.2492s", ev("miN(4*  aBs((2.1965S +  5ms*1075  + 9.005*+353.79123s  /29 ) /-15 + \t .71758  *69.5\t*round(16499MS,+24.87243S  -  -99.1410s  )  ) /  abs(\t4.97 \t -\t37.39 /  3.03006 )  )"));
     TEST_ASSERT_EQUAL_STRING("T5 -1", ev("sign( ( 0.491 - 163.2  /\t28.07992\t- \t 161.2\t*  1.9446)\t*\t10.63 )"));
-    TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("max(-36.366PX,sIN(-1.151/\t63.85938\t-\t0.67832 *-36) *  6.76in\t+\tMIN(\t26.80687\t*2.2mm *7.02,  calc(-9.1*\t1247PX ) - \t 6.8mm  ))"));
+    TEST_ASSERT_EQUAL_STRING("T2 -36.366px", ev("max(-36.366PX,sIN(-1.151/\t63.85938\t-\t0.67832 *-36) *  6.76in\t+\tMIN(\t26.80687\t*2.2mm *7.02,  calc(-9.1*\t1247PX ) - \t 6.8mm  ))"));
 }
 
 static void test_l92_meval_121(void) {
@@ -1123,7 +1123,7 @@ static void test_l92_meval_122(void) {
 }
 
 static void test_l92_meval_123(void) {
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("tan(.29/  +7.099)"));
+    TEST_ASSERT_EQUAL_STRING("T5 0.0409", ev("tan(.29/  +7.099)"));
     TEST_ASSERT_EQUAL_STRING("T9 0s", ev("abs( -0MS  )"));
     TEST_ASSERT_EQUAL_STRING("T2 -0.2131px", ev("mod(9.5284px*  -174 +\t9.83372px*9.4625, calc(  3PX  /61.80241 + 8.8 *-36.5981px) /217.5309)"));
     TEST_ASSERT_EQUAL_STRING("T2 -5.472px", ev("calc(  11.48PX/ -12.5882  *6  )"));
@@ -1136,7 +1136,7 @@ static void test_l92_meval_124(void) {
     TEST_ASSERT_EQUAL_STRING("T8 0.7087deg", ev("calc(abs( 25.65352* +2deg /\t72.4\t) - \t mod(\t1deg + \t -4deg/\t-28.5820 +\t2.885deg,7.71deg -\t7.614*0deg\t)  / 1089 *  0\t)"));
     TEST_ASSERT_EQUAL_STRING("T9 35502.8032s", ev("abs(21.9780s\t/1703.6738/3.9925\t+  908*39.1s\t)"));
     TEST_ASSERT_EQUAL_STRING("T5 8.329", ev("abs(\t-8.329)"));
-    TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("atan(7.2239/ 304 -  18.2702\t- -1 *\t35  )"));
+    TEST_ASSERT_EQUAL_STRING("T8 86.5841deg", ev("atan(7.2239/ 304 -  18.2702\t- -1 *\t35  )"));
     TEST_ASSERT_EQUAL_STRING("T2 1571.5062px", ev("calc(\t+40504PX\t/25.774)"));
 }
 
@@ -1181,7 +1181,7 @@ static void test_l92_meval_129(void) {
     TEST_ASSERT_EQUAL_STRING("T9 0.077s", ev("abs(mod(4.67293ms /14,\t8\t* 6MS ) /  36.6833/  8.7\t+ \t (\t77MS))"));
     TEST_ASSERT_EQUAL_STRING("T5 -1", ev("sigN(CALC(-7.02CM \t +  -5  *  2.1799PX*966))"));
     TEST_ASSERT_EQUAL_STRING("T3 KEEP", ev("AbS(11.35396%  + \t +162.7180%*819*27 )"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("COS(6.3dEg /-22\t/ 4.95  +\t-37.52Deg)"));
+    TEST_ASSERT_EQUAL_STRING("T5 0.7925", ev("COS(6.3dEg /-22\t/ 4.95  +\t-37.52Deg)"));
     TEST_ASSERT_EQUAL_STRING("T5 -1", ev("miN((750.937) /146.141  - \t -0.28729 * sign( -1pc)\t- +36.582 /  40,  SIGN(-3deg  )  )"));
 }
 
@@ -1204,7 +1204,7 @@ static void test_l92_meval_131(void) {
 }
 
 static void test_l92_meval_132(void) {
-    TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("aTaN(  3.04 \t + \t 2.30872/\t-5.5 -\t33.94  /  -1.7)"));
+    TEST_ASSERT_EQUAL_STRING("T8 87.4647deg", ev("aTaN(  3.04 \t + \t 2.30872/\t-5.5 -\t33.94  /  -1.7)"));
     TEST_ASSERT_EQUAL_STRING("T5 2.0426", ev("rem((  16.83 + 1.13243 *222.2*\t35.5 ),abs(-6.78 /-1.95\t+ 7))"));
     TEST_ASSERT_EQUAL_STRING("T5 0.9637", ev("mod(19.010\t*880.8/  22.249  - 87*5.30/\t1288.5801,1.900\t/  1.534 /5.195  -\t-0.9336)"));
     TEST_ASSERT_EQUAL_STRING("T8 21816.8841deg", ev("MOD(.4383turn / +791.0246 - \t 21deg\t/  4.9,792.73548*2rad\t- 2.97Turn*\t9.810  /\t9.2 \t -\t-8.59  *\t3.71748*  -37.1rad)"));
@@ -1224,7 +1224,7 @@ static void test_l92_meval_133(void) {
 static void test_l92_meval_134(void) {
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("max(-1.28702Q - \t round(to-zero,  6px*\t1.8\t+ \t -216.5IN -\t-30.93pt,  -462q/  .72 *  -78 ),-2 *37\t*\tround( down,-7.5246pt*963.88312 - 26.146Q /72073.0297,204.80px * 233.56/1.4  ) )"));
     TEST_ASSERT_EQUAL_STRING("T3 0%", ev("round( -1547% /10,  1604 *  1.65%)"));
-    TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("round(MOD(-9.315grad + 117.024rad  /\t5.94\t+\t2.5deG /-2,126deg )*5.310,  12.0259*atan(  -17.8909/\t20/589.8781  ) +  round(-9.164DEG/\t5\t+ 90.5deg - 13.74grad  / 145/+9.0,-8.8grad) - \t 10.031deg)"));
+    TEST_ASSERT_EQUAL_STRING("T8 608.448deg", ev("round(MOD(-9.315grad + 117.024rad  /\t5.94\t+\t2.5deG /-2,126deg )*5.310,  12.0259*atan(  -17.8909/\t20/589.8781  ) +  round(-9.164DEG/\t5\t+ 90.5deg - 13.74grad  / 145/+9.0,-8.8grad) - \t 10.031deg)"));
     TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("AsIN(7  )"));
     TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("sign(\t-1976.785\t*1571.0846%\t+\t7.503% /6.685 - \t rem(15%*  171.92 + \t -7.055 * 177.88224%, 198.2\t*1623.75581%  +\t-5.8008%)*\t9.48794)"));
     TEST_ASSERT_EQUAL_STRING("T2 4691.8976px", ev("CALC(  51.7in  -\t-4.0261 *calc( -17.4620 ) *3.859px)"));
@@ -1321,12 +1321,12 @@ static void test_l92_meval_144(void) {
 }
 
 static void test_l92_meval_145(void) {
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("CoS(-3  /28  )"));
+    TEST_ASSERT_EQUAL_STRING("T5 0.9943", ev("CoS(-3  /28  )"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("moD( +2vMiN\t/6.7691 - -89cm,9px  * -33.5  )"));
     TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("aTaN2(20.9DEG/\t2.23222\t+ \t -2.8840turn/  +12.76/-547516.4432,-26.2363dEG\t* 5.308)"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("cAlC(-1.168rem)"));
     TEST_ASSERT_EQUAL_STRING("T9 -0.0737s", ev("miN(-41.03692  *0.33856s\t/168.78 \t - +8s\t/-238  /3.9001,6.3603S/-1 - -2.5* 7.58s  /3,7.661ms + 1.35s,-.49718*-2.154S)"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("COS(695.5grad  - \t 5.430deg )"));
+    TEST_ASSERT_EQUAL_STRING("T5 -0.1647", ev("COS(695.5grad  - \t 5.430deg )"));
 }
 
 static void test_l92_meval_146(void) {
@@ -1366,7 +1366,7 @@ static void test_l92_meval_149(void) {
 }
 
 static void test_l92_meval_150(void) {
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("cos( 5.023deg\t+  8*9.0777rad\t+\t984.8092*\t6.2deg/  18.79882)"));
+    TEST_ASSERT_EQUAL_STRING("T5 -0.9869", ev("cos( 5.023deg\t+  8*9.0777rad\t+\t984.8092*\t6.2deg/  18.79882)"));
     TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("round(2\t/  120.731  -\t6.9*37.62867,0*4/  342780.34153 )"));
     TEST_ASSERT_EQUAL_STRING("T9 12.6364s", ev("round(  7S,  8S\t/7.91  +  -13.6440s \t -\t3ms*8.5/6.7\t)"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("ROUND(abs( 8.435PT + 291572px *4) \t - \t -0pt,\tcalc(69512.239px \t - \t 476857MM -\t5px  *1.52421 )\t+\t-1.15mm*2.183  /761755 -  21.64Px/  9.01 )"));
@@ -1378,7 +1378,7 @@ static void test_l92_meval_151(void) {
     TEST_ASSERT_EQUAL_STRING("T9 0.0029s", ev("rem(2.765s\t+  13.013S*  6,39.27630ms\t)"));
     TEST_ASSERT_EQUAL_STRING("T2 8.6632px", ev("mOd(\t.4px \t - \t +221.264px/  154.0  +  +9.7px,4.3px\t/  1*32.237\t)"));
     TEST_ASSERT_EQUAL_STRING("T3 KEEP", ev("MAX( 149333.493%/ 16.5625  -\t1710% / 2,-5.99201 *23%,-2.433%/.392,-30.231%\t)"));
-    TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("calc(asin(\t1.190  /-31.6335 ))"));
+    TEST_ASSERT_EQUAL_STRING("T8 -2.1548deg", ev("calc(asin(\t1.190  /-31.6335 ))"));
     TEST_ASSERT_EQUAL_STRING("T8 0.002deg", ev("clamp(3.098deg\t/  1559,\t193grad,\t-8.1deg  +  7.8907deg\t-\t15.034deg *9  / 126.03\t)"));
     TEST_ASSERT_EQUAL_STRING("T2 -48.5354px", ev("calc(\trem(-2.46986PX /950.66823 *1 \t +\t-9cM*  38.98750/\t38.41768,\tcalc(-4.81319q  /  1006.35 - \t 5.54930*  26.9mm  /8.8441 \t - -8.88613PX  ) \t -  calc( -1470pt)  / -39.92  /-9)  - 2.60200px\t/  38.598)"));
 }
@@ -1387,7 +1387,7 @@ static void test_l92_meval_152(void) {
     TEST_ASSERT_EQUAL_STRING("T3 52.6304%", ev("Max( 9.17%\t/26.8 *153.8,  -4.9%  +\t24%\t+\t-1% )"));
     TEST_ASSERT_EQUAL_STRING("T8 1388.8301deg", ev("clamp(  6*-238.35307grad -\t83.6rad  /-1.79,-2.67RAD\t/  35.5377/ 2 - 109.578DEG - \t 250deg,8.4178grad)"));
     TEST_ASSERT_EQUAL_STRING("T2 -2695px", ev("round(DOWN,-24PX * 92.2979,539Px\t)"));
-    TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("cos( 3.191DEG/234 +\tclamp(34.32421DEG\t/3.8014 +\t+7*2.44deg \t - 241.3791  *\t6.818*\t6.89deg,  33.44turn,  38.05deg /\t-6.82526  *\t-1455 + -0.30823rad /29.74)\t*+7.4\t)"));
+    TEST_ASSERT_EQUAL_STRING("T5 -0.1824", ev("cos( 3.191DEG/234 +\tclamp(34.32421DEG\t/3.8014 +\t+7*2.44deg \t - 241.3791  *\t6.818*\t6.89deg,  33.44turn,  38.05deg /\t-6.82526  *\t-1455 + -0.30823rad /29.74)\t*+7.4\t)"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("Abs(1609px /\t-1178.7\t-  173.34013px + 2cm* 361316.760/-1.4\t)"));
     TEST_ASSERT_EQUAL_STRING("T5 21303.4782", ev("CLAMP(23.17342 *837.36 +\t633*3,  -1\t/4.67419 - 26.10733 + -40.9*1.6,  5.32\t/40893.8/\t2.4\t)"));
 }
@@ -1729,7 +1729,7 @@ static void test_l92_meval_190(void) {
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("ABS(\t26PX/MOD( 23.2 * 1939.406  +  89.7761,  0*1.96  /  27))"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("abs(115735mm /  23)"));
     TEST_ASSERT_EQUAL_STRING("T2 KEEP", ev("round(0.2650CH\t+ -19.8\t*  28.3188pc  *89.39, -14PT/ +91.1)"));
-    TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("ACOS(  (  31.3759\t/-0.23375  )/-60948  /\t-2.7 -  472.5/  18.8660\t/  195)"));
+    TEST_ASSERT_EQUAL_STRING("T8 97.4234deg", ev("ACOS(  (  31.3759\t/-0.23375  )/-60948  /\t-2.7 -  472.5/  18.8660\t/  195)"));
     TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("sign(\t-.2s *\t31 /-1.32680\t+ \t 1114.46983  * 173s )"));
     TEST_ASSERT_EQUAL_STRING("T8 -33.0016deg", ev("clamP(9.4150turn *  1 /-1.86, 35.549DEG\t/-7, 12.6717RAD/  -22)"));
 }
@@ -1757,7 +1757,7 @@ static void test_l92_meval_193(void) {
     TEST_ASSERT_EQUAL_STRING("T8 0deg", ev("round(tO-zErO,6.70deg,8.6293turN/111.456\t+\t226.41018Deg*9.95666)"));
     TEST_ASSERT_EQUAL_STRING("T9 -3.5616s", ev("caLc(  5.41887S / 23.1461\t* 22.3\t- \t 8.782s)"));
     TEST_ASSERT_EQUAL_STRING("T9 18.181s", ev("min( 24.85098s  /  1.36722 - -4.41902ms)"));
-    TEST_ASSERT_EQUAL_STRING("T8 KEEP", ev("atan(min(34.10366/\t-4 *2.81 -\t-2.493 \t - -35.3/94, .6*61.11 *  198, 7\t- 261.24951  ) \t -  39.8734* 2/-9.3701\t)"));
+    TEST_ASSERT_EQUAL_STRING("T8 -89.7668deg", ev("atan(min(34.10366/\t-4 *2.81 -\t-2.493 \t - -35.3/94, .6*61.11 *  198, 7\t- 261.24951  ) \t -  39.8734* 2/-9.3701\t)"));
     TEST_ASSERT_EQUAL_STRING("T5 KEEP", ev("clamp(  -1.39349  - 85136.874/  10.0878/4.1563,  14.5724,  199832.780\t+ \t 132.04/ 7.51)"));
 }
 
