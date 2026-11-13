@@ -7,6 +7,19 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 93 (13 November 2026, base ebb64fc, Lot 92 head)
+
+US-031 partial, phase3_complete=false. The reader simplifies sin(),
+cos(), tan(), asin(), acos(), atan() and atan2(), types and simplifies
+pow(), sqrt(), hypot(), log() and exp(), and reads the constants e and pi
+(infinity and nan typed and kept), in 62-bit fixed point without libm,
+rounded to 1/10000. Registered values that use them are computed, so
+atan2(1, 0) reaches a gradient as 90deg and hypot(30px, 40px) a radial
+radius as 50px. A QEMU page (`make qemu-lot93`, CI job lot93-reader)
+checks them. The engine is unchanged (quarter turns only). US-068/073,
+US-076, US-080 and US-081 stay partial. US-078 and US-097 stay simule.
+See docs/lot93_plan.md.
+
 ### Lot 92 (13 November 2026, base 4def6ce, Lot 91 head)
 
 US-031 partial, phase3_complete=false. The reader types and simplifies
