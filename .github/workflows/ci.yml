@@ -1277,6 +1277,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 95: one boot of make qemu-lot95 (about 1 min locally)
+  lot95-reader:
+    name: QEMU @property limits and computed values in the reader (Lot 95)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 95 boot
+        run: make qemu-lot95
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot95-reader-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 94: one boot of make qemu-lot94 (about 1 min locally)
   lot94-reader:
     name: QEMU angled linear and conic gradients in the engine and the reader (Lot 94)

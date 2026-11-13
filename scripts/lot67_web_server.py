@@ -77,6 +77,9 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /lot94/grad.html    Lot 94: linear angles that are not quarter turns
                       (radians as whole degrees), a corner, conic-gradient,
                       a registered angle of 45deg, a refused conic stop
+  /lot95/props.html   Lot 95: @property with eight alternatives, the Lot 95
+                      types, a 31-byte name; plain dimensions, viewport
+                      units, a list, a mix, a transform list computed
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -222,13 +225,14 @@ LOT91_PAGES = {
         "<div id=\"badc91\"><p>badckeep91</p></div>"
         "<p>fin91b</p></body></html>"),
     # @property: an alternative syntax (Lot 90 refused the rule), a
-    # list, five alternatives (refused), a calc() whose type is not a
+    # list, nine alternatives (refused; Lot 95 converted it from five), a calc() whose type is not a
     # <length> (Lot 90 took it) and one that is
     "/lot91/props.html": (
         "<!doctype html><html><head><title>Lot 91 @property</title><style>"
         "@property --w91 { syntax: 'auto | <length>'; inherits: false; initial-value: 11px }\n"
         "@property --l91 { syntax: '<length>#'; inherits: true; initial-value: 1px, 2px }\n"
-        "@property --five91 { syntax: 'a | b | c | d | e'; inherits: false; initial-value: a }\n"
+        # Lot 95 (converted): nine alternatives (five are read since Lot 95)
+        "@property --five91 { syntax: 'a | b | c | d | e | f | g | h | i'; inherits: false; initial-value: a }\n"
         "@property --len91 { syntax: '<length>'; inherits: false; initial-value: 13px }\n"
         "#alt91 { --w91: 24px; font-size: var(--w91) }\n"
         "#altbad91 { --w91: red; font-size: var(--w91) }\n"
@@ -348,6 +352,50 @@ LOT94_PAGES = {
         "<div id=\"bad94\"><p>badkeep94</p></div>"
         "<div id=\"deg94\"><p>degkeep94</p></div>"
         "<p>fin94</p></body></html>"),
+}
+
+
+# Lot 95: reader page (tests/scripts/test_qemu_lot95.py)
+LOT95_PAGES = {
+    # @property with up to eight alternatives and the Lot 95 types, nine
+    # alternatives refused, a 31-byte name, more than eight registrations;
+    # registered values computed: an initial 0.125in (12px), 2.5vw at the
+    # 640 x 480 reader viewport (16px), a one-item <angle># list (100grad
+    # -> 90deg), a length-percentage mix (calc(8% + 96px), indent 97.28px
+    # as the reader resolved that text before), a transform list and a
+    # resolution (counted: simplified 5)
+    "/lot95/props.html": (
+        "<!doctype html><html><head><title>Lot 95 @property</title><style>"
+        "@property --l95 { syntax: '<length> | <transform-list>'; inherits: true; initial-value: 0.125in }\n"
+        "@property --e95 { syntax: 'a | b | c | d | e | f | g | <length>'; inherits: false; initial-value: 1pc }\n"
+        "@property --nine95 { syntax: 'a | b | c | d | e | f | g | h | i'; inherits: false; initial-value: a }\n"
+        "@property --a95 { syntax: '<angle>#'; inherits: false; initial-value: 0.25turn }\n"
+        "@property --m95 { syntax: '<length-percentage>'; inherits: false; initial-value: 0px }\n"
+        "@property --t95 { syntax: '<transform-list>'; inherits: false; initial-value: rotate(0) }\n"
+        "@property --r95 { syntax: '<resolution>'; inherits: false; initial-value: 1x }\n"
+        "@property --i95 { syntax: '<image>'; inherits: false; initial-value: linear-gradient(#ff0000, #0000ff) }\n"
+        "@property --s95 { syntax: '<string> | <url>'; inherits: false; initial-value: 'x' }\n"
+        "@property --abcdefghijklmnopqrstuvwxyz095 { syntax: '<length>'; inherits: false; initial-value: 0.25in }\n"
+        "#in95 { font-size: var(--l95) }\n"
+        "#vw95 { --l95: 2.5vw; font-size: var(--l95) }\n"
+        "#pc95 { font-size: var(--e95) }\n"
+        "#ang95 { --a95: 100grad; background-image: linear-gradient(var(--a95), #ff0000, #0000ff) }\n"
+        "#mix95 { --m95: calc(1in + 10% - 2%); text-indent: var(--m95) }\n"
+        "#t95 { --t95: translate(1in) rotate(0) }\n"
+        "#r95 { --r95: 96dpi }\n"
+        "#img95 { background-image: var(--i95) }\n"
+        "#long95 { font-size: var(--abcdefghijklmnopqrstuvwxyz095) }\n"
+        "</style></head><body><h1>Props 95</h1>"
+        "<p id=\"in95\">inkeep95</p>"
+        "<div id=\"vwbox95\"><p id=\"vw95\">vwkeep95</p></div>"
+        "<p id=\"pc95\">pckeep95</p>"
+        "<div id=\"ang95\"><p>angkeep95</p></div>"
+        "<p id=\"mix95\">mixkeep95</p>"
+        "<p id=\"t95\">tkeep95</p>"
+        "<p id=\"r95\">rkeep95</p>"
+        "<div id=\"img95\"><p>imgkeep95</p></div>"
+        "<p id=\"long95\">longkeep95</p>"
+        "<p>fin95</p></body></html>"),
 }
 
 
@@ -540,6 +588,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT94_PAGES:
             self._send(200, LOT94_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT95_PAGES:
+            self._send(200, LOT95_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

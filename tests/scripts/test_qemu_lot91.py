@@ -10,8 +10,8 @@ on the host and the guest reaches it as 10.0.2.2 (slirp).
     background-origin longhands are kept; a percentage circle and
     background-clip: text are refused (the colour stays).
   * @property (/lot91/props.html): 'auto | <length>' is registered (Lot 90
-    refused the rule), so red falls back to the initial 11px; five
-    alternatives are refused; calc(10px + 5%) is not a <length> (Lot 90
+    refused the rule), so red falls back to the initial 11px; nine
+    alternatives are refused (Lot 95, converted: five, read since Lot 95); calc(10px + 5%) is not a <length> (Lot 90
     took it) and falls back to 13px, calc(2px * 3 + 4px) is 10px.
   * autofill summer time: with the local time set near midnight by the
     tz offset, eu and us move the local date to 2 July, au (July is
@@ -91,7 +91,7 @@ def step_props(mon, proc, u):
                "node p #calcbad91 display auto size 13px",
                "node p #calcok91 display auto size 10px",
                "css-props registered 3 rejected 1 "], "web-css @property")
-    say("@property: 'auto | <length>' and '<length>#' registered, five alternatives refused; red -> 11px, "
+    say("@property: 'auto | <length>' and '<length>#' registered, nine alternatives refused (Lot 95, converted: five); red -> 11px, "
         "calc(10px + 5%) -> 13px (not a <length>), calc(2px * 3 + 4px) -> 10px")
 
 
