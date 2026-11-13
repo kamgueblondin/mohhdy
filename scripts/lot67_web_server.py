@@ -246,7 +246,7 @@ LOT91_PAGES = {
 # Lot 92: reader pages (tests/scripts/test_qemu_lot92.py)
 LOT92_PAGES = {
     # radian angles (two quarter turns kept as whole degrees, 1rad
-    # refused), a registered <angle> computed by mod() feeds the gradient,
+    # refused; Lot 94: written as 57deg), a registered <angle> computed by mod() feeds the gradient,
     # the same value unregistered keeps its text and is refused
     "/lot92/bg.html": (
         "<!doctype html><html><head><title>Lot 92 backgrounds</title><style>"
