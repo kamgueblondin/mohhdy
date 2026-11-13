@@ -43,7 +43,7 @@ QEMU test, docs).
 7. Rounding model. Values are fixed point (1/10000), each step rounded; pi is 3.1415927 for rad. The generated suites check these exact rules with Python fractions; they are not the double precision of a browser, so the fourth decimal can differ from one (for example calc(1px / 3 * 3) is 0.9999px).
 8. Mutations: 50 host mutations (rows A and B) and one QEMU mutation (no computation of registered values), all killed. M-rad-int-digits first survived: the two-digit bound also keeps the 32-bit arithmetic of rad_quarters from wrapping (429.4967rad); chunk 4 adds ten fixed edge cases to lot92_bggen.py and the mutant is killed. Two redundant checks found while writing the mutations were removed, since mutating them could not change any result (a length-percentage is never a known value; '*' needs no special case in wf_cssprop_compute, its alternatives list is empty and the one-type path does not take it).
 9. CI: one new job, lot92-reader (make qemu-lot92, no guest clock option). The pull_request trigger keeps no branches filter.
-10. ASan (gcc -fsanitize=address,undefined): see Gates; the baseline of Lot 91 fails 5 suites (test_gpt2_infer, test_pmm, test_vfs_service, test_webrt, test_lot87_web).
+10. ASan (gcc -fsanitize=address,undefined): the base and the head fail the same 5 suites (test_gpt2_infer, test_pmm, test_vfs_service, test_webrt, test_lot87_web); no new failure (see Gates).
 
 ## Not done (first gaps for lot 93)
 
@@ -64,4 +64,52 @@ QEMU: tests/scripts/test_qemu_lot92.py, `make qemu-lot92` (one boot at 1x): /lot
 
 ## Gates on the box
 
-Gate results are added by the final docs commit of this lot.
+Run on 0445a67 (the code of this lot with its first docs commit) on 13 November 2026 (UTC+4), one QEMU guest at a time (scripts in /workspace/run/lot92, gates.sh), 10:27 to 12:22. No gate failed and none was rerun. The ASan runs (below) ran at the same time as the first QEMU gates, which made those guests slower than when run alone (qemu-lot92 took 59 s alone before the gate run).
+
+| Gate | Result | Time |
+|------|--------|------|
+| make-all | pass | 1 s |
+| test-all | pass | 228 s |
+| roadmap-check | pass | 0 s |
+| font-check | pass | 0 s |
+| secrets | pass | 7 s |
+| strict-image | pass | 0 s |
+| qemu-lot92 | pass | 275 s |
+| qemu-lot91 | pass | 454 s |
+| qemu-lot90 | pass | 427 s |
+| qemu-gui-text-scale | pass | 166 s |
+| qemu-gui-parity | pass | 416 s |
+| qemu-lot89 | pass | 276 s |
+| qemu-p2p | pass | 584 s |
+| qemu-p2p-mesh | pass | 107 s |
+| qemu-p2p-phase5 | pass | 203 s |
+| qemu-net-wire | pass | 83 s |
+| qemu-lot67-web | pass | 277 s |
+| qemu-lot88-desk | pass | 416 s |
+| qemu-lot88-tv | pass | 222 s |
+| qemu-lot87 | pass | 208 s |
+| qemu-lot86 | pass | 174 s |
+| qemu-lot85 | pass | 151 s |
+| qemu-lot84 | pass | 146 s |
+| qemu-lot83 | pass | 107 s |
+| qemu-lot82 | pass | 97 s |
+| qemu-lot81 | pass | 117 s |
+| qemu-lot80 | pass | 97 s |
+| qemu-lot79 | pass | 59 s |
+| qemu-lot78 | pass | 39 s |
+| qemu-lot77 | pass | 25 s |
+| qemu-lot76 | pass | 20 s |
+| qemu-lot75 | pass | 91 s |
+| qemu-lot74 | pass | 96 s |
+| qemu-lot73 | pass | 170 s |
+| qemu-lot72 | pass | 267 s |
+| qemu-lot71 | pass | 285 s |
+| qemu-web-layout | pass | 537 s |
+| qemu-production | pass | 72 s |
+| tree-clean | pass | 0 s |
+
+make test-all: 19879 tests, 19879 passed, 0 failed (Lot 91 head: 19056).
+
+ASan and UBSan (TEST_CC="gcc -fsanitize=address,undefined -fno-sanitize-recover=all", make test-all on copies of each tree): base 4def6ce 18971 tests, 5 failed (test_gpt2_infer, test_pmm, test_vfs_service, test_lot87_web, test_webrt), 754 s; head 0445a67 19794 tests, 5 failed (the same five), 666 s. All Lot 92 suites and the converted Lot 91 suites pass under ASan; no new failure.
+
+Mutations: 51 applied / 51 killed / 0 survived (50 host, 1 QEMU), see review point 8.
