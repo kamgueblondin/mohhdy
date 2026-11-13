@@ -7,8 +7,8 @@
  * (lower case keywords, single spaces, ", " between layers, url() without
  * quotes) that the reader writes into the style attribute it hands to the
  * engine. The grammar is the part the engine draws:
- *   - an image layer is none, url(...), linear-gradient(...) or
- *     radial-gradient(...); at most WF_CSSBG_LAYERS layers, a gradient only
+ *   - an image layer is none, url(...), linear-gradient(...),
+ *     radial-gradient(...) or (Lot 94) conic-gradient(...); at most WF_CSSBG_LAYERS layers, a gradient only
  *     in the last one (it paints under every image);
  *   - linear-gradient: an optional "to top|right|bottom|left" or an angle
  *     that is a multiple of 90deg (or a quarter turn), then 2 to 4 colour
@@ -36,6 +36,14 @@
  * half a degree of a multiple of pi/2, at most 40 quarter turns, written
  * back as whole degrees ("1.5708rad" -> "90deg"). A colour is only allowed in
  * the last layer and is given back as text for the caller to check.
+ * Lot 94: any linear angle (deg up to 3600 with four decimals, turn up to
+ * 10 and grad up to 4000 with two), radians as their whole degrees
+ * (x * 180 / pi rounded half away from zero, "0.7854rad" -> "45deg"),
+ * "to" a corner (one vertical and one horizontal side, either order), and
+ * conic-gradient(): an optional "from ANGLE" (not radians) and "at
+ * POSITION", then 2 to 4 stops "colour [N% | Ndeg]" (N whole, 0..360 for
+ * degrees). The engine paints angled and conic gradients in at most 32
+ * cells (webeng WE_GRAD_CELLS).
  * Freestanding, no heap. Host tested (test_lot90_bg*.c). */
 #ifndef WF_CSSBG_H
 #define WF_CSSBG_H

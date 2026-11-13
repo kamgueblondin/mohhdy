@@ -274,12 +274,15 @@ def gradient(rng):
 
 def bad_gradient(rng):
     return rng.choice([
-        "linear-gradient(45deg, red, blue)", "linear-gradient(red)", "linear-gradient(red, blue, green, navy, black)",
-        "linear-gradient(to top left, red, blue)", "linear-gradient(red 101%, blue)", "linear-gradient(red 10px, blue)",
+        # Lot 94 (converted): 45deg, to top left, 0.3turn, 90.5deg and
+        # conic-gradient(red, blue) are drawn now; faults of the same kind
+        # take their places in this list (same draws)
+        "linear-gradient(45px, red, blue)", "linear-gradient(red)", "linear-gradient(red, blue, green, navy, black)",
+        "linear-gradient(to top bottom, red, blue)", "linear-gradient(red 101%, blue)", "linear-gradient(red 10px, blue)",
         "linear-gradient(bluish, red)", "repeating-linear-gradient(red, blue)", "radial-gradient(circle circle, red, blue)",
-        "radial-gradient(at, red, blue)", "radial-gradient(circle 10px, red, blue)", "linear-gradient(0.3turn, red, blue)",
-        "linear-gradient(90.5deg, red, blue)", "radial-gradient(at left right, red, blue)", "linear-gradient(red, blue",
-        "linear-gradient((red, blue)", "conic-gradient(red, blue)"])
+        "radial-gradient(at, red, blue)", "radial-gradient(circle 10px, red, blue)", "linear-gradient(0.125turn, red, blue)",
+        "linear-gradient(90.55555deg, red, blue)", "radial-gradient(at left right, red, blue)", "linear-gradient(red, blue",
+        "linear-gradient((red, blue)", "conic-gradient(red)"])
 
 
 def image_item(rng, last):

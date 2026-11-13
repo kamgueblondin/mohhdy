@@ -258,12 +258,16 @@ enum { WE_TF_TRANSLATE = 1, WE_TF_SCALE, WE_TF_ROTATE, WE_TF_SKEW, WE_TF_MATRIX,
 typedef struct { uint8_t kind, pct; int16_t x, y; } we_transform_t;
 
 /* Lot 62: linear gradients, axis-aligned, up to 4 stops, at most
- * WE_GRAD_BANDS solid bands per box. */
+ * WE_GRAD_BANDS solid bands per box. Lot 94: a linear gradient at any
+ * whole-degree angle or towards a corner (WE_GRAD_ANGLE) and a conic
+ * gradient (WE_GRAD_CONIC) paint at most WE_GRAD_CELLS solid cells. */
 enum { WE_BOX_BORDER = 0, WE_BOX_PADDING = 1, WE_BOX_CONTENT = 2 };
 enum { WE_TT_NONE = 0, WE_TT_UPPER = 1, WE_TT_LOWER = 2, WE_TT_CAPITALIZE = 3 };
 #define WE_GRAD_STOPS 4
 #define WE_GRAD_BANDS 8
-enum { WE_GRAD_BOTTOM = 1, WE_GRAD_RIGHT = 2, WE_GRAD_TOP = 3, WE_GRAD_LEFT = 4, WE_GRAD_RADIAL = 5 };
+#define WE_GRAD_CELLS 32
+enum { WE_GRAD_BOTTOM = 1, WE_GRAD_RIGHT = 2, WE_GRAD_TOP = 3, WE_GRAD_LEFT = 4, WE_GRAD_RADIAL = 5,
+       WE_GRAD_ANGLE = 6, WE_GRAD_CONIC = 7 };
 /* lot 62 round 2: radial ending shape, bit 0 circle, bits 1..2 extent */
 enum { WE_EXT_FARTHEST_CORNER = 0, WE_EXT_CLOSEST_SIDE = 1, WE_EXT_FARTHEST_SIDE = 2, WE_EXT_CLOSEST_CORNER = 3 };
 
@@ -464,6 +468,12 @@ typedef struct {
      * border box. grad_dir 0 none, else WE_GRAD_*; stop positions in
      * 1/10000 of the gradient line. */
     uint8_t grad_dir, grad_count, grad_shape;
+    /* Lot 94: WE_GRAD_ANGLE: grad_angle in degrees 0..359, or grad_corner
+     * 1..4 for "to" a corner (bit 0 of corner - 1: left, bit 1: bottom);
+     * WE_GRAD_CONIC: grad_angle is the "from" angle, the centre is
+     * grad_at (as radial) and stop positions are 1/10000 of a turn. */
+    int16_t grad_angle;
+    uint8_t grad_corner;
     /* Lot 63: radial centre (bit 0/1: x/y in percent) and explicit size
      * (-1: the extent keyword; bit 2/3 of grad_at_pct: rx/ry in percent). */
     int16_t grad_at[2], grad_size[2];

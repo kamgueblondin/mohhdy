@@ -25,6 +25,10 @@ the engine draws):
   (converted): rad within half a degree of a multiple of 90deg (at most 40
   quarter turns, two integer digits, four decimals) is taken and written
   as whole degrees, see scripts/lot92_bggen.py; 1rad stays refused.
+  Lot 94 (converted): any angle the engine reads is taken: deg |v| <= 3600
+  (four decimals), grad |v| <= 4000 and turn |v| <= 10 (two decimals),
+  any radian value (two integer digits, four decimals) written as its
+  whole degrees, and "to" a corner; see scripts/lot94_gradgen.py.
 * background-clip / background-origin: one of border-box, padding-box,
   content-box, or a list of up to four that all name the same box (the
   engine paints every layer in one box); text is refused.
@@ -196,18 +200,18 @@ def radial_case(rng):
 
 
 def rad_degrees(t):
-    """Lot 92: the degrees a radian angle stands for, or None (float model:
-    180 / pi, half a degree of tolerance)"""
+    """Lot 92: the degrees a radian angle stands for, or None. Lot 94
+    (converted): every radian value is its whole degrees, x * 180 / pi
+    rounded half away from zero (Lot 92 kept only multiples of 90)"""
     body = t[:-3]
     try:
         r = float(body)
     except ValueError:
         return None
-    deg = r * 180.0 / math.pi
-    k = round(deg / 90.0)
-    if abs(deg - 90 * k) > 0.5 or abs(k) > 40:
-        return None
-    return "%ddeg" % (90 * k) if k else "0deg"
+    deg = abs(r) * 180.0 / math.pi
+    w = int(math.floor(deg + 0.5))
+    assert abs(deg - math.floor(deg) - 0.5) > 1e-6
+    return "%ddeg" % (-w if r < 0 and w else w)
 
 
 def angle_case(rng):
@@ -218,18 +222,18 @@ def angle_case(rng):
         ok = v <= 3600
         if rng.random() < 0.3:
             v = rng.choice([45, 30, 135, 1, 91, 89, 3690, 450 + 1])
-            ok = False
+            ok = v <= 3600              # Lot 94 (converted): any angle up to 3600deg
         t = ("-" if rng.random() < 0.2 else "") + str(v) + rcase(rng, "deg")
     elif k in (1, 2):
         g = 100 * rng.randrange(0, 41)
         ok = True
         if rng.random() < 0.3:
             g = rng.choice([50, 150, 99, 101, 4100, 333])
-            ok = False
+            ok = g <= 4000              # Lot 94 (converted)
         t = ("-" if rng.random() < 0.2 else "") + str(g) + rcase(rng, "grad")
         if rng.random() < 0.1:
             t = t[:-4] + ".5" + t[-4:]
-            ok = False
+            ok = ok and g < 4000        # Lot 94 (converted): one decimal is read
     elif k == 3:
         q = rng.randrange(0, 41)
         whole, part = divmod(q * 25, 100)
@@ -241,13 +245,13 @@ def angle_case(rng):
         ok = rad_degrees(t) is not None
     elif k == 5:
         t = rng.choice(["0.3turn", "0.1turn", "11turn", "0.125turn"])
-        ok = False
+        ok = t in ("0.3turn", "0.1turn")   # Lot 94 (converted): two decimals, at most 10turn
     elif k == 6:
         t = rcase(rng, "to ") + rcase(rng, rng.choice(["top", "right", "bottom", "left"]))
         ok = True
     else:
         t = rcase(rng, "to ") + rcase(rng, rng.choice(["top left", "bottom right"]))
-        ok = False
+        ok = True                       # Lot 94 (converted): a corner
     args = [t] + stops(rng)
     text = rcase(rng, "linear-gradient(") + ("," + sp(rng)).join(args) + ")"
     words = [norm_words(a) for a in args]

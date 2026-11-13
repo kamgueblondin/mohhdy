@@ -2565,47 +2565,98 @@ static int align_keyword(const char *v, int len, int fallback, int *logical) {
     return fallback;
 }
 
+/* Lot 94: the side words after "to": one side (a WE_GRAD_* direction,
+ * corner 0) or a vertical and a horizontal one in either order (a corner
+ * 1..4: bit 0 of corner - 1 left, bit 1 bottom); -1 when refused. */
+static int gradient_to(const char *a, int l, int *dir, int *corner) {
+    static const char *const side[4] = { "top", "right", "bottom", "left" };
+    static const uint8_t dirs[4] = { WE_GRAD_TOP, WE_GRAD_RIGHT, WE_GRAD_BOTTOM, WE_GRAD_LEFT };
+    int t[4], tl[4], c = tokens(a, l, t, tl), w[2], k, j;
+    if (c < 1 || c > 2) return -1;
+    for (k = 0; k < c; k++) {
+        for (j = 0; j < 4 && !value_is(a + t[k], tl[k], side[j]); j++) {}
+        if (j == 4) return -1;
+        w[k] = j;
+    }
+    *corner = 0;
+    if (c == 1) { *dir = dirs[w[0]]; return 0; }
+    if ((w[0] & 1) == (w[1] & 1)) return -1;            /* two vertical or two horizontal words */
+    if (w[0] & 1) { j = w[0]; w[0] = w[1]; w[1] = j; }  /* w[0] top/bottom, w[1] right/left */
+    *dir = WE_GRAD_ANGLE;
+    *corner = 1 + (w[1] == 3) + 2 * (w[0] == 2);
+    return 0;
+}
+
+/* Lot 94: the conic-gradient argument "[from ANGLE] [at POSITION]": 1 when
+ * the first argument is one, 0 for a colour stop, -1 when refused. */
+static int conic_shape(const char *a, int l, int16_t at[2], uint8_t *at_pct, int *from) {
+    int t[4], tl[4], c = tokens(a, l, t, tl), k = 0, degrees;
+    at[0] = at[1] = 50;
+    *at_pct = 3;
+    *from = 0;
+    if (c < 1 || (!value_is(a + t[0], tl[0], "from") && !value_is(a + t[0], tl[0], "at"))) return 0;
+    if (value_is(a + t[0], tl[0], "from")) {
+        if (c < 2 || tf_angle(a + t[1], tl[1], &degrees)) return -1;
+        *from = (degrees % 360 + 360) % 360;
+        k = 2;
+        if (c == 2) return 1;
+        if (!value_is(a + t[2], tl[2], "at")) return -1;
+    }
+    if (k + 1 >= c) return -1;                          /* "at" with no position */
+    return position_pair(a + t[k + 1], l - t[k + 1], at, at_pct) ? -1 : 1;
+}
+
 static int parse_gradient(we_node_t *n, const char *v, int len) {
     int start[WE_GRAD_STOPS + 1], length[WE_GRAD_STOPS + 1], count, k, first = 0, dir = WE_GRAD_BOTTOM;
-    int pos[WE_GRAD_STOPS], last, radial, shape = 0;
+    int pos[WE_GRAD_STOPS], last, radial, conic, shape = 0, pl = 16, corner = 0, angle = 0;
     uint32_t color[WE_GRAD_STOPS];
+    int16_t conic_at[2];
+    uint8_t conic_pct = 0;
     if (len < 17 || v[len - 1] != ')') return -1;
     radial = w_ieq_n(v, 16, "radial-gradient(");
-    if (!radial && !w_ieq_n(v, 16, "linear-gradient(")) return -1;
-    count = comma_args(v + 16, len - 17, start, length, WE_GRAD_STOPS + 1);
+    conic = w_ieq_n(v, 15, "conic-gradient(");
+    if (conic) pl = 15;
+    else if (!radial && !w_ieq_n(v, 16, "linear-gradient(")) return -1;
+    count = comma_args(v + pl, len - pl - 1, start, length, WE_GRAD_STOPS + 1);
     if (count < 2) return -1;
     if (radial) {
         int got = radial_shape(n, v + 16 + start[0], length[0], &shape);
         if (got < 0) return -1;
         first = got;
         dir = WE_GRAD_RADIAL;
+    } else if (conic) {
+        first = conic_shape(v + pl + start[0], length[0], conic_at, &conic_pct, &angle);
+        if (first < 0) return -1;
+        dir = WE_GRAD_CONIC;
     } else {
         const char *a = v + 16 + start[0];
         int l = length[0];
         int degrees;
         if (l > 3 && w_ieq_n(a, 3, "to ")) {
-            int at = 3;
-            while (at < l && w_space(a[at])) at++;
-            if (value_is(a + at, l - at, "bottom")) dir = WE_GRAD_BOTTOM;
-            else if (value_is(a + at, l - at, "right")) dir = WE_GRAD_RIGHT;
-            else if (value_is(a + at, l - at, "top")) dir = WE_GRAD_TOP;
-            else if (value_is(a + at, l - at, "left")) dir = WE_GRAD_LEFT;
-            else return -1;
+            if (gradient_to(a + 3, l - 3, &dir, &corner)) return -1;
             first = 1;
         } else if (tf_angle(a, l, &degrees) == 0) {
             static const uint8_t by_quarter[4] = { WE_GRAD_TOP, WE_GRAD_RIGHT, WE_GRAD_BOTTOM, WE_GRAD_LEFT };
-            if (degrees % 90) return -1;
-            dir = by_quarter[((degrees / 90 % 4) + 4) % 4];
+            if (degrees % 90) {
+                /* Lot 94: any other whole-degree angle, painted in cells */
+                dir = WE_GRAD_ANGLE;
+                angle = (degrees % 360 + 360) % 360;
+            } else dir = by_quarter[((degrees / 90 % 4) + 4) % 4];
             first = 1;
         } else if (l > 0 && ((a[0] >= '0' && a[0] <= '9') || a[0] == '-')) return -1;
     }
     if (count - first < 2 || count - first > WE_GRAD_STOPS) return -1;
     for (k = 0; k < count - first; k++) {
-        const char *a = v + 16 + start[first + k];
-        int l = length[first + k], t[4], tl[4], c = tokens(a, l, t, tl), tenths;
+        const char *a = v + pl + start[first + k];
+        int l = length[first + k], t[4], tl[4], c = tokens(a, l, t, tl), tenths, degrees;
         pos[k] = -1;
         if (c < 1 || c > 2 || parse_color(a + t[0], tl[0], &color[k])) return -1;
-        if (c == 2) {
+        if (c == 2 && conic && tf_angle(a + t[1], tl[1], &degrees) == 0) {
+            /* Lot 94: a conic stop at an angle, 0..360 whole degrees, in
+             * 1/10000 of a turn rounded half up */
+            if (degrees < 0 || degrees > 360) return -1;
+            pos[k] = (degrees * 500 + 9) / 18;
+        } else if (c == 2) {
             if (spacing_percent(a + t[1], tl[1], 1, &tenths) || tenths > 1000) return -1;
             pos[k] = tenths < 0 ? 0 : tenths * 10;
         }
@@ -2625,6 +2676,9 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
     }
     n->grad_dir = (uint8_t)dir;
     n->grad_shape = (uint8_t)shape;
+    n->grad_angle = (int16_t)angle;
+    n->grad_corner = (uint8_t)corner;
+    if (conic) { n->grad_at[0] = conic_at[0]; n->grad_at[1] = conic_at[1]; n->grad_at_pct = conic_pct; }
     n->grad_count = (uint8_t)count;
     for (k = 0; k < count; k++) { n->grad_pos[k] = (uint16_t)pos[k]; n->grad_color[k] = color[k]; }
     return 0;
@@ -3531,7 +3585,7 @@ static int shorthand_kind(const char *t, int l) {
     int k;
     if (l > 4 && w_ieq_n(t, 4, "url(")) return 1;
     if (value_is(t, l, "none")) return 1;
-    if (l > 16 && (w_ieq_n(t, 16, "linear-gradient(") || w_ieq_n(t, 16, "radial-gradient("))) return 2;
+    if (l > 16 && (w_ieq_n(t, 16, "linear-gradient(") || w_ieq_n(t, 16, "radial-gradient(") || w_ieq_n(t, 15, "conic-gradient("))) return 2;
     for (k = 0; repeats[k]; k++) if (value_is(t, l, repeats[k])) return 3;
     for (k = 0; places[k]; k++) if (value_is(t, l, places[k])) return 4;
     if ((t[0] >= '0' && t[0] <= '9') || t[0] == '-' || t[0] == '.') return 4;
@@ -3618,7 +3672,8 @@ static int background_layers(we_doc_t *d, we_node_t *n, const char *v, int len) 
     layer_scratch.grad_dir = 0; layer_scratch.bgi_len = 0; layer_scratch.bgi_layers = 0;
     for (k = 0; k < c && !bad; k++) {
         const char *item = v + a[k];
-        if (l[k] > 16 && (w_ieq_n(item, 16, "linear-gradient(") || w_ieq_n(item, 16, "radial-gradient("))) {
+        if (l[k] > 16 && (w_ieq_n(item, 16, "linear-gradient(") || w_ieq_n(item, 16, "radial-gradient(") ||
+                          w_ieq_n(item, 15, "conic-gradient("))) {
             bad = k != c - 1 || parse_gradient(&layer_scratch, item, l[k]);
             continue;
         }
@@ -4943,7 +4998,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (background_shorthand(d, n, v, vl)) diag(d, "background refused", -1);
     }
     else if ((w_eq(prop, "background") || w_eq(prop, "background-image")) && vl > 16 &&
-             (w_ieq_n(v, 16, "linear-gradient(") || w_ieq_n(v, 16, "radial-gradient("))) {
+             (w_ieq_n(v, 16, "linear-gradient(") || w_ieq_n(v, 16, "radial-gradient(") || w_ieq_n(v, 15, "conic-gradient("))) {
         if (w_eq(prop, "background-image") && list_count(v, vl) > 1) {
             if (background_layers(d, n, v, vl)) diag(d, "background image refused", -1);
         } else if (parse_gradient(n, v, vl)) diag(d, "gradient refused", -1);
@@ -7152,7 +7207,8 @@ static int gradient_reserve(we_doc_t *d, int idx, int *count) {
     int first = (int)d->nitems, k, want;
     *count = 0;
     if (!d->nodes[idx].grad_dir) return first;
-    want = d->nodes[idx].grad_dir != WE_GRAD_RADIAL ? WE_GRAD_BANDS :
+    want = d->nodes[idx].grad_dir >= WE_GRAD_ANGLE ? WE_GRAD_CELLS :
+           d->nodes[idx].grad_dir != WE_GRAD_RADIAL ? WE_GRAD_BANDS :
            radial_translucent(&d->nodes[idx]) ? WE_RADIAL_ALPHA_SLOTS : WE_RADIAL_SLOTS;
     for (k = 0; k < want; k++) {
         os_fb_web_item_t *it = emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, 0);
@@ -7745,6 +7801,140 @@ static int radial_rings(we_doc_t *d, int idx, int slot, int count, const int *c,
     return 1;
 }
 
+/* ---------- Lot 94: gradients painted in cells ---------- */
+/* sin of 0..90 whole degrees in 1/65536, rounded to nearest */
+static const int32_t grad_sin[91] = {
+    0, 1144, 2287, 3430, 4572, 5712, 6850, 7987, 9121, 10252, 11380, 12505, 13626, 14742, 15855, 16962,
+    18064, 19161, 20252, 21336, 22415, 23486, 24550, 25607, 26656, 27697, 28729, 29753, 30767, 31772, 32768,
+    33754, 34729, 35693, 36647, 37590, 38521, 39441, 40348, 41243, 42126, 42995, 43852, 44695, 45525, 46341,
+    47143, 47930, 48703, 49461, 50203, 50931, 51643, 52339, 53020, 53684, 54332, 54963, 55578, 56175, 56756,
+    57319, 57865, 58393, 58903, 59396, 59870, 60326, 60764, 61183, 61584, 61966, 62328, 62672, 62997, 63303,
+    63589, 63856, 64104, 64332, 64540, 64729, 64898, 65048, 65177, 65287, 65376, 65446, 65496, 65526, 65536 };
+
+/* sin of d degrees (d >= 0: an angle 0..359, or that plus 90) in 1/65536 */
+static int32_t grad_sin_deg(int d) {
+    d %= 360;
+    if (d <= 90) return grad_sin[d];
+    if (d <= 180) return grad_sin[180 - d];
+    if (d <= 270) return -grad_sin[d - 180];
+    return -grad_sin[360 - d];
+}
+
+/* n / d for d > 0 by shift and subtract (no 64-bit division helper in
+ * the freestanding guest), the quotient rounded down */
+static uint64_t grad_udiv(uint64_t n, uint64_t d) {
+    uint64_t q = 0, r = 0;
+    int b;
+    for (b = 63; b >= 0; b--) {
+        r = (r << 1) | ((n >> b) & 1u);
+        if (r >= d) { r -= d; q |= (uint64_t)1 << b; }
+    }
+    return q;
+}
+
+/* atan(2^-i) in 1/2^32 of a turn, rounded to nearest */
+static const uint32_t grad_atan[31] = {
+    536870912u, 316933406u, 167458907u, 85004756u, 42667331u, 21354465u, 10679838u, 5340245u, 2670163u,
+    1335087u, 667544u, 333772u, 166886u, 83443u, 41722u, 20861u, 10430u, 5215u, 2608u, 1304u, 652u, 326u,
+    163u, 81u, 41u, 20u, 10u, 5u, 3u, 1u, 1u };
+
+/* the direction of (x, y) (y down) clockwise from up, in 1/2^32 of a turn
+ * (CORDIC vectoring, 31 steps, within about 2^-27 of a turn). Up, down and
+ * the origin (0) are exact: v = 0 skips the loop. Left and right go
+ * through it; their error cannot change a position, since a 1/10000
+ * position minus a whole-degree "from" is never a tie. */
+static uint32_t grad_turn(int x, int y) {
+    int64_t u = -(int64_t)y, v = x;
+    uint32_t acc = 0;
+    int i;
+    if (u < 0) { u = -u; v = -v; acc = 0x80000000u; }
+    u *= (int64_t)1 << 32; v *= (int64_t)1 << 32;      /* not a shift: v may be negative */
+    for (i = 0; i < 31 && v; i++) {
+        int64_t nu, nv;
+        if (v > 0) { nu = u + (v >> i); nv = v - (u >> i); acc += grad_atan[i]; }
+        else { nu = u - (v >> i); nv = v + (u >> i); acc -= grad_atan[i]; }
+        u = nu; v = nv;
+    }
+    return acc;
+}
+
+/* integer square root, rounded down */
+static int grad_isqrt(int n) {
+    int r = 0;
+    while ((r + 1) * (r + 1) <= n) r++;
+    return r;
+}
+
+/* Lot 94: a linear gradient at an angle or to a corner, or a conic one.
+ * The painted area is the origin box cut to the clip box (as the bands);
+ * it is split into at most WE_GRAD_CELLS cells, rows = isqrt(32 h / w)
+ * (1..h, at most 32) and cols = 32 / rows (at most w), each taking the
+ * colour of the gradient at its centre:
+ *   - linear: the CSS gradient line through the origin box centre,
+ *     length |W sin a| + |H cos a|, position 1/2 + ((x - cx) sin a -
+ *     (y - cy) cos a) / length, with sin and cos of whole degrees in
+ *     1/65536; to a corner, sin a and cos a are taken as +-H and +-W
+ *     (the line is perpendicular to the other diagonal, exactly);
+ *   - conic: the direction of the centre from the "at" point, clockwise
+ *     from up, minus the "from" angle, as a fraction of a turn.
+ * Positions are in 1/10000, rounded half up. */
+static void cells_fill(we_doc_t *d, int idx, int slot, int count, const int *o, const int *c) {
+    const we_node_t *n = &d->nodes[idx];
+    int ax0 = o[0] > c[0] ? o[0] : c[0], ay0 = o[1] > c[1] ? o[1] : c[1];
+    int ax1 = o[0] + o[2] < c[0] + c[2] ? o[0] + o[2] : c[0] + c[2];
+    int ay1 = o[1] + o[3] < c[1] + c[3] ? o[1] + o[3] : c[1] + c[3];
+    int aw = ax1 - ax0, ah = ay1 - ay0, rows, cols, i, j, k = 0;
+    int64_t sn = 0, cs = 0, den = 0;
+    int cx2 = 2 * o[0] + o[2], cy2 = 2 * o[1] + o[3];
+    if (aw <= 0 || ah <= 0) return;
+    if (n->grad_dir == WE_GRAD_ANGLE) {
+        if (n->grad_corner) {
+            sn = (n->grad_corner - 1) & 1 ? -o[3] : o[3];
+            cs = (n->grad_corner - 1) & 2 ? -o[2] : o[2];
+        } else {
+            sn = grad_sin_deg(n->grad_angle);
+            cs = grad_sin_deg(n->grad_angle + 90);
+        }
+        den = 2 * ((int64_t)o[2] * (sn < 0 ? -sn : sn) + (int64_t)o[3] * (cs < 0 ? -cs : cs));
+        if (den <= 0) return;
+    } else {
+        cx2 = 2 * (o[0] + (n->grad_at_pct & 1 ? o[2] * n->grad_at[0] / 100 : n->grad_at[0]));
+        cy2 = 2 * (o[1] + (n->grad_at_pct & 2 ? o[3] * n->grad_at[1] / 100 : n->grad_at[1]));
+    }
+    rows = grad_isqrt(WE_GRAD_CELLS * ah / aw);
+    if (rows < 1) rows = 1;
+    if (rows > ah) rows = ah;
+    if (rows > WE_GRAD_CELLS) rows = WE_GRAD_CELLS;
+    cols = WE_GRAD_CELLS / rows;
+    if (cols > aw) cols = aw;
+    for (k = 1; k < n->grad_count; k++) if (n->grad_color[k] != n->grad_color[0]) gradient_banded = 1;
+    k = 0;
+    for (j = 0; j < rows; j++) {
+        int y0 = ay0 + j * ah / rows, y1 = ay0 + (j + 1) * ah / rows;
+        for (i = 0; i < cols && k < count; i++, k++) {
+            os_fb_web_item_t *it = &d->items[slot + k];
+            int x0 = ax0 + i * aw / cols, x1 = ax0 + (i + 1) * aw / cols;
+            int dx = x0 + x1 - cx2, dy = y0 + y1 - cy2, p;
+            if (n->grad_dir == WE_GRAD_ANGLE) {
+                /* num >= 0: the cell centre is inside the origin box, so
+                 * the position is 0..10000 */
+                int64_t num = 5000 * den + 10000 * (dx * sn - dy * cs);
+                p = (int)grad_udiv((uint64_t)(2 * num + den), (uint64_t)(2 * den));
+            } else {
+                /* (turn - from / 360) in 1/(9 * 2^32) of 1/10000, then
+                 * rounded half up to 1/10000 */
+                int64_t t = (int64_t)grad_turn(dx, dy) * 90000 - (int64_t)n->grad_angle * 250 * ((int64_t)1 << 32);
+                if (t < 0) t += (int64_t)90000 << 32;
+                p = (int)(grad_udiv((uint64_t)t + ((uint64_t)9 << 31), 9) >> 32);
+            }
+            it->kind = OS_FB_WEB_RECT;
+            it->color = gradient_at(n, p);
+            it->x = (int16_t)x0; it->y = (int16_t)y0;
+            it->w = (uint16_t)(x1 - x0); it->h = (uint16_t)(y1 - y0);
+        }
+    }
+}
+
 static void gradient_fill(we_doc_t *d, int idx, int slot, int count, int bx, int by, int bw, int bh) {
     const we_node_t *n = &d->nodes[idx];
     int vertical = n->grad_dir == WE_GRAD_BOTTOM || n->grad_dir == WE_GRAD_TOP;
@@ -7755,6 +7945,12 @@ static void gradient_fill(we_doc_t *d, int idx, int slot, int count, int bx, int
         background_box(n, n->bg_clip, bx, by, bw, bh, c);
         for (k = 1; k < n->grad_count; k++) if (n->grad_color[k] != n->grad_color[0]) gradient_banded = 1;
         if (count > 0) radial_fill(d, idx, slot, count, o, c);
+        return;
+    }
+    if (n->grad_dir >= WE_GRAD_ANGLE) {
+        background_box(n, n->bg_origin, bx, by, bw, bh, o);
+        background_box(n, n->bg_clip, bx, by, bw, bh, c);
+        cells_fill(d, idx, slot, count, o, c);
         return;
     }
     background_box(n, n->bg_origin, bx, by, bw, bh, o);
@@ -8561,6 +8757,26 @@ static void vertical_style(we_doc_t *d, int i, int rl, int forward) {
     if (n->grad_dir && n->grad_dir <= WE_GRAD_RADIAL) {
         if (forward) n->grad_dir = grad_map[rl][n->grad_dir];
         else for (k = 1; k <= WE_GRAD_RADIAL; k++) if (grad_map[rl][k] == n->grad_dir) { n->grad_dir = (uint8_t)k; break; }
+    }
+    if (n->grad_dir == WE_GRAD_ANGLE) {
+        /* lot 94: the box is painted in the logical frame. vertical-lr
+         * transposes it (x' = y, y' = x): the direction angle a becomes
+         * 270 - a both ways. vertical-rl rotates it (x' = y, y' = -x):
+         * a - 90 forward, a + 90 back. A corner keyword is mapped the same
+         * way through its (left, bottom) bits. */
+        if (n->grad_corner) {
+            int left = (n->grad_corner - 1) & 1, bottom = ((n->grad_corner - 1) >> 1) & 1, nl, nb;
+            if (!rl) { nl = !bottom; nb = !left; }
+            else if (forward) { nl = !bottom; nb = left; }
+            else { nl = bottom; nb = !left; }
+            n->grad_corner = (uint8_t)(1 + nl + 2 * nb);
+        } else if (!rl) n->grad_angle = (int16_t)((630 - n->grad_angle) % 360);
+        else n->grad_angle = (int16_t)((n->grad_angle + (forward ? 270 : 90)) % 360);
+    } else if (n->grad_dir == WE_GRAD_CONIC && forward) {
+        /* the transpose would reverse the sweep and the rl centre needs the
+         * physical width: refused (lot 95) */
+        n->grad_dir = 0;
+        diag(d, "conic refused in vertical flow", i);
     }
     if (n->grad_dir == WE_GRAD_RADIAL) {
         swap16(&n->grad_at[0], &n->grad_at[1]);

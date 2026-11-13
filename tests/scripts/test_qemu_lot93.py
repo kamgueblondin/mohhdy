@@ -5,7 +5,8 @@ server runs on the host and the guest reaches it as 10.0.2.2 (slirp).
   * math functions in registered values (/lot93/math.html): a registered
     <angle> computed by atan2(1, 0) gives a 90deg gradient and acos(-1) a
     180deg one; its initial value atan2(1, 1) is 45deg, which the engine
-    does not draw (the colour stays); the same atan2() in an unregistered
+    did not draw (Lot 94, converted: the reader passes it and the engine
+    draws it in cells); the same atan2() in an unregistered
     property keeps its text and the gradient is refused. A registered
     <length> hypot(30px, 40px) is a 50px radial radius; calc(pow(2, 4) *
     1px) gives a 16px font size, round(calc(pi * 5px), 1px) 16px, the
@@ -66,7 +67,8 @@ def step_math(mon, proc, u):
                     "pikeep93", "sqrtkeep93", "tankeep93", "logkeep93"])
     need(css, ["node div #ang93 display auto bgimg linear-gradient(90deg, #ff0000, #0000ff)\n",
                "node div #acos93 display auto bgimg linear-gradient(180deg, #00ff00, #000000) bgrep no-repeat\n",
-               "node div #init93 display auto bg #123456\n",
+               # Lot 94 (converted): 45deg is passed on (was "bg #123456" alone)
+               "node div #init93 display auto bg #123456 bgimg linear-gradient(45deg, #ff0000, #0000ff)\n",
                "node div #uang93 display auto bg #654321\n",
                "node div #rad93 display auto bgimg radial-gradient(circle 50px, #ff0000, #0000ff)\n",
                "node p #pow93 display auto size 16px\n",
@@ -77,7 +79,7 @@ def step_math(mon, proc, u):
                "css-props registered 3 rejected 0 ", " simplified 6\n"], "web-css math")
     for ident in ("ang93", "acos93", "rad93"):
         refuse(node_line(css, ident), ["atan2(", "acos(", "hypot("], "web-css #" + ident)
-    say("computed: atan2(1, 0) -> 90deg and acos(-1) -> 180deg drawn, initial atan2(1, 1) = 45deg not drawn, "
+    say("computed: atan2(1, 0) -> 90deg and acos(-1) -> 180deg drawn, initial atan2(1, 1) = 45deg passed on, "
         "unregistered atan2() refused; hypot() -> radius 50px; pow(), pi, sqrt(), log() and exp() font sizes "
         "16/16/12/21px; tan(90deg) kept; simplified 6")
 

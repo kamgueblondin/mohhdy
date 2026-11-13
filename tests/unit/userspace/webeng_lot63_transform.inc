@@ -50,7 +50,7 @@ static void test_l63_transform_angle_refusals(void) {
     }
 }
 
-/* linear-gradient angles share the parser: quarter turns only */
+/* linear-gradient angles share the parser (Lot 94: any whole degree) */
 static void test_l63_transform_gradient_angles(void) {
     lot52_render("<body><div id=a style='height:4px;background:linear-gradient(100grad, #ff0000, #0000ff)'></div>"
                  "<div id=b style='height:4px;background:linear-gradient(.5turn, #ff0000, #0000ff)'></div>"
@@ -59,8 +59,10 @@ static void test_l63_transform_gradient_angles(void) {
     TEST_ASSERT_EQUAL(WE_GRAD_RIGHT, lot52_node("a")->grad_dir);
     TEST_ASSERT_EQUAL(WE_GRAD_BOTTOM, lot52_node("b")->grad_dir);
     TEST_ASSERT_EQUAL(WE_GRAD_LEFT, lot52_node("c")->grad_dir);
-    TEST_ASSERT_EQUAL(0, lot52_node("d")->grad_dir);
-    TEST_ASSERT_EQUAL(1, l61_diag_count("gradient refused"));
+    /* Lot 94 (converted): 45deg is an angled gradient, nothing refused */
+    TEST_ASSERT_EQUAL(WE_GRAD_ANGLE, lot52_node("d")->grad_dir);
+    TEST_ASSERT_EQUAL(45, lot52_node("d")->grad_angle);
+    TEST_ASSERT_EQUAL(0, l61_diag_count("gradient refused"));
 }
 
 /* rotate(45deg) about 0 0: corners (0,0) (14.1,14.1) (7.1,21.2) (-7.1,7.1),

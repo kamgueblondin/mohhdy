@@ -74,6 +74,9 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /lot93/math.html    Lot 93: registered values computed with atan2(),
                       acos(), hypot(), pow(), pi, sqrt(), log(), exp();
                       tan(90deg) kept
+  /lot94/grad.html    Lot 94: linear angles that are not quarter turns
+                      (radians as whole degrees), a corner, conic-gradient,
+                      a registered angle of 45deg, a refused conic stop
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -243,7 +246,7 @@ LOT91_PAGES = {
 # Lot 92: reader pages (tests/scripts/test_qemu_lot92.py)
 LOT92_PAGES = {
     # radian angles (two quarter turns kept as whole degrees, 1rad
-    # refused), a registered <angle> computed by mod() feeds the gradient,
+    # refused; Lot 94: written as 57deg), a registered <angle> computed by mod() feeds the gradient,
     # the same value unregistered keeps its text and is refused
     "/lot92/bg.html": (
         "<!doctype html><html><head><title>Lot 92 backgrounds</title><style>"
@@ -287,7 +290,8 @@ LOT92_PAGES = {
 LOT93_PAGES = {
     # registered <angle> values computed by atan2() and acos() feed the
     # gradient (90deg, 180deg); the computed initial value atan2(1, 1) is
-    # 45deg, which the engine does not draw (the colour stays); the same
+    # 45deg, which the engine did not draw (the colour stayed; Lot 94: it
+    # is drawn); the same
     # atan2() unregistered keeps its text and is refused. A registered
     # <length> computed by hypot() is a 50px radius; pow(), pi with
     # round(), the initial sqrt() and log() with exp() give font sizes;
@@ -319,6 +323,31 @@ LOT93_PAGES = {
         "<p id=\"tan93\">tankeep93</p>"
         "<p id=\"log93\">logkeep93</p>"
         "<p>fin93</p></body></html>"),
+}
+
+
+# Lot 94: reader page (tests/scripts/test_qemu_lot94.py)
+LOT94_PAGES = {
+    # 0.7854rad is written as 45deg; a corner and a conic gradient keep
+    # their words; a registered angle computed to 45deg is drawn now; a
+    # conic stop past 360deg refuses the gradient (the colour stays)
+    "/lot94/grad.html": (
+        "<!doctype html><html><head><title>Lot 94 gradients</title><style>"
+        "@property --a94 { syntax: '<angle>'; inherits: false; initial-value: 0deg }\n"
+        "#lin94 { background-image: linear-gradient(0.7854rad, #ff0000, #0000ff) }\n"
+        "#cor94 { background: linear-gradient(TO Bottom   left, #00ff00, #000000) }\n"
+        "#con94 { background-image: conic-gradient(from 30deg at 25% 75%, #ff0000, #0000ff 180deg, #00ff00) }\n"
+        "#reg94 { --a94: calc(30deg + 15deg); background-image: linear-gradient(var(--a94), #ff0000, #0000ff) }\n"
+        "#bad94 { background-color: #123456; background-image: conic-gradient(#ff0000 400deg, #0000ff) }\n"
+        "#deg94 { background: linear-gradient(-30.5DEG, #ff0000 10%, #0000ff) }\n"
+        "</style></head><body><h1>Gradients 94</h1>"
+        "<div id=\"lin94\"><p>linkeep94</p></div>"
+        "<div id=\"cor94\"><p>corkeep94</p></div>"
+        "<div id=\"con94\"><p>conkeep94</p></div>"
+        "<div id=\"reg94\"><p>regkeep94</p></div>"
+        "<div id=\"bad94\"><p>badkeep94</p></div>"
+        "<div id=\"deg94\"><p>degkeep94</p></div>"
+        "<p>fin94</p></body></html>"),
 }
 
 
@@ -508,6 +537,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT93_PAGES:
             self._send(200, LOT93_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT94_PAGES:
+            self._send(200, LOT94_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

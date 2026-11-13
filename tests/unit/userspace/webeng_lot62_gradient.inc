@@ -76,12 +76,21 @@ static void test_l62_gradient_cascade(void) {
 }
 
 static void test_l62_gradient_refusals(void) {
+    /* Lot 94 (converted): "to top left" and 45deg are drawn now; "to top
+     * bottom" and 45px are refused in their places */
     lot52_render(L62_BODY "<div id=a style='height:4px;background:linear-gradient(red, blue);"
-                 "background:linear-gradient(red);background:linear-gradient(to top left, red, blue);"
-                 "background:linear-gradient(45deg, red, blue);background:linear-gradient(red 10px, blue)'></div></body>", 320);
+                 "background:linear-gradient(red);background:linear-gradient(to top bottom, red, blue);"
+                 "background:linear-gradient(45px, red, blue);background:linear-gradient(red 10px, blue)'></div></body>", 320);
     TEST_ASSERT_EQUAL(4, l61_diag_count("gradient refused"));
     TEST_ASSERT_EQUAL(WE_GRAD_BOTTOM, lot52_node("a")->grad_dir);
     TEST_ASSERT_EQUAL(4, (int)g_doc.nitems);
+    lot52_render(L62_BODY "<div id=a style='height:4px;background:linear-gradient(to top left, red, blue)'></div>"
+                 "<div id=b style='height:4px;background:linear-gradient(45deg, red, blue)'></div></body>", 320);
+    TEST_ASSERT_EQUAL(0, l61_diag_count("gradient refused"));
+    TEST_ASSERT_EQUAL(WE_GRAD_ANGLE, lot52_node("a")->grad_dir);
+    TEST_ASSERT_EQUAL(2, lot52_node("a")->grad_corner);   /* top left: bit 0 of corner - 1 */
+    TEST_ASSERT_EQUAL(WE_GRAD_ANGLE, lot52_node("b")->grad_dir);
+    TEST_ASSERT_EQUAL(45, lot52_node("b")->grad_angle);
     lot52_render(L62_BODY "<div id=a style='height:4px;background:linear-gradient(red, blue, red, blue, red);"
                  "background:linear-gradient(red, , blue);background:linear-gradient(red, blue 120%);"
                  "background-image:url(x.png)'></div></body>", 320);

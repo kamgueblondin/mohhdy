@@ -5,7 +5,7 @@ server runs on the host and the guest reaches it as 10.0.2.2 (slirp).
   * reader backgrounds (/lot92/bg.html): linear-gradient angles in
     radians are taken when they are a quarter turn within half a degree
     and written as whole degrees (1.5708rad -> 90deg, -3.1416rad ->
-    -180deg); 1rad is refused (the colour stays). A registered <angle>
+    -180deg); 1rad was refused (Lot 94: written as 57deg). A registered <angle>
     whose value is mod(450deg, 360deg) is computed to 90deg and the
     gradient takes it; the same value in an unregistered property keeps
     its text and the gradient is refused.
@@ -69,13 +69,14 @@ def step_backgrounds(mon, proc, u):
                    ["radkeep92", "radnkeep92", "radbadkeep92", "angkeep92", "angukeep92"])
     need(css, ["node div #rad92 display auto bgimg linear-gradient(90deg, #ff0000, #0000ff)\n",
                "node div #radn92 display auto bgimg linear-gradient(-180deg, #00ff00, #000000) bgrep no-repeat\n",
-               "node div #radbad92 display auto bg #123456\n",
+               # Lot 94 (converted): 1rad is passed on as 57deg (drawn in cells)
+               "node div #radbad92 display auto bg #123456 bgimg linear-gradient(57deg, #ff0000, #0000ff)\n",
                "node div #ang92 display auto bgimg linear-gradient(90deg, #ff0000, #0000ff)\n",
                "node div #angu92 display auto bg #654321\n",
                "css-props registered 1 rejected 0 ", " simplified 1\n"], "web-css backgrounds")
-    for ident in ("rad92", "radn92", "ang92"):
+    for ident in ("rad92", "radn92", "radbad92", "ang92"):
         refuse(node_line(css, ident), ["rad,", "rad)", "mod("], "web-css #" + ident)
-    say("reader: 1.5708rad -> 90deg, -3.1416rad -> -180deg, 1rad refused; registered <angle> "
+    say("reader: 1.5708rad -> 90deg, -3.1416rad -> -180deg, 1rad -> 57deg (Lot 94); registered <angle> "
         "mod(450deg, 360deg) -> 90deg drawn, the unregistered one refused")
 
 

@@ -292,7 +292,7 @@ static void test_l90_val_29(void) {
 
 static void test_l90_val_30(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "rAdIal-Gradient(farthest-corner CIRCLE, 	 gREy, 	 #F1813A 61%, 	 rGb(141 ,95,182) 4%), URL(WUDh9HwXMgtmJdzG.gq-SbWaVVm)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "linear-gradient(45deg, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "linear-gradient(45px, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "URL(SWwXw/oZ9RmMeiO4pn0HHu9), url()"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url( 1dtAW.7 ), url(a b.png)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "linear-gradient(#Db5, rgb(122 150, 211), red, rgba(245, 204, 13, 0.0)), URL(f3xwZwFLbaPO8yHX45/33)"));
@@ -313,7 +313,7 @@ static void test_l90_val_32(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "RADIAL-GRADIENT(rgba(209, 27, 251, 0.3) 	 93%, #0232A2), URL(iZO9RuPf53VM7uTRkRNlvL3fc/x), URL(YknTGKcQu.PL55-pe1)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "none, none, none, none, none"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "none, none, none, none, none"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "linear-gradient(0.3turn, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "linear-gradient(0.125turn, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "linear-GradieNt(#f3A40bFf	39%, 	 rgba(220, 28, 84, 0.6), 	 #DBFabC 40%, 	 #83Acf9), url(\"lFJe/-h_uKHRoCbXEt7C\"), url( 	 oVdDVHNPzU-tlJ.QVxcoKl )"));
 }
 
@@ -331,7 +331,7 @@ static void test_l90_val_34(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "radial-gradient(CLOSEST-SIDE  ELLIPSE  at  416pX BOTTOM, 	 teal, 	 #Fd1A27 88%, 	 rgba(217, 25, 56, 0.9), 	 RGB(218 180, 11)), url(l9AwtqAinN), url(\"tf-ndw\")"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "LiNeAr-gRADIeNt(0.75turn, 	 #e9AC33C2	30.1%, 	 #EcBAb60e 97%), url(	_CynKMcpoZTiYd4yRSxKbt/ ), url(\"bT42ZeyhZAadnIX8PFaIGgF\")"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "none, none, none, none, none"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient(red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "conic-gradient(red)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "none, none, none, none, none"));
 }
 

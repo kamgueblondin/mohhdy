@@ -22,6 +22,13 @@ from the written text (180 / pi from Python's math module):
   when it is a whole multiple of 90deg (at most 3600), like a written
   angle; an unregistered one keeps its text and the gradient is refused.
 
+Lot 94 (converted): every radian value with at most two integer digits
+and four decimals is taken, written as its whole degrees (x * 180 / pi
+rounded half away from zero); a registered angle is taken when it is a
+whole number of degrees, at most 3600. The draws are unchanged (the Lot 92
+skip rule still picks the cases); the expectations follow Lot 94. Values
+within 1e-6 degree of a half degree are checked not to occur.
+
 Run: python3 scripts/lot92_bggen.py
 """
 import math
@@ -102,9 +109,11 @@ def rad_model(text, dec):
     dist = abs(deg - 90 * k)
     if abs(dist - 0.5) < 0.001:
         return None, True
-    if dist > 0.5 or abs(k) > 40:
-        return None, False
-    return "%ddeg" % (90 * k), False
+    # Lot 94 (converted): the whole degrees, rounded half away from zero
+    a = abs(deg)
+    assert abs(a - math.floor(a) - 0.5) > 1e-6
+    w = int(math.floor(a + 0.5))
+    return "%ddeg" % (-w if deg < 0 and w else w), False
 
 
 def norm_words(text):
@@ -147,6 +156,10 @@ def bad_case(rng):
         a = "1.5708rads"
     else:
         a = "64.4026rad"            # 41 quarter turns
+    # Lot 94 (converted): k 3 and 7 are radian values the reader now takes
+    if k in (3, 7):
+        deg, _ = rad_model(a[:-3], len(a[:-3].split(".")[1]) if "." in a else 0)
+        return "linear-gradient(%s, %s)" % (a, st), "linear-gradient(%s, %s)" % (deg, norm_words(st))
     return "linear-gradient(%s, %s)" % (a, st), None
 
 
@@ -225,7 +238,8 @@ def deg_text(d):
 
 
 def bg_accepts(d):
-    return d.denominator == 1 and d.numerator % 90 == 0 and abs(d.numerator) <= 3600
+    # Lot 94 (converted): any whole number of degrees up to 3600
+    return d.denominator == 1 and abs(d.numerator) <= 3600
 
 
 def write_sheet():
