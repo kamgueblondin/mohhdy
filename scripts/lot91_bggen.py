@@ -21,8 +21,10 @@ the engine draws):
 * the normal form of a gradient keeps each argument lower case with one
   space between words, joined with ", "; longer than 127 bytes: refused.
 * angles: deg (integer multiple of 90, at most 3600), turn (a multiple of
-  0.25, at most 10), grad (integer multiple of 100, at most 4000); rad is
-  refused (no exact quarter turn).
+  0.25, at most 10), grad (integer multiple of 100, at most 4000). Lot 92
+  (converted): rad within half a degree of a multiple of 90deg (at most 40
+  quarter turns, two integer digits, four decimals) is taken and written
+  as whole degrees, see scripts/lot92_bggen.py; 1rad stays refused.
 * background-clip / background-origin: one of border-box, padding-box,
   content-box, or a list of up to four that all name the same box (the
   engine paints every layer in one box); text is refused.
@@ -38,6 +40,7 @@ the engine draws):
 
 Run: python3 scripts/lot91_bggen.py
 """
+import math
 import os
 import random
 
@@ -192,6 +195,21 @@ def radial_case(rng):
     return text, normal
 
 
+def rad_degrees(t):
+    """Lot 92: the degrees a radian angle stands for, or None (float model:
+    180 / pi, half a degree of tolerance)"""
+    body = t[:-3]
+    try:
+        r = float(body)
+    except ValueError:
+        return None
+    deg = r * 180.0 / math.pi
+    k = round(deg / 90.0)
+    if abs(deg - 90 * k) > 0.5 or abs(k) > 40:
+        return None
+    return "%ddeg" % (90 * k) if k else "0deg"
+
+
 def angle_case(rng):
     k = rng.randrange(8)
     if k == 0:
@@ -219,7 +237,8 @@ def angle_case(rng):
         ok = True
     elif k == 4:
         t = rng.choice(["1.5708rad", "3.1416rad", "0rad", "6.2832rad", "1rad"])
-        ok = False
+        # Lot 92 (converted): Lot 91 refused every radian value
+        ok = rad_degrees(t) is not None
     elif k == 5:
         t = rng.choice(["0.3turn", "0.1turn", "11turn", "0.125turn"])
         ok = False
@@ -231,7 +250,10 @@ def angle_case(rng):
         ok = False
     args = [t] + stops(rng)
     text = rcase(rng, "linear-gradient(") + ("," + sp(rng)).join(args) + ")"
-    normal = "linear-gradient(" + ", ".join(norm_words(a) for a in args) + ")"
+    words = [norm_words(a) for a in args]
+    if k == 4 and ok:
+        words[0] = rad_degrees(t)
+    normal = "linear-gradient(" + ", ".join(words) + ")"
     if not ok or len(normal) > 127:
         return text, None
     return text, normal

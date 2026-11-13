@@ -80,7 +80,8 @@ static void test_gradians(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(4100grad, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(50grad, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(100.0grad, red, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(1.5708rad, red, blue)"));
+    /* Lot 92 (converted): a radian quarter turn is taken as 90deg */
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(90deg, red, blue)", grad("linear-gradient(1.5708rad, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", grad("linear-gradient(45deg, red, blue)"));
 }
 

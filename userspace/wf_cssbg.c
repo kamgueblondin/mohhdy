@@ -282,6 +282,41 @@ static void bo_collapse(bo_t *o, const char *s, int a, int b) {
     }
 }
 
+/* Lot 92: radians, at most two integer digits and four decimals. The
+ * engine's tf_angle rounds to whole degrees and draws a multiple of 90,
+ * and pi is irrational, so a value within half a degree of a multiple of
+ * pi/2 (|x - k pi/2| <= 0.0087266 rad, |k| <= 40) is taken as k quarter
+ * turns and *quarters set; -1 for any other radian value, 0 when s is not
+ * one. */
+#define WF_RAD_QUARTER 15707963   /* pi / 2 in 1e-7 rad */
+#define WF_RAD_HALF_DEG 87266     /* 0.5 deg in 1e-7 rad */
+static int rad_quarters(const char *s, int n, int *quarters) {
+    int i = 0, neg = 0, v = 0, d = 0, fd = 0, k, diff;
+    /* "grad" also ends in "rad": the unit follows a digit or a point */
+    if (n < 4 || !bis(s + n - 3, 3, "rad") || !((s[n - 4] >= '0' && s[n - 4] <= '9') || s[n - 4] == '.')) return 0;
+    n -= 3;
+    if (s[i] == '-') { neg = 1; i++; }
+    while (i < n && s[i] >= '0' && s[i] <= '9') { v = v * 10 + (s[i] - '0'); if (++d > 2) return -1; i++; }
+    v *= 10000;
+    if (i < n && s[i] == '.') {
+        int place = 1000;
+        for (i++; i < n && s[i] >= '0' && s[i] <= '9'; i++) {
+            if (++fd > 4) return -1;
+            v += (s[i] - '0') * place;
+            place /= 10;
+        }
+        if (!fd) return -1;
+    }
+    if (i != n || !(d + fd)) return -1;
+    v *= 1000;
+    k = (v + WF_RAD_QUARTER / 2) / WF_RAD_QUARTER;
+    diff = v - k * WF_RAD_QUARTER;
+    if (diff < 0) diff = -diff;
+    if (diff > WF_RAD_HALF_DEG || k > 40) return -1;
+    *quarters = neg ? -k : k;
+    return 1;
+}
+
 /* degrees or quarter turns: 1 a multiple of 90deg / 0.25turn, 0 not an
  * angle, -1 an angle the engine does not draw */
 static int angle(const char *s, int n) {
@@ -374,7 +409,7 @@ static int radial_shape(const char *s, int a, int b) {
 }
 
 int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
-    int a = 0, b = n, ia[6], ib[6], c, k, first = 0, radial;
+    int a = 0, b = n, ia[6], ib[6], c, k, first = 0, radial, rad = 0, quarters = 0;
     bo_t o;
     bo_init(&o, out, cap);
     if (!v) return 0;
@@ -397,7 +432,9 @@ int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
                 !bis(v + x, y - x, "left")) return 0;
             first = 1;
         } else {
-            int g = angle(v + ia[0], l);
+            int g = rad_quarters(v + ia[0], l, &quarters);
+            if (g == 0) g = angle(v + ia[0], l);
+            else if (g > 0) rad = 1;
             if (g < 0) return 0;
             first = g;
         }
@@ -407,7 +444,16 @@ int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
     bo_s(&o, radial ? "radial-gradient(" : "linear-gradient(", 16);
     for (k = 0; k < c; k++) {
         if (k) bo_s(&o, ", ", 2);
-        bo_collapse(&o, v, ia[k], ib[k]);
+        if (k == 0 && rad) {
+            /* Lot 92: a radian angle is written as its whole degrees */
+            char deg[8];
+            int dn = 0, q = quarters < 0 ? -quarters : quarters, dv = q * 90, p = 1000;
+            if (quarters < 0) deg[dn++] = '-';
+            while (p > 1 && dv < p) p /= 10;
+            for (; p; p /= 10) deg[dn++] = (char)('0' + dv / p % 10);
+            bo_s(&o, deg, dn);
+            bo_s(&o, "deg", 3);
+        } else bo_collapse(&o, v, ia[k], ib[k]);
     }
     bo_c(&o, ')');
     return bo_end(&o);
