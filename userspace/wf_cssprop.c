@@ -148,18 +148,42 @@ static int cp_unit_type(const char *u, int n) {
     return 0;
 }
 
-/* ---- Lot 91: math functions with their types (CSS Values 4) ---------- */
+/* ---- Lot 91/92: math functions with their types and values ----------- */
+
+/* Lot 92: a value is kept in 1/10000 of its canonical unit (px, deg, s,
+ * %, or a plain number); every operation rounds half away from zero and
+ * any value past CP_LIM (100000 units) is not simplified. 64-bit
+ * products, and a shift-subtract division (no __divdi3 in the guest). */
+#define CP_S 10000LL
+#define CP_LIM 1000000000LL
+
+enum {
+    CP_F_CALC = 1, CP_F_MIN, CP_F_MAX, CP_F_CLAMP, CP_F_ABS, CP_F_SIGN, CP_F_ROUND, CP_F_MOD, CP_F_REM,
+    CP_F_SIN, CP_F_COS, CP_F_TAN, CP_F_ASIN, CP_F_ACOS, CP_F_ATAN, CP_F_ATAN2
+};
 
 typedef struct { const char *s; int i, depth; } cp_mp_t;
+/* t: the type (0 invalid); ok: the value is known (v) */
+typedef struct { int t, ok; long long v; } cp_q_t;
 
-static int cp_mfn(const char *s) {
-    if (cp_low(s[0]) == 'c' && cp_low(s[1]) == 'a' && cp_low(s[2]) == 'l' && cp_low(s[3]) == 'c' && s[4] == '(') return 1;
-    if (cp_low(s[0]) == 'm' && cp_low(s[1]) == 'i' && cp_low(s[2]) == 'n' && s[3] == '(') return 2;
-    if (cp_low(s[0]) == 'm' && cp_low(s[1]) == 'a' && cp_low(s[2]) == 'x' && s[3] == '(') return 3;
-    if (cp_low(s[0]) == 'c' && cp_low(s[1]) == 'l' && cp_low(s[2]) == 'a' && cp_low(s[3]) == 'm' &&
-        cp_low(s[4]) == 'p' && s[5] == '(') return 4;
+static const char *const cp_fn_names[] = {"calc", "min", "max", "clamp", "abs", "sign", "round", "mod", "rem",
+                                          "sin", "cos", "tan", "asin", "acos", "atan", "atan2", 0};
+
+/* the math function starting at s (its code), *len the bytes of its name
+ * and '('; 0 when s does not start one. Lot 91 had calc, min, max and
+ * clamp; Lot 92 adds abs, sign, round, mod, rem and the trigonometric
+ * functions. */
+static int cp_mfn_len(const char *s, int *len) {
+    int k, j;
+    for (k = 0; cp_fn_names[k]; k++) {
+        const char *w = cp_fn_names[k];
+        for (j = 0; w[j] && cp_low(s[j]) == w[j]; j++) {}
+        if (!w[j] && s[j] == '(') { *len = j + 1; return k + 1; }
+    }
     return 0;
 }
+
+static int cp_mfn(const char *s) { int l; return cp_mfn_len(s, &l); }
 
 /* + and -: the same type, or a length with a percentage */
 static int cp_tadd(int a, int b) {
@@ -171,103 +195,339 @@ static int cp_tadd(int a, int b) {
     return la && lb ? WF_CSSPROP_LENPCT : 0;
 }
 
-static void cp_ws(cp_mp_t *m) { while (cp_sp(m->s[m->i])) m->i++; }
-
-static int cp_msum(cp_mp_t *m);
-
-/* the arguments of a math function after its '(' */
-static int cp_margs(cp_mp_t *m, int fn) {
-    int t, n = 1, u;
-    cp_ws(m);
-    t = cp_msum(m);
-    cp_ws(m);
-    while (t && m->s[m->i] == ',' && fn != 1) {
-        m->i++;
-        cp_ws(m);
-        u = cp_msum(m);
-        cp_ws(m);
-        t = cp_tadd(t, u);
-        n++;
+static unsigned long long cp_udiv(unsigned long long n, unsigned long long d, unsigned long long *rem) {
+    unsigned long long q = 0, r = 0;
+    int b;
+    for (b = 63; b >= 0; b--) {
+        r = (r << 1) | ((n >> b) & 1ULL);
+        if (r >= d) { r -= d; q |= 1ULL << b; }
     }
-    if (!t || m->s[m->i] != ')') return 0;
-    m->i++;
-    if (fn == 4 && n != 3) return 0;
-    return t;
+    *rem = r;
+    return q;
 }
 
-static int cp_mvalue(cp_mp_t *m) {
-    int fn, t, i, frac, a;
-    if (++m->depth > 16) return 0;
+/* n / d: mode 0 rounded half away from zero, 1 floor, 2 toward zero */
+static long long cp_div(long long n, long long d, int mode) {
+    int neg = (n < 0) != (d < 0);
+    unsigned long long un = (unsigned long long)(n < 0 ? -n : n), ud = (unsigned long long)(d < 0 ? -d : d), r, q;
+    q = cp_udiv(un, ud, &r);
+    if (mode == 0 && 2 * r >= ud) q++;
+    else if (mode == 1 && neg && r) q++;
+    return neg ? -(long long)q : (long long)q;
+}
+
+static int cp_fits(long long v) { return v <= CP_LIM && v >= -CP_LIM; }
+
+/* the value a math leaf "number[unit]" stands for: in canonical units */
+static const struct { const char *u; int t; long long num, den; } cp_units[] = {
+    {"px", WF_CSSPROP_LENGTH, 1, 1}, {"in", WF_CSSPROP_LENGTH, 96, 1}, {"cm", WF_CSSPROP_LENGTH, 4800, 127},
+    {"mm", WF_CSSPROP_LENGTH, 480, 127}, {"q", WF_CSSPROP_LENGTH, 120, 127}, {"pt", WF_CSSPROP_LENGTH, 4, 3},
+    {"pc", WF_CSSPROP_LENGTH, 16, 1},
+    /* relative lengths: typed, not simplified (no font or viewport here) */
+    {"em", WF_CSSPROP_LENGTH, 0, 1}, {"rem", WF_CSSPROP_LENGTH, 0, 1}, {"ex", WF_CSSPROP_LENGTH, 0, 1},
+    {"ch", WF_CSSPROP_LENGTH, 0, 1}, {"vw", WF_CSSPROP_LENGTH, 0, 1}, {"vh", WF_CSSPROP_LENGTH, 0, 1},
+    {"vmin", WF_CSSPROP_LENGTH, 0, 1}, {"vmax", WF_CSSPROP_LENGTH, 0, 1},
+    {"deg", WF_CSSPROP_ANGLE, 1, 1}, {"grad", WF_CSSPROP_ANGLE, 9, 10}, {"turn", WF_CSSPROP_ANGLE, 360, 1},
+    /* 180 / pi with pi to eight significant digits (3.1415927) */
+    {"rad", WF_CSSPROP_ANGLE, 1800000000LL, 31415927LL},
+    {"s", WF_CSSPROP_TIME, 1, 1}, {"ms", WF_CSSPROP_TIME, 1, 1000}, {0, 0, 0, 0}};
+
+static void cp_ws(cp_mp_t *m) { while (cp_sp(m->s[m->i])) m->i++; }
+
+static void cp_msum(cp_mp_t *m, cp_q_t *q);
+
+/* a number with its unit at m->i; q->t 0 when it is not one */
+static void cp_mleaf(cp_mp_t *m, cp_q_t *q) {
+    const char *s = m->s;
+    int i = m->i, frac, a, k, neg = 0, fd = 0;
+    long long raw = 0;
+    q->t = 0; q->ok = 1; q->v = 0;
+    if (!cp_number(s, &i, &frac)) return;
+    k = m->i;
+    if (s[k] == '+' || s[k] == '-') { neg = s[k] == '-'; k++; }
+    for (; k < i && s[k] != '.'; k++) {
+        if (raw > CP_LIM) q->ok = 0;
+        else raw = raw * 10 + (s[k] - '0');
+    }
+    raw *= CP_S;
+    if (k < i) {
+        int place = 1000;
+        for (k++; k < i; k++, fd++) {
+            if (fd < 4) { raw += (s[k] - '0') * place; place /= 10; }
+            else if (fd == 4 && s[k] >= '5') raw++;   /* half away from zero at the fifth digit */
+        }
+    }
+    if (raw > CP_LIM) q->ok = 0;
+    if (neg) raw = -raw;
+    if (s[i] == '%') { m->i = i + 1; q->t = WF_CSSPROP_PERCENT; q->v = raw; return; }
+    a = i;
+    while ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z')) i++;
+    m->i = i;
+    if (i == a) { q->t = WF_CSSPROP_NUMBER; q->v = raw; return; }
+    for (k = 0; cp_units[k].u; k++) {
+        if (!cp_eqn(s + a, i - a, cp_units[k].u)) continue;
+        q->t = cp_units[k].t;
+        if (!cp_units[k].num) { q->ok = 0; return; }
+        if (q->ok) q->v = cp_div(raw * cp_units[k].num, cp_units[k].den, 0);
+        if (!cp_fits(q->v)) q->ok = 0;
+        return;
+    }
+}
+
+/* the value is known. A length mixed with a percentage is typed but
+ * never known: no leaf is a length-percentage, and + - min() max() and
+ * clamp() keep ok only when both sides have the same type. */
+static int cp_known(const cp_q_t *q) { return q->ok; }
+
+/* a + b (sub: a - b) into a */
+static void cp_qadd(cp_q_t *a, const cp_q_t *b, int sub) {
+    int t = cp_tadd(a->t, b->t);
+    a->ok = a->ok && b->ok && t == a->t && t == b->t;
+    a->t = t;
+    if (a->ok) a->v = sub ? a->v - b->v : a->v + b->v;
+    if (!cp_fits(a->v)) a->ok = 0;
+}
+
+/* min (want -1), max (want 1) of two values into a */
+static void cp_qpick(cp_q_t *a, const cp_q_t *b, int want) {
+    int t = cp_tadd(a->t, b->t);
+    a->ok = a->ok && b->ok && t == a->t && t == b->t;
+    a->t = t;
+    if (a->ok && ((want < 0 && b->v < a->v) || (want > 0 && b->v > a->v))) a->v = b->v;
+}
+
+/* the round() strategy word at m->i: 1 nearest, 2 up, 3 down, 4 to-zero,
+ * 0 none (m->i not moved) */
+static int cp_strategy(cp_mp_t *m) {
+    static const char *const w[] = {"nearest", "up", "down", "to-zero", 0};
+    int k, j = m->i, e;
+    while (cp_ident(m->s[j])) j++;
+    for (e = j; cp_sp(m->s[e]); e++) {}
+    if (j == m->i || m->s[e] != ',') return 0;
+    for (k = 0; w[k]; k++) if (cp_eqn(m->s + m->i, j - m->i, w[k])) { m->i = e + 1; return k + 1; }
+    return 0;
+}
+
+/* round(): A rounded to a multiple of |B| */
+static void cp_round(cp_q_t *a, const cp_q_t *b, int how) {
+    long long step, k;
+    if (!cp_known(a) || !b->ok || a->t != b->t || b->v == 0) { a->ok = 0; return; }
+    step = b->v < 0 ? -b->v : b->v;
+    if (how == 2) k = -cp_div(-a->v, step, 1);
+    else if (how == 3) k = cp_div(a->v, step, 1);
+    else if (how == 4) k = cp_div(a->v, step, 2);
+    else k = cp_div(2 * a->v + step, 2 * step, 1);   /* half toward +infinity */
+    a->v = k * step;
+    if (!cp_fits(a->v)) a->ok = 0;
+}
+
+/* the arguments of math function fn after its '(' into q */
+static void cp_margs(cp_mp_t *m, int fn, cp_q_t *q) {
+    cp_q_t arg[3], u;
+    int n = 0, how = 0, t = 0;
+    cp_ws(m);
+    if (fn == CP_F_ROUND) how = cp_strategy(m);
+    for (;;) {
+        cp_msum(m, &u);
+        cp_ws(m);
+        if (!u.t) { q->t = 0; return; }
+        if (n < 3) arg[n] = u;
+        n++;
+        if (n == 1) { *q = u; t = u.t; }
+        else {
+            t = cp_tadd(t, u.t);
+            if (!t) { q->t = 0; return; }
+            if (fn == CP_F_MIN || fn == CP_F_MAX) cp_qpick(q, &u, fn == CP_F_MIN ? -1 : 1);
+        }
+        if (m->s[m->i] != ',' || fn == CP_F_CALC) break;
+        m->i++;
+        cp_ws(m);
+    }
+    if (m->s[m->i] != ')') { q->t = 0; return; }
+    m->i++;
+    switch (fn) {
+    case CP_F_CLAMP:
+        if (n != 3) { q->t = 0; return; }
+        /* clamp(MIN, VAL, MAX) = max(MIN, min(VAL, MAX)) */
+        *q = arg[1];
+        cp_qpick(q, &arg[2], -1);
+        cp_qpick(q, &arg[0], 1);
+        break;
+    case CP_F_ABS:
+        if (n != 1) { q->t = 0; return; }
+        if (q->v < 0) q->v = -q->v;
+        break;
+    case CP_F_SIGN:
+        if (n != 1) { q->t = 0; return; }
+        q->ok = cp_known(q);
+        q->v = q->v > 0 ? CP_S : q->v < 0 ? -CP_S : 0;
+        t = WF_CSSPROP_NUMBER;
+        break;
+    case CP_F_ROUND:
+        if (n > 2 || (n == 1 && t != WF_CSSPROP_NUMBER)) { q->t = 0; return; }
+        if (n == 1) {
+            cp_q_t one;
+            one.t = WF_CSSPROP_NUMBER; one.ok = 1; one.v = CP_S;
+            cp_round(q, &one, how);
+        } else {
+            *q = arg[0];
+            cp_round(q, &arg[1], how);
+        }
+        break;
+    case CP_F_MOD: case CP_F_REM:
+        if (n != 2) { q->t = 0; return; }
+        *q = arg[0];
+        /* mod takes the sign of B (floor), rem the sign of A (truncation) */
+        if (cp_known(q) && arg[1].ok && q->t == arg[1].t && arg[1].v != 0)
+            q->v -= arg[1].v * cp_div(q->v, arg[1].v, fn == CP_F_MOD ? 1 : 2);
+        else q->ok = 0;
+        break;
+    case CP_F_SIN: case CP_F_COS: case CP_F_TAN:
+        /* typed, not simplified */
+        if (n != 1 || (t != WF_CSSPROP_NUMBER && t != WF_CSSPROP_ANGLE)) { q->t = 0; return; }
+        t = WF_CSSPROP_NUMBER; q->ok = 0;
+        break;
+    case CP_F_ASIN: case CP_F_ACOS: case CP_F_ATAN:
+        if (n != 1 || t != WF_CSSPROP_NUMBER) { q->t = 0; return; }
+        t = WF_CSSPROP_ANGLE; q->ok = 0;
+        break;
+    case CP_F_ATAN2:
+        if (n != 2) { q->t = 0; return; }
+        t = WF_CSSPROP_ANGLE; q->ok = 0;
+        break;
+    default: break;
+    }
+    q->t = t;
+    if (!cp_fits(q->v)) q->ok = 0;
+}
+
+static void cp_mvalue(cp_mp_t *m, cp_q_t *q) {
+    int fn, len;
+    q->t = 0; q->ok = 0; q->v = 0;
+    if (++m->depth > 16) return;
     cp_ws(m);
     if (m->s[m->i] == '(') {
         m->i++;
         cp_ws(m);
-        t = cp_msum(m);
+        cp_msum(m, q);
         cp_ws(m);
-        if (!t || m->s[m->i] != ')') return 0;
+        if (!q->t || m->s[m->i] != ')') { q->t = 0; return; }
         m->i++;
         m->depth--;
-        return t;
+        return;
     }
-    fn = cp_mfn(m->s + m->i);
+    fn = cp_mfn_len(m->s + m->i, &len);
     if (fn) {
-        m->i += fn == 1 || fn == 4 ? (fn == 1 ? 5 : 6) : 4;
-        t = cp_margs(m, fn);
+        m->i += len;
+        cp_margs(m, fn, q);
         m->depth--;
-        return t;
+        return;
     }
-    i = m->i;
-    if (!cp_number(m->s, &i, &frac)) return 0;
-    if (m->s[i] == '%') { m->i = i + 1; m->depth--; return WF_CSSPROP_PERCENT; }
-    a = i;
-    while ((m->s[i] >= 'a' && m->s[i] <= 'z') || (m->s[i] >= 'A' && m->s[i] <= 'Z')) i++;
-    m->i = i;
+    cp_mleaf(m, q);
     m->depth--;
-    if (i == a) return WF_CSSPROP_NUMBER;
-    return cp_unit_type(m->s + a, i - a);
 }
 
-static int cp_mproduct(cp_mp_t *m) {
-    int t = cp_mvalue(m);
-    while (t) {
-        int j = m->i, u;
+static void cp_mproduct(cp_mp_t *m, cp_q_t *q) {
+    cp_mvalue(m, q);
+    while (q->t) {
+        int j = m->i;
         char op;
+        cp_q_t u;
         while (cp_sp(m->s[j])) j++;
         op = m->s[j];
         if (op != '*' && op != '/') break;
         m->i = j + 1;
-        u = cp_mvalue(m);
-        if (!u) return 0;
-        if (op == '*') t = t == WF_CSSPROP_NUMBER ? u : u == WF_CSSPROP_NUMBER ? t : 0;
-        else t = u == WF_CSSPROP_NUMBER ? t : 0;
+        cp_mvalue(m, &u);
+        if (!u.t) { q->t = 0; return; }
+        if (op == '*') {
+            int t = q->t == WF_CSSPROP_NUMBER ? u.t : u.t == WF_CSSPROP_NUMBER ? q->t : 0;
+            q->ok = q->ok && u.ok && t;
+            if (q->ok) q->v = cp_div(q->v * u.v, CP_S, 0);
+            q->t = t;
+        } else {
+            q->t = u.t == WF_CSSPROP_NUMBER ? q->t : 0;
+            q->ok = q->ok && u.ok && u.v != 0;
+            if (q->ok) q->v = cp_div(q->v * CP_S, u.v, 0);
+        }
+        if (!cp_fits(q->v)) q->ok = 0;
     }
-    return t;
 }
 
-static int cp_msum(cp_mp_t *m) {
-    int t = cp_mproduct(m);
-    while (t) {
-        int j = m->i, u;
+static void cp_msum(cp_mp_t *m, cp_q_t *q) {
+    cp_mproduct(m, q);
+    while (q->t) {
+        int j = m->i, sub;
+        cp_q_t u;
         if (!cp_sp(m->s[j])) break;
         while (cp_sp(m->s[j])) j++;
         if ((m->s[j] != '+' && m->s[j] != '-') || !cp_sp(m->s[j + 1])) break;
+        sub = m->s[j] == '-';
         m->i = j + 1;
-        u = cp_mproduct(m);
-        t = cp_tadd(t, u);
+        cp_mproduct(m, &u);
+        cp_qadd(q, &u, sub);
     }
-    return t;
 }
 
-int wf_cssprop_math_type(const char *v) {
+/* the whole value as one math function: q (q.t 0 when it is not one) */
+static void cp_mwhole(const char *v, cp_q_t *q) {
     cp_mp_t m;
-    int t;
-    if (!v || !cp_mfn(v)) return WF_CSSPROP_BAD;
+    q->t = 0; q->ok = 0; q->v = 0;
+    if (!v || !cp_mfn(v)) return;
     m.s = v;
     m.i = 0;
     m.depth = 0;
-    t = cp_mvalue(&m);
-    if (!t || v[m.i]) return WF_CSSPROP_BAD;
-    return t;
+    cp_mvalue(&m, q);
+    if (q->t && v[m.i]) q->t = 0;
+}
+
+int wf_cssprop_math_type(const char *v) {
+    cp_q_t q;
+    cp_mwhole(v, &q);
+    return q.t;
+}
+
+/* Lot 92: "N[.dddd]" and the unit for a value in 1/10000 */
+static int cp_fmt(long long v, const char *unit, char *out, int cap) {
+    char d[24];
+    int n = 0, k = 0, j;
+    unsigned long long u, r;
+    long long whole;
+    int frac;
+    if (v < 0) { out[n++] = '-'; v = -v; }
+    whole = (long long)cp_udiv((unsigned long long)v, (unsigned long long)CP_S, &r);
+    frac = (int)r;
+    u = (unsigned long long)whole;
+    do { unsigned long long rr; u = cp_udiv(u, 10, &rr); d[k++] = (char)('0' + (int)rr); } while (u && k < 20);
+    if (n + k + 6 + cp_len(unit) >= cap) return -1;
+    while (k) out[n++] = d[--k];
+    if (frac) {
+        int p = 1000;
+        out[n++] = '.';
+        while (frac && p) { out[n++] = (char)('0' + frac / p); frac %= p; p /= 10; }
+    }
+    for (j = 0; unit[j]; j++) out[n++] = unit[j];
+    out[n] = 0;
+    return n;
+}
+
+int wf_cssprop_math_eval(const char *v, int *type, char *out, int cap) {
+    cp_q_t q;
+    const char *unit;
+    if (type) *type = 0;
+    if (out && cap > 0) out[0] = 0;
+    cp_mwhole(v, &q);
+    if (!q.t) return -1;
+    if (type) *type = q.t;
+    if (!cp_known(&q) || !out) return 0;
+    switch (q.t) {
+    case WF_CSSPROP_LENGTH: unit = "px"; break;
+    case WF_CSSPROP_PERCENT: unit = "%"; break;
+    case WF_CSSPROP_ANGLE: unit = "deg"; break;
+    case WF_CSSPROP_TIME: unit = "s"; break;
+    default: unit = ""; break;
+    }
+    if (cp_fmt(q.v, unit, out, cap) < 0) { out[0] = 0; return 0; }
+    return 1;
 }
 
 /* one dimension: the type of a number with its unit (WF_CSSPROP_LENGTH,
@@ -398,6 +658,45 @@ int wf_cssprop_match_prop(const wf_cssprop_t *p, const char *v) {
     if (!v[0]) return 0;
     for (k = 0; k < p->nalt && k < WF_CSSPROP_ALTS; k++) if (cp_alt(&p->alt[k], v)) return 1;
     return 0;
+}
+
+/* Lot 92: the computed value of a registered value that is one math
+ * function: the first alternative it matches must be one numeric type
+ * without a multiplier; the value then has to be known (absolute
+ * lengths, angles, times, numbers, or percentages alone). An <integer>
+ * rounds to the nearest integer, half toward +infinity. */
+int wf_cssprop_compute(const wf_cssprop_t *p, const char *v, char *out, int cap) {
+    const wf_cssprop_alt_t *al = 0;
+    wf_cssprop_alt_t one;
+    cp_q_t q;
+    const char *unit = "";
+    int k, n;
+    if (out && cap > 0) out[0] = 0;
+    if (!p || !v || !out || cap < 2 || !cp_mfn(v)) return 0;
+    if (!p->nalt) {
+        one.type = p->syntax;
+        one.mult = WF_CSSPROP_ONE;
+        one.ident[0] = 0;
+        if (wf_cssprop_match(p->syntax, v)) al = &one;
+    } else {
+        for (k = 0; k < p->nalt && k < WF_CSSPROP_ALTS && !al; k++) if (cp_alt(&p->alt[k], v)) al = &p->alt[k];
+    }
+    if (!al || al->mult != WF_CSSPROP_ONE || al->type < WF_CSSPROP_LENGTH || al->type > WF_CSSPROP_TIME ||
+        al->type == WF_CSSPROP_COLOR)
+        return 0;
+    cp_mwhole(v, &q);
+    if (!q.t || !cp_known(&q)) return 0;
+    if (al->type == WF_CSSPROP_INTEGER) q.v = cp_div(2 * q.v + CP_S, 2 * CP_S, 1) * CP_S;
+    switch (q.t) {
+    case WF_CSSPROP_LENGTH: unit = "px"; break;
+    case WF_CSSPROP_PERCENT: unit = "%"; break;
+    case WF_CSSPROP_ANGLE: unit = "deg"; break;
+    case WF_CSSPROP_TIME: unit = "s"; break;
+    default: break;
+    }
+    n = cp_fmt(q.v, unit, out, cap);
+    if (n < 0) { out[0] = 0; return 0; }
+    return 1;
 }
 
 int wf_cssprop_independent(const char *v) {

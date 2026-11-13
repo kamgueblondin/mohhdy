@@ -32,6 +32,20 @@
  * <length-percentage> any of the three, <number> and <integer> a number
  * (an integer context rounds), <angle> an angle, <time> a time. Lot 90
  * took any balanced math function as a match for the numeric types.
+ * Lot 92: abs(), sign(), round() (with an optional nearest, up, down or
+ * to-zero strategy; B may be left out only when A is a number), mod()
+ * and rem() are typed and simplified; sin(), cos(), tan() (a number or an
+ * angle in, a number out), asin(), acos(), atan() (a number in, an angle
+ * out) and atan2() (two values of one type, an angle out) are typed but
+ * not simplified. A registered value that is one math function and
+ * matches one numeric alternative without a multiplier is computed
+ * (wf_cssprop_compute): absolute lengths in px (in 96px, cm, mm, q, pt,
+ * pc), angles in deg (grad, turn, rad with pi as 3.1415927), times in s,
+ * numbers, and percentages alone, each operation in 1/10000 of the unit
+ * rounded half away from zero; values past 100000 units, relative
+ * lengths (em, rem, ex, ch, vw, vh, vmin, vmax), a length mixed with a
+ * percentage, a division or a round() step of zero, and the trigonometric
+ * functions are kept as text.
  * Names and values are compared lower case. No heap. */
 #ifndef WF_CSSPROP_H
 #define WF_CSSPROP_H
@@ -87,11 +101,27 @@ int wf_cssprop_syntax_parse(const char *s, int n, wf_cssprop_t *out);
  * syntax (its alternatives). */
 int wf_cssprop_match_prop(const wf_cssprop_t *p, const char *value);
 
-/* Lot 91: the type of a math function (calc, min, max, clamp; lower
+/* Lot 91: the type of a math function (calc, min, max, clamp; Lot 92 also
+ * abs, sign, round, mod, rem, sin, cos, tan, asin, acos, atan, atan2; lower
  * case, the whole text): WF_CSSPROP_NUMBER, _LENGTH, _PERCENT, _LENPCT
  * (a length mixed with a percentage), _ANGLE, _TIME, or WF_CSSPROP_BAD
  * when it is not one or its types do not combine. */
 int wf_cssprop_math_type(const char *value);
+
+/* Lot 92: the value of a math function (the whole text, lower case) in
+ * its canonical unit ("6px", "33.3333%", "90deg", "1.5s", "-2"): 1 and
+ * out written, *type its type; 0 when it is a valid math function whose
+ * value is not known here (out ""; *type still set); -1 when it is not
+ * a valid math function. */
+int wf_cssprop_math_eval(const char *value, int *type, char *out, int cap);
+
+/* Lot 92: the computed value of a registered value: 1 and out written
+ * when value is one math function, its first matching alternative is
+ * one numeric type without a multiplier (<length>, <percentage>,
+ * <length-percentage>, <number>, <integer>, <angle>, <time>) and its
+ * value is known; <integer> rounds half toward +infinity. 0 otherwise
+ * (the caller keeps the text). */
+int wf_cssprop_compute(const wf_cssprop_t *p, const char *value, char *out, int cap);
 
 /* The syntax descriptor value, quotes included ("'<length>'"), n bytes:
  * the type code when the syntax is one type without a multiplier,

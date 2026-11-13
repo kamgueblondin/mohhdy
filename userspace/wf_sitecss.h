@@ -372,6 +372,7 @@ typedef struct {
     int var_invalid;              /* own values invalid there (guaranteed-invalid, or unset when registered) */
     int prop_unset;               /* registered values that did not match their syntax */
     int prop_initial;             /* elements given a registered initial value */
+    int prop_simplified;          /* Lot 92: registered math values computed (wf_cssprop_compute) */
     /* Lot 90 */
     char lpool[WF_SITE_LONGS][WF_SITE_LONG];
     int nlongs, dropped_longs;    /* pool entries; values left out because it was full */
