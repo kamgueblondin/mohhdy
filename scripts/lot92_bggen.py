@@ -157,6 +157,16 @@ def write_rad():
         cases.append(("grad",) + gradient_case(rng))
     for _ in range(80):
         cases.append(("grad",) + bad_case(rng))
+    # fixed edge cases: the integer digit bound also keeps the C side's
+    # 32-bit arithmetic from wrapping (429.4967rad times 10^7 wraps to
+    # about zero), 40 quarter turns is the last one taken
+    for t in ["429.4967rad", "-429.4967rad", "999.9999rad", "100rad", "62.8319rad", "-62.8319rad",
+              "64.4026rad", "0.0087rad", "0.0088rad", "-0rad"]:
+        body = t[:-3]
+        dec = len(body.split(".")[1]) if "." in body else 0
+        deg, _ = rad_model(body, dec)
+        normal = None if deg is None else "linear-gradient(%s, red, blue)" % deg
+        cases.append(("grad", "linear-gradient(%s, red, blue)" % t, normal))
     # through the image list: url layers, then the gradient last
     for _ in range(120):
         g, n = gradient_case(rng)
