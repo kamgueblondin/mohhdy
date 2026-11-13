@@ -66,6 +66,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       gradians, background-clip and background-origin
   /lot91/props.html   Lot 91: @property syntaxes with alternatives and
                       lists, calc() type checking
+  /lot92/bg.html      Lot 92: linear-gradient angles in radians, a
+                      registered angle computed by mod()
+  /lot92/props.html   Lot 92: registered math values computed (calc,
+                      round(), a computed initial value), sin() kept
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -229,6 +233,49 @@ LOT91_PAGES = {
         "<p id=\"calcbad91\">calcbadkeep91</p>"
         "<p id=\"calcok91\">calcokkeep91</p>"
         "<p>fin91p</p></body></html>"),
+}
+
+
+# Lot 92: reader pages (tests/scripts/test_qemu_lot92.py)
+LOT92_PAGES = {
+    # radian angles (two quarter turns kept as whole degrees, 1rad
+    # refused), a registered <angle> computed by mod() feeds the gradient,
+    # the same value unregistered keeps its text and is refused
+    "/lot92/bg.html": (
+        "<!doctype html><html><head><title>Lot 92 backgrounds</title><style>"
+        "#rad92 { background-image: linear-gradient(1.5708rad, #ff0000, #0000ff) }\n"
+        "#radn92 { background: linear-gradient(-3.1416RAD, #00ff00, #000000) no-repeat }\n"
+        "#radbad92 { background-color: #123456; background-image: linear-gradient(1rad, #ff0000, #0000ff) }\n"
+        "@property --a92 { syntax: '<angle>'; inherits: false; initial-value: 0deg }\n"
+        "#ang92 { --a92: mod(450deg, 360deg); background-image: linear-gradient(var(--a92), #ff0000, #0000ff) }\n"
+        "#angu92 { --u92: mod(450deg, 360deg); background-color: #654321; background-image: linear-gradient(var(--u92), #ff0000, #0000ff) }\n"
+        "</style></head><body><h1>Fonds 92</h1>"
+        "<div id=\"rad92\"><p>radkeep92</p></div>"
+        "<div id=\"radn92\"><p>radnkeep92</p></div>"
+        "<div id=\"radbad92\"><p>radbadkeep92</p></div>"
+        "<div id=\"ang92\"><p>angkeep92</p></div>"
+        "<div id=\"angu92\"><p>angukeep92</p></div>"
+        "<p>fin92b</p></body></html>"),
+    # registered <length> values computed: a calc() radius, a round()
+    # font size, a computed initial value (1in / 8 = 12px) inherited;
+    # sin() is typed and kept, so font-size does not take it
+    "/lot92/props.html": (
+        "<!doctype html><html><head><title>Lot 92 math</title><style>"
+        "@property --r92 { syntax: '<length>'; inherits: false; initial-value: 0px }\n"
+        "@property --s92 { syntax: '<length>'; inherits: true; initial-value: calc(1in / 8) }\n"
+        "@property --n92 { syntax: '<integer>'; inherits: false; initial-value: 0 }\n"
+        "#circ92 { --r92: calc(20px * 2); background-image: radial-gradient(circle var(--r92), #ff0000, #0000ff) }\n"
+        "#ucirc92 { --u92: calc(20px * 2); background-color: #224466; background-image: radial-gradient(circle var(--u92), #ff0000, #0000ff) }\n"
+        "#size92 { --s92: round(up, 21px, 4px); font-size: var(--s92) }\n"
+        "#init92 { font-size: var(--s92) }\n"
+        "#trig92 { --s92: calc(sin(30deg) * 10px); font-size: var(--s92) }\n"
+        "</style></head><body><h1>Maths 92</h1>"
+        "<div id=\"circ92\"><p>circkeep92</p></div>"
+        "<div id=\"ucirc92\"><p>ucirckeep92</p></div>"
+        "<p id=\"size92\">sizekeep92</p>"
+        "<p id=\"init92\">initkeep92</p>"
+        "<p id=\"trig92\">trigkeep92</p>"
+        "<p>fin92p</p></body></html>"),
 }
 
 
@@ -412,6 +459,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT91_PAGES:
             self._send(200, LOT91_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT92_PAGES:
+            self._send(200, LOT92_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

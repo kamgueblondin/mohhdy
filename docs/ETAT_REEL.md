@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 92 (math functions and computed registered values; radian gradient angles; base 4def6ce, Lot 91 head)
+
+- Reader sheet: abs(), sign(), round() (nearest, up, down, to-zero), mod() and rem() are typed and simplified, sin(), cos(), tan(), asin(), acos(), atan() and atan2() are typed and kept as text. A registered numeric value that is one math function is computed where it is declared (absolute lengths in px, angles in deg, times in s, numbers, percentages alone; 1/10000 steps; <integer> rounded) and inherited as computed; a math initial value is computed. Relative lengths and length-percentage mixes keep the text. Proof: test_lot92_mathtype.c, test_lot92_matheval.c, test_lot92_compute.c, test_lot92_propsheet.c, test_lot92_props.c, test_lot92_engine.c, `make qemu-lot92` (/lot92/props.html).
+- Reader backgrounds: a linear-gradient angle in radians within half a degree of a quarter turn is written as whole degrees (1.5708rad -> 90deg), which the engine draws unchanged; a registered <angle> computed by mod() feeds the gradient. Proof: test_lot92_bgrad.c, test_lot92_bgsheet.c, test_lot92_engine.c, `make qemu-lot92` (/lot92/bg.html).
+- US-068/US-073, US-076, US-080 and US-081 unchanged (partial); US-078 and US-097 simule.
+- Detail and gaps: docs/lot92_plan.md.
+
 ## Lot 91 (reader radial radii, gradians and background boxes; @property syntaxes and calc() types; autofill summer time and expiry before offers; base 0576849)
 
 - Reader sheet: radial-gradient with explicit radii (circle one length, ellipse two lengths or percentages), linear-gradient angles in gradians (multiples of 100grad), background-clip and background-origin (one box per element), and the box keywords of the background shorthand passed on (one sets both, two set origin then clip; layers in different boxes refused). The engine draws them unchanged. Proof: test_lot91_bgradial.c, test_lot91_bgbox.c, test_lot91_reader.c, test_lot91_engine.c, `make qemu-lot91` (/lot91/bg.html).

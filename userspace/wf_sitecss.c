@@ -2805,10 +2805,13 @@ static const wf_cssprop_t *kprop(const wf_site_t *d, int k) { return wf_site_pro
  * when the name is not registered */
 static uint8_t initial_b(wf_site_t *d, int k) {
     const wf_cssprop_t *p = kprop(d, k);
+    char cv[WF_CSSPROP_VAL];
     int e;
     if (!p) return 0;
     if (!p->has_initial) return WF_SITE_VINVALID;
-    e = evar_intern(d, k, p->initial);
+    /* Lot 92: a math initial value is computed like a declared one */
+    if (wf_cssprop_compute(p, p->initial, cv, (int)sizeof(cv))) e = evar_intern(d, k, cv);
+    else e = evar_intern(d, k, p->initial);
     if (e < 0) return WF_SITE_VINVALID;
     d->prop_initial++;
     return (uint8_t)(e + 1);
@@ -2887,8 +2890,18 @@ static void compute_vars(wf_site_t *d) {
             nd->vbind[k] = nb[k];
             if (!own[k] || !(p = kprop(d, k))) continue;
             /* a registered value of the wrong type acts as unset */
-            if (nb[k] != WF_SITE_VINVALID && nb[k] <= d->nevars && wf_cssprop_match_prop(p, d->evar[nb[k] - 1].value))
+            if (nb[k] != WF_SITE_VINVALID && nb[k] <= d->nevars && wf_cssprop_match_prop(p, d->evar[nb[k] - 1].value)) {
+                /* Lot 92: a math value of a numeric type is computed (the
+                 * descendants inherit the computed value, as CSS says) */
+                static char cv[WF_CSSPROP_VAL];
+                int e;
+                if (wf_cssprop_compute(p, d->evar[nb[k] - 1].value, cv, (int)sizeof(cv)) &&
+                    (e = evar_intern(d, k, cv)) >= 0) {
+                    nd->vbind[k] = (uint8_t)(e + 1);
+                    d->prop_simplified++;
+                }
                 continue;
+            }
             if (nb[k] != WF_SITE_VINVALID) d->prop_unset++;
             nd->vbind[k] = inherited_b(d, i, k);
         }
@@ -2912,6 +2925,11 @@ int wf_site_props_text(const wf_site_t *d, char *out, int cap) {
     n = app_u(out, cap, n, (unsigned)d->prop_unset);
     n = app(out, cap, n, " initial ");
     n = app_u(out, cap, n, (unsigned)d->prop_initial);
+    /* Lot 92: only when a value was computed, so the Lot 90 line stays */
+    if (d->prop_simplified) {
+        n = app(out, cap, n, " simplified ");
+        n = app_u(out, cap, n, (unsigned)d->prop_simplified);
+    }
     return n;
 }
 

@@ -31,7 +31,10 @@
  * end with the same pair, since the engine has one origin and one clip
  * box per element, else the shorthand is refused.
  * Lot 91 also takes explicit radial radii (circle 40px, ellipse 30px 20%,
- * 40px, 30% 20%) and angles in gradians (a multiple of 100grad). A colour is only allowed in
+ * 40px, 30% 20%) and angles in gradians (a multiple of 100grad). Lot 92:
+ * angles in radians (up to two integer digits and four decimals) within
+ * half a degree of a multiple of pi/2, at most 40 quarter turns, written
+ * back as whole degrees ("1.5708rad" -> "90deg"). A colour is only allowed in
  * the last layer and is given back as text for the caller to check.
  * Freestanding, no heap. Host tested (test_lot90_bg*.c). */
 #ifndef WF_CSSBG_H

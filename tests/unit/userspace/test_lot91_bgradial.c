@@ -821,7 +821,7 @@ static void test_l91_radial_89(void) {
     TEST_ASSERT_EQUAL_STRING("linear-gradient(3.75turn, #a984956c 18.3%, rgb(96, 24, 8))", run("grad", "LinEaR-gRadIent(3.75tUrn, #a984956c	18.3%, rgb(96, 24, 8))"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(to left, #0ade6ce1 24.9%, white)", run("grad", "LINEAR-GRADIENT(TO LEFT, 	 #0ade6ce1 	 24.9%, 	 white)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(5turn, rgb(78, 23, 183) 7%, rgb(130, 38, 122), purple 47%, #f7ba37 87%)", run("grad", "lineAr-grAdienT(5tURn,	rgb(78, 23, 183)	7%,	rgb(130, 38, 122),	purple 47%,	#f7bA37  87%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "lInear-GRadieNT(0rad,	transparent,	green 	 92.2%,	rgb(206, 64, 126),	#94cBCa)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(0deg, transparent, green 92.2%, rgb(206, 64, 126), #94cbca)", run("grad", "lInear-GRadieNT(0rad,	transparent,	green 	 92.2%,	rgb(206, 64, 126),	#94cBCa)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(333GRAD, 	 GRAY, 	 yellow, 	 rgb(184, 228, 239), 	 #2225bad9 70%)"));
 }
 
@@ -845,7 +845,7 @@ static void test_l91_radial_91(void) {
 
 static void test_l91_radial_92(void) {
     TEST_ASSERT_EQUAL_STRING("linear-gradient(0.25turn, orange, #8ae, rgb(22, 110, 87))", run("grad", "linear-gradient(0.25Turn, 	 orange, 	 #8Ae, 	 rgb(22, 110, 87))"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(3.1416rad, 	 YELLOW, 	 #d84, 	 rgb(76, 123, 170) 	 100%, 	 rgb(178, 163, 190))"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(180deg, yellow, #d84, rgb(76, 123, 170) 100%, rgb(178, 163, 190))", run("grad", "LINEAR-GRADIENT(3.1416rad, 	 YELLOW, 	 #d84, 	 rgb(76, 123, 170) 	 100%, 	 rgb(178, 163, 190))"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(-4000grad, rgb(255, 91, 54) 60.5%, #f8e9b7bf, rgb(24, 208, 14))", run("grad", "linear-gradient(-4000Grad, rgb(255, 91, 54) 60.5%, #f8e9b7bf, rgb(24, 208, 14))"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(2700grad, lime 75.7%, #76b7488e 11%, #05a19fe5 77%, rgb(146, 122, 221))", run("grad", "linear-gradient(2700grad,	LIME 75.7%,	#76b7488e 	 11%,	#05a19fe5  77%,	rgb(146, 122, 221))"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(3300grad, #d8f, #d71d331c)", run("grad", "lInEAr-gRadiEnT(3300GrAd, #D8F, #d71d331c)"));
@@ -862,7 +862,7 @@ static void test_l91_radial_93(void) {
 }
 
 static void test_l91_radial_94(void) {
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(0rad, 	 #87a00153, 	 #B531Af, 	 rgb(12, 66, 220))"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(0deg, #87a00153, #b531af, rgb(12, 66, 220))", run("grad", "linear-gradient(0rad, 	 #87a00153, 	 #B531Af, 	 rgb(12, 66, 220))"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(to BOTTOM RIGHT, blue, gray, #4284a656)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(3330deg, rgb(60, 138, 149) 16%, #dc9cd2b2 47%, rgb(40, 201, 75) 38%)", run("grad", "LINEAR-GRADIENT(3330DEg, rgb(60, 138, 149) 16%, #dc9cd2b2 	 47%, rgb(40, 201, 75) 38%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(11turn, #6d7ef804 15%, #513409d0	12%)"));
@@ -876,7 +876,7 @@ static void test_l91_radial_95(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "lineAr-grAdIenT(1900.5GRAD, GRAY, #aDAd34 	 39%, BLACK, #e16ed5)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(to right, white, #7d7bad7a 29%, #c2ffe661 99%)", run("grad", "liNear-gRAdIENt(TO rIGHt,	WHite,	#7d7bad7a 	 29%,	#c2ffe661  99%)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(5.5turn, rgb(4, 124, 132) 68.2%, red 62%)", run("grad", "liNeAr-grADIEnT(5.5TURN,  rgb(4, 124, 132) 68.2%,  red 62%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gRadiEnT(0rad,  #fe70492d,  #480e3105,  yellow 65%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(0deg, #fe70492d, #480e3105, yellow 65%)", run("grad", "linear-gRadiEnT(0rad,  #fe70492d,  #480e3105,  yellow 65%)"));
 }
 
 static void test_l91_radial_96(void) {
@@ -900,7 +900,7 @@ static void test_l91_radial_97(void) {
 static void test_l91_radial_98(void) {
     TEST_ASSERT_EQUAL_STRING("linear-gradient(to left, #e5523d, rgb(58, 112, 30))", run("grad", "lineaR-gRadienT(to leFt,	#e5523d,	rgb(58, 112, 30))"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradiEnt(50GRAD, #a0318b17, #3bde44a3, ORANGE)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "Linear-GradIEnt(0rad,	rgb(214, 227, 30) 	 78%,	#E4E16a)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(0deg, rgb(214, 227, 30) 78%, #e4e16a)", run("grad", "Linear-GradIEnt(0rad,	rgb(214, 227, 30) 	 78%,	#E4E16a)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(2700deg, rgb(122, 218, 180) 97.5%, #5e4b07)", run("grad", "LiNear-gradient(2700dEG, 	 rgb(122, 218, 180) 97.5%, 	 #5E4B07)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(1350deg, #6e70081c 43%, yellow)", run("grad", "LIneaR-gradiEnt(1350deg,  #6e70081c 43%,  Yellow)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(-101GRAd,	#68c0C9,	rgb(236, 151, 194))"));
@@ -909,7 +909,7 @@ static void test_l91_radial_98(void) {
 static void test_l91_radial_99(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "lINeAr-GradiEnt(-30Deg, #23f2bd63 	 30%, rgb(6, 2, 18), silver)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(to bottom, #d01f72, #d0f104a0, rgb(255, 197, 109), gray)", run("grad", "LIneAr-gradienT(to boTTOm,  #d01F72,  #d0f104a0,  rgb(255, 197, 109),  GRAY)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "lInear-gRADient(3.1416rad, 	 #753360f1, 	 grey, 	 #9cdb37f7 43%, 	 #4Cde2C  81%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(180deg, #753360f1, grey, #9cdb37f7 43%, #4cde2c 81%)", run("grad", "lInear-gRADient(3.1416rad, 	 #753360f1, 	 grey, 	 #9cdb37f7 43%, 	 #4Cde2C  81%)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(8.25turn, red, blue, rgb(182, 40, 10) 78.0%, rgb(166, 143, 30))", run("grad", "linEAr-gRadiEnt(8.25turn, RED, BLUE, rgb(182, 40, 10) 78.0%, rgb(166, 143, 30))"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(200grad, white, rgb(172, 26, 100) 40.1%)", run("grad", "LiNeAr-grADIent(200GRAD, wHitE, rgb(172, 26, 100) 40.1%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(to BottOm rIght, #4a81b84d, #9d26adbe, rgb(160, 135, 157), #F98ddC)"));
@@ -934,8 +934,8 @@ static void test_l91_radial_101(void) {
 }
 
 static void test_l91_radial_102(void) {
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(3.1416rad, #9ebc6884, #bbc)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LIneAR-gradienT(3.1416rad, 	 naVy, 	 rgb(6, 17, 182) 0.1%, 	 rgb(48, 65, 101))"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(180deg, #9ebc6884, #bbc)", run("grad", "LINEAR-GRADIENT(3.1416rad, #9ebc6884, #bbc)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(180deg, navy, rgb(6, 17, 182) 0.1%, rgb(48, 65, 101))", run("grad", "LIneAR-gradienT(3.1416rad, 	 naVy, 	 rgb(6, 17, 182) 0.1%, 	 rgb(48, 65, 101))"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(TO BOttoM RigHT, #fb748c05, #E270Ec  95.0%, #2f56c5e2, black)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linEAR-GRaDiENt(11turn,  #F55a6c,  rgb(7, 53, 184)	12.1%,  #26eb983a)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "lIneAR-Gradient(TO Top Left,  #663d6396,  grey)"));
@@ -998,7 +998,7 @@ static void test_l91_radial_108(void) {
 
 static void test_l91_radial_109(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(0.125turn,	#9fb25067,	#be26377e 86.6%,	rgb(231, 142, 152)  55.9%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINear-grAdIEnt(6.2832rad, maroon, #225e8f, rgb(189, 191, 14) 51%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(360deg, maroon, #225e8f, rgb(189, 191, 14) 51%)", run("grad", "LINear-grAdIEnt(6.2832rad, maroon, #225e8f, rgb(189, 191, 14) 51%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "lINeAr-graDient(11turn, rgb(176, 100, 237) 36%, #A98C36 22%, #1ffc4aa1, greY)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(0.3turn, #744ef980  67%, #3fa97f99, #21226743, #7aE	47%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(to bottom rIghT, rgb(56, 121, 241), #09b, rgb(165, 133, 181))"));
@@ -1009,7 +1009,7 @@ static void test_l91_radial_110(void) {
     TEST_ASSERT_EQUAL_STRING("linear-gradient(200grad, #e112be53, #b707f05f 91.5%, #0a4 26%)", run("grad", "linear-gradient(200GRAD, 	 #e112be53, 	 #b707f05f 91.5%, 	 #0a4  26%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(TO bottom right,	teal,	#3a57ee,	rgb(48, 221, 200),	red)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(2500grad, #0ec, rgb(162, 56, 76))", run("grad", "LINEAR-GRADIENT(2500GRAD, #0eC, rgb(162, 56, 76))"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "lineaR-gradieNT(1.5708rad, 	 NAVY, 	 PURPLE 48%, 	 BLUE  15%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(90deg, navy, purple 48%, blue 15%)", run("grad", "lineaR-gradieNT(1.5708rad, 	 NAVY, 	 PURPLE 48%, 	 BLUE  15%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LinEar-gradienT(0.3turn, rgb(118, 184, 25), #ffFcA1, #fa94888a)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(to left, #292a3e2c 5.6%, #9c0, #daf1fc46, #88fdc8d0)", run("grad", "lineAr-gRAdiEnT(to left,	#292a3e2c 	 5.6%,	#9c0,	#daf1fc46,	#88fdc8d0)"));
 }
@@ -1033,7 +1033,7 @@ static void test_l91_radial_112(void) {
 }
 
 static void test_l91_radial_113(void) {
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-GraDient(3.1416rad, gray 80%, rgb(15, 233, 194) 	 24%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(180deg, gray 80%, rgb(15, 233, 194) 24%)", run("grad", "linear-GraDient(3.1416rad, gray 80%, rgb(15, 233, 194) 	 24%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(1rad,  navy  53%,  rgb(253, 234, 85),  Lime,  #1F5F0d)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(2400grad, rgb(73, 63, 59), #7e94bc 43%)", run("grad", "LINEAR-GRADIENT(2400grAD,	rgb(73, 63, 59),	#7e94Bc 43%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(1rad, 	 rgb(136, 190, 247), 	 greEn	42%)"));
@@ -1047,7 +1047,7 @@ static void test_l91_radial_114(void) {
     TEST_ASSERT_EQUAL_STRING("linear-gradient(1200grad, transparent, rgb(125, 160, 78))", run("grad", "LinEar-grADieNT(1200grad,	TranspaReNt,	rgb(125, 160, 78))"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(to left, rgb(48, 239, 46), #3308dfcf, #24d 26%)", run("grad", "linEaR-graDieNt(To LeFT, rgb(48, 239, 46), #3308dfcf, #24D 26%)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(4000grad, #8cc589fe 29%, #75ab5a29 42%)", run("grad", "LINEAR-GRADIENT(4000GRAD, #8cc589fe 	 29%, #75ab5a29 42%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(3.1416rad, rgb(19, 223, 61)  80%, #2f182501, #62df4966 24%, rgb(216, 232, 247)	83%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(180deg, rgb(19, 223, 61) 80%, #2f182501, #62df4966 24%, rgb(216, 232, 247) 83%)", run("grad", "LINEAR-GRADIENT(3.1416rad, rgb(19, 223, 61)  80%, #2f182501, #62df4966 24%, rgb(216, 232, 247)	83%)"));
 }
 
 static void test_l91_radial_115(void) {
@@ -1061,7 +1061,7 @@ static void test_l91_radial_115(void) {
 
 static void test_l91_radial_116(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(-700.5grad, #9d26cd1a 25.6%, #40C726 14%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LInEaR-grAdiEnt(0rad,	#604054cd,	rgb(95, 63, 56),	#Fb6dfD,	#5e2379ad 	 38.8%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(0deg, #604054cd, rgb(95, 63, 56), #fb6dfd, #5e2379ad 38.8%)", run("grad", "LInEaR-grAdiEnt(0rad,	#604054cd,	rgb(95, 63, 56),	#Fb6dfD,	#5e2379ad 	 38.8%)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(200grad, rgb(118, 175, 26), maroon 55%, #bf2ad1)", run("grad", "linEAr-gRadiEnt(200grad,	rgb(118, 175, 26),	MAROON 55%,	#Bf2AD1)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(3600grad, #bcf 99%, #6d33b6 31%, #0002cc8d)", run("grad", "linEar-grAdient(3600GRad,	#BcF  99%,	#6D33b6 	 31%,	#0002cc8d)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(45deg, Purple, white 13.1%, #212b49b6)"));
@@ -1071,15 +1071,15 @@ static void test_l91_radial_116(void) {
 static void test_l91_radial_117(void) {
     TEST_ASSERT_EQUAL_STRING("linear-gradient(7.5turn, grey 92.6%, rgb(141, 120, 62), #0c2d5a 16.1%)", run("grad", "lineAr-gradient(7.5turn,  GREY 92.6%,  rgb(141, 120, 62),  #0C2D5a 16.1%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "lineAr-gradient(0.125turn,  #7394b3bc,  #ecC332,  #ba3)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(3.1416rad, #bB3, GRAY)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(180deg, #bb3, gray)", run("grad", "LINEAR-GRADIENT(3.1416rad, #bB3, GRAY)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(0.3turn,	rgb(91, 249, 149),	#ed7d359f 37%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(0rad, rgb(29, 55, 148), #688C8e, #Ba5, #c6a74b)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(0deg, rgb(29, 55, 148), #688c8e, #ba5, #c6a74b)", run("grad", "linear-gradient(0rad, rgb(29, 55, 148), #688C8e, #Ba5, #c6a74b)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(0.125turn, #97e8b125 	 66.0%, black, TRANSPARENT, #9759096b)"));
 }
 
 static void test_l91_radial_118(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linEar-gRadienT(4100grad, #468a4a7f 49%, navy 	 70.2%, rgb(134, 31, 157) 75%, #9a25fb 	 46.8%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LiNeAr-gRadieNt(0rad, #77d11977, rgb(225, 8, 117) 74%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(0deg, #77d11977, rgb(225, 8, 117) 74%)", run("grad", "LiNeAr-gRadieNt(0rad, #77d11977, rgb(225, 8, 117) 74%)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(3500grad, rgb(171, 155, 39), rgb(169, 174, 16) 87.4%)", run("grad", "LineaR-gradient(3500grad,  rgb(171, 155, 39),  rgb(169, 174, 16) 87.4%)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(to bottom, rgb(44, 238, 171) 71%, #56dbdec2 90.9%, #9e6c81fd)", run("grad", "LINEAR-GRADIENT(to bottoM, rgb(44, 238, 171) 71%, #56dbdec2  90.9%, #9e6c81fd)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(11turn,	green,	#7ed05f15  46%,	#8a44789a)"));
@@ -1089,7 +1089,7 @@ static void test_l91_radial_118(void) {
 static void test_l91_radial_119(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(91DEG, 	 rgb(75, 7, 234)	31%, 	 rgb(254, 34, 60) 65%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "LINEAR-GRADIENT(0.125turn, rgb(174, 231, 157) 16.8%, #63f	24.5%, rgb(111, 111, 159), #f7b6a6c9)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("grad", "linear-gradient(1.5708rad, rgb(217, 73, 103), #9BaAe3  7%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(90deg, rgb(217, 73, 103), #9baae3 7%)", run("grad", "linear-gradient(1.5708rad, rgb(217, 73, 103), #9BaAe3  7%)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(9turn, #652b64ff, green 17%, #4f069f)", run("grad", "lInEar-graDIent(9turn, #652b64ff, gREen  17%, #4F069f)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(2160deg, rgb(212, 40, 125) 43.7%, red, #c02a03cd 15%)", run("grad", "linear-gradient(2160DEG, rgb(212, 40, 125) 43.7%, Red, #c02a03cd  15%)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(6.5turn, white, gray 17%, #31f78de9)", run("grad", "LINEAR-GRADIENT(6.5tUrN, White, gRAy  17%, #31f78de9)"));
@@ -1097,7 +1097,7 @@ static void test_l91_radial_119(void) {
 
 static void test_l91_radial_120(void) {
     TEST_ASSERT_EQUAL_STRING("url(i71.png), radial-gradient(861.73% 182%, rgb(197, 225, 107), #90b874 25%, #05ebe80a)", run("img", "url(i71.png), 	 radial-gradient(861.73% 	 182%, rgb(197, 225, 107), #90B874 25%, #05ebe80a)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i14.png),  linear-gradIEnt(3.1416rad, #87fba71b 	 82%, #ca84b78e, #0037a018 54.9%, #01034c7b)"));
+    TEST_ASSERT_EQUAL_STRING("url(i14.png), linear-gradient(180deg, #87fba71b 82%, #ca84b78e, #0037a018 54.9%, #01034c7b)", run("img", "url(i14.png),  linear-gradIEnt(3.1416rad, #87fba71b 	 82%, #ca84b78e, #0037a018 54.9%, #01034c7b)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i21.png), raDIAl-graDiEnT(1.234px 495.51PX,  #9baf5c97,  rgb(136, 183, 208) 50%,  rgb(106, 65, 75))"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i96.png), 	 url(i19.png), 	 radIal-gradient(118px ellipse ELLIPSE, 	 #3e547d37, 	 #41BB85, 	 #F544E9 94%)"));
     TEST_ASSERT_EQUAL_STRING("url(i91.png), url(i13.png), radial-gradient(circle, black 45%, green 36%, teal 34%)", run("img", "url(i91.png),  url(i13.png),  RADiAL-gRAdient(circle, blAck 45%, GREEN  36%, TeaL 	 34%)"));
@@ -1136,7 +1136,7 @@ static void test_l91_radial_124(void) {
     TEST_ASSERT_EQUAL_STRING("url(i34.png), radial-gradient(832px at 10px 20px, #c320ec87, rgb(4, 81, 13) 29%)", run("img", "url(i34.png), RAdial-GrAdieNt(832px at 10PX 20PX,  #c320ec87,  rgb(4, 81, 13) 29%)"));
     TEST_ASSERT_EQUAL_STRING("url(i89.png), url(i12.png), radial-gradient(2677% 2903px ellipse at right top, #5cb, rgb(142, 96, 76) 80%)", run("img", "url(i89.png),	url(i12.png),	raDial-grADiEnt(2677% 2903pX eLLipse At right toP, #5Cb, rgb(142, 96, 76) 80%)"));
     TEST_ASSERT_EQUAL_STRING("url(i40.png), url(i48.png), linear-gradient(2300grad, rgb(38, 227, 38), #1bc, rgb(57, 14, 29))", run("img", "url(i40.png), url(i48.png), linear-gradient(2300grad, 	 rgb(38, 227, 38), 	 #1BC, 	 rgb(57, 14, 29))"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i88.png), url(i18.png), LINEAR-GRADIENT(1.5708rad,	green,	rgb(29, 189, 146),	rgb(104, 82, 37) 18.5%,	#fbaa684e)"));
+    TEST_ASSERT_EQUAL_STRING("url(i88.png), url(i18.png), linear-gradient(90deg, green, rgb(29, 189, 146), rgb(104, 82, 37) 18.5%, #fbaa684e)", run("img", "url(i88.png), url(i18.png), LINEAR-GRADIENT(1.5708rad,	green,	rgb(29, 189, 146),	rgb(104, 82, 37) 18.5%,	#fbaa684e)"));
     TEST_ASSERT_EQUAL_STRING("url(i83.png), linear-gradient(7.5turn, #e589ed18, #becf96, grey, #b83121)", run("img", "url(i83.png),	LineAR-gradienT(7.5turn, 	 #e589ed18, 	 #beCf96, 	 GREy, 	 #b83121)"));
 }
 
@@ -1168,7 +1168,7 @@ static void test_l91_radial_127(void) {
 }
 
 static void test_l91_radial_128(void) {
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "LINEAR-GRADIENT(1.5708rad, 	 gRAy, 	 #54e75f0d 20%, 	 blue 44%, 	 rgb(24, 111, 141) 84%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(90deg, gray, #54e75f0d 20%, blue 44%, rgb(24, 111, 141) 84%)", run("img", "LINEAR-GRADIENT(1.5708rad, 	 gRAy, 	 #54e75f0d 20%, 	 blue 44%, 	 rgb(24, 111, 141) 84%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "RADIAL-GRADIENT(ellipse 2860.2% AT LEFT 10px,	rgb(191, 154, 140)	60%,	oRAnge,	#06dce95e 23%,	ORANGE 29%)"));
     TEST_ASSERT_EQUAL_STRING("url(i58.png), linear-gradient(8.25turn, lime 88.9%, #aa7 62.9%, #2de, #f52edc)", run("img", "url(i58.png), 	 liNear-gRAdieNt(8.25tUrN, LIME	88.9%, #aa7	62.9%, #2dE, #f52eDC)"));
     TEST_ASSERT_EQUAL_STRING("url(i22.png), radial-gradient(2497.3px at right top, black 96%, #3a46c3c9)", run("img", "url(i22.png),	RADIAL-GRADIENT(2497.3px 	 At 	 right 	 top,  Black 96%,  #3a46c3c9)"));
@@ -1190,7 +1190,7 @@ static void test_l91_radial_130(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i15.png), linear-gradient(to tOp lEfT,	BLUE	89%,	transparent)"));
     TEST_ASSERT_EQUAL_STRING("url(i75.png), url(i53.png), radial-gradient(2258.7px at bottom right, #de2 40.8%, #cd717c 66%, orange, #d80e81cb)", run("img", "url(i75.png), url(i53.png), RADIAL-GRADIENT(2258.7px at BOTTOM rIgHt, #DE2 40.8%, #CD717c 66%, OrangE, #d80e81cb)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "radial-gradient(1721px ellipse AT rIGht tOP, SilvER 65%, #beF 	 79.5%, WHITE)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i69.png), url(i79.png), LINEAR-GRADIENT(0rad, grAY 57.6%, Black 43.1%, #246f168c 	 7%)"));
+    TEST_ASSERT_EQUAL_STRING("url(i69.png), url(i79.png), linear-gradient(0deg, gray 57.6%, black 43.1%, #246f168c 7%)", run("img", "url(i69.png), url(i79.png), LINEAR-GRADIENT(0rad, grAY 57.6%, Black 43.1%, #246f168c 	 7%)"));
     TEST_ASSERT_EQUAL_STRING("radial-gradient(at left 10px, green, #da5b0e)", run("img", "radial-gradient(at  LEFT  10px,  GREEN,  #Da5B0E)"));
 }
 
@@ -1209,7 +1209,7 @@ static void test_l91_radial_132(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i12.png), 	 url(i84.png), 	 radial-gradient(ELlipse 	 closest-side 	 1690% 	 at 	 toP 	 botTom, #23fe74, #3e1)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i32.png), url(i40.png), radial-gradient(1e2px 234PX aT left, #c407a274, #cae, #1dc4c7fa, wHite 36%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i48.png),	url(i75.png),	radiaL-GRadient(584%	1827px	at	mIDdle,  #dbb,  rgb(88, 36, 123),  #47640e66 	 26%,  rgb(52, 205, 150))"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i73.png), url(i80.png), linear-gradient(1.5708rad,	#3d3227e1,	#0481fec4	13%,	#07f643 	 25%)"));
+    TEST_ASSERT_EQUAL_STRING("url(i73.png), url(i80.png), linear-gradient(90deg, #3d3227e1, #0481fec4 13%, #07f643 25%)", run("img", "url(i73.png), url(i80.png), linear-gradient(1.5708rad,	#3d3227e1,	#0481fec4	13%,	#07f643 	 25%)"));
 }
 
 static void test_l91_radial_133(void) {
@@ -1250,7 +1250,7 @@ static void test_l91_radial_136(void) {
 
 static void test_l91_radial_137(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i43.png), 	 url(i13.png), 	 lineaR-gradIeNt(0.125turn, #dae27c, #6E1e8f 	 0%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "url(i21.png), 	 url(i13.png), 	 linear-gradient(6.2832rad,  SilVeR,  Grey,  rgb(108, 85, 33),  PurplE)"));
+    TEST_ASSERT_EQUAL_STRING("url(i21.png), url(i13.png), linear-gradient(360deg, silver, grey, rgb(108, 85, 33), purple)", run("img", "url(i21.png), 	 url(i13.png), 	 linear-gradient(6.2832rad,  SilVeR,  Grey,  rgb(108, 85, 33),  PurplE)"));
     TEST_ASSERT_EQUAL_STRING("url(i46.png), linear-gradient(to top, #eb46b82a, grey, red)", run("img", "url(i46.png), linear-gradient(TO top, #eb46b82a, grey, red)"));
     TEST_ASSERT_EQUAL_STRING("url(i95.png), url(i13.png), radial-gradient(ellipse 1732px 360.8%, #bfacd9 42%, #368d912f)", run("img", "url(i95.png), url(i13.png), radial-gRaDienT(ellipse	1732px	360.8%,	#BFACD9 42%,	#368d912f)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", run("img", "RADIal-grADIent(ellIpsE 	 2183px, #Fbf, #ebea0203 	 81%, SILVER)"));
