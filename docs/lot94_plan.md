@@ -16,12 +16,12 @@ are left for lot 95 because the size budget is reached with gap 1 (see
 Not done).
 
 A row is listed only when its code, tests and docs are in the branch.
-Size: about 8350 added lines against 8bc8ef5 before these docs, of which
+Size: about 8500 added lines against 8bc8ef5 with these docs, of which
 about 6000 are generated host test suites
 (tests/unit/userspace/test_lot94_{cells,bgval,accept,sheet}.c, written by
 scripts/lot94_gradgen.py from the model scripts/lot94_gradmodel.py, which
 shares no code with the C under test, fixed seeds 9401 to 9403) and about
-2350 are written by hand (about 380 lines of product code in webeng.c,
+2350 are written by hand (about 350 lines of product code in webeng.c,
 webeng.h, wf_cssbg.c and wf_cssbg.h, the model and generator, the hand
 test, the QEMU test and page, the CI job, docs). The regenerated Lot 90
 to 92 suites change 386 assertions (review point 7).
@@ -52,9 +52,10 @@ to 92 suites change 386 assertions (review point 7).
     - tests/scripts/test_qemu_lot92.py: #radbad92 now reads "bg #123456 bgimg linear-gradient(57deg, #ff0000, #0000ff)" (1rad was refused) and is checked for no "rad" left; found by the qemu-lot92 gate (see Gates).
     - tests/scripts/test_qemu_lot93.py: #init93 now reads "bg #123456 bgimg linear-gradient(45deg, #ff0000, #0000ff)" (the computed 45deg is passed on and drawn).
 8. Removed while writing the mutations, since no result could change: the axis special cases of grad_turn (CORDIC gives the same turns on the axes), the rounding branch for negative linear positions (the cell centre is inside the origin box, so the numerator is >= 0), the normalisation of negative angles in grad_sin_deg (callers pass 0..449), the three-word check of the reader to_sides (three words repeat an axis) and the -1 return of conic_shape for "from A x" (the stop check refuses it). Equivalent mutations kept out of the count: the 45deg sin entry (sin and cos scale together, the positions are ratios) and the reader 64-bit division remainder test (r >= d vs r > d: no value of the domain 0..999999 differs, checked exhaustively).
-9. Mutations: see Gates (host mutations of rows A to E, and one QEMU mutation: the lower half of the CORDIC turn not turned, qemu-lot94 failed on the conic cells).
+9. Mutations: 98 applied / 98 killed / 0 survived (97 host mutations of rows A to E, and one QEMU mutation: the lower half of the CORDIC turn not turned, qemu-lot94 failed on the conic cells 88..93). The first host run (92 mutations) left 14 survivors; beeb1e4 removes the redundant code of point 8, adds witnesses (asymmetric padding, mixed centres, from-to and degree-stop refusals, a conic layer after an image, the shorthand with a repeat) and fixes the vertical children (row E, found by the M94-vertical survivor). The second run killed 95 of 96; the survivor M94-to-empty is equivalent and was replaced by M94-to-many, killed after 2cb9ed4. A third run on ff104c6 reran the CORDIC mutations with a new one on the 2^32 scaling (7/7). Five equivalent mutations are listed, not counted (mutations.txt).
 10. CI: one new job, lot94-reader (make qemu-lot94, no guest clock option). The pull_request trigger keeps no branches filter.
-11. ASan (gcc -fsanitize=address,undefined): see Gates.
+11. ASan (gcc -fsanitize=address,undefined): the first head run (2cb9ed4) found a UBSan "left shift of negative value" in grad_turn (u <<= 32 with u or v negative), which failed test_lot94_cells, test_lot94_engine and test_lot94_sheet under UBSan only; ff104c6 scales by a multiplication (same values with gcc, no libgcc helper). On ff104c6 the base and the head fail the same 5 suites; no new failure (see Gates).
+12. qemu-lot92 had to be converted (86fded4, point 7): the first gate run on 2cb9ed4 failed it because #radbad92 (1rad) is now passed on. That run was stopped after qemu-lot91 because ff104c6 changes the guest engine; all gates were then run again on ff104c6 (see Gates).
 
 ## Not done (first gaps for lot 95)
 
@@ -75,4 +76,58 @@ QEMU: tests/scripts/test_qemu_lot94.py, `make qemu-lot94` (one boot at 1x): the 
 
 ## Gates on the box
 
-Pending (filled by the gate run).
+Run on ff104c6 (the code of this lot; later commits change docs only) on 13 November 2026 (UTC+4), gate starts 18:31:14 to 21:54:06 (DONE 21:54), one QEMU guest at a time (scripts in /workspace/run/lot94: gates.sh). Failed: qemu-p2p (see below; rerun alone once as a diagnostic, it passed); every other gate passed and none was rerun.
+
+An earlier run on 2cb9ed4 (18:02 to 18:30, logs/gates_run1_aborted.txt) passed make-all, test-all (21041 tests, 0 failed), roadmap-check, font-check, secrets, strict-image, qemu-lot94, qemu-lot93 and qemu-lot91, and failed qemu-lot92 (rc=2, #radbad92, converted in 86fded4); it was stopped during qemu-lot90 because ff104c6 changes the guest engine. Its results are not counted.
+
+| Gate | Result | Time |
+|------|--------|------|
+| make-all | pass | 2 s |
+| test-all | pass | 285 s |
+| roadmap-check | pass | 0 s |
+| font-check | pass | 0 s |
+| secrets | pass | 0 s |
+| strict-image | pass | 0 s |
+| qemu-lot94 | pass | 41 s |
+| qemu-lot93 | pass | 32 s |
+| qemu-lot92 | pass | 59 s |
+| qemu-lot91 | pass | 922 s |
+| qemu-lot90 | pass | 597 s |
+| qemu-gui-text-scale | pass | 523 s |
+| qemu-gui-parity | pass | 751 s |
+| qemu-lot89 | pass | 276 s |
+| qemu-p2p | FAIL rc=2 | 1109 s |
+| qemu-p2p-mesh | pass | 248 s |
+| qemu-p2p-phase5 | pass | 203 s |
+| qemu-net-wire | pass | 443 s |
+| qemu-lot67-web | pass | 279 s |
+| qemu-lot88-desk | pass | 743 s |
+| qemu-lot88-tv | pass | 591 s |
+| qemu-lot87 | pass | 208 s |
+| qemu-lot86 | pass | 511 s |
+| qemu-lot85 | pass | 152 s |
+| qemu-lot84 | pass | 493 s |
+| qemu-lot83 | pass | 108 s |
+| qemu-lot82 | pass | 97 s |
+| qemu-lot81 | pass | 117 s |
+| qemu-lot80 | pass | 448 s |
+| qemu-lot79 | pass | 60 s |
+| qemu-lot78 | pass | 39 s |
+| qemu-lot77 | pass | 25 s |
+| qemu-lot76 | pass | 20 s |
+| qemu-lot75 | pass | 91 s |
+| qemu-lot74 | pass | 441 s |
+| qemu-lot73 | pass | 171 s |
+| qemu-lot72 | pass | 494 s |
+| qemu-lot71 | pass | 631 s |
+| qemu-web-layout | pass | 891 s |
+| qemu-production | pass | 71 s |
+| tree-clean | pass | 0 s |
+
+make test-all: 21041 tests, 21041 passed, 0 failed (Lot 93 head: 20543).
+
+ASan and UBSan (TEST_CC="gcc -fsanitize=address,undefined -fno-sanitize-recover=all", make test-all on git archive copies of each tree): base 8bc8ef5 20458 tests, 5 failed (test_gpt2_infer, test_pmm, test_vfs_service, test_lot87_web, test_webrt), 806 s; head ff104c6 20956 tests, 5 failed (test_gpt2_infer, test_pmm, test_vfs_service, test_lot87_web, test_webrt), 1330 s. All Lot 94 suites and the converted suites pass under ASan; no new failure. The first head run on 2cb9ed4 (20690 tests, 8 failed) also failed test_lot94_cells, test_lot94_engine and test_lot94_sheet on the grad_turn shift (review point 11). The ASan runs ran at the same time as the first QEMU gates.
+
+qemu-p2p: the gate run failed it (rc=2, 1109 s): on guest b, 'p2p-poll 1' did not print 'p2p-poll ok' in time after 'p2p peer alpha down' and a raft prevote (logs/gate_qemu-p2p.txt). Lot 94 changes no p2p, network or kernel code (webeng.c, wf_cssbg.c, the Lot 67 test server pages and tests only). A diagnostic rerun of make qemu-p2p alone on ff104c6 after the gate run (21:54 to 22:08, logs/gate_qemu-p2p-rerun.txt) passed in 832 s (4 scenarios, frames=5097, plaintext=0). Read as a likely timing flake (several guests were slower than in Lot 93 on this box: qemu-lot91 922 s vs 452 s, qemu-net-wire 443 s vs 80 s); both results are reported, the table keeps the failure. No base comparison was run because the rerun passed.
+
+Mutations: 98 applied / 98 killed / 0 survived (97 host, 1 QEMU), see review point 9.
