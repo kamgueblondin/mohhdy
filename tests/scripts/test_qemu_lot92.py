@@ -12,9 +12,10 @@ server runs on the host and the guest reaches it as 10.0.2.2 (slirp).
   * computed registered values (/lot92/props.html): a registered <length>
     calc(20px * 2) gives a 40px radial radius (unregistered: refused);
     round(up, 21px, 4px) gives a 24px font size; the initial value
-    calc(1in / 8) is computed to 12px; calc(sin(30deg) * 10px) is typed
-    and kept, so font-size does not take it. css-props counts two
-    computed values ("simplified 2").
+    calc(1in / 8) is computed to 12px; calc(sin(30deg) * 10px) was typed
+    and kept in Lot 92; Lot 93 (converted) computes it to 5px, so
+    font-size takes it and css-props counts three computed values
+    ("simplified 3", was 2).
 No guest clock is involved (no -rtc option).
 """
 from __future__ import print_function
@@ -85,10 +86,10 @@ def step_props(mon, proc, u):
                "node div #ucirc92 display auto bg #224466\n",
                "node p #size92 display auto size 24px\n",
                "node p #init92 display auto size 12px\n",
-               "node p #trig92 display auto\n",
-               "css-props registered 3 rejected 0 ", " simplified 2\n"], "web-css computed values")
+               "node p #trig92 display auto size 5px\n",
+               "css-props registered 3 rejected 0 ", " simplified 3\n"], "web-css computed values")
     say("computed: calc(20px * 2) -> radius 40px (unregistered refused), round(up, 21px, 4px) -> 24px, "
-        "initial calc(1in / 8) -> 12px, sin() kept (no size); simplified 2")
+        "initial calc(1in / 8) -> 12px, calc(sin(30deg) * 10px) -> 5px (Lot 93); simplified 3")
 
 
 def boot_reader(hp):

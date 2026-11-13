@@ -69,7 +69,11 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /lot92/bg.html      Lot 92: linear-gradient angles in radians, a
                       registered angle computed by mod()
   /lot92/props.html   Lot 92: registered math values computed (calc,
-                      round(), a computed initial value), sin() kept
+                      round(), a computed initial value), sin() (Lot 93:
+                      computed)
+  /lot93/math.html    Lot 93: registered values computed with atan2(),
+                      acos(), hypot(), pow(), pi, sqrt(), log(), exp();
+                      tan(90deg) kept
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -258,7 +262,7 @@ LOT92_PAGES = {
         "<p>fin92b</p></body></html>"),
     # registered <length> values computed: a calc() radius, a round()
     # font size, a computed initial value (1in / 8 = 12px) inherited;
-    # sin() is typed and kept, so font-size does not take it
+    # sin() was typed and kept in Lot 92; Lot 93 computes it (5px)
     "/lot92/props.html": (
         "<!doctype html><html><head><title>Lot 92 math</title><style>"
         "@property --r92 { syntax: '<length>'; inherits: false; initial-value: 0px }\n"
@@ -276,6 +280,45 @@ LOT92_PAGES = {
         "<p id=\"init92\">initkeep92</p>"
         "<p id=\"trig92\">trigkeep92</p>"
         "<p>fin92p</p></body></html>"),
+}
+
+
+# Lot 93: reader page (tests/scripts/test_qemu_lot93.py)
+LOT93_PAGES = {
+    # registered <angle> values computed by atan2() and acos() feed the
+    # gradient (90deg, 180deg); the computed initial value atan2(1, 1) is
+    # 45deg, which the engine does not draw (the colour stays); the same
+    # atan2() unregistered keeps its text and is refused. A registered
+    # <length> computed by hypot() is a 50px radius; pow(), pi with
+    # round(), the initial sqrt() and log() with exp() give font sizes;
+    # tan(90deg) is infinite and kept, so font-size does not take it
+    "/lot93/math.html": (
+        "<!doctype html><html><head><title>Lot 93 math</title><style>"
+        "@property --a93 { syntax: '<angle>'; inherits: false; initial-value: atan2(1, 1) }\n"
+        "@property --r93 { syntax: '<length>'; inherits: false; initial-value: 0px }\n"
+        "@property --s93 { syntax: '<length>'; inherits: true; initial-value: calc(sqrt(144) * 1px) }\n"
+        "#ang93 { --a93: atan2(1, 0); background-image: linear-gradient(var(--a93), #ff0000, #0000ff) }\n"
+        "#acos93 { --a93: acos(-1); background: linear-gradient(var(--a93), #00ff00, #000000) no-repeat }\n"
+        "#init93 { background-color: #123456; background-image: linear-gradient(var(--a93), #ff0000, #0000ff) }\n"
+        "#uang93 { --u93: atan2(1, 0); background-color: #654321; background-image: linear-gradient(var(--u93), #ff0000, #0000ff) }\n"
+        "#rad93 { --r93: hypot(30px, 40px); background-image: radial-gradient(circle var(--r93), #ff0000, #0000ff) }\n"
+        "#pow93 { --s93: calc(pow(2, 4) * 1px); font-size: var(--s93) }\n"
+        "#pi93 { --s93: round(calc(pi * 5px), 1px); font-size: var(--s93) }\n"
+        "#sqrt93 { font-size: var(--s93) }\n"
+        "#tan93 { --s93: calc(tan(90deg) * 1px); font-size: var(--s93) }\n"
+        "#log93 { --s93: calc(log(8, 2) * exp(0) * 7px); font-size: var(--s93) }\n"
+        "</style></head><body><h1>Maths 93</h1>"
+        "<div id=\"ang93\"><p>angkeep93</p></div>"
+        "<div id=\"acos93\"><p>acoskeep93</p></div>"
+        "<div id=\"init93\"><p>initkeep93</p></div>"
+        "<div id=\"uang93\"><p>uangkeep93</p></div>"
+        "<div id=\"rad93\"><p>radkeep93</p></div>"
+        "<p id=\"pow93\">powkeep93</p>"
+        "<p id=\"pi93\">pikeep93</p>"
+        "<p id=\"sqrt93\">sqrtkeep93</p>"
+        "<p id=\"tan93\">tankeep93</p>"
+        "<p id=\"log93\">logkeep93</p>"
+        "<p>fin93</p></body></html>"),
 }
 
 
@@ -462,6 +505,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT92_PAGES:
             self._send(200, LOT92_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT93_PAGES:
+            self._send(200, LOT93_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
