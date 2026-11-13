@@ -7848,7 +7848,7 @@ static uint32_t grad_turn(int x, int y) {
     uint32_t acc = 0;
     int i;
     if (u < 0) { u = -u; v = -v; acc = 0x80000000u; }
-    u <<= 32; v <<= 32;
+    u *= (int64_t)1 << 32; v *= (int64_t)1 << 32;      /* not a shift: v may be negative */
     for (i = 0; i < 31 && v; i++) {
         int64_t nu, nv;
         if (v > 0) { nu = u + (v >> i); nv = v - (u >> i); acc += grad_atan[i]; }
