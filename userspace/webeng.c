@@ -7811,9 +7811,9 @@ static const int32_t grad_sin[91] = {
     57319, 57865, 58393, 58903, 59396, 59870, 60326, 60764, 61183, 61584, 61966, 62328, 62672, 62997, 63303,
     63589, 63856, 64104, 64332, 64540, 64729, 64898, 65048, 65177, 65287, 65376, 65446, 65496, 65526, 65536 };
 
-/* sin of d degrees (any integer) in 1/65536 */
+/* sin of d degrees (d >= 0: an angle 0..359, or that plus 90) in 1/65536 */
 static int32_t grad_sin_deg(int d) {
-    d = (d % 360 + 360) % 360;
+    d %= 360;
     if (d <= 90) return grad_sin[d];
     if (d <= 180) return grad_sin[180 - d];
     if (d <= 270) return -grad_sin[d - 180];
@@ -7839,13 +7839,14 @@ static const uint32_t grad_atan[31] = {
     163u, 81u, 41u, 20u, 10u, 5u, 3u, 1u, 1u };
 
 /* the direction of (x, y) (y down) clockwise from up, in 1/2^32 of a turn
- * (CORDIC vectoring, 31 steps); axes and the origin are exact (0 up) */
+ * (CORDIC vectoring, 31 steps, within about 2^-27 of a turn). Up, down and
+ * the origin (0) are exact: v = 0 skips the loop. Left and right go
+ * through it; their error cannot change a position, since a 1/10000
+ * position minus a whole-degree "from" is never a tie. */
 static uint32_t grad_turn(int x, int y) {
     int64_t u = -(int64_t)y, v = x;
     uint32_t acc = 0;
     int i;
-    if (v == 0) return u < 0 ? 0x80000000u : 0;
-    if (u == 0) return v > 0 ? 0x40000000u : 0xC0000000u;
     if (u < 0) { u = -u; v = -v; acc = 0x80000000u; }
     u <<= 32; v <<= 32;
     for (i = 0; i < 31 && v; i++) {
@@ -7876,8 +7877,7 @@ static int grad_isqrt(int n) {
  *     (the line is perpendicular to the other diagonal, exactly);
  *   - conic: the direction of the centre from the "at" point, clockwise
  *     from up, minus the "from" angle, as a fraction of a turn.
- * Positions are in 1/10000, rounded half away from zero (linear) or half
- * up (conic). */
+ * Positions are in 1/10000, rounded half up. */
 static void cells_fill(we_doc_t *d, int idx, int slot, int count, const int *o, const int *c) {
     const we_node_t *n = &d->nodes[idx];
     int ax0 = o[0] > c[0] ? o[0] : c[0], ay0 = o[1] > c[1] ? o[1] : c[1];
@@ -7916,9 +7916,10 @@ static void cells_fill(we_doc_t *d, int idx, int slot, int count, const int *o, 
             int x0 = ax0 + i * aw / cols, x1 = ax0 + (i + 1) * aw / cols;
             int dx = x0 + x1 - cx2, dy = y0 + y1 - cy2, p;
             if (n->grad_dir == WE_GRAD_ANGLE) {
+                /* num >= 0: the cell centre is inside the origin box, so
+                 * the position is 0..10000 */
                 int64_t num = 5000 * den + 10000 * (dx * sn - dy * cs);
-                p = num >= 0 ? (int)grad_udiv((uint64_t)(2 * num + den), (uint64_t)(2 * den))
-                             : -(int)grad_udiv((uint64_t)(-2 * num + den), (uint64_t)(2 * den));
+                p = (int)grad_udiv((uint64_t)(2 * num + den), (uint64_t)(2 * den));
             } else {
                 /* (turn - from / 360) in 1/(9 * 2^32) of 1/10000, then
                  * rounded half up to 1/10000 */
@@ -8756,6 +8757,26 @@ static void vertical_style(we_doc_t *d, int i, int rl, int forward) {
     if (n->grad_dir && n->grad_dir <= WE_GRAD_RADIAL) {
         if (forward) n->grad_dir = grad_map[rl][n->grad_dir];
         else for (k = 1; k <= WE_GRAD_RADIAL; k++) if (grad_map[rl][k] == n->grad_dir) { n->grad_dir = (uint8_t)k; break; }
+    }
+    if (n->grad_dir == WE_GRAD_ANGLE) {
+        /* lot 94: the box is painted in the logical frame. vertical-lr
+         * transposes it (x' = y, y' = x): the direction angle a becomes
+         * 270 - a both ways. vertical-rl rotates it (x' = y, y' = -x):
+         * a - 90 forward, a + 90 back. A corner keyword is mapped the same
+         * way through its (left, bottom) bits. */
+        if (n->grad_corner) {
+            int left = (n->grad_corner - 1) & 1, bottom = ((n->grad_corner - 1) >> 1) & 1, nl, nb;
+            if (!rl) { nl = !bottom; nb = !left; }
+            else if (forward) { nl = !bottom; nb = left; }
+            else { nl = bottom; nb = !left; }
+            n->grad_corner = (uint8_t)(1 + nl + 2 * nb);
+        } else if (!rl) n->grad_angle = (int16_t)((630 - n->grad_angle) % 360);
+        else n->grad_angle = (int16_t)((n->grad_angle + (forward ? 270 : 90)) % 360);
+    } else if (n->grad_dir == WE_GRAD_CONIC && forward) {
+        /* the transpose would reverse the sweep and the rl centre needs the
+         * physical width: refused (lot 95) */
+        n->grad_dir = 0;
+        diag(d, "conic refused in vertical flow", i);
     }
     if (n->grad_dir == WE_GRAD_RADIAL) {
         swap16(&n->grad_at[0], &n->grad_at[1]);

@@ -347,7 +347,7 @@ static int angle(const char *s, int n) {
  * either order (a corner); s[a..b) follows "to" */
 static int to_sides(const char *s, int a, int b) {
     int wa[3], wb[3], c = bsplit(s, a, b, ' ', 0, wa, wb, 3), k, vert = 0, horiz = 0;
-    if (c < 1 || c > 2) return 0;
+    if (c < 1) return 0;                    /* three words repeat an axis below */
     for (k = 0; k < c; k++) {
         int l = wb[k] - wa[k];
         if (bis(s + wa[k], l, "top") || bis(s + wa[k], l, "bottom")) vert++;
@@ -370,7 +370,7 @@ static int conic_shape(const char *s, int a, int b) {
         k = 2;
         if (c == 2) return 1;
     }
-    if (!bis(s + wa[k], wb[k] - wa[k], "at")) return k ? -1 : 0;
+    if (!bis(s + wa[k], wb[k] - wa[k], "at")) return 0;     /* "from A x": the stop check refuses it */
     if (k + 1 >= c) return -1;
     bo_init(&o, t, (int)sizeof(t));
     return pos_words(s, wa + k + 1, wb + k + 1, c - k - 1, &o) ? 1 : -1;

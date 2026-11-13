@@ -593,7 +593,7 @@ static void test_l94_accept_50(void) {
     check("conic-gradient(#7ed912, rgb(137, 24, 73), rgb(121, 194, 118), rgb(44, 24, 65) 20.9%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 135px 94px, lime 346deg, rgb(38, 252, 218))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from 3501.4033deg, teal, rgb(33, 156, 84), black 5deg)", WE_GRAD_CONIC, 261, 0, 3);
-    check("conic-gradient(from 292deg at 28% 52px, orange 37.5%, rgb(225, 113, 213))", WE_GRAD_CONIC, 292, 0, 2);
+    check("conic-gradient(from 292deg at 52px 28%, orange 37.5%, rgb(225, 113, 213))", WE_GRAD_CONIC, 292, 0, 2);
     check("conic-gradient(red 40.3%, orange, rgb(196, 15, 41), gray)", WE_GRAD_CONIC, 0, 0, 4);
 }
 
@@ -616,7 +616,7 @@ static void test_l94_accept_52(void) {
     check("conic-gradient(from -176deg at 86% 1%, #fbd092, black 275deg)", WE_GRAD_CONIC, 184, 0, 2);
     check("conic-gradient(at 26% 23%, rgb(1, 189, 149) 99%, white, #a4cd63)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(from 2083deg, rgb(227, 227, 79), #d87e0b, rgb(220, 67, 71))", WE_GRAD_CONIC, 283, 0, 3);
-    check("conic-gradient(at 32% 31px, gray 274deg, rgb(151, 25, 164), black 312deg, #bd4 33%)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 31px 32%, gray 169deg, rgb(151, 25, 164), black 312deg, #bd4 33%)", WE_GRAD_CONIC, 0, 0, 4);
 }
 
 static void test_l94_accept_53(void) {
@@ -636,7 +636,7 @@ static void test_l94_accept_54(void) {
     check("conic-gradient(at center, #f09f56, #691eb4 82deg, rgb(194, 252, 216), rgb(156, 116, 60) 2.3%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(from -256deg at 141px 74px, #66d7db, rgb(161, 177, 179) 37.9%, gray 35%)", WE_GRAD_CONIC, 104, 0, 3);
     check("conic-gradient(black, blue)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 15% 10px, #e74222, #7f7e48)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 15% 10px, #422, gray, #e48)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(#6f0, gray)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(rgb(161, 138, 88), rgb(163, 229, 89) 0.8%)", WE_GRAD_CONIC, 0, 0, 2);
 }
@@ -644,291 +644,301 @@ static void test_l94_accept_54(void) {
 static void test_l94_accept_55(void) {
     check("conic-gradient(teal 62.3%, teal, rgb(3, 145, 156), rgb(177, 45, 201))", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at left top, #4738d8, rgb(126, 84, 201))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 24% 39px, #054 73deg, orange)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 102deg at 139px 95px, #cc2 50.3%, #ad5)", WE_GRAD_CONIC, 102, 0, 2);
-    check("conic-gradient(at 159px 99px, #8c9, rgb(253, 3, 219))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at left bottom, gray 11.4%, rgb(40, 167, 126))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 24% 39px, red, rgb(73, 169, 104), rgb(165, 180, 81) 41%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(#e68d0b, orange 180deg, rgb(86, 41, 68), lime)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 25px 77px, white, lime, rgb(89, 19, 25))", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(rgb(154, 109, 87) 87.6%, rgb(238, 238, 115))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 124px 17px, rgb(42, 45, 51) 39.3%, white, navy)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(#10a 27.1%, white 104deg, rgb(164, 26, 184))", WE_GRAD_CONIC, 0, 0, 3);
 }
 
 static void test_l94_accept_56(void) {
-    check("conic-gradient(at 124px 17px, rgb(42, 45, 51) 39.3%, white, navy)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(#10a 27.1%, white 104deg, rgb(164, 26, 184))", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(from -119deg at 100% 80%, teal 297deg, rgb(47, 244, 67) 21.5%)", WE_GRAD_CONIC, 241, 0, 2);
-    check("conic-gradient(at 58% 11px, white 84.4%, #b61685)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at left center, white 31.8%, white)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 0 0, blue, navy, #9bf94b)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(at 30%, red, rgb(116, 65, 82))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 88% 10px, orange, rgb(63, 229, 91), blue, #639a04)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 11px 58%, #7bf, lime)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at left center, black, rgb(140, 251, 231), rgb(201, 2, 33))", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(rgb(111, 239, 71), orange 193deg, rgb(43, 63, 111))", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 1770.0888deg, rgb(87, 160, 222), rgb(216, 32, 98))", WE_GRAD_CONIC, 330, 0, 2);
+    check("conic-gradient(from 1932deg, rgb(18, 143, 212), white, rgb(2, 222, 216) 325deg)", WE_GRAD_CONIC, 132, 0, 3);
+    check("conic-gradient(at 91px 54px, rgb(30, 116, 65) 95.5%, rgb(241, 13, 144) 67.9%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 0 0, #66a 0.4%, rgb(209, 12, 196) 91.3%, #52c283 94deg)", WE_GRAD_CONIC, 0, 0, 3);
 }
 
 static void test_l94_accept_57(void) {
-    check("conic-gradient(from 19deg at right top, rgb(211, 100, 170), #a13 61.6%)", WE_GRAD_CONIC, 19, 0, 2);
+    check("conic-gradient(from -63deg at 31px 90px, blue, #863 8.1%)", WE_GRAD_CONIC, 297, 0, 2);
+    check("conic-gradient(at 192px 105px, rgb(183, 182, 252) 36.3%, #f90 212deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from -1723deg, #2df 90.5%, navy)", WE_GRAD_CONIC, 77, 0, 2);
+    check("conic-gradient(#a37f70 250deg, #37ac51 64.6%, rgb(182, 110, 199) 90deg)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from -3776.68grad, #a2b0d1 69.2%, rgb(66, 251, 248) 69.7%, rgb(153, 145, 171), black)", WE_GRAD_CONIC, 201, 0, 4);
+    check("conic-gradient(at 152px 76px, white 197deg, rgb(107, 201, 177) 23.1%, #946 15.7%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(blue, #217421 249deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 84% 10px, red 21.6%, rgb(29, 129, 55) 129deg, black 23.3%)", WE_GRAD_CONIC, 0, 0, 3);
+}
+
+static void test_l94_accept_58(void) {
     check("conic-gradient(at left center, rgb(6, 190, 212), #8b3 44.9%, rgb(114, 251, 6), rgb(105, 31, 174))", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 80% 90%, #f04, red, rgb(231, 35, 83) 266deg, black 62.8%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 0% 79%, gray 74.4%, rgb(249, 197, 254))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 108px 65px, #f3a8fc, rgb(216, 41, 155))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 140px 109px, #e26927, #a45 318deg)", WE_GRAD_CONIC, 0, 0, 2);
-}
-
-static void test_l94_accept_58(void) {
-    check("conic-gradient(at 52% 18px, rgb(116, 47, 149), #794d8c)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at right bottom, orange 18%, #bd2)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(blue, blue)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 208deg at 78px 41px, orange 115deg, #23824b 13.4%)", WE_GRAD_CONIC, 208, 0, 2);
-    check("conic-gradient(at 163px 16px, #8ec 266deg, red 58.5%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(white, #e51c06, #ef8, rgb(48, 162, 52))", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at 80% 35px, navy, lime, #034544 12.7%)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(rgb(244, 102, 170), rgb(183, 34, 198), rgb(177, 111, 15))", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(at 18px 52%, lime, #d8c, #c8a 57.2%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(navy, rgb(134, 49, 68) 32.4%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 256deg at 6% 0%, rgb(48, 57, 47) 72.4%, rgb(222, 126, 253))", WE_GRAD_CONIC, 256, 0, 2);
 }
 
 static void test_l94_accept_59(void) {
-    check("conic-gradient(#24b, teal 8deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 83% 43px, #84e36a, rgb(31, 217, 117))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at right bottom, lime 31.8%, #f56d67)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at left top, orange, rgb(99, 227, 25) 82.1%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at right top, rgb(108, 78, 136), red, #e6e01b, #0ee)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at left, rgb(108, 254, 123), rgb(213, 106, 203), red 46.5%)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from -316deg at left top, #dd8315 3.6%, rgb(247, 231, 242) 25.8%)", WE_GRAD_CONIC, 44, 0, 2);
-    check("conic-gradient(at 39% 50px, rgb(113, 31, 101) 325deg, #dd8c80)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 19px 65px, rgb(90, 146, 76) 33deg, rgb(60, 25, 135))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 9% 57%, rgb(220, 173, 94), #3c1608, lime, #98920d)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(rgb(113, 241, 72), white 29.9%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 6% 67%, rgb(115, 255, 222), rgb(62, 143, 38) 37.8%, #8ab)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 3233.870deg, orange 67%, #d74, navy, rgb(30, 1, 209) 86.9%)", WE_GRAD_CONIC, 354, 0, 4);
+    check("conic-gradient(rgb(205, 52, 239), rgb(140, 158, 48))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(rgb(200, 238, 143) 95.7%, rgb(130, 68, 73), rgb(21, 222, 188))", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 8turn, #6014af 18deg, red 39deg, #e902e8, #627)", WE_GRAD_CONIC, 0, 0, 4);
 }
 
 static void test_l94_accept_60(void) {
+    check("conic-gradient(at 50px 26%, red 46.5%, orange, teal, rgb(69, 70, 95))", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at center, rgb(211, 214, 139) 16.2%, orange, #882, rgb(144, 53, 166))", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 99% 83%, #dd8c80, #7b80af)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 33grad, #262 267deg, orange, rgb(47, 14, 114) 80deg, #81c)", WE_GRAD_CONIC, 30, 0, 4);
     check("conic-gradient(white 1deg, rgb(148, 227, 130) 93.8%, blue 87.6%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at 29px 69px, #ed7bc5 15.6%, #8c51a0, #f842f6)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(at 83% 49px, rgb(254, 57, 135), #305)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 1521deg, rgb(150, 68, 63), rgb(175, 70, 220), #944ba4, rgb(79, 65, 109) 24.4%)", WE_GRAD_CONIC, 81, 0, 4);
-    check("conic-gradient(from -4deg at 16% 6%, #285, black 71deg)", WE_GRAD_CONIC, 356, 0, 2);
-    check("conic-gradient(at left center, #28e 55.9%, rgb(7, 190, 138) 89.5%, lime, #bb5 98.8%)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(teal, rgb(210, 184, 132))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at right bottom, #9ab 13.1%, #519a2b 25%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 83% 49px, rgb(135, 45, 167), red 75.9%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from -207.27grad, rgb(63, 41, 175), teal 226deg)", WE_GRAD_CONIC, 173, 0, 2);
 }
 
 static void test_l94_accept_61(void) {
+    check("conic-gradient(at 30%, rgb(231, 87, 193), rgb(7, 190, 138) 89.5%, lime)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from -2930deg, orange 334deg, lime)", WE_GRAD_CONIC, 310, 0, 2);
+    check("conic-gradient(from 679.7deg, rgb(82, 123, 214), black)", WE_GRAD_CONIC, 320, 0, 2);
+    check("conic-gradient(at 196px 65px, gray, rgb(201, 183, 87), #126642 38.2%, #9832c3 8deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from -318deg at 22% 16px, #844, #298)", WE_GRAD_CONIC, 42, 0, 2);
     check("conic-gradient(at 57% 54%, rgb(221, 152, 232) 232deg, blue, #78f8cd 40%, black 76.5%)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at 64% 40px, rgb(241, 219, 133) 298deg, #3189cc)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 766.386deg, white 269deg, rgb(18, 8, 177))", WE_GRAD_CONIC, 46, 0, 2);
+    check("conic-gradient(at 0 0, gray 33.7%, rgb(182, 158, 192), rgb(22, 226, 234), rgb(93, 40, 36) 250deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(from 1turn, #211 69%, teal 151deg, rgb(104, 129, 16), #b89124)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at 118px 89px, navy, rgb(237, 42, 75) 212deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 124px 97px, red 44.8%, red 60%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(#c7a00a 238deg, white 107deg, rgb(152, 68, 94), rgb(234, 5, 182) 305deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 106deg at 1% 17px, #6f6 56.2%, blue 42.6%, lime)", WE_GRAD_CONIC, 106, 0, 3);
 }
 
 static void test_l94_accept_62(void) {
-    check("conic-gradient(at 25% 42px, white 86.4%, rgb(90, 116, 23) 0.4%, lime 21.9%, #e64bbf)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 118px 89px, navy, rgb(237, 42, 75) 212deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 124px 97px, red 44.8%, red 60%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(#c7a00a 238deg, white 107deg, rgb(152, 68, 94), rgb(234, 5, 182) 305deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 47px 95%, rgb(85, 108, 246) 41.7%, teal 81.2%, teal 20.2%, rgb(254, 233, 54) 0deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from 9.28turn, rgb(164, 64, 35), #7b0, rgb(193, 141, 12))", WE_GRAD_CONIC, 101, 0, 3);
     check("conic-gradient(#d1c8ca 58deg, #542 20.9%, rgb(36, 147, 234) 59.7%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(from -320deg at left top, orange, rgb(35, 35, 227) 31deg, #0ac 143deg, black)", WE_GRAD_CONIC, 40, 0, 4);
     check("conic-gradient(white, rgb(107, 172, 204) 237deg, #f91, rgb(120, 161, 160) 272deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(#70e, rgb(101, 25, 205), #c44533, rgb(113, 12, 182))", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 85deg at center bottom, rgb(4, 99, 28) 83%, #2c4, gray 77.5%)", WE_GRAD_CONIC, 85, 0, 3);
-    check("conic-gradient(from 135deg at 60% 41px, rgb(44, 191, 24), black 27.9%)", WE_GRAD_CONIC, 135, 0, 2);
-    check("conic-gradient(from 235.5grad, teal 45.4%, #661, rgb(35, 50, 193) 18deg, rgb(9, 173, 234))", WE_GRAD_CONIC, 212, 0, 4);
 }
 
 static void test_l94_accept_63(void) {
+    check("conic-gradient(#70e, rgb(101, 25, 205), #c44533, rgb(113, 12, 182))", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from 85deg at center bottom, rgb(4, 99, 28) 83%, #2c4, gray 77.5%)", WE_GRAD_CONIC, 85, 0, 3);
+    check("conic-gradient(from 135deg at 41px 60%, rgb(191, 24, 15), navy 39%)", WE_GRAD_CONIC, 135, 0, 2);
+    check("conic-gradient(from 235.5grad, teal 45.4%, #661, rgb(35, 50, 193) 18deg, rgb(9, 173, 234))", WE_GRAD_CONIC, 212, 0, 4);
     check("conic-gradient(at 137px 103px, orange, rgb(130, 93, 151), #819892 30.8%, #5b7 78.8%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(rgb(193, 120, 160), rgb(81, 214, 42) 5.4%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 16% 0%, #255c0a, rgb(11, 25, 228))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from -130deg at 38% 87%, rgb(238, 163, 87), navy 84.6%, rgb(152, 206, 124), black 48.4%)", WE_GRAD_CONIC, 230, 0, 4);
+}
+
+static void test_l94_accept_64(void) {
     check("conic-gradient(rgb(210, 0, 198) 219deg, white, #673, rgb(47, 169, 155) 60.7%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 6px 77px, white, #3cf)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(rgb(187, 73, 117), #7d0d39, rgb(184, 205, 160), #e16458)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(from 1733deg, #0b2 99%, rgb(205, 78, 7))", WE_GRAD_CONIC, 293, 0, 2);
-}
-
-static void test_l94_accept_64(void) {
     check("conic-gradient(at 0 0, #068 28deg, teal 37.4%, gray, rgb(187, 147, 65))", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(#170, red 214deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 56% 98%, blue 294deg, navy, white, #277)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 12px, rgb(5, 135, 131) 93.3%, white)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 3057deg, #6b7d75, rgb(167, 190, 57) 33%, rgb(26, 225, 216), rgb(10, 120, 233) 90deg)", WE_GRAD_CONIC, 177, 0, 4);
-    check("conic-gradient(at right bottom, lime, rgb(234, 47, 60))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(red, rgb(151, 182, 108) 187deg, teal, rgb(14, 12, 70) 349deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 81deg at 11% 48%, rgb(252, 185, 189) 33%, lime 65.7%, navy 65deg)", WE_GRAD_CONIC, 81, 0, 3);
 }
 
 static void test_l94_accept_65(void) {
-    check("conic-gradient(at right top, lime 328deg, rgb(177, 200, 99))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at center, lime, rgb(162, 247, 226))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 44% 25px, rgb(243, 227, 75) 56.7%, rgb(163, 83, 179))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(#51c2bf 133deg, #d89 38.3%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(rgb(113, 174, 255), rgb(90, 62, 139), red 209deg, orange 49deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(#e964d0, #a06 18deg, #14f594)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(at 37% 42px, rgb(214, 208, 92) 49deg, #c47, blue, lime)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at 68% 2%, blue, orange, rgb(111, 67, 124) 37.1%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 3057deg, #6b7d75, rgb(167, 190, 57) 33%, rgb(26, 225, 216), rgb(10, 120, 233) 90deg)", WE_GRAD_CONIC, 177, 0, 4);
+    check("conic-gradient(at right bottom, lime, rgb(234, 47, 60))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(red, rgb(151, 182, 108) 187deg, teal, rgb(14, 12, 70) 349deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 31px 61%, #64c, #14c4cf)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at top, teal 346deg, #aaf 134deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at top, rgb(172, 109, 194), navy, navy, rgb(25, 195, 91))", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 41px 68%, rgb(56, 177, 200), #5fd 0.8%, rgb(13, 226, 180), rgb(246, 198, 4))", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at left, rgb(91, 113, 8) 68.3%, #46d1c2)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
 static void test_l94_accept_66(void) {
+    check("conic-gradient(at 20% 2px, #14d521, white 225deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(#51c2bf 133deg, #d89 38.3%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(rgb(113, 174, 255), rgb(90, 62, 139), red 209deg, orange 49deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(#e964d0, #a06 18deg, #14f594)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(at 42px 37%, rgb(214, 208, 92) 49deg, #c47, blue, lime)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 68% 2%, blue, orange, rgb(111, 67, 124) 37.1%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(from -120deg at 19% 87%, rgb(213, 4, 80), lime, rgb(130, 208, 61) 168deg)", WE_GRAD_CONIC, 240, 0, 3);
-    check("conic-gradient(at 72% 3px, #f126f8, #08f)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 8.98turn, orange, rgb(11, 38, 250) 9deg, white 64.8%)", WE_GRAD_CONIC, 353, 0, 3);
-    check("conic-gradient(from -1927deg, #ca677e, rgb(235, 109, 178), rgb(226, 206, 134), #176)", WE_GRAD_CONIC, 233, 0, 4);
-    check("conic-gradient(from 3966.67grad, #040 268deg, #e1b370, gray)", WE_GRAD_CONIC, 330, 0, 3);
-    check("conic-gradient(from 31deg at 140px 26px, rgb(210, 147, 125), rgb(110, 53, 243), #9e5 222deg, rgb(241, 36, 205) 86.6%)", WE_GRAD_CONIC, 31, 0, 4);
-    check("conic-gradient(at left top, rgb(246, 49, 104) 149deg, orange 45.2%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at center top, #3761cd, rgb(252, 135, 195) 38deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 72% 3px, #126f8e, white, #b8c 11.3%, rgb(210, 206, 236))", WE_GRAD_CONIC, 0, 0, 4);
 }
 
 static void test_l94_accept_67(void) {
-    check("conic-gradient(from 644deg, rgb(31, 147, 57) 94.1%, blue 231deg)", WE_GRAD_CONIC, 284, 0, 2);
-    check("conic-gradient(at 70% 65%, rgb(176, 66, 7) 33deg, rgb(104, 239, 23), rgb(199, 189, 24) 37deg, red)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at 66% 90%, black, #abc 0.2%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 22% 38px, lime, blue 88.9%, navy)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 20deg at 66% 25px, #a443e4, lime)", WE_GRAD_CONIC, 20, 0, 2);
-    check("conic-gradient(at 192px 19px, gray, navy)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 88% 51px, rgb(95, 221, 203), white 311deg, #f9f53d)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 2315deg, rgb(77, 191, 221), rgb(6, 122, 199), #6de, #d22 11.3%)", WE_GRAD_CONIC, 155, 0, 4);
+    check("conic-gradient(at left bottom, black, lime)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(#445 313deg, #82e 56.6%, #59332e 19.4%, #5e0 217deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(white 64.8%, red 29.1%, rgb(62, 114, 231), teal)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from 3.78deg, orange, #a677ee, navy 329deg, teal 88deg)", WE_GRAD_CONIC, 4, 0, 4);
+    check("conic-gradient(at left top, #3dc51f 9.5%, lime, rgb(101, 90, 233) 89%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(at 47% 34px, red 162deg, navy)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at right bottom, #3a0b33, #9c78a9, red, #d06df3)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at left top, rgb(246, 49, 104) 149deg, orange 45.2%)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
 static void test_l94_accept_68(void) {
-    check("conic-gradient(at 30% 26%, #47b, white 326deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 12px, #1c1e5b 53deg, #568)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 0 0, orange 171deg, #661 63.1%, red 151deg)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(at 46% 18px, #1e9, rgb(0, 99, 35) 187deg, rgb(35, 24, 239) 357deg, navy 28deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(rgb(32, 5, 182), #459118 21.2%, rgb(102, 142, 213) 227deg, #97b58b)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 361.92grad, #07c, teal, rgb(8, 23, 211))", WE_GRAD_CONIC, 326, 0, 3);
-    check("conic-gradient(at top, lime 48.8%, black 120deg, lime 63.7%)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(at left, teal, blue)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at center top, #3761cd, rgb(252, 135, 195) 38deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 644deg, rgb(31, 147, 57) 94.1%, blue 231deg)", WE_GRAD_CONIC, 284, 0, 2);
+    check("conic-gradient(at 100% 56px, red 48.4%, #e50416, lime 249deg, #ffa 30.9%)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at left bottom, rgb(176, 66, 7) 33deg, rgb(104, 239, 23), rgb(199, 189, 24) 37deg, red)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 66% 90%, black, #abc 0.2%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 38px 22%, rgb(85, 220, 40), red 85.8%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 192px 19px, gray, navy)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 88% 51px, #e19730, orange)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
 static void test_l94_accept_69(void) {
+    check("conic-gradient(from 3528deg, rgb(41, 211, 111) 47.1%, rgb(215, 182, 41))", WE_GRAD_CONIC, 288, 0, 2);
+    check("conic-gradient(rgb(215, 188, 240) 48.6%, #69ee22, #30d 340deg, gray)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from 0.4turn, rgb(227, 100, 123) 97.4%, rgb(217, 26, 137))", WE_GRAD_CONIC, 144, 0, 2);
+    check("conic-gradient(at 30%, #62a, rgb(108, 15, 251) 7%, rgb(239, 164, 159), rgb(182, 109, 182) 30.8%)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at top, lime 48.8%, black 120deg, lime 63.7%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(at left, teal, blue)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from -337deg at 121px 81px, red, #247)", WE_GRAD_CONIC, 23, 0, 2);
-    check("conic-gradient(at 8% 44px, rgb(108, 84, 66) 74.7%, #9af)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 2363deg, rgb(117, 253, 251) 58.1%, #688, rgb(178, 238, 34) 180deg, red)", WE_GRAD_CONIC, 203, 0, 4);
-    check("conic-gradient(at 5% 28px, #03b 207deg, #a06, orange 30.3%, gray 291deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(rgb(40, 31, 47) 263deg, rgb(97, 209, 128))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 69% 40px, rgb(39, 211, 240), rgb(224, 44, 195) 37.7%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -335deg at 50px 4px, #426, black, rgb(37, 246, 128) 137deg, #958d97)", WE_GRAD_CONIC, 25, 0, 4);
-    check("conic-gradient(at right center, rgb(20, 124, 78), #c8d84b 26.5%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 44px 8%, rgb(66, 111, 192), #9af)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
 static void test_l94_accept_70(void) {
-    check("conic-gradient(from 2020.2deg, #1407a8, #4eb20b, #332e8e 265deg, rgb(48, 155, 128) 307deg)", WE_GRAD_CONIC, 220, 0, 4);
+    check("conic-gradient(from 2363deg, rgb(117, 253, 251) 58.1%, #688, rgb(178, 238, 34) 180deg, red)", WE_GRAD_CONIC, 203, 0, 4);
+    check("conic-gradient(at 28px 5%, #03b 207deg, #a06, orange 30.3%, gray 291deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(rgb(40, 31, 47) 263deg, rgb(97, 209, 128))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 40px 69%, rgb(211, 240, 17), #c4b 221deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 12px, rgb(72, 179, 20), rgb(38, 19, 30) 161deg, rgb(240, 142, 252) 277deg)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 155deg at 40px 62%, #ea4af9, rgb(48, 155, 128) 307deg)", WE_GRAD_CONIC, 155, 0, 2);
     check("conic-gradient(from -2560deg, gray, rgb(250, 219, 124) 217deg, teal 57deg, #534)", WE_GRAD_CONIC, 320, 0, 4);
     check("conic-gradient(red, white 0deg)", WE_GRAD_CONIC, 0, 0, 2);
+}
+
+static void test_l94_accept_71(void) {
     check("conic-gradient(at left 10px, rgb(137, 143, 155), #82e 69deg, #800)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(rgb(131, 29, 15), rgb(109, 35, 180) 290deg, rgb(28, 193, 217), #8a5634 348deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(from 870.71grad, rgb(45, 253, 28) 9.9%, rgb(86, 198, 199), rgb(216, 29, 102) 351deg)", WE_GRAD_CONIC, 64, 0, 3);
     check("conic-gradient(at 51% 20%, #f3fe50 333deg, rgb(104, 243, 83))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 1% 0%, rgb(250, 73, 52), white, #eacfed, rgb(130, 94, 249) 10.8%)", WE_GRAD_CONIC, 0, 0, 4);
-}
-
-static void test_l94_accept_71(void) {
     check("conic-gradient(rgb(167, 230, 165) 51.4%, gray 57.5%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at center bottom, orange, teal 16.2%, rgb(74, 129, 184) 49deg)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at 0 0, #0c173f, #f9e01b 169deg, #64c 14.7%, #d98 267deg)", WE_GRAD_CONIC, 0, 0, 4);
+}
+
+static void test_l94_accept_72(void) {
     check("conic-gradient(at 199px 79px, rgb(252, 176, 153) 53.2%, #af6 31%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from -272deg at right center, red, rgb(169, 211, 211))", WE_GRAD_CONIC, 88, 0, 2);
     check("conic-gradient(from -223deg at 2% 82%, blue, rgb(149, 21, 219))", WE_GRAD_CONIC, 137, 0, 2);
     check("conic-gradient(from 2610grad, rgb(235, 187, 152), rgb(150, 84, 202), rgb(161, 250, 202))", WE_GRAD_CONIC, 189, 0, 3);
     check("conic-gradient(from 131deg at right center, lime 51.6%, rgb(113, 25, 145) 61.3%, #381 162deg, #fa0 163deg)", WE_GRAD_CONIC, 131, 0, 4);
-}
-
-static void test_l94_accept_72(void) {
     check("conic-gradient(at 101px 27px, navy, #846)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from -2553.62grad, red 357deg, blue)", WE_GRAD_CONIC, 222, 0, 2);
     check("conic-gradient(at top, #e88148, rgb(60, 50, 222) 86.4%, white 75deg, #573 323deg)", WE_GRAD_CONIC, 0, 0, 4);
+}
+
+static void test_l94_accept_73(void) {
     check("conic-gradient(from -137deg at 103px 23px, rgb(220, 60, 110), #f70)", WE_GRAD_CONIC, 223, 0, 2);
     check("conic-gradient(at 76% 21%, rgb(10, 142, 181), #067f99 13deg, rgb(21, 242, 82), #165241)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at center, lime 70.8%, #83d 216deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from -212deg at right top, #758 196deg, rgb(100, 93, 44), #a013ce)", WE_GRAD_CONIC, 148, 0, 3);
     check("conic-gradient(at 93px 108px, #d3d, #a1abbc)", WE_GRAD_CONIC, 0, 0, 2);
-}
-
-static void test_l94_accept_73(void) {
     check("conic-gradient(from -218deg at 32% 58%, red, rgb(44, 219, 146) 55.5%, rgb(18, 42, 15) 41.9%, #833cea 31.9%)", WE_GRAD_CONIC, 142, 0, 4);
     check("conic-gradient(at center, rgb(235, 43, 208), rgb(52, 20, 212))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from -2075deg, #f3f, #18b603)", WE_GRAD_CONIC, 85, 0, 2);
-    check("conic-gradient(at 89% 34px, #b0f707 84.7%, orange, rgb(231, 89, 195) 67.7%)", WE_GRAD_CONIC, 0, 0, 3);
+}
+
+static void test_l94_accept_74(void) {
+    check("conic-gradient(at 34px 89%, #b0f707 84.7%, orange, rgb(231, 89, 195) 67.7%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(from 197deg at right top, teal 234deg, white)", WE_GRAD_CONIC, 197, 0, 2);
     check("conic-gradient(rgb(91, 30, 15), teal 24.6%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at top, white 20.1%, black)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from 2004deg, #937 24.1%, #4ca4bf, gray)", WE_GRAD_CONIC, 204, 0, 3);
-}
-
-static void test_l94_accept_74(void) {
     check("conic-gradient(from 354deg, #c19ffc 11%, rgb(223, 90, 72))", WE_GRAD_CONIC, 354, 0, 2);
     check("conic-gradient(from -320deg at 2% 56%, #1ea3a7, #c0e)", WE_GRAD_CONIC, 40, 0, 2);
     check("conic-gradient(from -217deg at right top, rgb(195, 54, 97), black, navy)", WE_GRAD_CONIC, 143, 0, 3);
+}
+
+static void test_l94_accept_75(void) {
     check("conic-gradient(rgb(4, 99, 200) 86.1%, #d10 247deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from 1560.9grad, #76e1db, #e3302d, #8dfd37 22.5%)", WE_GRAD_CONIC, 325, 0, 3);
     check("conic-gradient(at left, #8726b3 20deg, #4df295)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(lime 41.3%, #bf5 89.1%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from 46deg at center bottom, orange 77deg, #cfe7ea)", WE_GRAD_CONIC, 46, 0, 2);
+    check("conic-gradient(at 12px, gray 275deg, #0fb)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 48% 43px, #c445d3, rgb(231, 72, 150), blue 32.5%, rgb(182, 95, 30))", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from -0.87turn, gray, #af3 73.9%, blue)", WE_GRAD_CONIC, 47, 0, 3);
 }
 
-static void test_l94_accept_75(void) {
-    check("conic-gradient(at 12px, gray 275deg, #0fb)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 48% 43px, rgb(192, 73, 73) 44%, orange 94%, blue 32.5%, rgb(182, 95, 30))", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from -0.87turn, gray, #af3 73.9%, blue)", WE_GRAD_CONIC, 47, 0, 3);
+static void test_l94_accept_76(void) {
     check("conic-gradient(from -231deg at 95% 42%, rgb(98, 35, 69) 78%, rgb(31, 127, 143) 69.4%)", WE_GRAD_CONIC, 129, 0, 2);
     check("conic-gradient(at 90% 42%, blue 63.7%, black 20.9%, white, #908ce8 208deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 12px, #dd2055 285deg, blue 315deg, rgb(250, 82, 30) 353deg, #7b7b0c 77.7%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 38px 9px, white, black)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from 101deg at 64px 70px, #c8c, rgb(45, 176, 69))", WE_GRAD_CONIC, 101, 0, 2);
+    check("conic-gradient(at 84px 106px, #e97a15, #f73)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 86% 58px, orange 183deg, rgb(72, 194, 31) 340deg, #e39 316deg, #badc01)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 88% 51%, rgb(0, 170, 151), #b09 234deg)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
-static void test_l94_accept_76(void) {
-    check("conic-gradient(at 84px 106px, #e97a15, #f73)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 86% 58px, #635 88.7%, rgb(192, 98, 134))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(rgb(11, 227, 52), #bcb 220deg, rgb(10, 19, 204), #4973c2)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(rgb(113, 11, 219), gray 278deg, red 95.8%)", WE_GRAD_CONIC, 0, 0, 3);
+static void test_l94_accept_77(void) {
+    check("conic-gradient(at 26% 24px, rgb(120, 73, 183), #1b685d 136deg, #f6e)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(at center center, #c4e, #679aac 28deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 74px 52px, rgb(36, 25, 201) 10.4%, gray)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 12px, #d54 189deg, rgb(180, 17, 242) 76.6%, #79be6e 5.2%, navy 186deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(#304, #193883, #de55fe)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(#8bef13, orange)", WE_GRAD_CONIC, 0, 0, 2);
-}
-
-static void test_l94_accept_77(void) {
     check("conic-gradient(gray 25.6%, rgb(182, 13, 218))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(orange, gray, rgb(155, 137, 95), red 232deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(navy 36.5%, rgb(17, 217, 79) 20.3%, #e13)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(at 100% 71%, rgb(35, 110, 180), rgb(225, 15, 103))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 10% 22px, #80cc30, blue, rgb(204, 139, 210))", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(at 13% 31%, rgb(84, 74, 170) 17deg, red, #542 1deg)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 9turn, black, #baa)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(#8cc, rgb(237, 1, 62) 234deg, #db5fad, #23c)", WE_GRAD_CONIC, 0, 0, 4);
 }
 
 static void test_l94_accept_78(void) {
-    check("conic-gradient(at 63% 50%, rgb(108, 29, 233) 14.3%, navy, #a2481f 15.7%, rgb(186, 226, 44))", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at right bottom, #fe8735, #304 211deg, #7b0071, navy)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at left, teal 29.1%, #9fd, #e33826, lime 26.1%)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at 12px, #e43 11.8%, black)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -2403deg, rgb(235, 13, 146), black, #5b3 18.6%, rgb(197, 244, 243) 71%)", WE_GRAD_CONIC, 117, 0, 4);
-    check("conic-gradient(at 84% 23px, #c54, rgb(240, 133, 142))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 178px 79px, #41e 257deg, rgb(20, 93, 129), #af7cbf 195deg, rgb(169, 40, 10) 105deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at left, lime 61.1%, rgb(50, 178, 17), lime 96.9%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(navy 36.5%, rgb(17, 217, 79) 20.3%, #e13)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(at 100% 71%, rgb(35, 110, 180), rgb(225, 15, 103))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 10% 22px, rgb(169, 140, 10), #30ee73 89.8%, #720172 53.5%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(at left, rgb(33, 125, 45) 30.9%, rgb(233, 106, 80) 60.9%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(rgb(1, 62, 175), #ddb5fa, rgb(211, 202, 4) 87.6%, #a61813)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(orange, white 356deg, rgb(41, 139, 229) 1%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 93deg at 33px 95%, rgb(234, 75, 94), gray 176deg)", WE_GRAD_CONIC, 93, 0, 2);
+    check("conic-gradient(from 89deg at 51% 57px, #89f, rgb(17, 80, 14) 61deg)", WE_GRAD_CONIC, 89, 0, 2);
 }
 
 static void test_l94_accept_79(void) {
+    check("conic-gradient(at 25% 31%, #974ed9, gray 26.4%, rgb(223, 162, 76), gray)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from -306deg at 50% 92%, #84e, rgb(57, 12, 57) 23.7%, rgb(136, 242, 94))", WE_GRAD_CONIC, 54, 0, 3);
+    check("conic-gradient(from -2403deg, rgb(235, 13, 146), black, #5b3 18.6%, rgb(197, 244, 243) 71%)", WE_GRAD_CONIC, 117, 0, 4);
+    check("conic-gradient(at 84% 23px, rgb(199, 81, 71), rgb(240, 133, 142))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 178px 79px, #41e 257deg, rgb(20, 93, 129), #af7cbf 195deg, rgb(169, 40, 10) 105deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at left, lime 61.1%, rgb(50, 178, 17), lime 96.9%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(rgb(164, 169, 6) 37.4%, #a00 1.2%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(rgb(42, 96, 76), #ddaa42 95%)", WE_GRAD_CONIC, 0, 0, 2);
+}
+
+static void test_l94_accept_80(void) {
     check("conic-gradient(rgb(42, 232, 67), #440 210deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 30%, #58f, rgb(46, 125, 50))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at center top, #a5b978, gray, #0dc 17.2%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at 140px 73px, rgb(112, 153, 88), #d42fdf 100%, #a3aef1)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(from 3767.98grad, teal 150deg, #04c, #f93 39.4%)", WE_GRAD_CONIC, 151, 0, 3);
     check("conic-gradient(at 30%, rgb(30, 119, 36), black 342deg, rgb(150, 107, 120) 192deg, teal 18.9%)", WE_GRAD_CONIC, 0, 0, 4);
-}
-
-static void test_l94_accept_80(void) {
     check("conic-gradient(at top, #066, rgb(194, 88, 15))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at left center, rgb(217, 174, 222) 47.2%, rgb(7, 41, 24) 339deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 56% 22px, #af3, lime)", WE_GRAD_CONIC, 0, 0, 2);
+}
+
+static void test_l94_accept_81(void) {
+    check("conic-gradient(at 22px 56%, #af3, lime)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at right bottom, #6b28d5 190deg, rgb(157, 51, 222), blue)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(red 360deg, blue 0deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(red 99deg, blue)", WE_GRAD_CONIC, 0, 0, 2);
     check("linear-gradient(3600deg, red, blue)", WE_GRAD_TOP, 0, 0, 2);
     check("linear-gradient(-3600deg, red, blue)", WE_GRAD_TOP, 0, 0, 2);
     check("linear-gradient(10turn, red, blue)", WE_GRAD_TOP, 0, 0, 2);
+    check("linear-gradient(4000grad, red, blue)", WE_GRAD_TOP, 0, 0, 2);
 }
 
-static void test_l94_accept_81(void) {
-    check("linear-gradient(4000grad, red, blue)", WE_GRAD_TOP, 0, 0, 2);
+static void test_l94_accept_82(void) {
     check("linear-gradient(5730deg, red, blue)", WE_GRAD_ANGLE, 330, 0, 2);
     check("linear-gradient(-5730deg, red, blue)", WE_GRAD_ANGLE, 30, 0, 2);
     check("linear-gradient(0deg, red, blue)", WE_GRAD_TOP, 0, 0, 2);
@@ -936,9 +946,6 @@ static void test_l94_accept_81(void) {
     check("linear-gradient(-1deg, red, blue)", WE_GRAD_ANGLE, 359, 0, 2);
     check("linear-gradient(to left top, red, blue)", WE_GRAD_ANGLE, 0, 2, 2);
     check("conic-gradient(from -3600deg at 0 0, red, blue)", WE_GRAD_CONIC, 0, 0, 2);
-}
-
-static void test_l94_accept_82(void) {
     check("conic-gradient(at left, red, blue)", WE_GRAD_CONIC, 0, 0, 2);
 }
 

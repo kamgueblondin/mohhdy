@@ -11,6 +11,7 @@
 #define TEST_ASSERT_EQUAL_HEX32(e, a) TEST_ASSERT_EQUAL((long)(e), (long)(a))
 
 static we_doc_t g_doc;
+static int diag_count(const char *what);
 static char g_html[2048], g_out[4096];
 
 static int refused(void) {
@@ -167,6 +168,72 @@ static void test_parse(void) {
     TEST_ASSERT_EQUAL(WE_GRAD_RIGHT, node("f")->grad_dir);          /* a quarter turn keeps its bands */
     TEST_ASSERT_EQUAL(45, node("g")->grad_angle);                   /* half away from zero */
     TEST_ASSERT_EQUAL(0, node("g")->grad_corner);
+    /* a conic layer after an image layer, and the shorthand with a repeat */
+    render("<div id=a style='background-image:url(a.png), conic-gradient(from 90deg, red, blue)'></div>"
+           "<div id=b style='background:conic-gradient(from 10deg, red, blue) no-repeat'></div>");
+    TEST_ASSERT_EQUAL(0, refused());
+    TEST_ASSERT_EQUAL(WE_GRAD_CONIC, node("a")->grad_dir);
+    TEST_ASSERT_EQUAL(90, node("a")->grad_angle);
+    TEST_ASSERT_EQUAL(WE_GRAD_CONIC, node("b")->grad_dir);
+    TEST_ASSERT_EQUAL(10, node("b")->grad_angle);
+}
+
+/* the colour painted at a physical point */
+static long colour_at(int x, int y) {
+    int i;
+    for (i = 0; i < (int)g_doc.nitems; i++) {
+        const os_fb_web_item_t *it = &g_doc.items[i];
+        if (it->kind == OS_FB_WEB_RECT && x >= it->x && x < it->x + (int)it->w && y >= it->y && y < it->y + (int)it->h)
+            return (long)it->color;
+    }
+    return -1;
+}
+
+static void test_vertical_children(void) {
+    /* a child of a vertical box is painted in the logical frame: its angle
+     * and corner are mapped there and back, the physical colours are the
+     * ones of the same box in a horizontal flow */
+    static const char *const grads[] = {
+        "linear-gradient(30deg, #000000, #ffffff)", "linear-gradient(200deg, #000000, #ffffff)",
+        "linear-gradient(100deg, #000000, #ffffff)", "linear-gradient(to top left, #000000, #ffffff)",
+        "linear-gradient(to bottom left, #000000, #ffffff)", "linear-gradient(to top right, #000000, #ffffff)",
+        "linear-gradient(to bottom right, #000000, #ffffff)" };
+    static const char *const modes[2] = { "vertical-rl", "vertical-lr" };
+    static long flat[14][7];
+    char body[384];
+    int g, m, x, y, diff;
+    for (g = 0; g < 7; g++) {
+        snprintf(body, sizeof(body), "<div><div style='width:40px;height:20px;background:%s'></div></div>", grads[g]);
+        render(body);
+        for (x = 0; x < 14; x++) for (y = 0; y < 7; y++) flat[x][y] = colour_at(1 + 3 * x, 1 + 3 * y);
+        for (m = 0; m < 2; m++) {
+            snprintf(body, sizeof(body), "<div style='writing-mode:%s'><div id=c style='width:40px;height:20px;background:%s'></div></div>",
+                     modes[m], grads[g]);
+            render(body);
+            diff = 0;
+            for (x = 0; x < 14; x++) for (y = 0; y < 7; y++) diff += colour_at(1 + 3 * x, 1 + 3 * y) != flat[x][y];
+            TEST_ASSERT_EQUAL(0, diff);
+            TEST_ASSERT(flat[0][0] != flat[13][6]);
+        }
+    }
+    /* mapped back after the layout */
+    render("<div style='writing-mode:vertical-rl'><div id=a style='width:40px;height:20px;background:linear-gradient(30deg, red, blue)'></div>"
+           "<div id=b style='width:40px;height:20px;background:linear-gradient(to top left, red, blue)'></div></div>"
+           "<div style='writing-mode:vertical-lr'><div id=c style='width:40px;height:20px;background:linear-gradient(100deg, red, blue)'></div>"
+           "<div id=d style='width:40px;height:20px;background:linear-gradient(to bottom left, red, blue)'></div></div>");
+    TEST_ASSERT_EQUAL(30, node("a")->grad_angle);
+    TEST_ASSERT_EQUAL(2, node("b")->grad_corner);
+    TEST_ASSERT_EQUAL(100, node("c")->grad_angle);
+    TEST_ASSERT_EQUAL(4, node("d")->grad_corner);
+    /* a conic child is refused there, its colour stays */
+    render("<div style='writing-mode:vertical-rl'><div id=a style='width:40px;height:20px;background:#123456 conic-gradient(#000000, #ffffff)'></div></div>");
+    TEST_ASSERT_EQUAL(1, diag_count("conic refused in vertical flow"));
+    TEST_ASSERT_EQUAL(0, node("a")->grad_dir);
+    TEST_ASSERT_EQUAL(1, rects());
+    TEST_ASSERT_EQUAL_HEX32(0x00123456, g_doc.items[0].color);
+    render("<div style='writing-mode:vertical-lr'><div id=a style='width:40px;height:20px;background:conic-gradient(#000000, #ffffff)'></div></div>");
+    TEST_ASSERT_EQUAL(1, diag_count("conic refused in vertical flow"));
+    TEST_ASSERT_EQUAL(0, rects());
 }
 
 static void test_refusals(void) {
@@ -175,10 +242,11 @@ static void test_refusals(void) {
         "linear-gradient(to top left bottom, red, blue)", "conic-gradient(from 45deg left, red, blue)",
         "conic-gradient(from, red, blue)", "conic-gradient(at, red, blue)", "conic-gradient(from 45px, red, blue)",
         "conic-gradient(red 361deg, blue)", "conic-gradient(red -1deg, blue)", "conic-gradient(red)",
-        "conic-gradient(from 45deg at, red, blue)", "conic-gradient(at left right, red, blue)" };
+        "conic-gradient(from 45deg at, red, blue)", "conic-gradient(at left right, red, blue)",
+        "conic-gradient(from 45deg to left, red, blue)", "linear-gradient(red 45deg, blue)" };
     char body[256];
     int k;
-    for (k = 0; k < 12; k++) {
+    for (k = 0; k < 14; k++) {
         snprintf(body, sizeof(body), "<div id=a style='width:4px;height:4px;background:%s'></div>", bad[k]);
         render(body);
         TEST_ASSERT_EQUAL(1, refused());
@@ -265,6 +333,7 @@ int main(void) {
     RUN_TEST(test_grid_shapes);
     RUN_TEST(test_origin_and_clip);
     RUN_TEST(test_parse);
+    RUN_TEST(test_vertical_children);
     RUN_TEST(test_refusals);
     RUN_TEST(test_budget_and_modes);
     RUN_TEST(test_diag_and_transform);

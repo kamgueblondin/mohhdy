@@ -88,19 +88,29 @@ BOXES = ["padding-box", "content-box", "border-box"]
 
 
 def box_rect(kind, w, h, p):
+    """p: padding top, right, bottom, left"""
     if kind == "content-box":
-        return (p, p, w, h)
-    return (0, 0, w + 2 * p, h + 2 * p)
+        return (p[3], p[0], w, h)
+    return (0, 0, w + p[1] + p[3], h + p[0] + p[2])
 
 
 def box_style(rng):
-    w = rng.choice([rng.randrange(1, 9), rng.randrange(1, 220), rng.randrange(20, 220)])
-    h = rng.choice([rng.randrange(1, 9), rng.randrange(1, 120), rng.randrange(10, 120)])
-    p = rng.choice([0, 0, rng.randrange(0, 13)])
+    w = rng.choice([rng.randrange(1, 9), rng.randrange(1, 200), rng.randrange(20, 200)])
+    h = rng.choice([rng.randrange(1, 9), rng.randrange(1, 110), rng.randrange(10, 110)])
+    k = rng.randrange(4)
+    if k == 0:
+        p = (0, 0, 0, 0)
+    elif k == 1:
+        v = rng.randrange(1, 13)
+        p = (v, v, v, v)
+    else:
+        p = tuple(rng.randrange(0, 13) for _ in range(4))
     origin, clip = rng.choice(BOXES), rng.choice(BOXES)
     style = "width:%dpx;height:%dpx" % (w, h)
-    if p:
-        style += ";padding:%dpx" % p
+    if k == 1:
+        style += ";padding:%dpx" % p[0]
+    elif k > 1:
+        style += ";padding:%dpx %dpx %dpx %dpx" % p
     if origin != "padding-box" or rng.random() < 0.3:
         style += ";background-origin:" + origin
     if clip != "border-box" or rng.random() < 0.3:
@@ -189,8 +199,10 @@ def position(rng):
         hx = rng.choice([("left", 0), ("center", 50), ("right", 100)])
         vy = rng.choice([("top", 0), ("center", 50), ("bottom", 100)])
         return "%s %s" % (hx[0], vy[0]), (hx[1], 1), (vy[1], 1)
-    x = rng.randrange(101)
-    return "%d%% %dpx" % (x, rng.randrange(60)), (x, 1), None
+    x, y = rng.randrange(101), rng.randrange(60)
+    if rng.random() < 0.5:
+        return "%d%% %dpx" % (x, y), (x, 1), (y, 0)
+    return "%dpx %d%%" % (y, x), (y, 0), (x, 1)
 
 
 def conic_first(rng):
@@ -208,10 +220,7 @@ def conic_first(rng):
             frm = v % 360
         parts += [rcase(rng, "from"), t]
     if k in (2, 3):
-        while True:
-            pt, px, py = position(rng)
-            if py is not None:
-                break
+        pt, px, py = position(rng)
         parts += [rcase(rng, "at"), pt]
         at = (px, py)
     return (" ".join(parts) if parts else None), frm, at
