@@ -312,7 +312,7 @@ static void cp_mleaf(cp_mp_t *m, cp_q_t *q) {
                             cp_eqn(s + a, i - a, "ex") || cp_eqn(s + a, i - a, "ch"))) {
                 long long fs = cp_eqn(s + a, i - a, "rem") ? cp_fctx->rem : cp_fctx->em;
                 long long den = cp_eqn(s + a, i - a, "ex") || cp_eqn(s + a, i - a, "ch") ? 2000 : 1000;
-                if (fs <= 0) { q->ok = 0; return; }
+                /* fs > 0: the reader keeps a font size of at least 1px */
                 if (q->ok) q->v = cp_div(raw * fs, den, 0);
                 if (!cp_fits(q->v)) q->ok = 0;
                 return;
@@ -1618,32 +1618,6 @@ int wf_cssprop_parse(const char *pre, int pn, const char *body, int bn, wf_csspr
 
 /* ---- Lot 97: font-relative lengths ------------------------------------ */
 
-/* 1 when value names em, rem, ex or ch as the unit of a number (outside a
- * quoted string) */
-int wf_cssprop_font_relative(const char *v) {
-    int i;
-    char q = 0;
-    if (!v) return 0;
-    for (i = 0; v[i]; i++) {
-        int a, k;
-        if (q) { if (v[i] == q) q = 0; continue; }
-        if (v[i] == '"' || v[i] == '\'') { q = v[i]; continue; }
-        if (!cp_digit(v[i])) continue;
-        if (i > 0 && cp_ident(v[i - 1]) && !cp_digit(v[i - 1]) && v[i - 1] != '-' && v[i - 1] != '+' &&
-            v[i - 1] != '.')
-            continue;   /* a digit inside a name ("h1em") */
-        k = i;
-        while (cp_digit(v[k]) || v[k] == '.') k++;
-        a = k;
-        while ((v[k] >= 'a' && v[k] <= 'z') || (v[k] >= 'A' && v[k] <= 'Z')) k++;
-        if (cp_eqn(v + a, k - a, "em") || cp_eqn(v + a, k - a, "rem") || cp_eqn(v + a, k - a, "ex") ||
-            cp_eqn(v + a, k - a, "ch"))
-            return 1;
-        i = k - 1;
-    }
-    return 0;
-}
-
 int wf_cssprop_compute_font(const wf_cssprop_t *p, const char *v, const wf_cssprop_fctx_t *c, char *out, int cap) {
     wf_cssprop_ctx_t vc;
     int r;
@@ -1890,7 +1864,7 @@ int wf_cssprop_interp(const wf_cssprop_t *p, const char *a, const char *b, int t
         if (!cp_put(out, &len, cap, w, n)) { out[0] = 0; return 0; }
         return 2;
     }
-    if (!p || p->syntax == WF_CSSPROP_ANY) goto discrete;
+    if (!p) goto discrete;      /* '*' matches as one item that is never numeric: discrete */
     ia = cp_alt_index(p, a);
     ib = cp_alt_index(p, b);
     if (ia < 0 || ia != ib) goto discrete;
@@ -2036,7 +2010,7 @@ int wf_cssease_at(const wf_cssease_t *e, int x, int before) {
     if (e->kind == WF_CSSEASE_BEZIER) {
         long long lo = 0, hi = 1LL << 30;
         cp_w_t want;
-        if (x <= 0 || x >= CP_S) return x;
+        if (x <= 0) return x;     /* x = 10000 gives u = 2^30, y exactly 10000 */
         /* the smallest u with x(u) >= x: x(u) grows with u (x1, x2 in 0..1) */
         want = cp_wshl(cp_w(x), 90);
         while (hi - lo > 1) {
@@ -2098,23 +2072,21 @@ static int cp_next_tok(const char *s, int n, int *i, int *a, int *b) {
 /* the comma separated items of v: their ranges, the count, -1 when there
  * are more than max or one is empty */
 static int cp_list_items(const char *v, int *ia, int *ib, int max) {
-    int n = cp_len(v), i = 0, c = 0, a, b;
+    int n = cp_len(v), i = 0, c = 0, a, b, commas = 0, depth = 0, k;
     if (!n) return -1;
+    /* the top-level commas (split as cp_next_item does): at most max - 1 */
+    for (k = 0; k < n; k++) {
+        if (v[k] == '(') depth++;
+        else if (v[k] == ')') depth--;
+        else if (v[k] == ',' && !depth) commas++;
+    }
+    if (commas + 1 > max) return -1;
     while (cp_next_item(v, n, WF_CSSPROP_HASH, &i, &a, &b)) {
-        if (c >= max) return -1;
-        ia[c] = a; ib[c] = b; c++;
+        ia[c] = a; ib[c] = b; c++;      /* c <= commas + 1 <= max */
         if (i > n) break;
     }
     /* an empty item ("a, , b" or a trailing comma) */
-    {
-        int commas = 0, depth = 0, k;
-        for (k = 0; k < n; k++) {
-            if (v[k] == '(') depth++;
-            else if (v[k] == ')') depth--;
-            else if (v[k] == ',' && !depth) commas++;
-        }
-        if (commas + 1 != c) return -1;
-    }
+    if (commas + 1 != c) return -1;
     return c;
 }
 

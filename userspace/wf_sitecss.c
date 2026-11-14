@@ -2930,10 +2930,10 @@ static uint8_t inherited_b(wf_site_t *d, int i, int k) {
  * computed on that element (CSS-wide keywords, then var(), then the
  * syntax of a registration), and that computed value is what descendants
  * inherit. Nodes are in document order: the parent is done first. */
-/* Lot 97: per element, the registered names whose own value matched
- * (computed there, bit k) and those set there without inheriting (that,
- * or initial) */
-static uint32_t g_vown[WF_SITE_NODES], g_vexp[WF_SITE_NODES];
+/* Lot 97: per element, the registered names set there without inheriting
+ * (an own value, or initial); bit k. A font-relative value is computed
+ * wherever it is found: an inherited one is already a length */
+static uint32_t g_vexp[WF_SITE_NODES];
 
 static void compute_vars(wf_site_t *d) {
     static uint8_t own[WF_SITE_VNAMES], nb[WF_SITE_VNAMES];
@@ -2942,7 +2942,6 @@ static void compute_vars(wf_site_t *d) {
     for (i = 0; i < d->nnodes; i++) {
         wf_site_node_t *nd = &d->node[i];
         int any = 0;
-        g_vown[i] = 0;
         g_vexp[i] = 0;
         for (k = 0; k < d->nvnames; k++) {
             own[k] = nd->vbind[k];
@@ -3003,7 +3002,6 @@ static void compute_vars(wf_site_t *d) {
                 static char cv[WF_CSSPROP_VAL];
                 wf_cssprop_ctx_t c;
                 int e;
-                g_vown[i] |= 1u << k;
                 g_vexp[i] |= 1u << k;
                 c.vw = d->vw; c.vh = d->vh;
                 /* Lot 95: plain dimensions, lists, mixes and viewport units
@@ -3953,7 +3951,7 @@ static int anim_value(const wf_site_t *d, const wf_cssanim_t *a, const wf_site_k
 /* the keyframes of a name, 0 */
 static const wf_site_kf_t *kf_find(const wf_site_t *d, const char *name) {
     int k;
-    if (!name[0]) return 0;
+    /* "none" gives the name "", which no kept @keyframes has */
     for (k = 0; k < d->nkf; k++) if (eq(d->kf[k].name, name)) return &d->kf[k];
     return 0;
 }
@@ -3983,7 +3981,7 @@ static int trans_value(wf_site_t *d, const wf_site_node_t *nd, int k, const wf_c
     if (!nd->trans || nd->trans > d->nlongs || !sb || sb > d->nevars) return 0;
     c = wf_csstrans_parse(d->lpool[nd->trans - 1], tl, WF_CSSANIM_MAX);
     for (j = 0; j < c; j++) if (eq(tl[j].prop, "all") || eq(tl[j].prop, d->vname[k])) t = &tl[j];
-    if (!t || (long long)t->dur + t->delay <= 0) return 0;
+    if (!t) return 0;     /* dur + delay <= 0 ends at once below (e >= dur) */
     if (!kf_take(p, d->evar[sb - 1].value, slen(d->evar[sb - 1].value), fc, start, (int)sizeof(start))) return 0;
     if (eq(start, end)) return 0;
     if (wf_cssprop_interp(p, start, end, 5000, out, cap) == 1 && !t->discrete) return 0;
@@ -4018,8 +4016,9 @@ static int anim_pass(wf_site_t *d) {
             b = nd->vbind[k];
             if (!b || b > d->nevars) { if (b != orig[i][k]) changed++; continue; }
             scopy(cur, WF_CSSPROP_VAL, d->evar[b - 1].value, slen(d->evar[b - 1].value));
-            if ((g_vown[i] & (1u << k)) && wf_cssprop_font_relative(cur) &&
-                wf_cssprop_compute_font(p, cur, &fc, val, (int)sizeof(val))) {
+            /* 0 when nothing changes: a value without a font unit was
+             * computed when it was cascaded */
+            if (wf_cssprop_compute_font(p, cur, &fc, val, (int)sizeof(val))) {
                 scopy(cur, WF_CSSPROP_VAL, val, slen(val));
                 d->prop_font++;
             }
@@ -4134,11 +4133,10 @@ int wf_site_apply(wf_site_t *d) {
     d->anim_ms = g_anim_ms;
     if (d->nprops && anim_pass(d)) {
         int k;
-        for (i = 0; i < d->nnodes; i++) {
+        /* the animation and transition lists come out the same (same
+         * rules, same ranks) */
+        for (i = 0; i < d->nnodes; i++)
             for (k = 1; k <= WF_SITE_K_MAX; k++) reset_kind(&d->node[i], k);
-            d->node[i].anim = 0; d->node[i].trans = 0;
-            d->node[i].anim_rank = 0; d->node[i].trans_rank = 0;
-        }
         cascade_props(d);
         d->recascades = 1;
     }

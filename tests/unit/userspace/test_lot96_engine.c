@@ -167,17 +167,28 @@ static void test_repeat_parse(void) {
     TEST_ASSERT_EQUAL(27000, centi("e"));
     TEST_ASSERT_EQUAL(0, node("f")->grad_repeat);
     TEST_ASSERT_EQUAL(WE_GRAD_LEFT, node("f")->grad_dir);
-    /* a period of 0 is refused, the earlier gradient stays */
+    /* a period of 0. Lot 97 (converted): painted in the average colour
+     * as one solid gradient along the y axis (was refused, the earlier
+     * gradient stayed); malformed values are still refused */
     {
-        static const char *const bad[] = {
+        static const char *const zero[] = {
             "repeating-linear-gradient(red 50%, blue 50%)", "repeating-linear-gradient(red 100%, blue)",
             "repeating-conic-gradient(red 90deg, blue 25%)", "repeating-radial-gradient(red 60%, lime 50%, blue 20%)",
+            "repeating-conic-gradient(red 0.35deg, blue 0.1%)", "repeating-linear-gradient(red, blue 0%)" };
+        static const char *const bad[] = {
             "repeating-linear-gradient(red)", "repeating-gradient(red, blue)", "repeating-linear-gradient(red, blue",
-            "repeating-repeating-linear-gradient(red, blue)", "repeating-conic-gradient(red 0.35deg, blue 0.1%)",
-            "repeating-linear-gradient(red, blue 0%)" };
+            "repeating-repeating-linear-gradient(red, blue)" };
         char body[256];
         int k;
-        for (k = 0; k < 10; k++) {
+        for (k = 0; k < 6; k++) {
+            snprintf(body, sizeof(body), "<div id=a style='width:4px;height:4px;background:linear-gradient(red, blue);background-image:%s'></div>", zero[k]);
+            render(body);
+            TEST_ASSERT_EQUAL(0, node("a")->grad_repeat);
+            TEST_ASSERT_EQUAL(WE_GRAD_ANGLE, node("a")->grad_dir);
+            TEST_ASSERT_EQUAL(18000, centi("a"));
+            TEST_ASSERT_EQUAL(1, rects());
+        }
+        for (k = 0; k < 4; k++) {
             snprintf(body, sizeof(body), "<div id=a style='width:4px;height:4px;background:linear-gradient(red, blue);background-image:%s'></div>", bad[k]);
             render(body);
             TEST_ASSERT_EQUAL(0, node("a")->grad_repeat);

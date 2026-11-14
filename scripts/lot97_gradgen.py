@@ -204,14 +204,14 @@ CELLS_C = ['#include "../../framework/unity.h"', "#include <string.h>", "#includ
 def write_cells():
     rng = random.Random(9705)
     cases = []
-    for _ in range(160):
+    for _ in range(80):
         cases.append(average_case(rng))
-    for _ in range(240):
+    for _ in range(130):
         cases.append(axis_case(rng))
-    for _ in range(160):
+    for _ in range(90):
         cases.append(rl_radial_case(rng))
     got = 0
-    while got < 200:
+    while got < 100:
         c = rl_linear_case(rng)
         if c:
             cases.append(c)

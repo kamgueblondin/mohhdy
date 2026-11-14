@@ -224,8 +224,6 @@ int wf_cssprop_parse(const char *pre, int pn, const char *body, int bn, wf_csspr
  * (interpolated), 1 (discrete) or 0 (out too small, or no value). */
 typedef struct { int vw, vh, em, rem; } wf_cssprop_fctx_t;
 int wf_cssprop_compute_font(const wf_cssprop_t *p, const char *value, const wf_cssprop_fctx_t *c, char *out, int cap);
-/* 1 when value names em, rem, ex or ch outside a name or a string */
-int wf_cssprop_font_relative(const char *value);
 int wf_cssprop_interp(const wf_cssprop_t *p, const char *a, const char *b, int t, char *out, int cap);
 
 /* An easing function (CSS Easing 1): linear, ease, ease-in, ease-out,

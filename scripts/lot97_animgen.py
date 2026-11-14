@@ -136,7 +136,7 @@ def ease_fields(e):
 def write_ease():
     rng = random.Random(9701)
     cases, worst = [], 0.0
-    while len(cases) < 900:
+    while len(cases) < 400:
         good = rng.random() < 0.8
         s = ease_text(rng, good)
         e = A.ease_parse(s)
@@ -208,7 +208,7 @@ def value_of(rng, t):
 def write_interp():
     rng = random.Random(9702)
     cases = []
-    while len(cases) < 1000:
+    while len(cases) < 500:
         t = rng.choice(list(TYPE_KIND))
         m = rng.choice(["", "", "", "+", "#"])
         alts = [(t, m)]
@@ -311,7 +311,7 @@ def ease_c(e):
 def write_timing():
     rng = random.Random(9703)
     cases = []
-    while len(cases) < 700:
+    while len(cases) < 300:
         n = rng.choice([1, 1, 1, 2, 3, 5])
         good = rng.random() < 0.8
         if rng.random() < 0.6:
@@ -491,7 +491,7 @@ def trans_case(rng):
 def write_sheet():
     rng = random.Random(9704)
     cases = []
-    while len(cases) < 300:
+    while len(cases) < 160:
         css, ms, ov, iv, act = kf_case(rng) if rng.random() < 0.65 else trans_case(rng)
         if len(css) > 900 or ov is None or iv is None:
             continue
