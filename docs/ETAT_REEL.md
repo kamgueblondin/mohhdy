@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 96 (fractional degrees and repeating gradients; base fc0fdc9, PR 253 head)
+
+- Engine (webeng.c): gradient angles are kept in 1/100 degree (turn, grad, rad = 57.3deg, deg; sin and cos interpolated between whole degrees); repeating-linear, repeating-radial and repeating-conic gradients are painted in at most 32 flat cells per box (positions repeated over the first to last stop; a period of 0 refuses the gradient; radius past 8191 px or centre offset past 32767 px refused; a repeating radial child of a vertical-rl box refused). Proof: test_lot96_cells.c, test_lot96_sheet.c, test_lot96_engine.c, `make qemu-lot96` (/web/lot96.html, 94 rectangles checked against the models).
+- Reader (wf_cssbg.c, wf_cssprop.c): repeating gradients are passed on with the period check, radians are written in 1/100 degree (1rad as 57.3deg), a conic "from" in radians and conic stops with two decimals are read; a registered <image> gradient is checked by the background reader. Proof: test_lot96_bgval.c, test_lot96_accept.c, test_lot96_reader.c, `make qemu-lot96` (/lot96/grad.html).
+- we_doc_t unchanged (870824 bytes, < 1 MiB), wf_site_t unchanged (447372 bytes). Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false; US-068/US-073, US-076, US-080 and US-081 unchanged (partial); US-078 and US-097 simule.
+- Detail and gaps: docs/lot96_plan.md.
+
 ## Lot 95 (@property limits, more syntax types and computed values; base 3173f47, Lot 94 head)
 
 - Reader (wf_cssprop.c, wf_sitecss.c): @property takes 8 alternatives, 31-byte names, 127-byte values and 16 registrations (32 custom property names and 96 bound values per element); the syntax types <url>, <image>, <resolution>, <transform-function>, <transform-list> and <string> are read. Registered values are computed for plain dimensions (1in is 96px), each item of a '+' or '#' list, length-percentage mixes inside calc() ("calc(P% + Lpx)"), viewport units with the reader viewport and the arguments of transform functions; em, rem, ex and ch are kept. Every computed text is written only when it fits whole. Proof: test_lot95_syntax.c, test_lot95_match.c, test_lot95_compute.c, test_lot95_sheet.c, test_lot95_props.c, `make qemu-lot95` (/lot95/props.html).

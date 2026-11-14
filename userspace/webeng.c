@@ -3285,7 +3285,8 @@ static int tf_angle_milli(const char *v, int len, int *out) {
         if (len > ul && w_ieq_n(v + len - ul, ul, units[k].unit)) { u = k; len -= ul; }
     }
     if (u < 0 && !(len == 1 && v[0] == '0')) return -1;
-    if (v[len - 1] < '0' || v[len - 1] > '9' || color_number(v, len, &milli, &percent) || percent) return -1;
+    /* a last digit: never a percentage */
+    if (v[len - 1] < '0' || v[len - 1] > '9' || color_number(v, len, &milli, &percent)) return -1;
     if (u >= 0) {
         if (milli > 2000000000 / units[u].num || milli < -2000000000 / units[u].num) return -1;
         milli = milli * units[u].num / units[u].den;
