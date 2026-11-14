@@ -7,6 +7,18 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 101 (14 November 2026, base 9dd02b6, PR 258 merged)
+
+US-031 partial, phase3_complete=false. The reader paints lab(), lch(),
+oklab(), oklch() and color() in nine colour spaces (clipped to sRGB)
+and currentcolor in color, background-color and the background
+shorthand. The scroll-timeline and view-timeline properties are taken,
+and an animation named on the scroll timeline of the root element runs
+at the reader scroll position (web-css scroll N). A QEMU page (`make
+qemu-lot101`, CI job lot101-reader-spaces) checks the reader at three
+scroll positions. US-068/073, US-076, US-080 and US-081 stay partial.
+US-078 and US-097 stay simule. See docs/lot101_plan.md.
+
 ### Lot 100 (14 November 2026, base 0c1b716, PR 257 merged)
 
 US-031 partial, phase3_complete=false. The reader paints every CSS
