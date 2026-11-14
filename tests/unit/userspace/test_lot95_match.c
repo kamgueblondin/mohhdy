@@ -22,7 +22,7 @@ static void test_l95_match_0(void) {
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TFUNC, "scale()"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-list>'", "skewx( -3.28336turn )"));
     TEST_ASSERT_EQUAL(0, mp("'<resolution> | <string> | <color> | <integer>+ | <resolution> | <transform-list> | <time>+ | small'", "1000s  calc(74ms - +392s)  calc(-500turn * +0)  +12%"));
-    TEST_ASSERT_EQUAL(1, mp("'<resolution> | <image>+ | <string> | <custom-ident>'", "radial-gradient(to right, red 10%, blue)  repeating-radial-gradient(red)"));
+    TEST_ASSERT_EQUAL(0, mp("'<resolution> | <image>+ | <string> | <custom-ident>'", "radial-gradient(to right, red 10%, blue)  repeating-radial-gradient(red)"));
 }
 
 static void test_l95_match_1(void) {
@@ -39,7 +39,7 @@ static void test_l95_match_1(void) {
 }
 
 static void test_l95_match_2(void) {
-    TEST_ASSERT_EQUAL(1, mp("'<image> | <color> | <time># | <length-percentage>'", "repeating-conic-gradient(circle, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image> | <color> | <time># | <length-percentage>'", "repeating-conic-gradient(circle, red, blue)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "rotatex(-360.9331grad)"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function> | <image> | <transform-list> | <string>'", "translatez(calc(12pc - 10em + 12pt))"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_URL, "url(\"a'b.png\")"));
@@ -86,8 +86,8 @@ static void test_l95_match_5(void) {
     TEST_ASSERT_EQUAL(0, mp("'<image>'", "element(#a)"));
     TEST_ASSERT_EQUAL(0, mp("'<resolution> | <url> | <resolution> | <transform-list> | <url># | <image>'", "url(a"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution>'", "279dppx"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>#'", "url( 'a.png' ) , repeating-conic-gradient(rgb(1, 2, 3), white) , linear-gradient(from 90deg, red, blue)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image> | <transform-list> | <custom-ident>+ | <image> | <url> | <number> | <image> | <string>'", "repeating-linear-gradient(closest-side, red, (blue))"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>#'", "url( 'a.png' ) , repeating-conic-gradient(rgb(1, 2, 3), white) , linear-gradient(from 90deg, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image> | <transform-list> | <custom-ident>+ | <image> | <url> | <number> | <image> | <string>'", "repeating-linear-gradient(closest-side, red, (blue))"));
 }
 
 static void test_l95_match_6(void) {
@@ -122,7 +122,7 @@ static void test_l95_match_8(void) {
     TEST_ASSERT_EQUAL(0, mp("'<string># | <time> | stretch'", "_under"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-list> | <angle> | <custom-ident>'", "-150000q"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_STRING, "'x\""));
-    TEST_ASSERT_EQUAL(1, mp("'<image>#'", "repeating-linear-gradient(at 10px 20px, red, blue) , radial-gradient(from 90deg, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>#'", "repeating-linear-gradient(at 10px 20px, red, blue) , radial-gradient(from 90deg, red, blue)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_STRING, "'a b c'"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "radial-gradient()"));
     TEST_ASSERT_EQUAL(0, mp("'<string>'", "'a'b'"));
@@ -236,9 +236,9 @@ static void test_l95_match_16(void) {
 static void test_l95_match_17(void) {
     TEST_ASSERT_EQUAL(0, mp("'<transform-list> | auto | <custom-ident>'", "1a"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <number>+ | <transform-list>'", "-360.486"));
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-radial-gradient(from 90deg, red, blue)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-radial-gradient(from 90deg, red, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<image> | <url>'", "url('q\\'r.png')"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>#'", "repeating-radial-gradient(red),conic-gradient(45deg, red, blue 3em)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>#'", "repeating-radial-gradient(red),conic-gradient(45deg, red, blue 3em)"));
     TEST_ASSERT_EQUAL(0, mp("'<url> | <string> | <image> | stretch | <integer>+ | <transform-list> | <angle># | <length>+'", "auto"));
     TEST_ASSERT_EQUAL(0, mp("'<string>#'", "'a' 'b' , '\\\\'"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "skew(-0)"));
@@ -249,10 +249,10 @@ static void test_l95_match_17(void) {
 static void test_l95_match_18(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "url()"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution> | <percentage># | <transform-list> | <image>+ | _under | <number>'", "calc((+145.5192 - 3))"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "repeating-linear-gradient(at 10px 20px, red, blue)\turl(a.png)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "repeating-linear-gradient(at 10px 20px, red, blue)\turl(a.png)"));
     TEST_ASSERT_EQUAL(0, mp("'<url> | <length># | left-side | <time># | big+ | <image>#'", "url(a b.png)"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution>'", "-500x"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "repeating-linear-gradient(at 10px 20px, red, blue) url(a.png)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "repeating-linear-gradient(at 10px 20px, red, blue) url(a.png)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_URL, "url( 'a.png' )"));
     TEST_ASSERT_EQUAL(0, mp("'<string> | <resolution>'", "abc"));
     TEST_ASSERT_EQUAL(1, mp("'<url> | <number> | <time> | stretch# | small | <string>+'", "-1.5733"));
@@ -264,7 +264,7 @@ static void test_l95_match_19(void) {
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TLIST, "translate(5.9615rem), scale3d(100,+372,-2%)"));
     TEST_ASSERT_EQUAL(1, mp("'<string>+ | <length> | <length> | <string> | <number> | <url>'", "1.60845mm"));
     TEST_ASSERT_EQUAL(1, mp("'<integer> | <transform-function># | <string> | left-side | thin | _under# | <color>+ | <color>'", "red"));
-    TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <percentage>+ | <percentage> | <image> | <color># | <angle>+'", "linear-gradient(at 10px 20px, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<transform-list> | <percentage>+ | <percentage> | <image> | <color># | <angle>+'", "linear-gradient(at 10px 20px, red, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution>+ | <resolution>#'", "324dpi"));
     TEST_ASSERT_EQUAL(1, mp("'<url># | <url>'", "url(https://x.example/i.png), url(\"\"), url(e\\(f.png)"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>'", "skewx(0)"));
@@ -277,12 +277,12 @@ static void test_l95_match_20(void) {
     TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <percentage> | <url>+'", "url() url('')"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>+'", "scalez(500) skewy(calc(+5turn + 12deg)) scale(calc(-500.1650)) translatex(0)"));
     TEST_ASSERT_EQUAL(1, mp("'<url>'", "url(\"a.png\")"));
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "radial-gradient(to right, red 10%, blue)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "radial-gradient(to right, red 10%, blue)"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-function>+ | big+'", "rotate3d(1500,  calc(0),  214) translatez( calc(180vmax - 88em - 90.4cm) )"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-function> | <url>'", "rotatex()"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "url(\"a'b.png\")"));
     TEST_ASSERT_EQUAL(0, mp("'-moz-thing'", "big"));
-    TEST_ASSERT_EQUAL(1, mp("'<string> | <image># | left-side'", "radial-gradient(to right, red 10%, blue) , conic-gradient(to right, red 10%, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<string> | <image># | left-side'", "radial-gradient(to right, red 10%, blue) , conic-gradient(to right, red 10%, blue)"));
 }
 
 static void test_l95_match_21(void) {
@@ -331,7 +331,7 @@ static void test_l95_match_24(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "scaley(calc(180))"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TLIST, "rotatey(253.6turn)\ttranslate3d(calc(+192mm),-263.570%,calc(-96 * 360em - 75cm * 288))"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution> | <transform-list> | <transform-function>'", "perspective(0)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>#'", "radial-gradient(closest-side, red, (blue))"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>#'", "radial-gradient(closest-side, red, (blue))"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution># | <resolution> | <string># | <transform-function> | left-side# | <image>'", "0dppx"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red, blue) x"));
     TEST_ASSERT_EQUAL(0, mp("'<image>'", "image(a.png)"));
@@ -346,7 +346,7 @@ static void test_l95_match_25(void) {
     TEST_ASSERT_EQUAL(1, mp("'<string>#'", "'a\"b', \"abc\""));
     TEST_ASSERT_EQUAL(1, mp("'<resolution>+ | <length-percentage> | <percentage>'", "180.370dppx calc(+2x * 500 - 325x * 1500) 0.59683dppx -10dppx"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-function> | a1 | <resolution> | <transform-list> | <string> | thin | <url>+ | <transform-function>#'", "x"));
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-radial-gradient(red)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-radial-gradient(red)"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution> | <length-percentage> | <transform-function># | <number>'", "45dpi"));
 }
 
@@ -390,7 +390,7 @@ static void test_l95_match_28(void) {
 }
 
 static void test_l95_match_29(void) {
-    TEST_ASSERT_EQUAL(1, mp("'<image>#'", "repeating-linear-gradient(circle, red, blue) , repeating-linear-gradient(45deg, red, blue 3em)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>#'", "repeating-linear-gradient(circle, red, blue) , repeating-linear-gradient(45deg, red, blue 3em)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(to right, red 10%, blue)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_STRING, "\"a'"));
     TEST_ASSERT_EQUAL(0, mp("'<string> | <transform-list> | stretch | <resolution> | left-side+ | <integer>#'", "0.771, +1175, calc(-10.6 * 45.1238), calc(-3 + -96.2)"));
@@ -411,19 +411,19 @@ static void test_l95_match_30(void) {
     TEST_ASSERT_EQUAL(1, mp("'<transform-list>'", "matrix(0.41,328,45,3,3.590,calc(-382)) scalez(-254%) translate(180.194in , +20000%) skew(360grad,  168rad)"));
     TEST_ASSERT_EQUAL(1, mp("'<string># | <transform-list> | <angle> | <length>'", "calc(329.57602rad / +370)"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <integer> | <angle>'", "calc(93grad)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>'", "repeating-linear-gradient(red)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>'", "repeating-linear-gradient(red)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient( )"));
 }
 
 static void test_l95_match_31(void) {
-    TEST_ASSERT_EQUAL(1, mp("'<image> | <string># | <resolution> | <color># | <angle> | <url> | <image> | <integer>'", "repeating-conic-gradient(red)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image> | <string># | <resolution> | <color># | <angle> | <url> | <image> | <integer>'", "repeating-conic-gradient(red)"));
     TEST_ASSERT_EQUAL(1, mp("'<url> | <transform-list> | <angle> | <image>'", "url('q\\'r.png')"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_RESOLUTION, "5dpcm"));
     TEST_ASSERT_EQUAL(1, mp("'<url>#'", "url(a.png) , url( 'a.png' ) , url()"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <string>'", "\"abc\""));
     TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <custom-ident> | <url> | <length>+ | <transform-function> | a1#'", "thin"));
     TEST_ASSERT_EQUAL(1, mp("'<string>'", "'semi: colon'"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "radial-gradient(closest-side, red, (blue))\trepeating-radial-gradient(to right, red 10%, blue)\turl( a.png )"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "radial-gradient(closest-side, red, (blue))\trepeating-radial-gradient(to right, red 10%, blue)\turl( a.png )"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_RESOLUTION, "calc(-86x - +45dppx)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-conic-gradient(from 90deg, red, blue)"));
 }
@@ -436,7 +436,7 @@ static void test_l95_match_32(void) {
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_STRING, "\"a\\\""));
     TEST_ASSERT_EQUAL(0, mp("'<resolution> | <transform-function># | <transform-function> | <angle> | <transform-list> | big+ | <transform-list> | <transform-list>'", "-67.98pt"));
     TEST_ASSERT_EQUAL(0, mp("'<resolution> | <length>'", "calc(10%)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+ | <string> | <color> | <custom-ident>'", "radial-gradient(circle, red, blue)  linear-gradient(circle, red, blue)  linear-gradient(from 90deg, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+ | <string> | <color> | <custom-ident>'", "radial-gradient(circle, red, blue)  linear-gradient(circle, red, blue)  linear-gradient(from 90deg, red, blue)"));
     TEST_ASSERT_EQUAL(0, mp("'<image> | <angle># | <image>'", "radial-gradient()"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution># | stretch | <time># | <transform-list> | <transform-function> | <string> | <angle> | <transform-list>'", "5.6029dppx,+45dpi,calc(243 * +0dpi - -1500.28dpcm / -254.202)"));
 }
@@ -463,7 +463,7 @@ static void test_l95_match_34(void) {
     TEST_ASSERT_EQUAL(1, mp("'<image> | <percentage># | <transform-list> | <integer>'", "-1304"));
     TEST_ASSERT_EQUAL(0, mp("'<resolution>'", "1xx"));
     TEST_ASSERT_EQUAL(1, mp("'<image>+ | <resolution>+'", "calc(100.187dpi + 307.0573dppx)\t45dppx"));
-    TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <image>+ | <custom-ident>'", "linear-gradient(from 90deg, red, blue)  repeating-radial-gradient(red)"));
+    TEST_ASSERT_EQUAL(0, mp("'<transform-list> | <image>+ | <custom-ident>'", "linear-gradient(from 90deg, red, blue)  repeating-radial-gradient(red)"));
     TEST_ASSERT_EQUAL(0, mp("'<string>+'", "'semi: colon'"));
 }
 
@@ -501,7 +501,7 @@ static void test_l95_match_37(void) {
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-linear-gradient(red, blue"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>'", "rotatex(calc(+17 * 335.66turn))"));
     TEST_ASSERT_EQUAL(0, mp("'<string> | _under | <percentage>'", "big"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>'", "conic-gradient(circle, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>'", "conic-gradient(circle, red, blue)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_URL, "url( a.png )"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function> | <time>+ | <image>'", "calc(12.32695ms / 5.448)  -96s"));
 }
@@ -521,7 +521,7 @@ static void test_l95_match_38(void) {
 
 static void test_l95_match_39(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "rotatex(calc(-12grad - 45.8 * 5.4grad + +230 * +3turn))"));
-    TEST_ASSERT_EQUAL(1, mp("'<image># | -moz-thing+'", "repeating-linear-gradient(from 90deg, red, blue),repeating-radial-gradient(from 90deg, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image># | -moz-thing+'", "repeating-linear-gradient(from 90deg, red, blue),repeating-radial-gradient(from 90deg, red, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<length-percentage>'", "5.49619vmax"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_URL, "url('a'b')"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-list> | <transform-list> | <transform-list> | <transform-list>'", "translatey(calc(45.6263pt / -360.7 - 12.1923%)) skew( 1 ) scalex(174)"));
@@ -553,15 +553,15 @@ static void test_l95_match_41(void) {
     TEST_ASSERT_EQUAL(0, mp("'<image>+ | <url> | small | <transform-list> | <image> | <color> | <string>+ | <resolution>#'", "_under"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "skew(100deg, +10turn)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "rotatey(-100deg)"));
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "conic-gradient(circle, red, blue)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "conic-gradient(circle, red, blue)"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-function>'", "translate(+341mm , auto)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>#'", "repeating-conic-gradient(closest-side, red, (blue))"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>#'", "repeating-conic-gradient(closest-side, red, (blue))"));
 }
 
 static void test_l95_match_42(void) {
     TEST_ASSERT_EQUAL(0, mp("'<length-percentage>'", "calc(366 * +254 - 5.9)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_RESOLUTION, "calc(1dppx + 1px)"));
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "radial-gradient(red)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "radial-gradient(red)"));
     TEST_ASSERT_EQUAL(0, mp("'<image> | <number>'", "5dpcm"));
     TEST_ASSERT_EQUAL(0, mp("'<url> | <integer> | <time> | <transform-function> | <string> | thin | thin | <resolution>'", "150000.7807%"));
     TEST_ASSERT_EQUAL(0, mp("'<image># | <percentage>'", "repeating-linear-gradient( ),conic-gradient(to right, red 10%, blue)"));
@@ -601,7 +601,7 @@ static void test_l95_match_45(void) {
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>#'", "skewx(+222turn),skew(calc(500.6turn))"));
     TEST_ASSERT_EQUAL(0, mp("'<length-percentage>'", "-45.2"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "url('a b.png')"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "url(a.png)\tconic-gradient(red)\trepeating-radial-gradient(circle, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "url(a.png)\tconic-gradient(red)\trepeating-radial-gradient(circle, red, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution> | <color>'", "3dpi"));
     TEST_ASSERT_EQUAL(0, mp("'<string>+ | <image> | <string> | <custom-ident>'", "repeating-radial-gradient()"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution># | <transform-function>+ | thin | <custom-ident> | <image># | <angle>+'", "calc(10dppx)"));
@@ -630,7 +630,7 @@ static void test_l95_match_47(void) {
     TEST_ASSERT_EQUAL(0, mp("'<resolution>+ | <url> | <length># | <url> | <percentage> | <transform-function>+'", "226x  1px  +180.35x"));
     TEST_ASSERT_EQUAL(1, mp("'<image> | <transform-list> | <length> | <string>+ | <custom-ident> | <resolution>+'", "\"abc\""));
     TEST_ASSERT_EQUAL(1, mp("'<number>'", "calc(45 - 90 * 1000)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "repeating-linear-gradient(45deg, red, blue 3em) conic-gradient(closest-side, red, (blue))"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "repeating-linear-gradient(45deg, red, blue 3em) conic-gradient(closest-side, red, (blue))"));
     TEST_ASSERT_EQUAL(0, mp("'<url># | <percentage> | <resolution>+ | <time> | <string> | <time>#'", "uri(a.png) , url(https://x.example/i.png)"));
     TEST_ASSERT_EQUAL(1, mp("'<string>'", "'a\\'b'"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-function> | stretch'", "left-side"));
@@ -672,7 +672,7 @@ static void test_l95_match_50(void) {
     TEST_ASSERT_EQUAL(1, mp("'<string> | <length># | <integer>+ | <string>'", "\"\""));
     TEST_ASSERT_EQUAL(0, mp("'<string>+'", "'abc'\t'a b c'"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>'", "translatex(1000.17em)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image> | <number>+'", "conic-gradient(red)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image> | <number>+'", "conic-gradient(red)"));
 }
 
 static void test_l95_match_51(void) {
@@ -681,7 +681,7 @@ static void test_l95_match_51(void) {
     TEST_ASSERT_EQUAL(1, mp("'<image>'", "url(https://x.example/i.png)"));
     TEST_ASSERT_EQUAL(0, mp("'<string>+ | <transform-function> | <number>#'", "'semi: colon'"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "perspective(calc((254.7vmin + -180.916px) * 268 - 90q))"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "linear-gradient(red)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "linear-gradient(red)"));
     TEST_ASSERT_EQUAL(0, mp("'<url> | <integer> | x | stretch | <image> | <url>'", "thin"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-list> | <image>+'", "repeating-linear-gradient(red, (blue)  url  conic-gradient(red)"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function> | <resolution> | left-side | _under | <integer># | <angle> | <image> | <integer>'", "_under"));
@@ -769,7 +769,7 @@ static void test_l95_match_57(void) {
 static void test_l95_match_58(void) {
     TEST_ASSERT_EQUAL(0, mp("'<string># | none'", "-moz-thing"));
     TEST_ASSERT_EQUAL(1, mp("'<angle>+ | <length> | small | <transform-list> | _under+ | <custom-ident>+ | <time>+ | big'", "foo\ta-b"));
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(circle, red, blue)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(circle, red, blue)"));
     TEST_ASSERT_EQUAL(0, mp("'<image> | <time>+ | -moz-thing | thin+'", "_under"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <url># | <string> | <image>'", "url(\"\"), url(''), url(\"a.png\")"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TLIST, "rotatey(310.6277rad)"));
@@ -781,7 +781,7 @@ static void test_l95_match_58(void) {
 
 static void test_l95_match_59(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_RESOLUTION, "calc(45x + -219 * 254x)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image> | _under+'", "repeating-radial-gradient(to right, red 10%, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image> | _under+'", "repeating-radial-gradient(to right, red 10%, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<string># | <transform-list> | <time># | <transform-function> | <time># | <integer>'", "-886"));
     TEST_ASSERT_EQUAL(0, mp("'<time> | <custom-ident># | <color> | <url> | stretch+ | <time>+ | <custom-ident># | <transform-list>'", "calc(2.1 - 500 - 389.64 / -101.23724)"));
     TEST_ASSERT_EQUAL(1, mp("'<string> | <image> | <transform-list> | <color> | <custom-ident>+ | <url>'", "url(\"\")"));
@@ -851,7 +851,7 @@ static void test_l95_match_64(void) {
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>+ | <url>#'", "rotatex(-346.6576grad)\tscaley(184%)\trotatey(-2deg)\tmatrix(159.022, 1500, 90.538, +1.322, 1000, +332)"));
     TEST_ASSERT_EQUAL(0, mp("'<time> | <color># | x# | <time>#'", "none"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_RESOLUTION, "-1000.0x"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+ | <string>'", "repeating-conic-gradient(red)  radial-gradient(from 90deg, red, blue)  conic-gradient(circle, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+ | <string>'", "repeating-conic-gradient(red)  radial-gradient(from 90deg, red, blue)  conic-gradient(circle, red, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution>#'", "3dpcm , +180dpcm , 235x , 5dpcm"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_URL, "url(a\"b)"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>+ | <color># | <length> | _under | <transform-function> | <integer>'", "+277mm"));
@@ -876,7 +876,7 @@ static void test_l95_match_66(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "url(https://x.example/i.png)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_RESOLUTION, "calc(149.35317dpi)"));
     TEST_ASSERT_EQUAL(0, mp("'<string>#'", "\"\",'(paren','abc'"));
-    TEST_ASSERT_EQUAL(1, mp("'<image> | <transform-function>'", "linear-gradient(circle, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image> | <transform-function>'", "linear-gradient(circle, red, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<url>+'", "url(https://x.example/i.png)  url(\"\")  url(https://x.example/i.png)"));
     TEST_ASSERT_EQUAL(1, mp("'<string>+ | <number>#'", "+96,+2000000.88,90"));
     TEST_ASSERT_EQUAL(0, mp("'<url>'", "src(a.png)"));
@@ -890,7 +890,7 @@ static void test_l95_match_67(void) {
     TEST_ASSERT_EQUAL(1, mp("'<string>+ | <angle> | <resolution> | <color>+ | <length-percentage>+ | <string>#'", "red  #a1b2c3"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function> | <resolution>'", "5.1dpi"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function> | <string> | <length>'", "calc(-3rem)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image> | <transform-list> | <image>#'", "radial-gradient(red) , url('q\\'r.png')"));
+    TEST_ASSERT_EQUAL(0, mp("'<image> | <transform-list> | <image>#'", "radial-gradient(red) , url('q\\'r.png')"));
     TEST_ASSERT_EQUAL(0, mp("'<time>+ | <transform-list> | -moz-thing# | <length> | stretch | <angle># | <url> | <transform-list>'", "calc(-5dppx / 5),calc(+180deg)"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <length>+'", "379em 232.8051q"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function> | <url> | <transform-list>'", "url( 'a.png' )"));
@@ -981,7 +981,7 @@ static void test_l95_match_74(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "skewy(calc(12 * 0deg + 0.7489deg / 1.129))"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-list> | <color> | <percentage>+ | <transform-list> | <image> | -moz-thing+'", "perspective(+3.7vh)  scaley( +260 )  calc(1px)"));
     TEST_ASSERT_EQUAL(1, mp("'<string> | <percentage> | <length-percentage>'", "'a\"b'"));
-    TEST_ASSERT_EQUAL(1, mp("'<image> | <number> | <integer>'", "linear-gradient(at 10px 20px, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image> | <number> | <integer>'", "linear-gradient(at 10px 20px, red, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<url># | <number>'", "url(''), url(), url()"));
     TEST_ASSERT_EQUAL(0, mp("'<resolution> | auto | <image> | <time>'", "small"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function> | big'", "translatez(calc(254.7 * 254.6288px + 100q))"));
@@ -994,7 +994,7 @@ static void test_l95_match_75(void) {
     TEST_ASSERT_EQUAL(1, mp("'<string> | <image># | <number> | <url> | stretch+ | -moz-thing+ | a1 | <time>'", "\"a'b\""));
     TEST_ASSERT_EQUAL(0, mp("'<string> | <percentage>#'", "\"a'"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "matrix(386.25631,  161,  258.1,  +194,  2.81695,  -197)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>#'", "radial-gradient(rgb(1, 2, 3), white),repeating-radial-gradient(from 90deg, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>#'", "radial-gradient(rgb(1, 2, 3), white),repeating-radial-gradient(from 90deg, red, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>'", "perspective( calc(1500.28 * 222.3vmin) )"));
     TEST_ASSERT_EQUAL(0, mp("'<image># | <custom-ident>+ | <resolution>'", "1dp"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution>#'", "calc(221dpcm * 1500 - 1.6693x / 96 - 96.4dpi) , calc(500.4650dpcm) , -128dpi , 180dppx"));
@@ -1096,7 +1096,7 @@ static void test_l95_match_83(void) {
     TEST_ASSERT_EQUAL(1, mp("'<resolution># | a1'", "calc(90.977dppx - +381x - 0dpi) , 254.0dpi , calc(98dpcm / -2)"));
     TEST_ASSERT_EQUAL(0, mp("'<image> | <angle> | <string> | <transform-list> | <image> | <resolution>'", "\"a\\\""));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>+'", "translatex(+360%)\ttranslatez(calc(113.9398pt - 500.9002rem))\trotate(10.2773rad)"));
-    TEST_ASSERT_EQUAL(1, mp("'<url> | auto | <length>+ | <image>+'", "repeating-linear-gradient(from 90deg, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<url> | auto | <length>+ | <image>+'", "repeating-linear-gradient(from 90deg, red, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution>#'", "100000dppx, -1500.038dpi"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-function> | left-side+ | <integer> | <length-percentage> | <length-percentage> | _under#'", "small, _under"));
     TEST_ASSERT_EQUAL(1, mp("'<image>+'", "repeating-linear-gradient(red, blue)"));
@@ -1202,7 +1202,7 @@ static void test_l95_match_91(void) {
     TEST_ASSERT_EQUAL(0, mp("'<transform-function>'", "scaley(1deg)"));
     TEST_ASSERT_EQUAL(1, mp("'<string>'", "'a\"b'"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution> | <image> | <transform-list> | <transform-list> | <image>+ | auto'", "skewx(calc(0grad - 1000rad))"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "conic-gradient(red)  repeating-radial-gradient(closest-side, red, (blue))"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "conic-gradient(red)  repeating-radial-gradient(closest-side, red, (blue))"));
     TEST_ASSERT_EQUAL(1, mp("'<string> | <transform-function>+ | <image># | <url>'", "rotate(-1.914deg)  translatez(calc(10 * 13cm))"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-function> | thin'", "skew(+45grad,-45rad,0.0)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TLIST, "rotate3d(1000,3,+96.698,1.3911grad) skewy( 1s ) scaley(90%)"));
@@ -1214,7 +1214,7 @@ static void test_l95_match_92(void) {
     TEST_ASSERT_EQUAL(0, mp("'<transform-list> | <string>#'", "scale3d(-382 , -1.1 , 0) rotate3d(calc(90), 394, calc(-50.7708), +360grad) translate(  )"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>'", "rotatex(-0)"));
     TEST_ASSERT_EQUAL(1, mp("'big# | <resolution>+ | <url> | <url># | <angle> | <transform-function>+'", "url('')"));
-    TEST_ASSERT_EQUAL(1, mp("'<image> | <color>#'", "linear-gradient(closest-side, red, (blue))"));
+    TEST_ASSERT_EQUAL(0, mp("'<image> | <color>#'", "linear-gradient(closest-side, red, (blue))"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "conic-gradient(from 90deg, red, blue)"));
     TEST_ASSERT_EQUAL(0, mp("'big+ | <resolution> | <time>'", "_under _under auto -moz-thing"));
     TEST_ASSERT_EQUAL(1, mp("'<url>+ | <color> | <length> | <url>+ | <transform-list> | <number>'", "teal"));
@@ -1266,7 +1266,7 @@ static void test_l95_match_96(void) {
     TEST_ASSERT_EQUAL(1, mp("'<transform-function> | small | <color>+ | <length-percentage> | <length-percentage> | auto | <number>+ | x+'", "red  teal"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_RESOLUTION, "258dpcm"));
     TEST_ASSERT_EQUAL(0, mp("'<string>+ | <color> | _under | <integer>'", "auto"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>'", "repeating-linear-gradient(circle, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>'", "repeating-linear-gradient(circle, red, blue)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TLIST, "skewy(1px)"));
     TEST_ASSERT_EQUAL(0, mp("'<url> | <length>+ | <length> | <length>+ | <integer> | <image>+ | <image># | <custom-ident>'", "linear-gradient(red, (blue) , radial-gradient(red) , radial-gradient(red, blue"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "scale3d(500.8174,  96.9462,  327)"));
@@ -1292,7 +1292,7 @@ static void test_l95_match_98(void) {
     TEST_ASSERT_EQUAL(0, mp("'<image> | small# | <image># | <url> | <url> | auto#'", "thin , a1"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <color># | <transform-list>'", "#a1b2c3 , red , red , teal"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-list>'", "perspective( +99999mm )  translatez(calc((+48.21589pt - 100px * 1000) * -100))"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "repeating-conic-gradient(circle, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "repeating-conic-gradient(circle, red, blue)"));
     TEST_ASSERT_EQUAL(0, mp("'<string>#'", "'(paren' , '\\\\'"));
     TEST_ASSERT_EQUAL(1, mp("'<url># | <color>'", "url( 'a.png' ),url( a.png ),url(\"a.png\")"));
     TEST_ASSERT_EQUAL(1, mp("'<string>+ | <image> | <url># | <resolution>'", "'a\"b'  'a\\'b'  'a\"b'"));
@@ -1306,9 +1306,9 @@ static void test_l95_match_99(void) {
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TLIST, "scaley(1px)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-radial-gradient(rgb(1, 2, 3), white)"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution> | auto'", "2.479dpcm"));
-    TEST_ASSERT_EQUAL(1, mp("'<image># | <integer> | <resolution># | <color>+ | <transform-function> | <percentage># | <string> | <length>'", "repeating-conic-gradient(closest-side, red, (blue)),repeating-radial-gradient(to right, red 10%, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image># | <integer> | <resolution># | <color>+ | <transform-function> | <percentage># | <string> | <length>'", "repeating-conic-gradient(closest-side, red, (blue)),repeating-radial-gradient(to right, red 10%, blue)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TFUNC, "translatex(0.36453vmin)"));
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-conic-gradient(45deg, red, blue 3em)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-conic-gradient(45deg, red, blue 3em)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TLIST, "skew(-0)"));
 }
 
@@ -1316,12 +1316,12 @@ static void test_l95_match_100(void) {
     TEST_ASSERT_EQUAL(1, mp("'<string>+'", "'\\\\'"));
     TEST_ASSERT_EQUAL(0, mp("'<url>'", "url"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TLIST, "scale3d(calc(+180),  6,  +0)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "repeating-linear-gradient(from 90deg, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "repeating-linear-gradient(from 90deg, red, blue)"));
     TEST_ASSERT_EQUAL(1, mp("'<url>+ | <angle>+ | left-side | <length># | <string> | <image>+'", "45rad"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TLIST, "rotatex( -10.498deg )"));
     TEST_ASSERT_EQUAL(1, mp("'<resolution> | <angle># | <resolution> | <length-percentage>+ | auto+ | <image>'", "46x"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TLIST, "matrix(346,  calc(1px),  calc(-0.163 * +180.2),  332.3313,  calc(5.0),  333.5672)"));
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "radial-gradient(45deg, red, blue 3em)"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "radial-gradient(45deg, red, blue 3em)"));
     TEST_ASSERT_EQUAL(1, mp("'<string> | <url>+'", "'a b c'"));
 }
 
@@ -1330,7 +1330,7 @@ static void test_l95_match_101(void) {
     TEST_ASSERT_EQUAL(0, mp("'<image> | <color> | <image>#'", "reddish"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_TLIST, "rotatey(calc(0turn))"));
     TEST_ASSERT_EQUAL(0, mp("'<string>'", "'a' 'b'"));
-    TEST_ASSERT_EQUAL(1, mp("'<resolution> | <image>'", "repeating-conic-gradient(45deg, red, blue 3em)"));
+    TEST_ASSERT_EQUAL(0, mp("'<resolution> | <image>'", "repeating-conic-gradient(45deg, red, blue 3em)"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-function>+'", "rotatey(134.14grad)\tscalez(1500.750%)"));
     TEST_ASSERT_EQUAL(1, mp("'<string> | <resolution> | left-side+ | <integer>+'", "calc(0dppx - 290.5870x / 331 + +254dpi)"));
     TEST_ASSERT_EQUAL(1, mp("'<transform-list> | <length-percentage> | auto# | x#'", "calc(90.0772% * 313 + 46% / +5.7 + -45.0em)"));
@@ -1341,7 +1341,7 @@ static void test_l95_match_101(void) {
 static void test_l95_match_102(void) {
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TFUNC, "rotate4d(0)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_RESOLUTION, "-45dpi"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>'", "radial-gradient(red)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>'", "radial-gradient(red)"));
     TEST_ASSERT_EQUAL(0, mp("'<resolution> | none | <integer> | <url>#'", "1dp"));
     TEST_ASSERT_EQUAL(1, mp("'<url>+'", "url(\"a'b.png\")\turl()\turl()\turl(\"a'b.png\")"));
     TEST_ASSERT_EQUAL(1, mp("'<image>#'", "conic-gradient(from 90deg, red, blue)"));
@@ -1394,7 +1394,7 @@ static void test_l95_match_106(void) {
     TEST_ASSERT_EQUAL(1, mp("'<transform-list>'", "scaley(-2.49)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TLIST, "scale3d(auto,1000,10)"));
     TEST_ASSERT_EQUAL(1, mp("'<url>+ | left-side# | auto | <image> | <url># | <length-percentage># | <transform-list> | <transform-list>'", "scale(-1500.6469%)rotate3d(+1,  274,  calc(132),  0.0)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image> | <length-percentage>'", "conic-gradient(closest-side, red, (blue))"));
+    TEST_ASSERT_EQUAL(0, mp("'<image> | <length-percentage>'", "conic-gradient(closest-side, red, (blue))"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TLIST, "rotate(374grad)\t1px"));
     TEST_ASSERT_EQUAL(0, mp("'<url># | small#'", "stretch"));
     TEST_ASSERT_EQUAL(0, mp("'<url> | <transform-list> | <image> | <resolution>+ | <number> | big+ | <integer> | _under+'", "_under\tx"));
@@ -1406,9 +1406,9 @@ static void test_l95_match_106(void) {
 static void test_l95_match_107(void) {
     TEST_ASSERT_EQUAL(0, mp("'<resolution>+ | _under'", "calc(96dpi)  1dp  calc(+10.6x - -1dpi)  1dp"));
     TEST_ASSERT_EQUAL(0, mp("'<transform-list> | _under#'", "rotatez(1)rotatey(1000turn)"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+ | stretch+ | <url>+ | left-side | <string>+ | <image>'", "repeating-conic-gradient(45deg, red, blue 3em)  linear-gradient(at 10px 20px, red, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+ | stretch+ | <url>+ | left-side | <string>+ | <image>'", "repeating-conic-gradient(45deg, red, blue 3em)  linear-gradient(at 10px 20px, red, blue)"));
     TEST_ASSERT_EQUAL(0, mp("'<string>+ | <transform-function> | _under | none'", "stretch"));
-    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "conic-gradient(to right, red 10%, blue)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "conic-gradient(to right, red 10%, blue)"));
     TEST_ASSERT_EQUAL(0, mp("'<string> | <transform-list> | <url> | <image> | <transform-list> | <length> | <string> | <color>#'", "1pxrotatey(0.0)rotatez(calc(254rad / +0.91 + 28grad - +1500turn))"));
     TEST_ASSERT_EQUAL(1, mp("'<string>'", "'a b c'"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_RESOLUTION, "360x"));

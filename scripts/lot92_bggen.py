@@ -23,7 +23,8 @@ from the written text (180 / pi from Python's math module):
   angle; an unregistered one keeps its text and the gradient is refused.
 
 Lot 94 (converted): every radian value with at most two integer digits
-and four decimals is taken, written as its whole degrees (x * 180 / pi
+and four decimals is taken, written as its whole degrees (Lot 96
+(converted): to 1/100 degree, scripts/lot96_gradmodel.py) (x * 180 / pi
 rounded half away from zero); a registered angle is taken when it is a
 whole number of degrees, at most 3600. The draws are unchanged (the Lot 92
 skip rule still picks the cases); the expectations follow Lot 94. Values
@@ -35,6 +36,9 @@ import math
 import os
 import random
 from fractions import Fraction as F
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import lot96_gradmodel as M96  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "tests", "unit", "userspace")
@@ -109,11 +113,12 @@ def rad_model(text, dec):
     dist = abs(deg - 90 * k)
     if abs(dist - 0.5) < 0.001:
         return None, True
-    # Lot 94 (converted): the whole degrees, rounded half away from zero
-    a = abs(deg)
-    assert abs(a - math.floor(a) - 0.5) > 1e-6
-    w = int(math.floor(a + 0.5))
-    return "%ddeg" % (-w if deg < 0 and w else w), False
+    # Lot 96 (converted): to 1/100 degree, rounded half away from zero
+    # (Lot 94: whole degrees); see scripts/lot96_gradmodel.py
+    c = M96.rad_centi(text)
+    if c is None:
+        return None, True
+    return M96.centi_text(c), False
 
 
 def norm_words(text):
@@ -189,7 +194,7 @@ def write_rad():
         if normal is not None and len(normal) > 127:
             normal = None
         cases.append(("img", text, normal))
-    o = [HEADER % "Lot 92: linear-gradient angles in radians, written back as whole degrees",
+    o = [HEADER % "Lot 92: linear-gradient angles in radians, written back as degrees (Lot 96: to 1/100 degree)",
          '#include "../../framework/unity.h"', "#include <string.h>", '#include "wf_cssbg.h"', "",
          "static char g_o[WF_CSSBG_VAL];", "",
          "static const char *run(const char *f, const char *v) {",

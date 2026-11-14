@@ -28,14 +28,39 @@ Written from the rules in docs/lot94_plan.md, not from the C sources:
   the last to 10000, a position below an earlier one is raised to it, the
   ones without a position are spread evenly (floor) between their
   neighbours; a conic stop "Ndeg" is round half up of N * 10000 / 360.
+
+Lot 96 (converted): angles are kept to 1/100 degree (Lot 94: whole
+degrees). sin65536 of an angle between two whole degrees is the lower
+whole degree's value plus (higher - lower) * hundredths / 100 rounded half
+up, in the first quadrant (the others mirror it); decimal_degrees returns
+a Fraction in 1/100 degree; rad_whole_degrees is replaced by
+lot96_gradmodel.rad_centi (the reader writes radians to 1/100 degree).
 """
 import math
 from fractions import Fraction as F
 
 
 def sin65536(d):
-    """round(65536 sin d) for whole degrees, exact at multiples of 30 and 90"""
+    """round(65536 sin d) for whole degrees, exact at multiples of 30 and 90;
+    Lot 96: d in 1/100 degree (a Fraction) between whole degrees is
+    interpolated in the first quadrant"""
     d %= 360
+    if F(d).denominator != 1:
+        d = F(d)
+        assert (d * 100).denominator == 1
+        if d <= 90:
+            q, sign = d, 1
+        elif d <= 180:
+            q, sign = 180 - d, 1
+        elif d <= 270:
+            q, sign = d - 180, -1
+        else:
+            q, sign = 360 - d, -1
+        i = math.floor(q)
+        f = int((q - i) * 100)
+        lo, hi = sin65536(i), sin65536(i + 1)
+        return sign * (lo + ((hi - lo) * f + 50) // 100)
+    d = int(d)
     exact = {0: 0, 30: 32768, 90: 65536, 150: 32768, 180: 0, 210: -32768, 270: -65536, 330: -32768}
     if d in exact:
         return exact[d]
@@ -185,8 +210,14 @@ def rad_whole_degrees(text):
 
 
 def decimal_degrees(text, unit):
-    """whole degrees the engine takes for deg, turn or grad text with at
-    most three decimals: the exact value rounded half away from zero"""
-    v = F(text)
-    v = v * {"deg": 1, "turn": 360, "grad": F(9, 10)}[unit]
-    return round_half_away(v)
+    """the degrees the engine takes for deg, turn or grad text with at most
+    three decimals (Lot 96: more are dropped). Lot 96 (converted): the value
+    in 1/1000 of its unit
+    times the unit factor, truncated toward zero to 1/1000 degree, then
+    rounded half away from zero to 1/100 degree, as a Fraction (Lot 94: the
+    exact value rounded to whole degrees)"""
+    v = F(text) * 1000
+    v = math.floor(v) if v >= 0 else -math.floor(-v)     # the engine reads three decimals
+    m = v * {"deg": 1, "turn": 360, "grad": F(9, 10)}[unit]
+    m = math.floor(m) if m >= 0 else -math.floor(-m)
+    return F(round_half_away(F(m, 10)), 100)

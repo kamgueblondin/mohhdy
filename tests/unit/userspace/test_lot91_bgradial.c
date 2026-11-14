@@ -1034,9 +1034,9 @@ static void test_l91_radial_112(void) {
 
 static void test_l91_radial_113(void) {
     TEST_ASSERT_EQUAL_STRING("linear-gradient(180deg, gray 80%, rgb(15, 233, 194) 24%)", run("grad", "linear-GraDient(3.1416rad, gray 80%, rgb(15, 233, 194) 	 24%)"));
-    TEST_ASSERT_EQUAL_STRING("linear-gradient(57deg, navy 53%, rgb(253, 234, 85), lime, #1f5f0d)", run("grad", "LINEAR-GRADIENT(1rad,  navy  53%,  rgb(253, 234, 85),  Lime,  #1F5F0d)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(57.3deg, navy 53%, rgb(253, 234, 85), lime, #1f5f0d)", run("grad", "LINEAR-GRADIENT(1rad,  navy  53%,  rgb(253, 234, 85),  Lime,  #1F5F0d)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(2400grad, rgb(73, 63, 59), #7e94bc 43%)", run("grad", "LINEAR-GRADIENT(2400grAD,	rgb(73, 63, 59),	#7e94Bc 43%)"));
-    TEST_ASSERT_EQUAL_STRING("linear-gradient(57deg, rgb(136, 190, 247), green 42%)", run("grad", "LINEAR-GRADIENT(1rad, 	 rgb(136, 190, 247), 	 greEn	42%)"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(57.3deg, rgb(136, 190, 247), green 42%)", run("grad", "LINEAR-GRADIENT(1rad, 	 rgb(136, 190, 247), 	 greEn	42%)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(1980deg, #c00d256a, #dee)", run("grad", "linear-gradient(1980deG, #c00d256a, #dEE)"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(1350deg, #fa80ee 41.2%, rgb(212, 36, 94), yellow, #3081c371)", run("grad", "liNear-grADiENt(1350deG, #fA80EE 41.2%, rgb(212, 36, 94), yellow, #3081c371)"));
 }

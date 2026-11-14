@@ -6,6 +6,8 @@ eight alternatives and the types <url>, <image>, <resolution>,
 and the computed value of a registered value.
 
 This file shares no code with the C under test (userspace/wf_cssprop.c).
+Lot 96 (converted): <image> gradients are checked as the background reader
+checks them (lot96_gradmodel.gradient_ok).
 Values are lower case and trimmed, as the reader keeps them.
 
 Numbers are kept in 1/10000 of the canonical unit (px, %, deg, s, dppx or
@@ -20,7 +22,12 @@ known keeps its text; the whole value is "kept" (None) when its computed
 text equals the text.
 """
 from fractions import Fraction as F
+import os
 import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import lot96_gradmodel as M96  # noqa: E402
 
 S = 10000
 LIM = 10 ** 9
@@ -415,13 +422,16 @@ def group_end(s, i):
 
 
 def is_image(s):
+    """Lot 96 (converted): a gradient is what the background reader takes
+    (scripts/lot96_gradmodel.py, written from the reader's rules); Lot 95:
+    any gradient name whose parentheses balance and close at the end"""
     if is_url(s):
         return True
     for g in GRADS:
         if s.startswith(g) and len(s) > len(g):
             if group_end(s, len(g) - 1) != len(s):
                 return False
-            return s[len(g):-1].strip(SP) != ""
+            return bool(M96.gradient_ok(s))
     return False
 
 

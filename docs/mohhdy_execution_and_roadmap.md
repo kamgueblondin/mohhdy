@@ -7,6 +7,19 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 96 (14 November 2026, base fc0fdc9, PR 253 head)
+
+US-031 partial, phase3_complete=false. The engine keeps gradient angles
+in 1/100 degree and paints repeating-linear, repeating-radial and
+repeating-conic gradients in at most 32 flat cells per box. The reader
+passes repeating gradients on (a period of 0 is refused), writes radians
+in 1/100 degree, reads a conic "from" in radians and checks the
+gradients of a registered <image>. A QEMU page (`make qemu-lot96`, CI job
+lot96-engine) checks the painted cells and the reader. Transitions and
+animations of registered properties and em/rem/ex/ch are left for lot
+97. US-068/073, US-076, US-080 and US-081 stay partial. US-078 and
+US-097 stay simule. See docs/lot96_plan.md.
+
 ### Lot 95 (14 November 2026, base 3173f47, Lot 94 head)
 
 US-031 partial, phase3_complete=false. The reader's @property takes 8

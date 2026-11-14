@@ -80,6 +80,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /lot95/props.html   Lot 95: @property with eight alternatives, the Lot 95
                       types, a 31-byte name; plain dimensions, viewport
                       units, a list, a mix, a transform list computed
+  /lot96/grad.html    Lot 96: repeating gradients, radians written to 1/100
+                      degree (a radian conic "from"), a conic stop with
+                      decimals, a period of 0 refused, a registered
+                      <image> whose stops the reader refuses
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -250,7 +254,7 @@ LOT91_PAGES = {
 # Lot 92: reader pages (tests/scripts/test_qemu_lot92.py)
 LOT92_PAGES = {
     # radian angles (two quarter turns kept as whole degrees, 1rad
-    # refused; Lot 94: written as 57deg), a registered <angle> computed by mod() feeds the gradient,
+    # refused; Lot 94: written as 57deg; Lot 96: 57.3deg), a registered <angle> computed by mod() feeds the gradient,
     # the same value unregistered keeps its text and is refused
     "/lot92/bg.html": (
         "<!doctype html><html><head><title>Lot 92 backgrounds</title><style>"
@@ -396,6 +400,32 @@ LOT95_PAGES = {
         "<div id=\"img95\"><p>imgkeep95</p></div>"
         "<p id=\"long95\">longkeep95</p>"
         "<p>fin95</p></body></html>"),
+}
+
+
+# Lot 96: reader page (tests/scripts/test_qemu_lot96.py)
+LOT96_PAGES = {
+    # repeating gradients (1rad written as 57.3deg, a radian conic "from",
+    # a 45.5deg stop), a period of 0 refused (the colour stays), a
+    # registered <image> whose value the reader refuses (its initial value
+    # is drawn), a conic gradient with stops in hundredths of a degree
+    "/lot96/grad.html": (
+        "<!doctype html><html><head><title>Lot 96 gradients</title><style>"
+        "@property --i96 { syntax: '<image>'; inherits: false; initial-value: linear-gradient(#ff0000, #0000ff) }\n"
+        "#rl96 { background-image: repeating-linear-gradient(1rad, #ff0000, #0000ff 20%) }\n"
+        "#rc96 { background: Repeating-Conic-Gradient(from 0.5RAD at 25% 75%, #ff0000, #0000ff 45.5deg) }\n"
+        "#rr96 { background-image: repeating-radial-gradient(circle 10px, #00ff00, #000000 50%) }\n"
+        "#flat96 { background-color: #123456; background-image: repeating-linear-gradient(#ff0000 50%, #0000ff 50%) }\n"
+        "#img96 { --i96: repeating-linear-gradient(#ff0000 10%, #0000ff 10%); background-image: var(--i96) }\n"
+        "#deg96 { background-image: conic-gradient(#ff0000 0.25deg, #0000ff 359.75deg) }\n"
+        "</style></head><body><h1>Gradients 96</h1>"
+        "<div id=\"rl96\"><p>rlkeep96</p></div>"
+        "<div id=\"rc96\"><p>rckeep96</p></div>"
+        "<div id=\"rr96\"><p>rrkeep96</p></div>"
+        "<div id=\"flat96\"><p>flatkeep96</p></div>"
+        "<div id=\"img96\"><p>imgkeep96</p></div>"
+        "<div id=\"deg96\"><p>degkeep96</p></div>"
+        "<p>fin96</p></body></html>"),
 }
 
 
@@ -591,6 +621,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT95_PAGES:
             self._send(200, LOT95_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT96_PAGES:
+            self._send(200, LOT96_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

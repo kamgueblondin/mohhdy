@@ -294,8 +294,8 @@ static void test_l95_sheet_32(void) {
 
 static void test_l95_sheet_33(void) {
     prep("@property --p { syntax: '<image>'; inherits: true; initial-value: url(\"a'b.png\") } #o { --p: radial-gradient(from 90deg, red, blue) }", 800, 600);
-    TEST_ASSERT_EQUAL_STRING("radial-gradient(from 90deg, red, blue)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("radial-gradient(from 90deg, red, blue)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("url(\"a'b.png\")", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("url(\"a'b.png\")", nv("i"));
     TEST_ASSERT_EQUAL_STRING("url(\"a'b.png\")", nv("q"));
     TEST_ASSERT_EQUAL_STRING("", tail());
 }
@@ -653,10 +653,10 @@ static void test_l95_sheet_77(void) {
 }
 
 static void test_l95_sheet_78(void) {
-    prep("@property --p { syntax: '<image>'; inherits: true; initial-value: radial-gradient(from 90deg, red, blue) } #o { --p: repeating-conic-gradient(at 10px 20px, red, blue) }", 640, 480);
+    prep("@property --p { syntax: '<image>'; inherits: true; initial-value: linear-gradient(red, blue) } #o { --p: repeating-conic-gradient(at 10px 20px, red, blue) }", 640, 480);
     TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(at 10px 20px, red, blue)", nv("o"));
     TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(at 10px 20px, red, blue)", nv("i"));
-    TEST_ASSERT_EQUAL_STRING("radial-gradient(from 90deg, red, blue)", nv("q"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(red, blue)", nv("q"));
     TEST_ASSERT_EQUAL_STRING("", tail());
 }
 
@@ -686,10 +686,10 @@ static void test_l95_sheet_81(void) {
 
 static void test_l95_sheet_82(void) {
     prep("@property --p { syntax: '<image>#'; inherits: false; initial-value: linear-gradient(red, blue) } #o { --p: radial-gradient(45deg, red, blue 3em) , conic-gradient(45deg, red, blue 3em) } #i { --p: url, repeating-radial-gradient(rgb(1, 2, 3), white) }", 640, 480);
-    TEST_ASSERT_EQUAL_STRING("radial-gradient(45deg, red, blue 3em), conic-gradient(45deg, red, blue 3em)", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(red, blue)", nv("o"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(red, blue)", nv("i"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(red, blue)", nv("q"));
-    TEST_ASSERT_EQUAL_STRING(" simplified 1", tail());
+    TEST_ASSERT_EQUAL_STRING("", tail());
 }
 
 static void test_l95_sheet_83(void) {
@@ -903,7 +903,7 @@ static void test_l95_sheet_108(void) {
 static void test_l95_sheet_109(void) {
     prep("@property --p { syntax: '<image>'; inherits: true; initial-value: conic-gradient(rgb(1, 2, 3), white) } #o { --p: element(#a) } #i { --p: radial-gradient(45deg, red, blue 3em) }", 375, 812);
     TEST_ASSERT_EQUAL_STRING("conic-gradient(rgb(1, 2, 3), white)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("radial-gradient(45deg, red, blue 3em)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("conic-gradient(rgb(1, 2, 3), white)", nv("i"));
     TEST_ASSERT_EQUAL_STRING("conic-gradient(rgb(1, 2, 3), white)", nv("q"));
     TEST_ASSERT_EQUAL_STRING("", tail());
 }
@@ -917,10 +917,10 @@ static void test_l95_sheet_110(void) {
 }
 
 static void test_l95_sheet_111(void) {
-    prep("@property --p { syntax: '<image>'; inherits: true; initial-value: repeating-linear-gradient(closest-side, red, (blue)) } #o { --p: radial-gradient(red) }", 640, 480);
-    TEST_ASSERT_EQUAL_STRING("radial-gradient(red)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("radial-gradient(red)", nv("i"));
-    TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(closest-side, red, (blue))", nv("q"));
+    prep("@property --p { syntax: '<image>'; inherits: true; initial-value: linear-gradient(red, blue) } #o { --p: radial-gradient(red) }", 640, 480);
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(red, blue)", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(red, blue)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("linear-gradient(red, blue)", nv("q"));
     TEST_ASSERT_EQUAL_STRING("", tail());
 }
 
@@ -1207,7 +1207,7 @@ static void test_l95_sheet_146(void) {
 static void test_l95_sheet_147(void) {
     prep("@property --p { syntax: '<image>+'; inherits: true; initial-value: linear-gradient(red, blue) } #o { --p: conic-gradient(from 90deg, red, blue) repeating-radial-gradient(red, blue) } #i { --p: repeating-linear-gradient(circle, red, blue) repeating-conic-gradient(to right, red 10%, blue) }", 1280, 720);
     TEST_ASSERT_EQUAL_STRING("conic-gradient(from 90deg, red, blue) repeating-radial-gradient(red, blue)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(circle, red, blue) repeating-conic-gradient(to right, red 10%, blue)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("conic-gradient(from 90deg, red, blue) repeating-radial-gradient(red, blue)", nv("i"));
     TEST_ASSERT_EQUAL_STRING("linear-gradient(red, blue)", nv("q"));
     TEST_ASSERT_EQUAL_STRING("", tail());
 }

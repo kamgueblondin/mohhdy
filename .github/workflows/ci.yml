@@ -1277,6 +1277,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 96: one boot of make qemu-lot96 (about 1 min locally)
+  lot96-engine:
+    name: QEMU fractional angles and repeating gradients in the engine and the reader (Lot 96)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 96 boot
+        run: make qemu-lot96
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot96-engine-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 95: one boot of make qemu-lot95 (about 1 min locally)
   lot95-reader:
     name: QEMU @property limits and computed values in the reader (Lot 95)

@@ -699,7 +699,7 @@ static void test_l95_compute_52(void) {
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<resolution>+'", "_under", 0, 0, 0));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number>'", "8", 1, 800, 600));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<integer>'", "calc(326.36s - 1500ms + 224ms)", 1, 1000, 1000));
-    TEST_ASSERT_EQUAL_STRING("conic-gradient(rgb(1, 2, 3), white) repeating-linear-gradient(circle, red, blue)", cv("'<image>+'", "conic-gradient(rgb(1, 2, 3), white)  repeating-linear-gradient(circle, red, blue)", 0, 0, 0));
+    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<image>+'", "conic-gradient(rgb(1, 2, 3), white)  repeating-linear-gradient(circle, red, blue)", 0, 0, 0));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<image> | <integer>+'", "thin", 1, 375, 812));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'big | <number> | <time>'", "-285.5556dppx", 1, 1280, 720));
     TEST_ASSERT_EQUAL_STRING("10px", cv("'<length>+ | <image>'", "+10px", 1, 1000, 1000));
@@ -737,7 +737,7 @@ static void test_l95_compute_54(void) {
 static void test_l95_compute_55(void) {
     TEST_ASSERT_EQUAL_STRING("rotatez(1099.692deg)", cv("'<transform-function>'", "rotatez(3.0547turn)", 0, 0, 0));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<string> | <time>'", "\"\"", 1, 1000, 1000));
-    TEST_ASSERT_EQUAL_STRING("repeating-radial-gradient(from 90deg, red, blue) radial-gradient(45deg, red, blue 3em)", cv("'<image>+'", "repeating-radial-gradient(from 90deg, red, blue)  radial-gradient(45deg, red, blue 3em)", 0, 0, 0));
+    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<image>+'", "repeating-radial-gradient(from 90deg, red, blue)  radial-gradient(45deg, red, blue 3em)", 0, 0, 0));
     TEST_ASSERT_EQUAL_STRING("1583, 1926, -1853", cv("'<integer>#'", "+1583, +1926, -1853", 1, 640, 480));
     TEST_ASSERT_EQUAL_STRING("96dppx", cv("'<resolution>'", "calc(96x)", 1, 800, 600));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length-percentage>'", "180vmin", 0, 0, 0));
@@ -755,7 +755,7 @@ static void test_l95_compute_56(void) {
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<url> | <transform-list>'", "url(a.png)", 1, 800, 600));
     TEST_ASSERT_EQUAL_STRING("-751.6729dppx 5.2156dppx 2.1dppx", cv("'<resolution>+ | <number>'", "calc(-312.74dpcm * +90 + -12dpi / 355.8 - 263dpcm)  500.6956dpi  calc(2.1x)", 1, 640, 480));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<percentage>#'", "12%", 1, 0, 0));
-    TEST_ASSERT_EQUAL_STRING("repeating-radial-gradient(to right, red 10%, blue), url()", cv("'<image>#'", "repeating-radial-gradient(to right, red 10%, blue) , url()", 0, 0, 0));
+    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<image>#'", "repeating-radial-gradient(to right, red 10%, blue) , url()", 0, 0, 0));
     TEST_ASSERT_EQUAL_STRING("translatex(calc(+254vh * -90.002 + 10.80in + 180.056px)) rotate(0deg) translate(5%)", cv("'<transform-list>'", "translatex(calc(+254vh * -90.002 + 10.80in + 180.056px))rotate(-0)translate(5%)", 1, 1280, 720));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length-percentage>'", "-3%", 0, 0, 0));
 }

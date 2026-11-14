@@ -190,7 +190,10 @@ static void test_types(void) {
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_STRING, "abc"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "url(a.png)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red, blue)"));
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-conic-gradient(from 1deg, red, (blue))"));
+    /* Lot 96 (converted): the stops are checked by the background reader,
+     * "(blue)" is not a colour (Lot 95: 1, balanced parentheses only) */
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-conic-gradient(from 1deg, red, (blue))"));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-conic-gradient(from 1deg, red, blue)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient( )"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red, blue"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red) x"));
@@ -459,9 +462,10 @@ static void test_more_edges(void) {
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_URL, "url(a(b.png)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_URL, "url(a\tb)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_URL, "url(\t'a b'\t)"));
-    /* quotes inside a gradient do not close it */
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red, ')')"));
-    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red, '\\')')"));
+    /* quotes inside a gradient do not close it; Lot 96 (converted): a
+     * quoted stop is not a colour, the gradient is refused (Lot 95: 1) */
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red, ')')"));
+    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red, '\\')')"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient("));
     /* transform arguments: counts, math functions, digits in names */
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_TFUNC, "translate(1px, 2px, 0)"));

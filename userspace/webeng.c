@@ -2512,6 +2512,17 @@ static int comma_args(const char *v, int len, int *start, int *length, int cap) 
  * Returns 1 when the first argument is the shape, 0 for a colour stop. */
 static int tf_length(const char *v, int len, int16_t *out, int *percent);
 static int position_pair(const char *v, int len, int16_t out[2], uint8_t *pct_bits);
+static int tf_angle_c(const char *v, int len, int *centi);
+
+/* Lot 96: 1 when v starts a gradient function the engine reads:
+ * linear-, radial- or conic-gradient(, each also with "repeating-" */
+static int grad_name(const char *v, int len) {
+    int r = len > 10 && w_ieq_n(v, 10, "repeating-") ? 10 : 0;
+    v += r; len -= r;
+    return (len > 16 && (w_ieq_n(v, 16, "linear-gradient(") || w_ieq_n(v, 16, "radial-gradient("))) ||
+           (len > 15 && w_ieq_n(v, 15, "conic-gradient("));
+}
+
 static int radial_shape(we_node_t *n, const char *a, int l, int *shape) {
     static const char *const ext[4] = { "farthest-corner", "closest-side", "farthest-side", "closest-corner" };
     int i = 0, any = 0, form = -1, extent = -1, sizes = 0, j;
@@ -2590,14 +2601,15 @@ static int gradient_to(const char *a, int l, int *dir, int *corner) {
 /* Lot 94: the conic-gradient argument "[from ANGLE] [at POSITION]": 1 when
  * the first argument is one, 0 for a colour stop, -1 when refused. */
 static int conic_shape(const char *a, int l, int16_t at[2], uint8_t *at_pct, int *from) {
-    int t[4], tl[4], c = tokens(a, l, t, tl), k = 0, degrees;
+    int t[4], tl[4], c = tokens(a, l, t, tl), k = 0, centi;
     at[0] = at[1] = 50;
     *at_pct = 3;
     *from = 0;
     if (c < 1 || (!value_is(a + t[0], tl[0], "from") && !value_is(a + t[0], tl[0], "at"))) return 0;
     if (value_is(a + t[0], tl[0], "from")) {
-        if (c < 2 || tf_angle(a + t[1], tl[1], &degrees)) return -1;
-        *from = (degrees % 360 + 360) % 360;
+        /* Lot 96: in 1/100 degree (Lot 94: whole degrees) */
+        if (c < 2 || tf_angle_c(a + t[1], tl[1], &centi)) return -1;
+        *from = (centi % 36000 + 36000) % 36000;
         k = 2;
         if (c == 2) return 1;
         if (!value_is(a + t[2], tl[2], "at")) return -1;
@@ -2608,10 +2620,12 @@ static int conic_shape(const char *a, int l, int16_t at[2], uint8_t *at_pct, int
 
 static int parse_gradient(we_node_t *n, const char *v, int len) {
     int start[WE_GRAD_STOPS + 1], length[WE_GRAD_STOPS + 1], count, k, first = 0, dir = WE_GRAD_BOTTOM;
-    int pos[WE_GRAD_STOPS], last, radial, conic, shape = 0, pl = 16, corner = 0, angle = 0;
+    int pos[WE_GRAD_STOPS], last, radial, conic, shape = 0, pl = 16, corner = 0, angle = 0, repeat = 0;
     uint32_t color[WE_GRAD_STOPS];
     int16_t conic_at[2];
     uint8_t conic_pct = 0;
+    /* Lot 96: repeating-linear/radial/conic-gradient( */
+    if (len > 10 && w_ieq_n(v, 10, "repeating-")) { repeat = 1; v += 10; len -= 10; }
     if (len < 17 || v[len - 1] != ')') return -1;
     radial = w_ieq_n(v, 16, "radial-gradient(");
     conic = w_ieq_n(v, 15, "conic-gradient(");
@@ -2629,33 +2643,40 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
         if (first < 0) return -1;
         dir = WE_GRAD_CONIC;
     } else {
+        static const uint8_t by_quarter[4] = { WE_GRAD_TOP, WE_GRAD_RIGHT, WE_GRAD_BOTTOM, WE_GRAD_LEFT };
         const char *a = v + 16 + start[0];
         int l = length[0];
-        int degrees;
+        int centi;
         if (l > 3 && w_ieq_n(a, 3, "to ")) {
             if (gradient_to(a + 3, l - 3, &dir, &corner)) return -1;
             first = 1;
-        } else if (tf_angle(a, l, &degrees) == 0) {
-            static const uint8_t by_quarter[4] = { WE_GRAD_TOP, WE_GRAD_RIGHT, WE_GRAD_BOTTOM, WE_GRAD_LEFT };
-            if (degrees % 90) {
-                /* Lot 94: any other whole-degree angle, painted in cells */
-                dir = WE_GRAD_ANGLE;
-                angle = (degrees % 360 + 360) % 360;
-            } else dir = by_quarter[((degrees / 90 % 4) + 4) % 4];
+        } else if (tf_angle_c(a, l, &centi) == 0) {
+            /* Lot 96: 1/100 degree (Lot 94: whole degrees); a quarter
+             * turn keeps its bands, any other angle is painted in cells */
+            angle = (centi % 36000 + 36000) % 36000;
+            dir = angle % 9000 ? WE_GRAD_ANGLE : by_quarter[angle / 9000];
+            if (dir != WE_GRAD_ANGLE) angle = 0;    /* a side keeps angle 0 */
             first = 1;
         } else if (l > 0 && ((a[0] >= '0' && a[0] <= '9') || a[0] == '-')) return -1;
+        if (repeat && dir != WE_GRAD_ANGLE) {
+            /* Lot 96: a repeating linear gradient is painted in cells
+             * along its side's angle */
+            for (k = 0; k < 4 && by_quarter[k] != dir; k++) {}
+            angle = k * 9000;
+            dir = WE_GRAD_ANGLE;
+        }
     }
     if (count - first < 2 || count - first > WE_GRAD_STOPS) return -1;
     for (k = 0; k < count - first; k++) {
         const char *a = v + pl + start[first + k];
-        int l = length[first + k], t[4], tl[4], c = tokens(a, l, t, tl), tenths, degrees;
+        int l = length[first + k], t[4], tl[4], c = tokens(a, l, t, tl), tenths, centi;
         pos[k] = -1;
         if (c < 1 || c > 2 || parse_color(a + t[0], tl[0], &color[k])) return -1;
-        if (c == 2 && conic && tf_angle(a + t[1], tl[1], &degrees) == 0) {
-            /* Lot 94: a conic stop at an angle, 0..360 whole degrees, in
-             * 1/10000 of a turn rounded half up */
-            if (degrees < 0 || degrees > 360) return -1;
-            pos[k] = (degrees * 500 + 9) / 18;
+        if (c == 2 && conic && tf_angle_c(a + t[1], tl[1], &centi) == 0) {
+            /* Lot 94: a conic stop at an angle, 0..360 degrees, in 1/10000
+             * of a turn rounded half up (Lot 96: in 1/100 degree) */
+            if (centi < 0 || centi > 36000) return -1;
+            pos[k] = (centi * 5 + 9) / 18;
         } else if (c == 2) {
             if (spacing_percent(a + t[1], tl[1], 1, &tenths) || tenths > 1000) return -1;
             pos[k] = tenths < 0 ? 0 : tenths * 10;
@@ -2674,9 +2695,14 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
         }
         last = k;
     }
+    /* Lot 96: a repeating gradient repeats its first to last stop; a
+     * period of 0 is refused (CSS paints the average colour) */
+    if (repeat && pos[count - 1] <= pos[0]) return -1;
     n->grad_dir = (uint8_t)dir;
     n->grad_shape = (uint8_t)shape;
-    n->grad_angle = (int16_t)angle;
+    n->grad_repeat = (uint8_t)repeat;
+    n->grad_angle = (int16_t)(angle / 100);
+    n->grad_frac = (uint8_t)(angle % 100);
     n->grad_corner = (uint8_t)corner;
     if (conic) { n->grad_at[0] = conic_at[0]; n->grad_at[1] = conic_at[1]; n->grad_at_pct = conic_pct; }
     n->grad_count = (uint8_t)count;
@@ -3248,8 +3274,9 @@ static int tf_scale(const char *v, int len, int16_t *out) {
     return 0;
 }
 
-/* An angle in whole degrees, rounded half away from zero. */
-static int tf_angle(const char *v, int len, int *degrees) {
+/* Lot 96: an angle in 1/1000 degree (turn, grad, rad = 57.3deg, deg or
+ * a bare 0); -1 when it is not one or past 2e9 thousandths. */
+static int tf_angle_milli(const char *v, int len, int *out) {
     static const struct { const char *unit; int16_t num, den; } units[] = {
         {"turn", 360, 1}, {"grad", 9, 10}, {"rad", 573, 10}, {"deg", 1, 1}, {0, 0, 0}};
     int milli, percent, k, u = -1;
@@ -3258,12 +3285,32 @@ static int tf_angle(const char *v, int len, int *degrees) {
         if (len > ul && w_ieq_n(v + len - ul, ul, units[k].unit)) { u = k; len -= ul; }
     }
     if (u < 0 && !(len == 1 && v[0] == '0')) return -1;
-    if (v[len - 1] < '0' || v[len - 1] > '9' || color_number(v, len, &milli, &percent) || percent) return -1;
+    /* a last digit: never a percentage */
+    if (v[len - 1] < '0' || v[len - 1] > '9' || color_number(v, len, &milli, &percent)) return -1;
     if (u >= 0) {
         if (milli > 2000000000 / units[u].num || milli < -2000000000 / units[u].num) return -1;
         milli = milli * units[u].num / units[u].den;
     }
+    *out = milli;
+    return 0;
+}
+
+/* An angle in whole degrees, rounded half away from zero. */
+static int tf_angle(const char *v, int len, int *degrees) {
+    int milli;
+    if (tf_angle_milli(v, len, &milli)) return -1;
     *degrees = (milli >= 0 ? milli + 500 : milli - 500) / 1000;
+    return 0;
+}
+
+/* Lot 96: an angle in 1/100 degree: the value in 1/1000 of its unit
+ * (decimals past the third are dropped), times the unit factor (turn 360,
+ * grad 9/10, rad 57.3, truncated toward zero), rounded half away from
+ * zero to 1/100 degree. */
+static int tf_angle_c(const char *v, int len, int *centi) {
+    int milli;
+    if (tf_angle_milli(v, len, &milli)) return -1;
+    *centi = (milli >= 0 ? milli + 5 : milli - 5) / 10;
     return 0;
 }
 
@@ -3585,7 +3632,7 @@ static int shorthand_kind(const char *t, int l) {
     int k;
     if (l > 4 && w_ieq_n(t, 4, "url(")) return 1;
     if (value_is(t, l, "none")) return 1;
-    if (l > 16 && (w_ieq_n(t, 16, "linear-gradient(") || w_ieq_n(t, 16, "radial-gradient(") || w_ieq_n(t, 15, "conic-gradient("))) return 2;
+    if (grad_name(t, l)) return 2;
     for (k = 0; repeats[k]; k++) if (value_is(t, l, repeats[k])) return 3;
     for (k = 0; places[k]; k++) if (value_is(t, l, places[k])) return 4;
     if ((t[0] >= '0' && t[0] <= '9') || t[0] == '-' || t[0] == '.') return 4;
@@ -3672,8 +3719,7 @@ static int background_layers(we_doc_t *d, we_node_t *n, const char *v, int len) 
     layer_scratch.grad_dir = 0; layer_scratch.bgi_len = 0; layer_scratch.bgi_layers = 0;
     for (k = 0; k < c && !bad; k++) {
         const char *item = v + a[k];
-        if (l[k] > 16 && (w_ieq_n(item, 16, "linear-gradient(") || w_ieq_n(item, 16, "radial-gradient(") ||
-                          w_ieq_n(item, 15, "conic-gradient("))) {
+        if (grad_name(item, l[k])) {
             bad = k != c - 1 || parse_gradient(&layer_scratch, item, l[k]);
             continue;
         }
@@ -4997,8 +5043,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     else if (w_eq(prop, "background") && shorthand_layers(v, vl)) {
         if (background_shorthand(d, n, v, vl)) diag(d, "background refused", -1);
     }
-    else if ((w_eq(prop, "background") || w_eq(prop, "background-image")) && vl > 16 &&
-             (w_ieq_n(v, 16, "linear-gradient(") || w_ieq_n(v, 16, "radial-gradient(") || w_ieq_n(v, 15, "conic-gradient("))) {
+    else if ((w_eq(prop, "background") || w_eq(prop, "background-image")) && grad_name(v, vl)) {
         if (w_eq(prop, "background-image") && list_count(v, vl) > 1) {
             if (background_layers(d, n, v, vl)) diag(d, "background image refused", -1);
         } else if (parse_gradient(n, v, vl)) diag(d, "gradient refused", -1);
@@ -7207,7 +7252,7 @@ static int gradient_reserve(we_doc_t *d, int idx, int *count) {
     int first = (int)d->nitems, k, want;
     *count = 0;
     if (!d->nodes[idx].grad_dir) return first;
-    want = d->nodes[idx].grad_dir >= WE_GRAD_ANGLE ? WE_GRAD_CELLS :
+    want = d->nodes[idx].grad_dir >= WE_GRAD_ANGLE || d->nodes[idx].grad_repeat ? WE_GRAD_CELLS :
            d->nodes[idx].grad_dir != WE_GRAD_RADIAL ? WE_GRAD_BANDS :
            radial_translucent(&d->nodes[idx]) ? WE_RADIAL_ALPHA_SLOTS : WE_RADIAL_SLOTS;
     for (k = 0; k < want; k++) {
@@ -7695,17 +7740,12 @@ static void background_box(const we_node_t *n, int box, int bx, int by, int bw, 
  * outside in, each taking the colour at its band's middle radius and cut
  * to the clip box. Lot 64: with a translucent stop the rings must not
  * overlap, so radial_rings() paints each one minus the next inner one. */
-static int radial_rings(we_doc_t *d, int idx, int slot, int count, const int *c, int cx, int cy, int rx, int ry);
-static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o, const int *c) {
-    const we_node_t *n = &d->nodes[idx];
-    static int band[WE_ROUND_BANDS][4];
-    int extent = n->grad_shape >> 1, rx, ry, ring, used = 1, k, far, sx, sy;
-    uint32_t opaque = 0xFFFFFFFFu;
+/* the centre and the radii of a radial gradient in origin box o (Lot 96:
+ * shared by the rings and the repeating cells) */
+static void radial_radii(const we_node_t *n, const int *o, int *pcx, int *pcy, int *prx, int *pry) {
+    int extent = n->grad_shape >> 1, rx, ry, k, far, sx, sy;
     int cx = o[0] + (n->grad_at_pct & 1 ? o[2] * n->grad_at[0] / 100 : n->grad_at[0]);
     int cy = o[1] + (n->grad_at_pct & 2 ? o[3] * n->grad_at[1] / 100 : n->grad_at[1]);
-    we_shape_t clip, ring_shape;
-    we_radii_t zero, r;
-    if (o[2] <= 0 || o[3] <= 0 || c[2] <= 0 || c[3] <= 0) return;
     /* side distances from the centre: the nearer (far 0) or farther pair */
     far = extent == WE_EXT_FARTHEST_SIDE || extent == WE_EXT_FARTHEST_CORNER;
     sx = cx - o[0]; k = o[0] + o[2] - cx;
@@ -7729,6 +7769,19 @@ static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o,
     }
     if (rx < 1) rx = 1;
     if (ry < 1) ry = 1;
+    *pcx = cx; *pcy = cy; *prx = rx; *pry = ry;
+}
+
+static int radial_rings(we_doc_t *d, int idx, int slot, int count, const int *c, int cx, int cy, int rx, int ry);
+static void radial_fill(we_doc_t *d, int idx, int slot, int count, const int *o, const int *c) {
+    const we_node_t *n = &d->nodes[idx];
+    static int band[WE_ROUND_BANDS][4];
+    int rx, ry, ring, used = 1, k, cx, cy;
+    uint32_t opaque = 0xFFFFFFFFu;
+    we_shape_t clip, ring_shape;
+    we_radii_t zero, r;
+    if (o[2] <= 0 || o[3] <= 0 || c[2] <= 0 || c[3] <= 0) return;
+    radial_radii(n, o, &cx, &cy, &rx, &ry);
     if (radial_translucent(n)) {
         if (radial_rings(d, idx, slot, count, c, cx, cy, rx, ry)) return;
         diag(d, "radial alpha painted opaque", idx);     /* the nested rings, without their alpha */
@@ -7811,13 +7864,48 @@ static const int32_t grad_sin[91] = {
     57319, 57865, 58393, 58903, 59396, 59870, 60326, 60764, 61183, 61584, 61966, 62328, 62672, 62997, 63303,
     63589, 63856, 64104, 64332, 64540, 64729, 64898, 65048, 65177, 65287, 65376, 65446, 65496, 65526, 65536 };
 
-/* sin of d degrees (d >= 0: an angle 0..359, or that plus 90) in 1/65536 */
-static int32_t grad_sin_deg(int d) {
-    d %= 360;
-    if (d <= 90) return grad_sin[d];
-    if (d <= 180) return grad_sin[180 - d];
-    if (d <= 270) return -grad_sin[d - 180];
-    return -grad_sin[360 - d];
+/* Lot 96: sin of 0..9000 hundredths of a degree in 1/65536: the table
+ * entry, or between two entries the lower one plus (higher - lower) *
+ * hundredths / 100 rounded half up (the table rises) */
+static int32_t grad_sin_q(int c) {
+    int i = c / 100, f = c % 100;
+    if (!f) return grad_sin[i];
+    return grad_sin[i] + ((grad_sin[i + 1] - grad_sin[i]) * f + 50) / 100;
+}
+
+/* sin of c hundredths of a degree (c >= 0: an angle 0..35999, or that
+ * plus 9000) in 1/65536 (Lot 94: whole degrees) */
+static int32_t grad_sin_deg(int c) {
+    c %= 36000;
+    if (c <= 9000) return grad_sin_q(c);
+    if (c <= 18000) return grad_sin_q(18000 - c);
+    if (c <= 27000) return -grad_sin_q(c - 18000);
+    return -grad_sin_q(36000 - c);
+}
+
+/* Lot 96: integer square root of a 64-bit value, rounded down */
+static uint64_t grad_isqrt64(uint64_t n) {
+    uint64_t r = 0, bit = (uint64_t)1 << 62;
+    while (bit > n) bit >>= 2;
+    while (bit) {
+        if (n >= r + bit) { n -= r + bit; r = (r >> 1) + bit; }
+        else r >>= 1;
+        bit >>= 2;
+    }
+    return r;
+}
+
+/* Lot 96: 1 when a doubled offset is past WE_GRAD_OFFSET_MAX */
+static int grad_far(int v) { return v > WE_GRAD_OFFSET_MAX || v < -WE_GRAD_OFFSET_MAX; }
+
+/* Lot 96: a repeating gradient's position p mapped into its first to
+ * last stop: pos0 + (p - pos0) modulo the period (0 <= result < period) */
+static int grad_repeat_p(const we_node_t *n, int p) {
+    int p0 = n->grad_pos[0], period = n->grad_pos[n->grad_count - 1] - p0, r;
+    if (!n->grad_repeat) return p;              /* parse_gradient refuses a period of 0 */
+    r = (p - p0) % period;
+    if (r < 0) r += period;
+    return p0 + r;
 }
 
 /* n / d for d > 0 by shift and subtract (no 64-bit division helper in
@@ -7883,7 +7971,8 @@ static void cells_fill(we_doc_t *d, int idx, int slot, int count, const int *o, 
     int ax0 = o[0] > c[0] ? o[0] : c[0], ay0 = o[1] > c[1] ? o[1] : c[1];
     int ax1 = o[0] + o[2] < c[0] + c[2] ? o[0] + o[2] : c[0] + c[2];
     int ay1 = o[1] + o[3] < c[1] + c[3] ? o[1] + o[3] : c[1] + c[3];
-    int aw = ax1 - ax0, ah = ay1 - ay0, rows, cols, i, j, k = 0;
+    int aw = ax1 - ax0, ah = ay1 - ay0, rows, cols, i, j, k = 0, rx = 1, ry = 1;
+    int angle = n->grad_angle * 100 + n->grad_frac;
     int64_t sn = 0, cs = 0, den = 0;
     int cx2 = 2 * o[0] + o[2], cy2 = 2 * o[1] + o[3];
     if (aw <= 0 || ah <= 0) return;
@@ -7892,11 +7981,22 @@ static void cells_fill(we_doc_t *d, int idx, int slot, int count, const int *o, 
             sn = (n->grad_corner - 1) & 1 ? -o[3] : o[3];
             cs = (n->grad_corner - 1) & 2 ? -o[2] : o[2];
         } else {
-            sn = grad_sin_deg(n->grad_angle);
-            cs = grad_sin_deg(n->grad_angle + 90);
+            sn = grad_sin_deg(angle);
+            cs = grad_sin_deg(angle + 9000);
         }
         den = 2 * ((int64_t)o[2] * (sn < 0 ? -sn : sn) + (int64_t)o[3] * (cs < 0 ? -cs : cs));
         if (den <= 0) return;
+    } else if (n->grad_dir == WE_GRAD_RADIAL) {
+        /* Lot 96: a repeating radial gradient, its radii as the rings' */
+        int cx, cy;
+        radial_radii(n, o, &cx, &cy, &rx, &ry);
+        cx2 = 2 * cx; cy2 = 2 * cy;
+        /* the doubled cell centres lie in [2 ax0, 2 ax1] x [2 ay0, 2 ay1] */
+        if (rx > WE_GRAD_RADIUS_MAX || ry > WE_GRAD_RADIUS_MAX || grad_far(2 * ax0 - cx2) || grad_far(2 * ax1 - cx2) ||
+            grad_far(2 * ay0 - cy2) || grad_far(2 * ay1 - cy2)) {
+            diag(d, "repeating gradient too large", idx);
+            return;
+        }
     } else {
         cx2 = 2 * (o[0] + (n->grad_at_pct & 1 ? o[2] * n->grad_at[0] / 100 : n->grad_at[0]));
         cy2 = 2 * (o[1] + (n->grad_at_pct & 2 ? o[3] * n->grad_at[1] / 100 : n->grad_at[1]));
@@ -7907,6 +8007,13 @@ static void cells_fill(we_doc_t *d, int idx, int slot, int count, const int *o, 
     if (rows > WE_GRAD_CELLS) rows = WE_GRAD_CELLS;
     cols = WE_GRAD_CELLS / rows;
     if (cols > aw) cols = aw;
+    if (n->grad_dir == WE_GRAD_ANGLE && !n->grad_corner && angle % 9000 == 0) {
+        /* Lot 96: only a repeating gradient keeps a quarter turn as an
+         * angle (no corner): along an axis, the 32 cells in
+         * one column (top, bottom) or one row (left, right) */
+        if (angle % 18000 == 0) { cols = 1; rows = ah < WE_GRAD_CELLS ? ah : WE_GRAD_CELLS; }
+        else { rows = 1; cols = aw < WE_GRAD_CELLS ? aw : WE_GRAD_CELLS; }
+    }
     for (k = 1; k < n->grad_count; k++) if (n->grad_color[k] != n->grad_color[0]) gradient_banded = 1;
     k = 0;
     for (j = 0; j < rows; j++) {
@@ -7920,15 +8027,24 @@ static void cells_fill(we_doc_t *d, int idx, int slot, int count, const int *o, 
                  * the position is 0..10000 */
                 int64_t num = 5000 * den + 10000 * (dx * sn - dy * cs);
                 p = (int)grad_udiv((uint64_t)(2 * num + den), (uint64_t)(2 * den));
+            } else if (n->grad_dir == WE_GRAD_RADIAL) {
+                /* Lot 96: 10000 |(dx / rx, dy / ry)| (doubled offsets) as
+                 * s = isqrt(64 N), N = (dx ry)^2 + (dy rx)^2, then
+                 * p = 10000 s / (8 R) rounded half up, R = 2 rx ry (the
+                 * bounds above keep 64 N below 2^63) */
+                uint64_t ax = (uint64_t)(dx < 0 ? -dx : dx) * (uint64_t)ry, ay = (uint64_t)(dy < 0 ? -dy : dy) * (uint64_t)rx;
+                uint64_t sq = grad_isqrt64((ax * ax + ay * ay) << 6), big = (uint64_t)rx * (uint64_t)ry * 2;
+                p = (int)grad_udiv(10000 * sq + 4 * big, 8 * big);
             } else {
                 /* (turn - from / 360) in 1/(9 * 2^32) of 1/10000, then
-                 * rounded half up to 1/10000 */
-                int64_t t = (int64_t)grad_turn(dx, dy) * 90000 - (int64_t)n->grad_angle * 250 * ((int64_t)1 << 32);
+                 * rounded half up to 1/10000 (Lot 96: from in 1/100
+                 * degree, 250/100 = 5/2) */
+                int64_t t = (int64_t)grad_turn(dx, dy) * 90000 - (int64_t)angle * 5 * ((int64_t)1 << 31);
                 if (t < 0) t += (int64_t)90000 << 32;
                 p = (int)(grad_udiv((uint64_t)t + ((uint64_t)9 << 31), 9) >> 32);
             }
             it->kind = OS_FB_WEB_RECT;
-            it->color = gradient_at(n, p);
+            it->color = gradient_at(n, grad_repeat_p(n, p));
             it->x = (int16_t)x0; it->y = (int16_t)y0;
             it->w = (uint16_t)(x1 - x0); it->h = (uint16_t)(y1 - y0);
         }
@@ -7940,14 +8056,14 @@ static void gradient_fill(we_doc_t *d, int idx, int slot, int count, int bx, int
     int vertical = n->grad_dir == WE_GRAD_BOTTOM || n->grad_dir == WE_GRAD_TOP;
     int o[4], c[4], extent, bands, k;
     if (!n->grad_dir) return;
-    if (n->grad_dir == WE_GRAD_RADIAL) {
+    if (n->grad_dir == WE_GRAD_RADIAL && !n->grad_repeat) {
         background_box(n, n->bg_origin, bx, by, bw, bh, o);
         background_box(n, n->bg_clip, bx, by, bw, bh, c);
         for (k = 1; k < n->grad_count; k++) if (n->grad_color[k] != n->grad_color[0]) gradient_banded = 1;
         if (count > 0) radial_fill(d, idx, slot, count, o, c);
         return;
     }
-    if (n->grad_dir >= WE_GRAD_ANGLE) {
+    if (n->grad_dir >= WE_GRAD_ANGLE || n->grad_repeat) {
         background_box(n, n->bg_origin, bx, by, bw, bh, o);
         background_box(n, n->bg_clip, bx, by, bw, bh, c);
         cells_fill(d, idx, slot, count, o, c);
@@ -8770,13 +8886,24 @@ static void vertical_style(we_doc_t *d, int i, int rl, int forward) {
             else if (forward) { nl = !bottom; nb = left; }
             else { nl = bottom; nb = !left; }
             n->grad_corner = (uint8_t)(1 + nl + 2 * nb);
-        } else if (!rl) n->grad_angle = (int16_t)((630 - n->grad_angle) % 360);
-        else n->grad_angle = (int16_t)((n->grad_angle + (forward ? 270 : 90)) % 360);
+        } else {
+            /* Lot 96: in 1/100 degree */
+            int a = n->grad_angle * 100 + n->grad_frac;
+            a = !rl ? (63000 - a) % 36000 : (a + (forward ? 27000 : 9000)) % 36000;
+            n->grad_angle = (int16_t)(a / 100);
+            n->grad_frac = (uint8_t)(a % 100);
+        }
     } else if (n->grad_dir == WE_GRAD_CONIC && forward) {
         /* the transpose would reverse the sweep and the rl centre needs the
          * physical width: refused (lot 95) */
         n->grad_dir = 0;
         diag(d, "conic refused in vertical flow", i);
+    } else if (n->grad_dir == WE_GRAD_RADIAL && n->grad_repeat && rl) {
+        /* Lot 96: repeating radial cells are rotated with the box, their
+         * rl centre needs the physical width as the conic one: refused
+         * (vertical-lr transposes them and keeps them) */
+        n->grad_dir = 0;
+        diag(d, "repeating radial refused in rl", i);
     }
     if (n->grad_dir == WE_GRAD_RADIAL) {
         swap16(&n->grad_at[0], &n->grad_at[1]);
