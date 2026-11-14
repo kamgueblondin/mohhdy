@@ -7,6 +7,21 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 97 (14 November 2026, base aa74fac, PR 254 merged)
+
+US-031 partial, phase3_complete=false. The reader computes em, rem, ex
+and ch in registered values with the element's font size and animates
+registered custom properties with @keyframes, the animation and
+transition shorthands and @starting-style at a reader clock set by
+"web-css time N" (interpolated numbers, lengths, mixes, angles, lists and
+colours; other values discrete). The engine paints a period of 0 in its
+average colour, gradients along an axis per pixel run and vertical-rl
+cells from the physical left, with a repeating radial centre mirrored
+(no longer refused). A QEMU page (`make qemu-lot97`, CI job
+lot97-reader-engine) checks the painted rectangles and the reader at two
+clock values. US-068/073, US-076, US-080 and US-081 stay partial. US-078
+and US-097 stay simule. See docs/lot97_plan.md.
+
 ### Lot 96 (14 November 2026, base fc0fdc9, PR 253 head)
 
 US-031 partial, phase3_complete=false. The engine keeps gradient angles

@@ -563,8 +563,13 @@ def write_sheet():
             c = M.compute(alts, v, (vw, vh))
             if c is not None:
                 simplified[0] += 1
-                return c
-            return v
+            else:
+                c = v
+            # Lot 97 (converted): an own value with em, rem, ex or ch is
+            # computed again with the element's font size (16px here)
+            if any(u in c for u in ("em", "ex", "ch")):
+                c = M.compute(alts, c, (vw, vh, 16000, 16000)) or c
+            return c
 
         o_b = bind(vals[0], init_b)
         i_inh = o_b if inherits else init_b

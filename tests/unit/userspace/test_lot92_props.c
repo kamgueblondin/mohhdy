@@ -171,7 +171,7 @@ static void test_sheet_computed_and_inherited(void) {
     TEST_ASSERT_EQUAL_STRING("36px", nv("o", "--g"));
     TEST_ASSERT_EQUAL_STRING("36px", nv("i", "--g"));                    /* inherits the computed value */
     TEST_ASSERT_EQUAL_STRING("calc(36px * 2)", nv("i", "--h"));          /* not registered: text */
-    TEST_ASSERT_EQUAL_STRING("calc(1em * 2)", nv("j", "--g"));           /* relative: kept */
+    TEST_ASSERT_EQUAL_STRING("32px", nv("j", "--g"));                    /* Lot 97 (converted): was kept as calc(1em * 2) */
     TEST_ASSERT_EQUAL_STRING("24px", nv("q", "--g"));                    /* the initial value, computed */
     wf_site_props_text(&g_d, g_t, (int)sizeof(g_t));
     TEST_ASSERT_NOT_NULL(strstr(g_t, " simplified 1"));

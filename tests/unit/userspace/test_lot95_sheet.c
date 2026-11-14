@@ -54,7 +54,7 @@ static void test_l95_sheet_2(void) {
 
 static void test_l95_sheet_3(void) {
     prep("@property --p { syntax: '<length>#'; inherits: true; initial-value: 1px } #o { --p: 348rem,calc(+96px / 96 - (254.292pt + +90in * 45.3)) } #i { --p: calc(-1500cm * -90 + 175.049vmin - +160.6326em * -1000) , 360vw }", 800, 600);
-    TEST_ASSERT_EQUAL_STRING("348rem, calc(+96px / 96 - (254.292pt + +90in * 45.3))", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("5568px, calc(+96px / 96 - (254.292pt + +90in * 45.3))", nv("o"));
     TEST_ASSERT_EQUAL_STRING("calc(-1500cm * -90 + 175.049vmin - +160.6326em * -1000), 2880px", nv("i"));
     TEST_ASSERT_EQUAL_STRING("1px", nv("q"));
     TEST_ASSERT_EQUAL_STRING(" simplified 2", tail());
@@ -118,8 +118,8 @@ static void test_l95_sheet_10(void) {
 
 static void test_l95_sheet_11(void) {
     prep("@property --p { syntax: '<length>'; inherits: true; initial-value: 1px } #o { --p: calc(354in + (0.7271rem - 2pc) + 2cm) }", 640, 480);
-    TEST_ASSERT_EQUAL_STRING("calc(354in + (0.7271rem - 2pc) + 2cm)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("calc(354in + (0.7271rem - 2pc) + 2cm)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("34039.2242px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("34039.2242px", nv("i"));
     TEST_ASSERT_EQUAL_STRING("1px", nv("q"));
     TEST_ASSERT_EQUAL_STRING("", tail());
 }
@@ -430,7 +430,7 @@ static void test_l95_sheet_49(void) {
 
 static void test_l95_sheet_50(void) {
     prep("@property --p { syntax: '<length-percentage>'; inherits: false; initial-value: +257.489vh } #o { --p: calc(-195pc + 114em + 117%) }", 1280, 720);
-    TEST_ASSERT_EQUAL_STRING("calc(-195pc + 114em + 117%)", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("calc(117% - 1296px)", nv("o"));
     TEST_ASSERT_EQUAL_STRING("1853.9208px", nv("i"));
     TEST_ASSERT_EQUAL_STRING("1853.9208px", nv("q"));
     TEST_ASSERT_EQUAL_STRING("", tail());
@@ -615,7 +615,7 @@ static void test_l95_sheet_72(void) {
 static void test_l95_sheet_73(void) {
     prep("@property --p { syntax: '<length>#'; inherits: true; initial-value: 1px } #o { --p: calc(+3.8vmin + 3vmax * -500) , 100000.83533pc } #i { --p: calc(+257rem / 65 + 96.77cm * 10), calc(69.5809vw), -228.6pc, 131.0576pt }", 640, 480);
     TEST_ASSERT_EQUAL_STRING("-9581.76px, 100000.83533pc", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("calc(+257rem / 65 + 96.77cm * 10), 445.3178px, -3657.6px, 174.7435px", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("36637.7495px, 445.3178px, -3657.6px, 174.7435px", nv("i"));
     TEST_ASSERT_EQUAL_STRING("1px", nv("q"));
     TEST_ASSERT_EQUAL_STRING(" simplified 2", tail());
 }
@@ -719,7 +719,7 @@ static void test_l95_sheet_85(void) {
 static void test_l95_sheet_86(void) {
     prep("@property --p { syntax: '<length>+'; inherits: true; initial-value: 1px } #o { --p: calc(96.82978in / +90) } #i { --p: calc(-191.04003rem + 132pc * 10) }", 800, 600);
     TEST_ASSERT_EQUAL_STRING("103.2851px", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("calc(-191.04003rem + 132pc * 10)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("18063.36px", nv("i"));
     TEST_ASSERT_EQUAL_STRING("1px", nv("q"));
     TEST_ASSERT_EQUAL_STRING(" simplified 1", tail());
 }
@@ -998,8 +998,8 @@ static void test_l95_sheet_120(void) {
 
 static void test_l95_sheet_121(void) {
     prep("@property --p { syntax: '<length-percentage>#'; inherits: false; initial-value: 1% } #o { --p: calc(12em + -3% * -0), 100cm } #i { --p: calc(309% / -180 - +126px), calc(-23cm * 1 + 320.0004% * 101.16530 - +310rem / +360.54387) }", 375, 812);
-    TEST_ASSERT_EQUAL_STRING("calc(12em + -3% * -0), 3779.5276px", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("calc(-1.7167% - 126px), calc(-23cm * 1 + 320.0004% * 101.16530 - +310rem / +360.54387)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("calc(0% + 192px), 3779.5276px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("calc(-1.7167% - 126px), calc(32372.9365% - 883.0483px)", nv("i"));
     TEST_ASSERT_EQUAL_STRING("1%", nv("q"));
     TEST_ASSERT_EQUAL_STRING(" simplified 2", tail());
 }
@@ -1030,8 +1030,8 @@ static void test_l95_sheet_124(void) {
 
 static void test_l95_sheet_125(void) {
     prep("@property --p { syntax: '<transform-function>'; inherits: true; initial-value: scale(1) } #o { --p: translatez(calc(+12.3987em - 254.2172vmin / -337 + 263vmin)) }", 800, 600);
-    TEST_ASSERT_EQUAL_STRING("translatez(calc(+12.3987em - 254.2172vmin / -337 + 263vmin))", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("translatez(calc(+12.3987em - 254.2172vmin / -337 + 263vmin))", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("translatez(1780.9053px)", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("translatez(1780.9053px)", nv("i"));
     TEST_ASSERT_EQUAL_STRING("scale(1)", nv("q"));
     TEST_ASSERT_EQUAL_STRING("", tail());
 }
@@ -1127,7 +1127,7 @@ static void test_l95_sheet_136(void) {
 static void test_l95_sheet_137(void) {
     prep("@property --p { syntax: '<length-percentage>#'; inherits: false; initial-value: -500%, +90vmax, 200%, 90% } #o { --p: -180%,-12.2277vmax } #i { --p: 120.9130q, calc(-364pt + 10%), 100%, 1000.9238em }", 375, 812);
     TEST_ASSERT_EQUAL_STRING("-180%, -99.2889px", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("114.2485px, calc(10% - 485.3333px), 100%, 1000.9238em", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("114.2485px, calc(10% - 485.3333px), 100%, 16014.7808px", nv("i"));
     TEST_ASSERT_EQUAL_STRING("-500%, 730.8px, 200%, 90%", nv("q"));
     TEST_ASSERT_EQUAL_STRING(" simplified 2", tail());
 }
@@ -1262,8 +1262,8 @@ static void test_l95_sheet_153(void) {
 
 static void test_l95_sheet_154(void) {
     prep("@property --p { syntax: '<length>'; inherits: true; initial-value: 1px } #o { --p: 52.664rem } #i { --p: 500em }", 1000, 1000);
-    TEST_ASSERT_EQUAL_STRING("52.664rem", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("500em", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("842.624px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("8000px", nv("i"));
     TEST_ASSERT_EQUAL_STRING("1px", nv("q"));
     TEST_ASSERT_EQUAL_STRING("", tail());
 }

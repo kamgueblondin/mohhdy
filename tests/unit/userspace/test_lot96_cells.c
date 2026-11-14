@@ -2170,58 +2170,58 @@ static void test_l96_cells_194(void) {
 }
 
 static void test_l96_cells_195(void) {
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:130px;height:84px;padding:0px 11px 8px 11px;background-origin:padding-box;background-clip:padding-box;background-image:repeaTINg-CONIC-GRAdieNt(red 100%, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:76px;height:2px;background-image:repeating-linear-gradient(red 100%, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:118px;height:22px;padding:10px;background-origin:content-box;background-clip:padding-box;background-image:REPEATING-RADIAL-GRADIENT(red 100%, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:2px;height:3px;padding:2px 1px 3px 7px;background-origin:padding-box;background-image:rEPeatINg-COnIC-gRADIent(red 1%, lime 0%, blue 1%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 152 92 00408040",
+        cells("width:130px;height:84px;padding:0px 11px 8px 11px;background-origin:padding-box;background-clip:padding-box;background-image:repeating-conic-gradient(red 23%, lime 23%, blue 21%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 3 47 00800080",
+        cells("width:3px;height:47px;background-origin:content-box;background-clip:padding-box;background-image:REPEAtING-lIneAr-GrADiENt(red 77%, blue 77%)"));
+    TEST_ASSERT_EQUAL_STRING("10 10 118 22 00408040",
+        cells("width:118px;height:22px;padding:10px;background-origin:content-box;background-clip:padding-box;background-image:repeating-radial-gradient(red 7%, lime 4%, blue 1%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 18 19 00408040",
+        cells("width:2px;height:3px;padding:8px;background-origin:padding-box;background-image:repeating-conic-gradient(red 17%, lime 16%, blue 4%)"));
 }
 
 static void test_l96_cells_196(void) {
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:1px;height:87px;padding:10px 8px 10px 11px;background-origin:padding-box;background-clip:content-box;background-image:RepeaTING-lINeaR-grAdIenT(red 100%, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:87px;height:55px;padding:5px;background-clip:padding-box;background-image:REPEATING-LINEAR-GRADIENT(red 100%, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:4px;height:7px;padding:7px;background-origin:content-box;background-image:repeating-radial-gradient(red 42%, lime 24%, blue 37%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:6px;height:22px;padding:10px 10px 4px 0px;background-origin:content-box;background-clip:padding-box;background-image:repeating-conic-gradient(red 100%, blue)"));
+    TEST_ASSERT_EQUAL_STRING("6 7 190 5 00408040",
+        cells("width:190px;height:5px;padding:7px 11px 9px 6px;background-origin:content-box;background-clip:content-box;background-image:REpEATING-COnic-gradIeNt(red 45%, lime 34%, blue 7%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 161 40 00408040",
+        cells("width:155px;height:34px;padding:3px;background-image:repeating-conic-gradient(red 52%, lime 16%, blue 27%)"));
+    TEST_ASSERT_EQUAL_STRING("7 7 117 14 00408040",
+        cells("width:117px;height:14px;padding:7px;background-origin:border-box;background-clip:content-box;background-image:repeating-linear-gradient(red 2%, lime 1%, blue 2%)"));
+    TEST_ASSERT_EQUAL_STRING("12 7 8 107 00408040",
+        cells("width:8px;height:107px;padding:7px 5px 7px 12px;background-origin:content-box;background-clip:content-box;background-image:repeating-radial-gradient(red 43%, lime 26%, blue 1%)"));
 }
 
 static void test_l96_cells_197(void) {
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:3px;height:7px;padding:5px 12px 3px 0px;background-origin:content-box;background-clip:padding-box;background-image:REpeaTinG-lINeaR-graDIEnT(red 100%, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:5px;height:1px;padding:7px;background-clip:content-box;background-image:rEPEaTInG-cONIC-gRAdieNt(red 75%, lime 36%, blue 46%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:3px;height:56px;background-origin:content-box;background-clip:padding-box;background-image:repeating-radial-gradient(red 100%, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:1px;height:82px;padding:1px;background-clip:padding-box;background-image:repeating-linear-gradient(red 96%, lime 4%, blue 28%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 3 39 00800080",
+        cells("width:3px;height:39px;background-clip:content-box;background-image:RePEatinG-coNIc-GRaDIENT(red 89%, blue 89%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 7 7 00800080",
+        cells("width:7px;height:7px;background-origin:content-box;background-clip:padding-box;background-image:repeating-linear-gradient(red 31%, blue 31%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 107 93 00800080",
+        cells("width:107px;height:93px;background-origin:border-box;background-image:REPEATING-CONIC-GRADIENT(red 41%, blue 41%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 103 15 00800080",
+        cells("width:94px;height:4px;padding:4px 1px 7px 8px;background-origin:border-box;background-clip:padding-box;background-image:repeating-linear-gradient(red 100%, blue)"));
 }
 
 static void test_l96_cells_198(void) {
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:22px;height:76px;background-origin:content-box;background-clip:content-box;background-image:REPEATING-CONIC-GRADIENT(red 100%, blue)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:66px;height:30px;padding:3px 0px 5px 4px;background-origin:border-box;background-clip:content-box;background-image:REPEATING-LINEAR-GRADIENT(red 33%, blue 33%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:182px;height:7px;padding:4px 1px 8px 7px;background-origin:content-box;background-clip:content-box;background-image:repeating-conic-gradient(red 24%, blue 24%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:2px;height:108px;background-origin:border-box;background-clip:padding-box;background-image:rEpEAtinG-RaDIaL-grADient(red 3%, lime 2%, blue 2%)"));
+    TEST_ASSERT_EQUAL_STRING("7 7 5 1 00800080",
+        cells("width:5px;height:1px;padding:7px;background-clip:content-box;background-image:REPEATING-CONIC-GRADIENT(red 100%, blue)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 58 32 00408040",
+        cells("width:34px;height:8px;padding:12px;background-origin:padding-box;background-clip:border-box;background-image:repeating-radial-gradient(red 56%, lime 2%, blue 51%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 9 18 00800080",
+        cells("width:6px;height:11px;padding:5px 2px 2px 1px;background-clip:padding-box;background-image:REPEATING-RADIAL-GRADIENT(red 100%, blue)"));
+    TEST_ASSERT_EQUAL_STRING("11 11 115 1 00800080",
+        cells("width:115px;height:1px;padding:11px;background-origin:padding-box;background-clip:content-box;background-image:repeating-linear-gradient(red 25%, blue 25%)"));
 }
 
 static void test_l96_cells_199(void) {
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:195px;height:50px;padding:10px 6px 3px 11px;background-origin:border-box;background-clip:padding-box;background-image:rEPeatiNg-RAdiAL-gradiEnT(red 83%, blue 83%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:85px;height:1px;padding:4px 0px 11px 5px;background-origin:content-box;background-image:REpEaTinG-COnic-graDIEnt(red 26%, blue 26%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:4px;height:53px;background-origin:border-box;background-clip:content-box;background-image:REPEATING-LINEAR-GRADIENT(red 31%, lime 31%, blue 31%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED",
-        cells("width:117px;height:75px;padding:12px 4px 12px 12px;background-origin:content-box;background-clip:content-box;background-image:rEPeAting-CONIC-GrADiENT(red 0%, lime 0%, blue 0%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 1 41 00408040",
+        cells("width:1px;height:41px;background-origin:content-box;background-clip:padding-box;background-image:repeating-radial-gradient(red 39%, lime 2%, blue 0%)"));
+    TEST_ASSERT_EQUAL_STRING("4 3 66 30 00800080",
+        cells("width:66px;height:30px;padding:3px 0px 5px 4px;background-origin:border-box;background-clip:content-box;background-image:repeating-linear-gradient(red 66%, blue 66%)"));
+    TEST_ASSERT_EQUAL_STRING("7 4 30 7 00800080",
+        cells("width:30px;height:7px;padding:4px 1px 8px 7px;background-origin:content-box;background-clip:content-box;background-image:REPEATING-CONIC-GRADIENT(red 50%, blue 50%)"));
+    TEST_ASSERT_EQUAL_STRING("0 0 2 108 00408040",
+        cells("width:2px;height:108px;background-origin:border-box;background-clip:padding-box;background-image:REPEATING-RADIAL-GRADIENT(red 79%, lime 70%, blue 20%)"));
 }
 
 int main(void) {

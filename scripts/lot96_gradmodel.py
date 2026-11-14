@@ -19,7 +19,8 @@ Written from the rules in docs/lot96_plan.md, not from the C sources:
 * a conic stop "Ndeg" may carry two decimals; its position is round half up
   of N * 10000 / 360;
 * a repeating gradient repeats its first to last stop: a position p maps to
-  p0 + ((p - p0) mod (pN - p0)); a period of 0 is refused;
+  p0 + ((p - p0) mod (pN - p0)); a period of 0 is refused (Lot 97,
+  converted: taken, see lot97_gradmodel.py);
 * repeating linear gradients are painted in cells; one along an axis (a
   side, or 0/90/180/270deg) uses min(h, 32) rows of one column (top,
   bottom) or min(w, 32) columns of one row (left, right); any other one the
@@ -325,11 +326,8 @@ def gradient_ok(s):
         norm[0] = " ".join(["from", centi_text(angle_centi(w[1]))] + w[2:])
     if len(("repeating-" if repeat else "") + kind + "-gradient(" + ", ".join(norm) + ")") > 127:
         return 0
-    if repeat:
-        p0 = pos[0] or 0
-        top = max([p0] + [p for p in pos[1:] if p is not None] + ([10000] if pos[-1] is None else []))
-        if top <= p0:
-            return 0
+    # Lot 97 (converted): a repeating gradient with a period of 0 is taken
+    # (the engine paints its average colour; Lot 96 refused it)
     return 1
 
 

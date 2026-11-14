@@ -70,6 +70,10 @@ int wf_html_sitecss_scope(char *out, int cap);
 int wf_html_sitecss_vars(char *out, int cap);
 /* Lot 90: "registered N rejected R computed C invalid I unset U initial J" */
 int wf_html_sitecss_props(char *out, int cap);
+/* Lot 97: "keyframes K animated A transitioned T font F at Nms" of the
+ * last page (0 when it has none), and the reader clock for the next one */
+int wf_html_sitecss_anim(char *out, int cap);
+void wf_html_set_csstime(int ms);
 /* Plain text of a page for the console (tags removed, blocks on new
  * lines). Lot 71: every character reference decoded and the text written
  * as UTF-8 (the console decodes UTF-8), Latin-1 pages converted. */

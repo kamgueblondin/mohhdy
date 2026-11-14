@@ -82,8 +82,13 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       units, a list, a mix, a transform list computed
   /lot96/grad.html    Lot 96: repeating gradients, radians written to 1/100
                       degree (a radian conic "from"), a conic stop with
-                      decimals, a period of 0 refused, a registered
-                      <image> whose stops the reader refuses
+                      decimals, a period of 0 (Lot 97: passed on), a
+                      registered <image> with a period of 0
+  /lot97/anim.html    Lot 97: @keyframes and a transition of registered
+                      properties at the reader clock (web-css time N), a
+                      registered length in em inherited as a length, an
+                      !important value kept, @starting-style without a
+                      custom property, a dropped @keyframes name
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -406,9 +411,9 @@ LOT95_PAGES = {
 # Lot 96: reader page (tests/scripts/test_qemu_lot96.py)
 LOT96_PAGES = {
     # repeating gradients (1rad written as 57.3deg, a radian conic "from",
-    # a 45.5deg stop), a period of 0 refused (the colour stays), a
-    # registered <image> whose value the reader refuses (its initial value
-    # is drawn), a conic gradient with stops in hundredths of a degree
+    # a 45.5deg stop), a period of 0 (Lot 97: passed on with the colour;
+    # Lot 96 refused it), a registered <image> with a period of 0 (Lot 97:
+    # its own value), a conic gradient with stops in hundredths of a degree
     "/lot96/grad.html": (
         "<!doctype html><html><head><title>Lot 96 gradients</title><style>"
         "@property --i96 { syntax: '<image>'; inherits: false; initial-value: linear-gradient(#ff0000, #0000ff) }\n"
@@ -426,6 +431,34 @@ LOT96_PAGES = {
         "<div id=\"img96\"><p>imgkeep96</p></div>"
         "<div id=\"deg96\"><p>degkeep96</p></div>"
         "<p>fin96</p></body></html>"),
+}
+
+
+# Lot 97: reader page (tests/scripts/test_qemu_lot97.py); the guest sets
+# the reader clock first (web-css time N)
+LOT97_PAGES = {
+    "/lot97/anim.html": (
+        "<!doctype html><html><head><title>Lot 97 animations</title><style>"
+        "@property --c97 { syntax: '<color>'; inherits: true; initial-value: black }\n"
+        "@property --w97 { syntax: '<length>'; inherits: true; initial-value: 0px }\n"
+        "@property --t97 { syntax: '<color>'; inherits: false; initial-value: black }\n"
+        "@keyframes k97 { from { --c97: rgb(0, 0, 0) } to { --c97: rgb(200, 100, 0) } }\n"
+        "@keyframes 'q97' { from { --c97: rgb(0, 0, 0) } to { --c97: rgb(0, 200, 0) } }\n"
+        "@keyframes a.b { to { --c97: red } }\n"
+        "#a97 { color: var(--c97); animation: k97 1000ms linear }\n"
+        "#q97 { color: var(--c97); animation: q97 1000ms steps(2) }\n"
+        "#i97 { --c97: rgb(1, 2, 3) !important; color: var(--c97); animation: k97 1000ms linear }\n"
+        "#f97 { font-size: 20px; --w97: 2em } #f97 p { font-size: 10px } #f97 span { font-size: var(--w97) }\n"
+        "#t97 { --t97: rgb(0, 0, 255); background-color: var(--t97); transition: --t97 1000ms linear }\n"
+        "@starting-style { #t97 { --t97: rgb(0, 0, 55) } #s97 { color: #ff0000 } }\n"
+        "</style></head><body><h1>Animations 97</h1>"
+        "<div id=\"a97\"><p>akeep97</p></div>"
+        "<div id=\"q97\"><p>qkeep97</p></div>"
+        "<div id=\"i97\"><p>ikeep97</p></div>"
+        "<div id=\"f97\"><p>fkeep97 <span id=\"sp97\">spkeep97</span></p></div>"
+        "<div id=\"t97\"><p>tkeep97</p></div>"
+        "<div id=\"s97\"><p>skeep97</p></div>"
+        "<p>fin97</p></body></html>"),
 }
 
 
@@ -624,6 +657,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT96_PAGES:
             self._send(200, LOT96_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT97_PAGES:
+            self._send(200, LOT97_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
