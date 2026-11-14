@@ -1673,6 +1673,13 @@ qemu-lot98: $(OS_IMAGE) pack-initrd disk
 qemu-lot99: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot99.py
 
+# Lot 100: hwb(), color-mix(), names and alpha painted by the reader,
+# colour keyframes and @starting-style transitions
+# (tests/scripts/test_qemu_lot100.py)
+.PHONY: qemu-lot100
+qemu-lot100: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot100.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

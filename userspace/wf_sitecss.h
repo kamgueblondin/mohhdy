@@ -280,7 +280,7 @@ typedef struct {
     uint8_t hidden_attr;
     int disp_rank, weight_rank, align_rank, color_rank;
     int margin_rank, pad_rank;
-    uint32_t color;               /* 0xRRGGBB */
+    uint32_t color;               /* 0xRRGGBB; Lot 100: 255 - alpha in the top byte */
     uint8_t margin[4], pad[4];    /* top right bottom left, px */
     uint8_t margin_set, pad_set;  /* bit i set when that side was assigned */
     /* Lot 87: the winning declaration of kind k was revert-layer (1) or
@@ -316,6 +316,11 @@ typedef struct {
      * 1 when that list is a shorthand's, and the declaration's rank */
     uint8_t al[WF_SITE_ALONGS], alsh[WF_SITE_ALONGS];
     int alrank[WF_SITE_ALONGS];
+    /* Lot 100: the starting color and background-color of @starting-style
+     * rules (colours as color and bg) and their ranks */
+    uint32_t scolor, sbg;
+    uint8_t scolor_set, sbg_set;
+    int scolor_rank, sbg_rank;
 } wf_site_node_t;
 
 typedef struct {
@@ -467,6 +472,8 @@ typedef struct {
     int recascades;               /* reader properties cascaded again (0 or 1) */
     int prop_composed;            /* Lot 98: animated values with a keyframe added to the value below */
     int anim_idle;                /* Lot 99: element animations without a timeline */
+    int col_animated;             /* Lot 100: animated color and background-color values */
+    int col_transitioned;         /* Lot 100: ... transitioned */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */

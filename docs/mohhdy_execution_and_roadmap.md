@@ -7,6 +7,19 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 100 (14 November 2026, base 0c1b716, PR 257 merged)
+
+US-031 partial, phase3_complete=false. The reader paints every CSS
+Color 4 named colour, hwb() and color-mix(in srgb, ...), and colours
+with an alpha (rgba(), hsla(), #rgba, #rrggbbaa, hwb() and color-mix()
+with an alpha), written #rrggbbaa for the engine to composite; rgb()
+takes the CSS Color 4 grammar. @keyframes and transitions from
+@starting-style animate the reader's own color and background-color at
+the reader clock. A QEMU page (`make qemu-lot100`, CI job
+lot100-reader-colors) checks the reader at two clock values.
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097
+stay simule. See docs/lot100_plan.md.
+
 ### Lot 99 (14 November 2026, base c3f691d, PR 256 merged)
 
 US-031 partial, phase3_complete=false. The reader paints opaque hsl()

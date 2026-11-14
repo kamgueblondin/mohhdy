@@ -279,6 +279,16 @@ int wf_cssprop_accumulate(const wf_cssprop_t *p, const char *under, const char *
  * through 1800000000 / 31415927 deg, the angle conversion of this reader
  * since Lot 92). */
 int wf_cssprop_rgb24(const char *v, int n, unsigned int *rgb);
+/* Lot 100: any colour the reader paints, at v[0..n) (spaces around it
+ * and a following ';' or '!' allowed, nothing else; letters in any
+ * case): a hex colour (3, 4, 6 or 8 digits), one of the
+ * 148 named colours of CSS Color 4, transparent, rgb(), rgba(), hsl(),
+ * hsla(), hwb() or color-mix(in srgb, ...) (four color-mix() levels at
+ * most, the outer one included), with
+ * the conversions wf_cssprop_interp uses. 1, *rgb (0xRRGGBB) and *alpha
+ * (0..255, both rounded half away from zero), else 0. currentcolor is
+ * not taken (it has no value of its own). */
+int wf_cssprop_color(const char *v, int n, unsigned int *rgb, int *alpha);
 
 /* An easing function (CSS Easing 1): linear, ease, ease-in, ease-out,
  * ease-in-out, cubic-bezier(x1, y1, x2, y2) (x in 0..1, y in -100..100,

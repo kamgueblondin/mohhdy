@@ -1098,18 +1098,71 @@ static int cp_dim(const char *v, int *frac, int *zero) {
 
 static int cp_hex(char c) { return cp_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
 
+/* Lot 100: the 148 named colours of CSS Color 4 (0xRRGGBB) */
+static const struct { const char *name; unsigned int rgb; } cp_named[] = {
+    {"aliceblue", 0xf0f8ffU}, {"antiquewhite", 0xfaebd7U}, {"aqua", 0x00ffffU}, {"aquamarine", 0x7fffd4U},
+    {"azure", 0xf0ffffU}, {"beige", 0xf5f5dcU}, {"bisque", 0xffe4c4U}, {"black", 0x000000U},
+    {"blanchedalmond", 0xffebcdU}, {"blue", 0x0000ffU}, {"blueviolet", 0x8a2be2U}, {"brown", 0xa52a2aU},
+    {"burlywood", 0xdeb887U}, {"cadetblue", 0x5f9ea0U}, {"chartreuse", 0x7fff00U}, {"chocolate", 0xd2691eU},
+    {"coral", 0xff7f50U}, {"cornflowerblue", 0x6495edU}, {"cornsilk", 0xfff8dcU}, {"crimson", 0xdc143cU},
+    {"cyan", 0x00ffffU}, {"darkblue", 0x00008bU}, {"darkcyan", 0x008b8bU}, {"darkgoldenrod", 0xb8860bU},
+    {"darkgray", 0xa9a9a9U}, {"darkgreen", 0x006400U}, {"darkgrey", 0xa9a9a9U}, {"darkkhaki", 0xbdb76bU},
+    {"darkmagenta", 0x8b008bU}, {"darkolivegreen", 0x556b2fU}, {"darkorange", 0xff8c00U}, {"darkorchid", 0x9932ccU},
+    {"darkred", 0x8b0000U}, {"darksalmon", 0xe9967aU}, {"darkseagreen", 0x8fbc8fU}, {"darkslateblue", 0x483d8bU},
+    {"darkslategray", 0x2f4f4fU}, {"darkslategrey", 0x2f4f4fU}, {"darkturquoise", 0x00ced1U},
+    {"darkviolet", 0x9400d3U}, {"deeppink", 0xff1493U}, {"deepskyblue", 0x00bfffU}, {"dimgray", 0x696969U},
+    {"dimgrey", 0x696969U}, {"dodgerblue", 0x1e90ffU}, {"firebrick", 0xb22222U}, {"floralwhite", 0xfffaf0U},
+    {"forestgreen", 0x228b22U}, {"fuchsia", 0xff00ffU}, {"gainsboro", 0xdcdcdcU}, {"ghostwhite", 0xf8f8ffU},
+    {"gold", 0xffd700U}, {"goldenrod", 0xdaa520U}, {"gray", 0x808080U}, {"green", 0x008000U},
+    {"greenyellow", 0xadff2fU}, {"grey", 0x808080U}, {"honeydew", 0xf0fff0U}, {"hotpink", 0xff69b4U},
+    {"indianred", 0xcd5c5cU}, {"indigo", 0x4b0082U}, {"ivory", 0xfffff0U}, {"khaki", 0xf0e68cU},
+    {"lavender", 0xe6e6faU}, {"lavenderblush", 0xfff0f5U}, {"lawngreen", 0x7cfc00U}, {"lemonchiffon", 0xfffacdU},
+    {"lightblue", 0xadd8e6U}, {"lightcoral", 0xf08080U}, {"lightcyan", 0xe0ffffU},
+    {"lightgoldenrodyellow", 0xfafad2U}, {"lightgray", 0xd3d3d3U}, {"lightgreen", 0x90ee90U},
+    {"lightgrey", 0xd3d3d3U}, {"lightpink", 0xffb6c1U}, {"lightsalmon", 0xffa07aU}, {"lightseagreen", 0x20b2aaU},
+    {"lightskyblue", 0x87cefaU}, {"lightslategray", 0x778899U}, {"lightslategrey", 0x778899U},
+    {"lightsteelblue", 0xb0c4deU}, {"lightyellow", 0xffffe0U}, {"lime", 0x00ff00U}, {"limegreen", 0x32cd32U},
+    {"linen", 0xfaf0e6U}, {"magenta", 0xff00ffU}, {"maroon", 0x800000U}, {"mediumaquamarine", 0x66cdaaU},
+    {"mediumblue", 0x0000cdU}, {"mediumorchid", 0xba55d3U}, {"mediumpurple", 0x9370dbU},
+    {"mediumseagreen", 0x3cb371U}, {"mediumslateblue", 0x7b68eeU}, {"mediumspringgreen", 0x00fa9aU},
+    {"mediumturquoise", 0x48d1ccU}, {"mediumvioletred", 0xc71585U}, {"midnightblue", 0x191970U},
+    {"mintcream", 0xf5fffaU}, {"mistyrose", 0xffe4e1U}, {"moccasin", 0xffe4b5U}, {"navajowhite", 0xffdeadU},
+    {"navy", 0x000080U}, {"oldlace", 0xfdf5e6U}, {"olive", 0x808000U}, {"olivedrab", 0x6b8e23U},
+    {"orange", 0xffa500U}, {"orangered", 0xff4500U}, {"orchid", 0xda70d6U}, {"palegoldenrod", 0xeee8aaU},
+    {"palegreen", 0x98fb98U}, {"paleturquoise", 0xafeeeeU}, {"palevioletred", 0xdb7093U}, {"papayawhip", 0xffefd5U},
+    {"peachpuff", 0xffdab9U}, {"peru", 0xcd853fU}, {"pink", 0xffc0cbU}, {"plum", 0xdda0ddU},
+    {"powderblue", 0xb0e0e6U}, {"purple", 0x800080U}, {"rebeccapurple", 0x663399U}, {"red", 0xff0000U},
+    {"rosybrown", 0xbc8f8fU}, {"royalblue", 0x4169e1U}, {"saddlebrown", 0x8b4513U}, {"salmon", 0xfa8072U},
+    {"sandybrown", 0xf4a460U}, {"seagreen", 0x2e8b57U}, {"seashell", 0xfff5eeU}, {"sienna", 0xa0522dU},
+    {"silver", 0xc0c0c0U}, {"skyblue", 0x87ceebU}, {"slateblue", 0x6a5acdU}, {"slategray", 0x708090U},
+    {"slategrey", 0x708090U}, {"snow", 0xfffafaU}, {"springgreen", 0x00ff7fU}, {"steelblue", 0x4682b4U},
+    {"tan", 0xd2b48cU}, {"teal", 0x008080U}, {"thistle", 0xd8bfd8U}, {"tomato", 0xff6347U}, {"turquoise", 0x40e0d0U},
+    {"violet", 0xee82eeU}, {"wheat", 0xf5deb3U}, {"white", 0xffffffU}, {"whitesmoke", 0xf5f5f5U},
+    {"yellow", 0xffff00U}, {"yellowgreen", 0x9acd32U}, {0, 0}
+};
+
+/* the named colour v[0..n): its index in cp_named, -1 */
+static int cp_named_at(const char *v, int n) {
+    int k;
+    for (k = 0; cp_named[k].name; k++) if (cp_eqn(v, n, cp_named[k].name)) return k;
+    return -1;
+}
+
+typedef struct { long long c[3], a; } cp_rgba_t;
+static int cp_rgba(const char *v, cp_rgba_t *o);
+
 static int cp_color(const char *v) {
-    static const char *const names[] = {
-        "black", "white", "red", "green", "blue", "yellow", "gray", "grey", "silver", "maroon", "purple",
-        "fuchsia", "lime", "olive", "navy", "teal", "aqua", "orange", "transparent", "currentcolor", 0
-    };
     static const char *const fns[] = {"rgb(", "rgba(", "hsl(", "hsla(", 0};
+    cp_rgba_t t;
     int k, n = cp_len(v);
     if (v[0] == '#') {
         for (k = 1; k < n; k++) if (!cp_hex(v[k])) return 0;
         return n == 4 || n == 5 || n == 7 || n == 9;
     }
-    for (k = 0; names[k]; k++) if (cp_eqn(v, n, names[k])) return 1;
+    /* Lot 100: every named colour */
+    if (cp_eqn(v, n, "transparent") || cp_eqn(v, n, "currentcolor") || cp_named_at(v, n) >= 0) return 1;
+    /* Lot 100: hwb() and color-mix() are matched by their conversion */
+    if ((n > 4 && cp_eqn(v, 4, "hwb(")) || (n > 10 && cp_eqn(v, 10, "color-mix("))) return cp_rgba(v, &t);
     for (k = 0; fns[k]; k++) {
         int m = cp_len(fns[k]), i, depth = 0;
         if (n <= m || !cp_eqn(v, m, fns[k])) continue;
@@ -1716,9 +1769,8 @@ static int cp_interp_num(int t, const char *s, int a0, int b0, const char *u, in
     return n < 0 ? -2 : n;
 }
 
-/* a colour in sRGB: channels in 1/10000 of 0..255, alpha in 1/10000 of
- * 0..1; 0 when it is not one this reader interpolates */
-typedef struct { long long c[3], a; } cp_rgba_t;
+/* a colour in sRGB (cp_rgba_t): channels in 1/10000 of 0..255, alpha in
+ * 1/10000 of 0..1; 0 when it is not one this reader interpolates */
 
 static int cp_hexv(char c) { return cp_digit(c) ? c - '0' : (cp_low(c) - 'a' + 10); }
 
@@ -1810,21 +1862,119 @@ static void cp_hsl_rgb(long long h, long long s, long long l, long long *c) {
     }
 }
 
-static int cp_rgba(const char *v, cp_rgba_t *o) {
-    static const struct { const char *name; unsigned char r, g, b; } named[] = {
-        {"black", 0, 0, 0}, {"white", 255, 255, 255}, {"red", 255, 0, 0}, {"green", 0, 128, 0},
-        {"blue", 0, 0, 255}, {"yellow", 255, 255, 0}, {"gray", 128, 128, 128}, {"grey", 128, 128, 128},
-        {"silver", 192, 192, 192}, {"maroon", 128, 0, 0}, {"purple", 128, 0, 128}, {"fuchsia", 255, 0, 255},
-        {"lime", 0, 255, 0}, {"olive", 128, 128, 0}, {"navy", 0, 0, 128}, {"teal", 0, 128, 128},
-        {"aqua", 0, 255, 255}, {"orange", 255, 165, 0}, {0, 0, 0, 0}};
+/* Lot 100: hwb() (CSS Color 4) from the hue (1/10000 deg, 0..3599999)
+ * and the whiteness and blackness (1/10000 %, 0..1000000): when W + B
+ * reaches 100% the grey W / (W + B); else the channel of hsl(H 100% 50%),
+ * 255 g / 600000 with g = 300000 - m (m of cp_hsl_rgb), scaled by
+ * 1 - W - B, plus W. Exact, then rounded half away from zero to 1/10000:
+ * 255 (g (10^6 - W - B) + 600000 W) / (6 10^11) = 17 (...) / (4 10^6) */
+static void cp_hwb_rgb(long long h, long long w, long long b, long long *c) {
+    static const int nn[3] = {0, 8, 4};
+    long long m;
+    int k, kk;
+    for (k = 0; k < 3; k++) {
+        if (w + b >= 1000000) { c[k] = cp_div(w * 2550000, w + b, 0); continue; }
+        kk = (nn[k] * 300000 + (int)h) % 3600000;
+        m = kk - 900000;
+        if (2700000 - kk < m) m = 2700000 - kk;
+        m = cp_clampll(m, -300000, 300000);
+        c[k] = cp_div(((300000 - m) * (1000000 - w - b) + 600000 * w) * 17, 4000000, 0);
+    }
+}
+
+static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth);
+
+/* s[*a..*b) without the spaces around it */
+static void cp_trim(const char *s, int *a, int *b) {
+    while (*a < *b && cp_sp(s[*a])) (*a)++;
+    while (*b > *a && cp_sp(s[*b - 1])) (*b)--;
+}
+
+/* the top-level parts of s[a..b) split at sep (',' or a space run):
+ * their ranges, trimmed; the count, -1 over max. An unbalanced
+ * parenthesis leaves a stray '(' or ')' in a part, which no colour form
+ * takes, so it is not refused here */
+static int cp_split(const char *s, int a, int b, char sep, int *pa, int *pb, int max) {
+    int n = 0, depth = 0, i, st = a;
+    for (i = a; i <= b; i++) {
+        int cut = i == b;
+        if (!cut) {
+            if (s[i] == '(') depth++;
+            else if (s[i] == ')') depth--;
+            else if (!depth && (sep == ',' ? s[i] == ',' : cp_sp(s[i]))) cut = 1;
+        }
+        if (!cut) continue;
+        if (sep != ',' && i < b && i == st) { st = i + 1; continue; }     /* a run of spaces */
+        if (n >= max) return -1;
+        pa[n] = st; pb[n] = i;
+        cp_trim(s, &pa[n], &pb[n]);
+        n++;
+        st = i + 1;
+    }
+    return n;
+}
+
+/* Lot 100: one color-mix() item s[a..b): a colour and an optional
+ * percentage before or after it; *p -1 when there is none */
+static int cp_mix_item(const char *s, int a, int b, cp_rgba_t *o, long long *p, int depth) {
+    char item[WF_CSSPROP_VAL];
+    int pa[3], pb[3], n = cp_split(s, a, b, ' ', pa, pb, 3), c = 0, k, pct = 0;
+    if (n < 1 || n > 2) return 0;
+    *p = -1;
+    if (n == 2) {
+        int q = s[pb[0] - 1] == '%' ? 0 : 1;      /* the percentage: a top-level token ends with '%' */
+        /* a token that is not a number leaves *p at -1 (and pct 0) */
+        (void)cp_tok_num(s, pa[q], pb[q], p, &pct);
+        if (!pct || *p < 0 || *p > 100 * CP_S) return 0;
+        c = 1 - q;
+    }
+    if (pb[c] - pa[c] >= (int)sizeof(item)) return 0;
+    for (k = pa[c]; k < pb[c]; k++) item[k - pa[c]] = s[k];
+    item[pb[c] - pa[c]] = 0;
+    return cp_rgba_d(item, o, depth + 1);
+}
+
+/* Lot 100: color-mix(in srgb, C1 [P1], C2 [P2]) (CSS Color 5) at v[0..n):
+ * the percentages default to 50% each, or to 100% minus the other; their
+ * sum S (> 0) normalises them; the colours are mixed premultiplied and an
+ * S under 100% scales the alpha. With P in 1/10000 %: A = a1 P1 + a2 P2,
+ * each channel (c1 a1 P1 + c2 a2 P2) / A (0 when A is 0), the alpha A / S,
+ * or A / 100% when S is under it; each rounded once */
+static int cp_mix(const char *v, int n, cp_rgba_t *o, int depth) {
+    int pa[3], pb[3], k, w0, w1;
+    long long p[2];
+    cp_rgba_t x[2];
+    long long sum, an;
+    if (depth > 3 || cp_split(v, 10, n - 1, ',', pa, pb, 3) != 3) return 0;
+    /* "in", spaces, "srgb" (the part is followed by a comma, so
+     * v[w0 + 2] is inside v) */
+    w0 = pa[0];
+    if (!cp_eqn(v + w0, 2, "in") || !cp_sp(v[w0 + 2])) return 0;
+    for (w1 = w0 + 2; cp_sp(v[w1]); w1++) {}
+    if (!cp_eqn(v + w1, pb[0] - w1, "srgb")) return 0;
+    for (k = 0; k < 2; k++) if (!cp_mix_item(v, pa[k + 1], pb[k + 1], &x[k], &p[k], depth)) return 0;
+    if (p[0] < 0 && p[1] < 0) p[0] = p[1] = 50 * CP_S;
+    else if (p[0] < 0) p[0] = 100 * CP_S - p[1];
+    else if (p[1] < 0) p[1] = 100 * CP_S - p[0];
+    sum = p[0] + p[1];
+    if (sum <= 0) return 0;
+    an = x[0].a * p[0] + x[1].a * p[1];
+    for (k = 0; k < 3; k++) o->c[k] = an ? cp_div(x[0].c[k] * x[0].a * p[0] + x[1].c[k] * x[1].a * p[1], an, 0) : 0;
+    o->a = cp_div(an, sum >= 100 * CP_S ? sum : 100 * CP_S, 0);
+    return 1;
+}
+
+static int cp_rgba(const char *v, cp_rgba_t *o) { return cp_rgba_d(v, o, 0); }
+
+static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
     int n = cp_len(v), k;
     o->a = CP_S;
     if (cp_eqn(v, n, "transparent")) { o->c[0] = o->c[1] = o->c[2] = 0; o->a = 0; return 1; }
-    for (k = 0; named[k].name; k++)
-        if (cp_eqn(v, n, named[k].name)) {
-            o->c[0] = named[k].r * CP_S; o->c[1] = named[k].g * CP_S; o->c[2] = named[k].b * CP_S;
-            return 1;
-        }
+    k = cp_named_at(v, n);      /* Lot 100: every named colour */
+    if (k >= 0) {
+        for (n = 0; n < 3; n++) o->c[n] = (long long)((cp_named[k].rgb >> (16 - 8 * n)) & 255u) * CP_S;
+        return 1;
+    }
     if (v[0] == '#') {
         int d = n == 4 || n == 5 ? 1 : 2, i;
         if (n != 4 && n != 5 && n != 7 && n != 9) return 0;
@@ -1838,6 +1988,7 @@ static int cp_rgba(const char *v, cp_rgba_t *o) {
         }
         return 1;
     }
+    if (!n || v[n - 1] != ')') return 0;     /* Lot 100: a function ends at its ')' */
     if ((n > 5 && cp_eqn(v, 4, "rgb(")) || (n > 6 && cp_eqn(v, 5, "rgba("))) {
         int ta[4], tb[4], got = cp_color_toks(v, n, v[3] == '(' ? 4 : 5, ta, tb), pct;
         long long x;
@@ -1869,6 +2020,26 @@ static int cp_rgba(const char *v, cp_rgba_t *o) {
         cp_hsl_rgb(h, sl[0], sl[1], o->c);
         return 1;
     }
+    if (n > 5 && cp_eqn(v, 4, "hwb(")) {
+        /* Lot 100: hwb(H W B [/ A]), spaces only; W and B percentages or
+         * numbers (the same scale), clamped to 0..100% */
+        int ta[4], tb[4], got = cp_color_toks(v, n, 4, ta, tb), pct;
+        long long h, wb[2], x;
+        cp_q_t q;
+        if ((got != 3 && got != 4) || cp_comma_after(v, tb[0], n) || !cp_hue(v, ta[0], tb[0], &q)) return 0;
+        h = q.v - cp_div(q.v, 3600000, 1) * 3600000;
+        for (k = 1; k < 3; k++) {
+            if (!cp_tok_num(v, ta[k], tb[k], &x, &pct)) return 0;
+            wb[k - 1] = cp_clampll(x, 0, 100 * CP_S);
+        }
+        if (got == 4) {
+            if (!cp_tok_num(v, ta[3], tb[3], &x, &pct)) return 0;
+            o->a = cp_clampll(pct ? cp_div(x, 100, 0) : x, 0, CP_S);
+        }
+        cp_hwb_rgb(h, wb[0], wb[1], o->c);
+        return 1;
+    }
+    if (n > 11 && cp_eqn(v, 10, "color-mix(")) return cp_mix(v, n, o, depth);
     return 0;
 }
 
@@ -1917,11 +2088,6 @@ static int cp_interp_color(const char *a, const char *b, int t, int add, char *o
 
 /* ---- Lot 99: transform lists added and accumulated -------------------- */
 
-/* s[*a..*b) without the spaces around it */
-static void cp_trim(const char *s, int *a, int *b) {
-    while (*a < *b && cp_sp(s[*a])) (*a)++;
-    while (*b > *a && cp_sp(s[*b - 1])) (*b)--;
-}
 
 /* the transform function s[a..b), one exactly and already matched (by
  * cp_alt_index, so its name is known and it has 1 to 6 arguments): its
@@ -2137,6 +2303,32 @@ int wf_cssprop_rgb24(const char *v, int n, unsigned int *rgb) {
      * ')') */
     if ((!cp_eqn(buf, 4, "hsl(") && !cp_eqn(buf, 5, "hsla(")) || !cp_rgba(buf, &c) || c.a != CP_S) return 0;
     *rgb = (unsigned int)((cp_div(c.c[0], CP_S, 0) << 16) | (cp_div(c.c[1], CP_S, 0) << 8) | cp_div(c.c[2], CP_S, 0));
+    return 1;
+}
+
+/* Lot 100: any colour the reader paints (see wf_cssprop.h) */
+int wf_cssprop_color(const char *v, int n, unsigned int *rgb, int *alpha) {
+    char buf[WF_CSSPROP_VAL];
+    int a = 0, b, k, depth = 0;
+    cp_rgba_t c;
+    if (!v || !rgb || !alpha) return 0;
+    while (a < n && cp_sp(v[a])) a++;
+    /* to a space, ';' or '!' outside parentheses (a text glued after the
+     * closing ')', an empty text or an unclosed '(' fails every colour
+     * form below) */
+    for (b = a; b < n; b++) {
+        if (v[b] == '(') depth++;
+        else if (v[b] == ')') depth--;
+        else if (!depth && (cp_sp(v[b]) || v[b] == ';' || v[b] == '!')) break;
+    }
+    if (b - a >= (int)sizeof(buf)) return 0;
+    for (k = b; k < n && cp_sp(v[k]); k++) {}
+    if (k < n && v[k] != ';' && v[k] != '!') return 0;
+    for (k = a; k < b; k++) buf[k - a] = v[k];     /* cp_rgba takes letters in any case */
+    buf[b - a] = 0;
+    if (!cp_rgba(buf, &c)) return 0;
+    *rgb = (unsigned int)((cp_div(c.c[0], CP_S, 0) << 16) | (cp_div(c.c[1], CP_S, 0) << 8) | cp_div(c.c[2], CP_S, 0));
+    *alpha = (int)cp_div(c.a * 255, CP_S, 0);
     return 1;
 }
 

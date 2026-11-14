@@ -2067,7 +2067,7 @@ static void test_l99_sheet_75(void) {
     prep0("#o { background-color: blue } #o { background-color: hsla(-332grad 0% 85% / 1), red }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
     prep0("#o { color: blue } #o { color: hsla(11.45rad 27.09% 86% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#e4d2e580"));
     prep0("#o { color: blue } #o { color: hsl(3rad, 77%, 51.93%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#26e3c9"));
     prep0("#o { background-color: blue } #o { background: no-repeat hsl(532grad, 75%, 122%) }");
@@ -2082,7 +2082,7 @@ static void test_l99_sheet_76(void) {
     prep0("#o { background-color: blue } #o { background: hsl(3, 93.72%, 100%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#ffffff"));
     prep0("#o { color: blue } #o { color: hsl(0.25turn, 25%, 37%, 99.99%) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#5e7647"));
 }
 
 static void test_l99_sheet_77(void) {
@@ -2093,7 +2093,7 @@ static void test_l99_sheet_77(void) {
     prep0("#o { background-color: blue } #o { background-color: hsl(-637.79, 50.836%, 32%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#5c7b28"));
     prep0("#o { background-color: blue } #o { background-color: hsl(77, 19%, 100%, 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#ffffff80"));
 }
 
 static void test_l99_sheet_78(void) {
@@ -2104,7 +2104,7 @@ static void test_l99_sheet_78(void) {
     prep0("#o { background-color: blue } #o { background: hsl(-336.1grad 20 67%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#bcba9a"));
     prep0("#o { background-color: blue } #o { background: url(x.png) hsla(1.1turn 90% 47% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#e48d0c80"));
 }
 
 static void test_l99_sheet_79(void) {
@@ -2135,7 +2135,7 @@ static void test_l99_sheet_81(void) {
     prep0("#o { color: blue } #o { color: hsl(2.494turn, 50%, 101.17%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#ffffff"));
     prep0("#o { color: blue } #o { color: hsla(321.1087grad -10.5% 50% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#80808080"));
     prep0("#o { color: blue } #o { color: hsl(0.1turn 114.97 32%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#a36200"));
 }
@@ -2146,7 +2146,7 @@ static void test_l99_sheet_82(void) {
     prep0("#o { color: blue } #o { color: hsl(1.814turn, 36%, 49%, 1) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#9f50aa"));
     prep0("#o { color: blue } #o { color: hsla(200grad 53.1% 11% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0d2b2b80"));
     prep0("#o { background-color: blue } #o { background-color: hsla(495grad 55.657% 78.34%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#cce7a9"));
 }
@@ -2164,9 +2164,9 @@ static void test_l99_sheet_83(void) {
 
 static void test_l99_sheet_84(void) {
     prep0("#o { background-color: blue } #o { background: hsla(230grad 64% 55.6% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#4595d680"));
     prep0("#o { color: blue } #o { color: hsl(468.4deg -0.08 33 / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#54545480"));
     prep0("#o { background-color: blue } #o { background-color: HSLA(629.2DEG, 92%, 24.4385%, 1) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#3d0578"));
     prep0("#o { background-color: blue } #o { background-color: hsla(2turn 64% 56.4% / 1) }");
@@ -2190,7 +2190,7 @@ static void test_l99_sheet_86(void) {
     prep0("#o { color: blue } #o { color: hsl(-334grad 44.3% 66.8% / 100%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#d0cf85"));
     prep0("#o { color: blue } #o { color: hsl(354.2174deg, 106.86%, 78%, 0) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#ff8f9a00"));
     prep0("#o { color: blue } #o { color: hsl(1rad, 50%, 50%, 1, 1) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
 }
@@ -2214,7 +2214,7 @@ static void test_l99_sheet_88(void) {
     prep0("#o { background-color: blue } #o { background: no-repeat hsla(-0.968turn 38% 100% / 1) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#ffffff"));
     prep0("#o { color: blue } #o { color: hsl(400grad 93% 93.93% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#fee1e180"));
 }
 
 static void test_l99_sheet_89(void) {
@@ -2225,7 +2225,7 @@ static void test_l99_sheet_89(void) {
     prep0("#o { background-color: blue } #o { background-color: hsl(-1.806TURN, 50%, 50%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#aabf40"));
     prep0("#o { background-color: blue } #o { background-color: hsla(451.559deg 85% 41% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#64c11080"));
 }
 
 static void test_l99_sheet_90(void) {
@@ -2234,7 +2234,7 @@ static void test_l99_sheet_90(void) {
     prep0("#o { color: blue } #o { color: hsla(200grad 47.6% 81.8%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#bae7e7"));
     prep0("#o { color: blue } #o { color: hsl(-78 32% 97% / 99%) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#f8f5fafc"));
     prep0("#o { color: blue } #o { color: hsla(64 100% 18.55%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#585f00"));
 }
@@ -2247,23 +2247,23 @@ static void test_l99_sheet_91(void) {
     prep0("#o { background-color: blue } #o { background-color: hsla(3.1416rad 91% 14%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#034444"));
     prep0("#o { color: blue } #o { color: hsla(-5.36rad, -11.2%, 100%, 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#ffffff80"));
 }
 
 static void test_l99_sheet_92(void) {
     prep0("#o { background-color: blue } #o { background: url(x.png) hsla(586.58 76.416% 15% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#09164380"));
     prep0("#o { background-color: blue } #o { background-color: hsl(-3.64rad, 51%, 100%, 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#ffffff80"));
     prep0("#o { color: blue } #o { color: hsl(200grad 89.3 -1.1% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#00000080"));
     prep0("#o { color: blue } #o { color: hsla(6.2832rad, 2.2%, 50%, 100%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#827d7d"));
 }
 
 static void test_l99_sheet_93(void) {
     prep0("#o { background-color: blue } #o { background-color: hsl(84, 100%, 38.9%, 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#77c60080"));
     prep0("#o { background-color: blue } #o { background-color: hsl(0.5turn, 98.5%, 68%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#5dfefe"));
     prep0("#o { background-color: blue } #o { background-color: hsl(481.88deg 21 27) }");
@@ -2278,7 +2278,7 @@ static void test_l99_sheet_94(void) {
     prep0("#o { color: blue } #o { color: hsl(-64.37grad, 100%, 50%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#ff00f6"));
     prep0("#o { background-color: blue } #o { background-color: hsl(-315.5171deg, 3.79%, 39%, 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#67656080"));
     prep0("#o { background-color: blue } #o { background-color: hsla(578.33 -19.56% 37%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#5e5e5e"));
 }
@@ -2296,7 +2296,7 @@ static void test_l99_sheet_95(void) {
 
 static void test_l99_sheet_96(void) {
     prep0("#o { background-color: blue } #o { background: hsl(0.5turn 97% 98.96 / 99.99%) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#faffff"));
     prep0("#o { background-color: blue } #o { background: no-repeat hsl(-5.147rad, 36%, 75%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#d2d6a8"));
     prep0("#o { background-color: blue } #o { background: hsla(-261.8489grad 95% 0%) }");
@@ -2313,7 +2313,7 @@ static void test_l99_sheet_97(void) {
     prep0("#o { background-color: blue } #o { background-color: hsla(0rad, 34%, 99.7%, 1) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#fefefe"));
     prep0("#o { background-color: blue } #o { background-color: hsla(0.5turn 87% 9% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#032b2b80"));
 }
 
 static void test_l99_sheet_98(void) {
@@ -2340,7 +2340,7 @@ static void test_l99_sheet_99(void) {
 
 static void test_l99_sheet_100(void) {
     prep0("#o { color: blue } #o { color: hsla(-60.882grad, 50%, 6%, 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#17081680"));
     prep0("#o { background-color: blue } #o { background: hsl(-0.8799turN, 0%, 50%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#808080"));
     prep0("#o { color: blue } #o { color: hsla(300.8362deg 88.5% 81%) }");
@@ -2355,9 +2355,9 @@ static void test_l99_sheet_101(void) {
     prep0("#o { background-color: blue } #o { background: no-repeat hsl(-94.3grad 106.78% 73 / 1) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#c675ff"));
     prep0("#o { background-color: blue } #o { background: url(x.png) hsl(261.299grad 60% 0% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#00000080"));
     prep0("#o { background-color: blue } #o { background: url(x.png) hsl(-5.78deg 100% 68% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#ff5c6c80"));
 }
 
 static void test_l99_sheet_102(void) {
@@ -2368,7 +2368,7 @@ static void test_l99_sheet_102(void) {
     prep0("#o { color: blue } #o { color: 	hsla(-120.432 100% 79.516%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#9797ff"));
     prep0("#o { background-color: blue } #o { background: url(x.png) hsla(53 97% 68.6% / 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#fdea6180"));
 }
 
 static void test_l99_sheet_103(void) {
@@ -2388,9 +2388,9 @@ static void test_l99_sheet_104(void) {
     prep0("#o { color: blue } #o { color: hsla(9.59rad 100% 98.3%) }");
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "color:#f6feff"));
     prep0("#o { background-color: blue } #o { background: hsl(200grad, 68%, 67%, 99.99%) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#72e4e4"));
     prep0("#o { background-color: blue } #o { background-color: hsl(178.4grad, 10.2%, 100%, 0.5) }");
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#ffffff80"));
 }
 
 int main(void) {

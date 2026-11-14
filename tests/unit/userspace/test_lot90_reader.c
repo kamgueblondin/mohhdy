@@ -197,10 +197,13 @@ static void test_style_attribute(void) {
 }
 
 static void test_unknown_colour_drops_shorthand(void) {
-    /* the reader keeps eight colour names; a shorthand whose colour it
-     * does not keep is dropped whole, as a lone colour was in Lot 88 */
-    prep("#a { background: url(a.png) orange } #b { background: url(b.png) #abc }", "<p id=a>a</p><p id=b>b</p>");
+    /* a shorthand whose colour the reader does not keep is dropped
+     * whole, as a lone colour was in Lot 88 (Lot 100: orange is now a
+     * kept name, so the dropped word is one no CSS level names) */
+    prep("#a { background: url(a.png) orangy } #b { background: url(b.png) #abc } #c { background: url(c.png) orange }",
+         "<p id=a>a</p><p id=b>b</p><p id=c>c</p>");
     TEST_ASSERT_EQUAL_STRING("", style_of("a"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffa500;background-image:url(c.png)\"", style_of("c"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#aabbcc;background-image:url(b.png)\"", style_of("b"));
 }
 
