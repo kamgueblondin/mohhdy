@@ -37,7 +37,8 @@ Numbers are integers in 1/10000. rhalf rounds half away from zero.
   percentage mix into calc(P% + Lpx); integers rounded half toward
   +infinity; '+' and '#' lists item by item (same length); colours in
   sRGB with premultiplied alpha, channels rhalf to 0..255, alpha rhalf to
-  1/10000; anything else flips at t = 5000. t = 0 and 10000 give the
+  1/10000 (Lot 98, converted: hsl() colours too, by
+  scripts/lot98_animmodel.py; they flipped at t = 5000); anything else flips at t = 5000. t = 0 and 10000 give the
   endpoints as written.
 """
 import math
@@ -446,6 +447,9 @@ def rgba(v):
         vals = [int(h[i * d:(i + 1) * d], 16) * (17 if d == 1 else 1) for i in range(len(h) // d)]
         a = rhalf(F(vals[3] * S, 255)) if len(vals) == 4 else S
         return [x * S for x in vals[:3]], a
+    if v.startswith("hsl"):
+        import lot98_animmodel  # Lot 98, converted: hsl() was not taken
+        return lot98_animmodel.hsl(v)
     m = re.fullmatch(r"rgba?\((.*)\)", v)
     if not m:
         return None
@@ -455,8 +459,8 @@ def rgba(v):
     else:
         main, _, al = body.partition("/")
         toks = main.split() + ([al.strip()] if _ else [])
-        if _ and len(main.split()) != 3:
-            return None
+        if len(main.split()) != 3:
+            return None     # Lot 98: four without the slash were taken
     if len(toks) not in (3, 4) or any(not t for t in toks):
         return None
     ch, a = [], S

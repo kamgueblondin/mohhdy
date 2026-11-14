@@ -62,15 +62,17 @@ static void test_l97_font_units(void) {
     TEST_ASSERT_EQUAL_STRING("keyframes 0 animated 0 transitioned 0 font 1 at 0ms", anim_text());
     prep(PL "html { font-size: 10px } #o { font-size: 30px; --p: 3rem }", 0);
     TEST_ASSERT_EQUAL_STRING("30px", nv("o"));
+    /* Lot 98: ex is 5/16 em (the engine font's x height; was 1/2 em) */
     prep(PL "#o { font-size: 20px; --p: 1ex }", 0);
-    TEST_ASSERT_EQUAL_STRING("10px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("6.25px", nv("o"));
     prep(PL "#o { font-size: 20px; --p: 3ch }", 0);
     TEST_ASSERT_EQUAL_STRING("30px", nv("o"));
     prep(PL "#o { font-size: 20px; --p: calc(1em + 5px) }", 0);
     TEST_ASSERT_EQUAL_STRING("25px", nv("o"));
-    /* rounded half away from zero to 1/10000 px: 1.0001ex of 15px */
+    /* rounded half away from zero to 1/10000 px: 1.0001ex of 15px
+     * (Lot 98: 4.68796875px; was 7.5008px with ex = 1/2 em) */
     prep(PL "#o { font-size: 15px; --p: 1.0001ex }", 0);
-    TEST_ASSERT_EQUAL_STRING("7.5008px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("4.688px", nv("o"));
     prep(PL "#o { font-size: 20px; --p: -2em }", 0);
     TEST_ASSERT_EQUAL_STRING("-40px", nv("o"));
     /* past the fixed point range: kept as written, not counted */

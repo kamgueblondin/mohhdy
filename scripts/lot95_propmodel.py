@@ -15,8 +15,9 @@ a plain number). A leaf N<unit> is N (at most four decimals here) times
 the unit's ratio, rounded half away from zero; a viewport unit is N times
 the viewport side / 100, rounded the same way; em, rem, ex and ch are not
 known (Lot 97, converted: they are N times the font size when the context
-carries one, vp = (vw, vh, em, rem) in px thousandths, ex and ch being half
-an em, rounded the same way). A product with a number and a quotient by a number are rounded
+carries one, vp = (vw, vh, em, rem) in px thousandths, rounded the same
+way; Lot 98, converted: ex is 5/16 em, the inked rows of the engine font's
+'x' glyph, and ch is 1/2 em, its '0' advance, both were half an em). A product with a number and a quotient by a number are rounded
 half away from zero at each step; sums are exact. Any value past 100000
 units is not known. A length and a percentage add into a mix written
 "calc(P% + Lpx)" (" - " and |L| when L < 0). An item whose value is not
@@ -171,7 +172,8 @@ def leaf(text, vp):
         fs = vp[3] if u == "rem" else vp[2]
         if fs <= 0:
             return Q(kind, 0, 0, False)
-        v = rhalf(F(raw * fs, 2000 if u in ("ex", "ch") else 1000))
+        ratio = {"ex": F(5, 16), "ch": F(8, 16)}.get(u, F(1))
+        v = rhalf(F(raw * fs, 1000) * ratio)
         return Q(kind, v, 0, ok and fits(v))
     if ratio is None:
         if not vp or vp[0] <= 0 or vp[1] <= 0:

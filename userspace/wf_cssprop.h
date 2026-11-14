@@ -201,10 +201,13 @@ int wf_cssprop_parse(const char *pre, int pn, const char *body, int bn, wf_csspr
 /* ---- Lot 97: font-relative lengths, interpolation and timing ---------
  * wf_cssprop_compute_font is wf_cssprop_compute_ctx with a font context:
  * em is the element's font size and rem the root's, both in px
- * thousandths (0: not known, the unit is kept as text); ex and ch are
- * half an em (the CSS fallback when no font metrics are known: the reader
- * has none). Each item is rounded half away from zero to 1/10000 px, from
- * the exact product of its value and the font size.
+ * thousandths (0: not known, the unit is kept as text). Lot 98: ex and ch
+ * come from the metrics of the font the web engine lays text out with
+ * (the 8x8 glyphs of kernel/gfx_font8.h in the 8x10 cell of a 16 px font,
+ * userspace/webeng.h): ex is the height of the inked rows of "x" (5 px of
+ * 16, 5/16 em) and ch the advance of "0" (WE_CHAR_W 8 px of 16, 1/2 em);
+ * Lot 97 used 1/2 em for both. Each item is rounded half away from zero
+ * to 1/10000 px, from the exact product of its value and the font size.
  *
  * wf_cssprop_interp interpolates two computed values of a registration
  * at progress t (1/10000, may leave 0..10000 after an easing): both must
@@ -219,12 +222,37 @@ int wf_cssprop_parse(const char *pre, int pn, const char *body, int bn, wf_csspr
  * (hex, rgb(), rgba(), the 19 names, transparent) interpolate in sRGB with
  * premultiplied alpha (CSS Color 4 for legacy colours), each channel
  * rounded half away from zero to 0..255, alpha to 1/10000 in 0..1, written
- * "rgb(R, G, B)" or "rgba(R, G, B, A)"; hsl(), hsla() and currentcolor
- * are discrete. t 0 gives a and t 10000 gives b as written. Returns 2
- * (interpolated), 1 (discrete) or 0 (out too small, or no value). */
+ * "rgb(R, G, B)" or "rgba(R, G, B, A)"; currentcolor is discrete. Lot 98:
+ * hsl() and hsla() (hue as a number of degrees or with deg, grad, rad or
+ * turn; saturation and lightness as percentages, or numbers in the space
+ * form; commas, or spaces with "/ alpha") interpolate too: they are
+ * legacy colours, so they interpolate in sRGB (CSS Color 4), after the
+ * conversion of CSS Color 4 (hsl to rgb) with each channel rounded half
+ * away from zero to 1/10000 of 0..255; saturation and lightness are
+ * clamped to 0..100%, the hue taken modulo 360deg. t 0 gives a and t
+ * 10000 gives b as written. Returns 2 (interpolated), 1 (discrete) or 0
+ * (out too small, or no value).
+ *
+ * Lot 98: wf_cssprop_add composes value v on top of the underlying value
+ * under (Web Animations 1 composite operations add and accumulate, which
+ * this reader does not tell apart: they differ only for types it keeps
+ * discrete, such as transforms): numbers, lengths, percentages,
+ * length-percentage mixes, angles, times, resolutions and integers are
+ * summed in their canonical unit; colours are summed in premultiplied
+ * sRGB (the alpha sum clamped to 1, then each channel, the premultiplied
+ * sum over that alpha rounded half away from zero, to 0..255); '+' and
+ * '#' lists item by item when the lengths match (CSS Properties and
+ * Values 1: simple lists). Returns 2 (composed into out), 1 (the values do
+ * not add: out is v, the composite falls back to replace) or 0 (out too
+ * small, or no value). */
+#define WF_CSSPROP_EX_NUM 5      /* Lot 98: ex = 5/16 em (inked rows of "x" in the 8x8 font) */
+#define WF_CSSPROP_EX_DEN 16
+#define WF_CSSPROP_CH_NUM 8      /* Lot 98: ch = 8/16 em (WE_CHAR_W at WE_FONT_PX_DEFAULT) */
+#define WF_CSSPROP_CH_DEN 16
 typedef struct { int vw, vh, em, rem; } wf_cssprop_fctx_t;
 int wf_cssprop_compute_font(const wf_cssprop_t *p, const char *value, const wf_cssprop_fctx_t *c, char *out, int cap);
 int wf_cssprop_interp(const wf_cssprop_t *p, const char *a, const char *b, int t, char *out, int cap);
+int wf_cssprop_add(const wf_cssprop_t *p, const char *under, const char *v, char *out, int cap);
 
 /* An easing function (CSS Easing 1): linear, ease, ease-in, ease-out,
  * ease-in-out, cubic-bezier(x1, y1, x2, y2) (x in 0..1, y in -100..100,
@@ -258,10 +286,13 @@ int wf_cssease_at(const wf_cssease_t *e, int x, int before);
 #define WF_CSSANIM_MS_MAX 100000000
 enum { WF_CSSANIM_NORMAL = 0, WF_CSSANIM_REVERSE = 1, WF_CSSANIM_ALTERNATE = 2, WF_CSSANIM_ALT_REVERSE = 3 };
 enum { WF_CSSANIM_FILL_NONE = 0, WF_CSSANIM_FORWARDS = 1, WF_CSSANIM_BACKWARDS = 2, WF_CSSANIM_BOTH = 3 };
+/* Lot 98: animation-composition (CSS Animations 2) */
+enum { WF_CSSANIM_REPLACE = 0, WF_CSSANIM_ADD = 1, WF_CSSANIM_ACCUMULATE = 2 };
 typedef struct {
     char name[WF_CSSPROP_NAME];
     int dur, delay, iters;
     unsigned char dir, fill, paused;
+    unsigned char comp;           /* Lot 98: WF_CSSANIM_REPLACE, _ADD or _ACCUMULATE */
     wf_cssease_t ease;
 } wf_cssanim_t;
 /* the comma separated list v (lower case, trimmed): the number of
@@ -280,6 +311,40 @@ typedef struct {
 } wf_csstrans_t;
 /* as wf_cssanim_parse; "none" is valid alone only */
 int wf_csstrans_parse(const char *v, wf_csstrans_t *out, int max);
+
+/* Lot 98: the longhands (CSS Animations 1 and 2, CSS Transitions 1 and
+ * 2). Each is a comma separated list of one token per item:
+ *   animation-name (none or an identifier that is not a CSS-wide
+ *   keyword), animation-duration (a time >= 0, or auto: 0s),
+ *   animation-timing-function (an easing function), animation-delay (a
+ *   time), animation-iteration-count (infinite or a number 0..100000),
+ *   animation-direction, animation-fill-mode, animation-play-state and
+ *   animation-composition (replace, add, accumulate);
+ *   transition-property (all, an identifier, or none alone),
+ *   transition-duration (>= 0), transition-timing-function,
+ *   transition-delay, transition-behavior (normal, allow-discrete).
+ * wf_cssanim_long and wf_csstrans_long write the field of longhand which
+ * in out[0..count) (the other fields are left as they are) and return the
+ * count, -1 when the list is not valid or longer than max. */
+enum {
+    WF_CSSANIM_L_NAME = 0, WF_CSSANIM_L_DURATION, WF_CSSANIM_L_TIMING, WF_CSSANIM_L_DELAY, WF_CSSANIM_L_COUNT,
+    WF_CSSANIM_L_DIRECTION, WF_CSSANIM_L_FILL, WF_CSSANIM_L_PLAY, WF_CSSANIM_L_COMPOSITION, WF_CSSANIM_LONGS
+};
+enum {
+    WF_CSSTRANS_L_PROPERTY = 0, WF_CSSTRANS_L_DURATION, WF_CSSTRANS_L_TIMING, WF_CSSTRANS_L_DELAY,
+    WF_CSSTRANS_L_BEHAVIOR, WF_CSSTRANS_LONGS
+};
+int wf_cssanim_long(int which, const char *v, wf_cssanim_t *out, int max);
+int wf_csstrans_long(int which, const char *v, wf_csstrans_t *out, int max);
+/* Lot 98: the coordinated lists (CSS Values 4, coordinating list-valued
+ * properties). v[k] is the value of longhand k (0: its initial value),
+ * sh[k] 1 when v[k] is a list of the shorthand (whose items give longhand
+ * k). The number of animations is the length of the animation-name list
+ * (of transitions, of transition-property); the other lists are repeated
+ * or cut to that length. A list that does not parse counts as its
+ * initial value. Returns the count written to out (at most max). */
+int wf_cssanim_coord(const char *const *v, const unsigned char *sh, wf_cssanim_t *out, int max);
+int wf_csstrans_coord(const char *const *v, const unsigned char *sh, wf_csstrans_t *out, int max);
 
 /* Lot 97: the directed progress of one animation at local time ms (CSS
  * Animations 1 and Web Animations 1 timing: delay, duration, iteration

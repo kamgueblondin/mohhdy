@@ -88,7 +88,23 @@
  *     is not transitioned.
  * Animated, transitioned and font-relative values are computed after a
  * first cascade (the font sizes come from it); the reader properties are
- * then cascaded again so var() reads them. */
+ * then cascaded again so var() reads them.
+ * Lot 98:
+ *   - the longhands animation-name, -duration, -timing-function, -delay,
+ *     -iteration-count, -direction, -fill-mode, -play-state and
+ *     -composition, transition-property, -duration, -timing-function,
+ *     -delay and -behavior (wf_cssanim_long, wf_csstrans_long) cascade one
+ *     by one; the shorthands set their longhands (animation does not set
+ *     animation-composition) and none, initial and unset give the initial
+ *     values. The lists are coordinated on animation-name and
+ *     transition-property (wf_cssanim_coord, wf_csstrans_coord);
+ *   - animation-composition add or accumulate (also given in a keyframe,
+ *     for that keyframe) adds each keyframe value to the value below
+ *     (wf_cssprop_add) before the interpolation; the 0% and 100% frames
+ *     filled from the value below stay that value;
+ *   - @keyframes inside @scope blocks are taken like the others (a
+ *     keyframes name is not scoped); @property inside @scope is not.
+ *   - ex and ch use the engine's font metrics (wf_cssprop.h). */
 #ifndef WF_SITECSS_H
 #define WF_SITECSS_H
 #include <stdint.h>
@@ -208,8 +224,13 @@ enum {
     /* Lot 97: outside the kinds of K_MAX (all, revert and inherit leave
      * them alone): lidx is the list in lpool, 0 for none */
     WF_SITE_K_ANIM = 27,      /* the animation shorthand */
-    WF_SITE_K_TRANS = 28      /* the transition shorthand */
+    WF_SITE_K_TRANS = 28,     /* the transition shorthand */
+    /* Lot 98: the longhands, slot = kind - WF_SITE_K_LONG0: the nine
+     * animation-* (WF_CSSANIM_L_*) then the five transition-*
+     * (WF_CSSANIM_LONGS + WF_CSSTRANS_L_*) */
+    WF_SITE_K_LONG0 = 29
 };
+#define WF_SITE_ALONGS 14           /* Lot 98: WF_CSSANIM_LONGS + WF_CSSTRANS_LONGS slots per element */
 /* Lot 89: a compound that names the scoping root */
 enum {
     WF_SITE_SREF_NONE = 0,
@@ -287,13 +308,14 @@ typedef struct {
     uint8_t lv[WF_SITE_LKINDS], lv_val[WF_SITE_LKINDS];
     int lv_rank[WF_SITE_LKINDS];
     /* Lot 97: the starting value of each custom property name (an evar
-     * index + 1 from @starting-style rules, 0 none) and its rank; the
-     * animation and transition lists (lpool index + 1, 0 none) and the
-     * ranks of their winning declarations */
+     * index + 1 from @starting-style rules, 0 none) and its rank */
     uint8_t sbind[WF_SITE_VNAMES];
     int srank[WF_SITE_VNAMES];
-    uint8_t anim, trans;
-    int anim_rank, trans_rank;
+    /* Lot 98 (Lot 97 kept the two shorthands): per longhand slot, the list
+     * of the winning declaration (lpool index + 1, 0 the initial value),
+     * 1 when that list is a shorthand's, and the declaration's rank */
+    uint8_t al[WF_SITE_ALONGS], alsh[WF_SITE_ALONGS];
+    int alrank[WF_SITE_ALONGS];
 } wf_site_node_t;
 
 typedef struct {
@@ -443,6 +465,7 @@ typedef struct {
     int prop_animated;            /* (element, property) values set by an animation */
     int prop_transitioned;        /* ... by a running (or delayed) transition */
     int recascades;               /* reader properties cascaded again (0 or 1) */
+    int prop_composed;            /* Lot 98: animated values with a keyframe added to the value below */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */
@@ -502,7 +525,9 @@ const wf_cssprop_t *wf_site_prop(const wf_site_t *d, const char *name);
  * the next prepares (animations and transitions); 0 by default. */
 void wf_site_set_time(int ms);
 /* Lot 97: "keyframes K animated A transitioned T font F at Nms" (and
- * " dropped D" when @keyframes were over the table); length, 0 when the
- * page had no keyframes, animation, transition or font-relative value. */
+ * " dropped D" when @keyframes were over the table; Lot 98: " composed C"
+ * when C animated values added a keyframe to the value below); length, 0
+ * when the page had no keyframes, animation or transition list, or
+ * font-relative value. */
 int wf_site_anim_text(const wf_site_t *d, char *out, int cap);
 #endif
