@@ -225,12 +225,12 @@ enum {
      * them alone): lidx is the list in lpool, 0 for none */
     WF_SITE_K_ANIM = 27,      /* the animation shorthand */
     WF_SITE_K_TRANS = 28,     /* the transition shorthand */
-    /* Lot 98: the longhands, slot = kind - WF_SITE_K_LONG0: the nine
-     * animation-* (WF_CSSANIM_L_*) then the five transition-*
-     * (WF_CSSANIM_LONGS + WF_CSSTRANS_L_*) */
+    /* Lot 98: the longhands, slot = kind - WF_SITE_K_LONG0: the
+     * animation-* (WF_CSSANIM_L_*; Lot 99: ten, animation-timeline last)
+     * then the five transition-* (WF_CSSANIM_LONGS + WF_CSSTRANS_L_*) */
     WF_SITE_K_LONG0 = 29
 };
-#define WF_SITE_ALONGS 14           /* Lot 98: WF_CSSANIM_LONGS + WF_CSSTRANS_LONGS slots per element */
+#define WF_SITE_ALONGS 15           /* Lot 98: WF_CSSANIM_LONGS + WF_CSSTRANS_LONGS slots per element (Lot 99: 15) */
 /* Lot 89: a compound that names the scoping root */
 enum {
     WF_SITE_SREF_NONE = 0,
@@ -466,6 +466,7 @@ typedef struct {
     int prop_transitioned;        /* ... by a running (or delayed) transition */
     int recascades;               /* reader properties cascaded again (0 or 1) */
     int prop_composed;            /* Lot 98: animated values with a keyframe added to the value below */
+    int anim_idle;                /* Lot 99: element animations without a timeline */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */

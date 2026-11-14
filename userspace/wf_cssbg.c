@@ -1,5 +1,6 @@
 /* wf_cssbg.c - Lot 90: see wf_cssbg.h. */
 #include "wf_cssbg.h"
+#include "wf_cssprop.h"
 
 static char bl(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
 static int bsp(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
@@ -740,7 +741,11 @@ int wf_cssbg_shorthand(const char *v, wf_cssbg_t *out) {
                 bx[box++] = box_code(v + wa[k], wb[k] - wa[k]);
             } else {
                 int l = wb[k] - wa[k];
-                if (!last_layer || col || !wf_cssbg_color(v + wa[k], l) || l >= (int)sizeof(out->color)) return 0;
+                unsigned int rgb;
+                /* Lot 99: an opaque hsl() too (the reader paints it) */
+                if (!last_layer || col || !(wf_cssbg_color(v + wa[k], l) || wf_cssprop_rgb24(v + wa[k], l, &rgb)) ||
+                    l >= (int)sizeof(out->color))
+                    return 0;
                 col = 1;
                 {
                     int i;

@@ -523,6 +523,11 @@ static int parse_color(const char *s, int n, uint32_t *out) {
         }
         return 0;
     }
+    {
+        /* Lot 99: an opaque hsl() or hsla() */
+        unsigned int c;
+        if (wf_cssprop_rgb24(s + i, n - i, &c)) { *out = (uint32_t)c; return 1; }
+    }
     if (n - i >= 4 && lc(s[i]) == 'r' && lc(s[i + 1]) == 'g' && lc(s[i + 2]) == 'b') {
         /* Lot 97: rgb(R, G, B) with integers 0..255, the form an animated
          * opaque <color> computes to (rgba() too with an alpha of 1) */
@@ -1031,12 +1036,13 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
         (r->kind >= WF_SITE_K_LONG0 && r->kind < WF_SITE_K_LONG0 + WF_SITE_ALONGS)) {
         /* Lot 97: the strongest animation (transition) list wins. Lot 98:
          * per longhand; a shorthand sets its longhands (animation all but
-         * animation-composition) */
+         * animation-composition; Lot 99: animation-timeline is reset by it,
+         * to auto) */
         int lo = r->kind - WF_SITE_K_LONG0, hi = lo + 1, sh = 0, q;
-        if (r->kind == WF_SITE_K_ANIM) { lo = 0; hi = WF_CSSANIM_L_COMPOSITION; sh = 1; }
+        if (r->kind == WF_SITE_K_ANIM) { lo = 0; hi = WF_CSSANIM_LONGS; sh = 1; }
         else if (r->kind == WF_SITE_K_TRANS) { lo = WF_CSSANIM_LONGS; hi = WF_SITE_ALONGS; sh = 1; }
         for (q = lo; q < hi; q++) {
-            if (rank < nd->alrank[q]) continue;
+            if ((sh && q == WF_CSSANIM_L_COMPOSITION) || rank < nd->alrank[q]) continue;
             nd->al[q] = r->lidx;
             nd->alsh[q] = (uint8_t)sh;
             nd->alrank[q] = rank;
@@ -2101,8 +2107,8 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             static const char *const lnames[WF_SITE_ALONGS] = {
                 "animation-name", "animation-duration", "animation-timing-function", "animation-delay",
                 "animation-iteration-count", "animation-direction", "animation-fill-mode", "animation-play-state",
-                "animation-composition", "transition-property", "transition-duration", "transition-timing-function",
-                "transition-delay", "transition-behavior"};
+                "animation-composition", "animation-timeline", "transition-property", "transition-duration",
+                "transition-timing-function", "transition-delay", "transition-behavior"};
             static wf_cssanim_t la[WF_CSSANIM_MAX];
             static wf_csstrans_t lt[WF_CSSANIM_MAX];
             int q, c;
@@ -3960,38 +3966,56 @@ static void kf_collect(const wf_site_t *d, const wf_site_kf_t *kf, int k, const 
     }
 }
 
-/* the value of animation a (keyframes kf) for name k at the reader clock,
- * under the value below: 1 and out, 0 when it gives none */
-static int anim_value(const wf_site_t *d, const wf_cssanim_t *a, const wf_site_kf_t *kf, int k, const wf_cssprop_t *p,
-                      const wf_cssprop_fctx_t *fc, const char *under, char *out, int cap, int *composed) {
-    static kf_frames_t f;
+/* Lot 99: keyframe value v composed on under with operation c (add or
+ * accumulate) into f->val[j]; 1 when it was (else f->val[j] is left as
+ * it is) */
+static int kf_compose(const wf_cssprop_t *p, int c, const char *under, const char *v, kf_frames_t *f, int j) {
     static char sum[WF_CSSPROP_VAL];
+    int r = c == WF_CSSANIM_ACCUMULATE ? wf_cssprop_accumulate(p, under, v, sum, (int)sizeof(sum))
+                                       : wf_cssprop_add(p, under, v, sum, (int)sizeof(sum));
+    if (r != 2) return 0;   /* 1 gives v itself, 0 nothing */
+    scopy(f->val[j], WF_CSSPROP_VAL, sum, slen(sum));
+    return 1;
+}
+
+/* the value of animation a (keyframes kf) for name k at the reader clock,
+ * under the value below (base: the element's own value): 1 and out, 0
+ * when it gives none */
+static int anim_value(const wf_site_t *d, const wf_cssanim_t *a, const wf_site_kf_t *kf, int k, const wf_cssprop_t *p,
+                      const wf_cssprop_fctx_t *fc, const char *base, const char *under, char *out, int cap,
+                      int *composed) {
+    static kf_frames_t f;
     int prog, before, j, x, m;
     const wf_cssease_t *e;
     if (!wf_cssanim_progress(a, d->anim_ms, &prog, &before)) return 0;
     kf_collect(d, kf, k, p, fc, &f);
     if (!f.n) return 0;
     /* Lot 98: add and accumulate put each keyframe value on the value
-     * below (the frames filled in below stay that value) */
-    for (j = 0; j < f.n; j++)
-        if ((f.comp[j] >= 0 ? f.comp[j] : a->comp) != WF_CSSANIM_REPLACE &&
-            wf_cssprop_add(p, under, f.val[j], sum, (int)sizeof(sum)) == 2) {
-            scopy(f.val[j], WF_CSSPROP_VAL, sum, slen(sum));
-            *composed = 1;
-        }
+     * below */
+    for (j = 0; j < f.n; j++) {
+        int c = f.comp[j] >= 0 ? f.comp[j] : a->comp;
+        if (c != WF_CSSANIM_REPLACE && kf_compose(p, c, under, f.val[j], &f, j)) *composed = 1;
+    }
+    /* Lot 99: the 0% and 100% keyframes a rule leaves out take the
+     * element's own value with the animation's composition (CSS
+     * Animations 2, generate initial and final frames) */
     if (f.off[0] > 0) {
         for (m = f.n; m > 0; m--) {
             f.off[m] = f.off[m - 1]; f.has_ease[m] = f.has_ease[m - 1]; f.ease[m] = f.ease[m - 1];
             scopy(f.val[m], WF_CSSPROP_VAL, f.val[m - 1], slen(f.val[m - 1]));
         }
         f.off[0] = 0; f.has_ease[0] = 0;
-        scopy(f.val[0], WF_CSSPROP_VAL, under, slen(under));
         f.n++;
+        if (a->comp == WF_CSSANIM_REPLACE || !kf_compose(p, a->comp, under, base, &f, 0))
+            scopy(f.val[0], WF_CSSPROP_VAL, base, slen(base));
+        else *composed = 1;
     }
     if (f.off[f.n - 1] < 10000) {
         f.off[f.n] = 10000; f.has_ease[f.n] = 0;
-        scopy(f.val[f.n], WF_CSSPROP_VAL, under, slen(under));
         f.n++;
+        if (a->comp == WF_CSSANIM_REPLACE || !kf_compose(p, a->comp, under, base, &f, f.n - 1))
+            scopy(f.val[f.n - 1], WF_CSSPROP_VAL, base, slen(base));
+        else *composed = 1;
     }
     for (j = 0; j + 2 < f.n && f.off[j + 1] <= prog; j++) {}
     x = ((prog - f.off[j]) * 20000 / (f.off[j + 1] - f.off[j]) + 1) / 2;   /* at most 2e8 */
@@ -4064,7 +4088,7 @@ static int trans_value(wf_site_t *d, const wf_site_node_t *nd, int k, const wf_c
  * bindings. */
 static int anim_pass(wf_site_t *d) {
     static uint8_t orig[WF_SITE_NODES][WF_SITE_VNAMES];
-    static char cur[WF_CSSPROP_VAL], val[WF_CSSPROP_VAL];
+    static char cur[WF_CSSPROP_VAL], val[WF_CSSPROP_VAL], base[WF_CSSPROP_VAL];
     static wf_cssanim_t al[WF_CSSANIM_MAX];
     int i, k, changed = 0;
     for (i = 0; i < d->nnodes; i++) for (k = 0; k < d->nvnames; k++) orig[i][k] = d->node[i].vbind[k];
@@ -4074,6 +4098,9 @@ static int anim_pass(wf_site_t *d) {
         wf_cssprop_fctx_t fc;
         fc.vw = d->vw; fc.vh = d->vh; fc.em = d->fs[i]; fc.rem = d->root_fs;
         na = node_lists(d, nd, 1, al);
+        /* Lot 99: an animation without a timeline (none, or a name no
+         * timeline has here) has no effect */
+        for (j = 0; j < na; j++) if (al[j].timeline != WF_CSSANIM_TL_AUTO && kf_find(d, al[j].name)) d->anim_idle++;
         for (k = 0; k < d->nvnames; k++) {
             const wf_cssprop_t *p = kprop(d, k);
             int b, animated = 0, e, composed = 0;
@@ -4090,10 +4117,11 @@ static int anim_pass(wf_site_t *d) {
             }
             /* an !important own declaration keeps its value against the
              * animations (rank_of: importance is the top bit, 2^30) */
+            scopy(base, WF_CSSPROP_VAL, cur, slen(cur));
             if (nd->vrank[k] < (1 << 30))
                 for (j = 0; j < na; j++) {
-                    const wf_site_kf_t *kf = kf_find(d, al[j].name);
-                    if (kf && anim_value(d, &al[j], kf, k, p, &fc, cur, val, (int)sizeof(val), &composed)) {
+                    const wf_site_kf_t *kf = al[j].timeline == WF_CSSANIM_TL_AUTO ? kf_find(d, al[j].name) : 0;
+                    if (kf && anim_value(d, &al[j], kf, k, p, &fc, base, cur, val, (int)sizeof(val), &composed)) {
                         scopy(cur, WF_CSSPROP_VAL, val, slen(val));
                         animated = 1;
                     }
@@ -4137,6 +4165,10 @@ int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
     if (d->prop_composed) {
         n = app(out, cap, n, " composed ");
         n = app_u(out, cap, n, (unsigned)d->prop_composed);
+    }
+    if (d->anim_idle) {
+        n = app(out, cap, n, " idle ");
+        n = app_u(out, cap, n, (unsigned)d->anim_idle);
     }
     return n;
 }

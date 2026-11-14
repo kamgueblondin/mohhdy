@@ -184,7 +184,8 @@ static void test_l98_long_api(void) {
     static wf_csstrans_t t[WF_CSSANIM_MAX + 2];
     const char *v[WF_CSSANIM_LONGS] = {0};
     unsigned char sh[WF_CSSANIM_LONGS] = {0};
-    TEST_ASSERT_EQUAL(9, WF_CSSANIM_LONGS);
+    /* Lot 99, converted: animation-timeline is the tenth (was 9) */
+    TEST_ASSERT_EQUAL(10, WF_CSSANIM_LONGS);
     TEST_ASSERT_EQUAL(5, WF_CSSTRANS_LONGS);
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_NAME, 0, a, 4));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_NAME, "k", 0, 4));
@@ -192,7 +193,11 @@ static void test_l98_long_api(void) {
     TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_L_NAME, "k", a, 1));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(-1, "add", a, 4));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_LONGS, "add", a, 4));
-    TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_LONGS - 1, "add", a, 4));
+    /* Lot 99, converted: the last longhand is animation-timeline (was
+     * animation-composition, WF_CSSANIM_LONGS - 1 "add" gave 1) */
+    TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_L_COMPOSITION, "add", a, 4));
+    TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_LONGS - 1, "add", a, 4));
+    TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_LONGS - 1, "none", a, 4));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_NAME, "a, b, c", a, 2));
     TEST_ASSERT_EQUAL(4, wf_cssanim_long(WF_CSSANIM_L_NAME, "a, b, c, d", a, WF_CSSANIM_MAX + 2));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_NAME, "a, b, c, d, e", a, WF_CSSANIM_MAX + 2));
@@ -352,9 +357,12 @@ static void test_l98_composition(void) {
     /* the shorthand does not reset the composition, in either order */
     prep(PN KF "#o { --p: 10px; animation-composition: add; animation: k 1000ms linear }", 500);
     TEST_ASSERT_EQUAL_STRING("60px", nv("o"));
-    /* filled ends stay the value below */
+    /* Lot 99, converted (was "filled ends stay the value below", 70px):
+     * the generated 0% keyframe is the element's 20px added on the 20px
+     * below (40px), 50% is 120px; at 250ms halfway: 80px (CSS Animations
+     * 2, generate initial and final frames) */
     prep(PN "@keyframes k { 50% { --p: 100px } } #o { --p: 20px; animation: k 1000ms linear; animation-composition: add }", 250);
-    TEST_ASSERT_EQUAL_STRING("70px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("80px", nv("o"));
     /* a keyframe's own composition */
     prep(PN "@keyframes k { from { --p: 0px; animation-composition: replace } to { --p: 100px } } "
          "#o { --p: 10px; animation: k 1000ms linear; animation-composition: add }", 500);

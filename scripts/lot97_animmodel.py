@@ -156,14 +156,17 @@ def colour_match(v):
     """a <color> value as the registration matches it: a hex colour (3, 4,
     6 or 8 digits), a name, or rgb(), rgba(), hsl(), hsla() with only
     digits, '.', '%', ',', '/', spaces, signs and the letters of deg
-    inside one pair of parentheses"""
+    inside one pair of parentheses (Lot 99: in hsl() and hsla() the
+    letters of grad, rad and turn too)"""
     if v.startswith("#"):
         return len(v) in (4, 5, 7, 9) and all(c in "0123456789abcdef" for c in v[1:])
     if v in COLOUR_NAMES:
         return True
     for f in ("rgb(", "rgba(", "hsl(", "hsla("):
         if v.startswith(f) and len(v) > len(f) + 1 and v.endswith(")"):
-            return all(c in "0123456789.%,/ \t\n\r\fdeg-+" for c in v[len(f):-1])
+            # Lot 99, converted: the letters of grad, rad and turn in hsl()
+            ok = "0123456789.%,/ \t\n\r\fdeg-+" + ("ratun" if f.startswith("hsl") else "")
+            return all(c in ok for c in v[len(f):-1])
     return False
 
 

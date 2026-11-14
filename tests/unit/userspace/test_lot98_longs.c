@@ -1077,14 +1077,14 @@ static void test_l98_longs_45(void) {
         TEST_ASSERT_EQUAL_STRING("--p 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"none 6.9652s 3 fade-in paused", "14.44s", 0, 0, "", "normal , normal , alternate , normal", "backwards , forwards", "running,paused,running", "initial , accumulate , add , add"};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"none 6.9652s 3 fade-in paused", "14.44s", 0, 0, "", "normal , normal , alternate , normal", "backwards , forwards", "running,paused,running", "initial , accumulate , add , add", 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("fade-in 14440 0 10000 0 2 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"k,slide,--n,k", 0, "cubic-bezier(0.7052,0,0.17,0.08)", "1s,0s,paused running,0s,0ms", "0.0001", "alternate, normal, normal", 0, "14831ms alternate cubic-bezier(0.3304,2.6,0,1.3775) slide, reverse 5.76s fade-in -3016ms, backwards 13.717s slide 2361ms 3", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"k,slide,--n,k", 0, "cubic-bezier(0.7052,0,0.17,0.08)", "1s,0s,paused running,0s,0ms", "0.0001", "alternate, normal, normal", 0, "14831ms alternate cubic-bezier(0.3304,2.6,0,1.3775) slide, reverse 5.76s fade-in -3016ms, backwards 13.717s slide 2361ms 3", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("k 0 0 1 2 0 0 0 1 0 1 7052 0 1700 800", afield(0));
         TEST_ASSERT_EQUAL_STRING("slide 0 0 1 0 0 0 0 1 0 1 7052 0 1700 800", afield(1));
@@ -1092,8 +1092,8 @@ static void test_l98_longs_45(void) {
         TEST_ASSERT_EQUAL_STRING("k 0 0 1 2 0 0 0 1 0 1 7052 0 1700 800", afield(3));
     }
     {
-        static const char *const v[9] = {"", "0ms, auto, 5, 11.33s", 0, "running k 3.27s 4427ms, fade-in both -2612ms steps(4, jump-end) 0 14497ms, 8s a1 alternate-reverse 3 running", 0, 0, "forwards", "running k 3.27s 4427ms, fade-in both -2612ms steps(4, jump-end) 0 14497ms, 8s a1 alternate-reverse 3 running", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"", "0ms, auto, 5, 11.33s", 0, "running k 3.27s 4427ms, fade-in both -2612ms steps(4, jump-end) 0 14497ms, 8s a1 alternate-reverse 3 running", 0, 0, "forwards", "running k 3.27s 4427ms, fade-in both -2612ms steps(4, jump-end) 0 14497ms, 8s a1 alternate-reverse 3 running", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1104,8 +1104,8 @@ static void test_l98_longs_45(void) {
         TEST_ASSERT_EQUAL_STRING("all 12500 0 0 2 0 10 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {"k", "9804ms paused 7.0822s", 0, "9804ms paused 7.0822s", 0, 0, "9804ms paused 7.0822s", "paused , running", "auto , add , add , add , add"};
-        static const unsigned char sh[9] = {0, 1, 0, 1, 0, 0, 1, 0, 0};
+        static const char *const v[10] = {"k", "9804ms paused 7.0822s", 0, "9804ms paused 7.0822s", 0, 0, "9804ms paused 7.0822s", "paused , running", "auto , add , add , add , add", 0};
+        static const unsigned char sh[10] = {0, 1, 0, 1, 0, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("k 9804 7082 10000 0 0 1 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1116,8 +1116,8 @@ static void test_l98_longs_45(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 1810 11420 968 -3000", tfield(0));
     }
     {
-        static const char *const v[9] = {"z,_x", "-2 reverse ease 10.8958s steps(5, jump-none)", "steps(4)", 0, 0, "alternate-reverse , alternate , normal , reverse", "backwards", "running , running , paused", "accumulate, replace, accumulate"};
-        static const unsigned char sh[9] = {0, 1, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"z,_x", "-2 reverse ease 10.8958s steps(5, jump-none)", "steps(4)", 0, 0, "alternate-reverse , alternate , normal , reverse", "backwards", "running , running , paused", "accumulate, replace, accumulate", 0};
+        static const unsigned char sh[10] = {0, 1, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 0 10000 3 2 0 2 2 0 4 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("_x 0 0 10000 2 2 0 0 2 0 4 0 0 0 0", afield(1));
@@ -1132,14 +1132,14 @@ static void test_l98_longs_46(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 17000 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"none", "ease-in-out -1.3155s running _x, running step-end 2 alternate paused 19525ms", "steps(7, jump-start),steps(10, jump-start),cubic-bezier(0,2.68,0.2933,1),ease-out", "12.8s, 16s", 0, "ease-in-out -1.3155s running _x, running step-end 2 alternate paused 19525ms", 0, "stopped", "add"};
-        static const unsigned char sh[9] = {0, 1, 0, 0, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {"none", "ease-in-out -1.3155s running _x, running step-end 2 alternate paused 19525ms", "steps(7, jump-start),steps(10, jump-start),cubic-bezier(0,2.68,0.2933,1),ease-out", "12.8s, 16s", 0, "ease-in-out -1.3155s running _x, running step-end 2 alternate paused 19525ms", 0, "stopped", "add", 0};
+        static const unsigned char sh[10] = {0, 1, 0, 0, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 12800 10000 0 0 0 1 2 1 7 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"--n , --n , k", "2413ms , 0ms , auto", "3028ms 10.3438s paused", 0, "3028ms 10.3438s paused", "alternate , alternate-reverse , normal , normal", "forwards", 0, "accumulate"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 1, 0, 0, 0, 0};
+        static const char *const v[10] = {"--n , --n , k", "2413ms , 0ms , auto", "3028ms 10.3438s paused", 0, "3028ms 10.3438s paused", "alternate , alternate-reverse , normal , normal", "forwards", 0, "accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 1, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("--n 2413 0 10000 2 1 0 2 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("--n 0 0 10000 3 1 0 2 1 0 1 2500 1000 2500 10000", afield(1));
@@ -1152,30 +1152,30 @@ static void test_l98_longs_46(void) {
         TEST_ASSERT_EQUAL_STRING("--p 0 0 1 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"--n,_x,slide", 0, "cubic-bezier(0.381,0.348,0.7,-1.287)", "11719ms", 0, "paused steps(5212, jump-start) 9.4s running, 2604ms backwards slide alternate-reverse", "none,backwards,none,backwards", "running , running", "add , replace , add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {"--n,_x,slide", 0, "cubic-bezier(0.381,0.348,0.7,-1.287)", "11719ms", 0, "paused steps(5212, jump-start) 9.4s running, 2604ms backwards slide alternate-reverse", "none,backwards,none,backwards", "running , running", "add , replace , add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("--n 0 11719 10000 0 0 0 1 1 0 1 3810 3480 7000 -12870", afield(0));
         TEST_ASSERT_EQUAL_STRING("_x 0 11719 10000 3 2 0 0 1 0 1 3810 3480 7000 -12870", afield(1));
         TEST_ASSERT_EQUAL_STRING("slide 0 11719 10000 0 0 0 1 1 0 1 3810 3480 7000 -12870", afield(2));
     }
     {
-        static const char *const v[9] = {"ease, --n, --n", "13.2s", "steps(3, jump-none), ease-in-out", 0, "100000.0001 , 2.5 , 0 , 0.0001", "reverse", 0, 0, 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"ease, --n, --n", "13.2s", "steps(3, jump-none), ease-in-out", 0, "100000.0001 , 2.5 , 0 , 0.0001", "reverse", 0, 0, 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("ease 13200 0 10000 1 0 0 0 2 2 3 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("--n 13200 0 10000 1 0 0 0 1 0 1 4200 0 5800 10000", afield(1));
         TEST_ASSERT_EQUAL_STRING("--n 13200 0 10000 1 0 0 0 2 2 3 0 0 0 0", afield(2));
     }
     {
-        static const char *const v[9] = {"z", 0, "cubic-bezier(0.0895 , 2.5 , 0 , 1), steps(2, start), steps(4, start), steps(10, end)", 0, "infinite", "1px 6.7s 7.2038s fade-in, _x 6450ms steps(5, start) 12.9s, none paused cubic-bezier(0.4,-2.347,0.01,0.3) normal 17.6952s", "forwards , normal , both , backwards", 0, "add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {"z", 0, "cubic-bezier(0.0895 , 2.5 , 0 , 1), steps(2, start), steps(4, start), steps(10, end)", 0, "infinite", "1px 6.7s 7.2038s fade-in, _x 6450ms steps(5, start) 12.9s, none paused cubic-bezier(0.4,-2.347,0.01,0.3) normal 17.6952s", "forwards , normal , both , backwards", 0, "add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 0 -1 0 0 0 1 1 0 1 895 25000 0 10000", afield(0));
     }
     {
-        static const char *const v[9] = {", slide", "auto,auto,0ms,0ms", 0, 0, "infinite", 0, "backwards", 0, "paused running"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {", slide", "auto,auto,0ms,0ms", 0, 0, "infinite", 0, "backwards", 0, "paused running", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 -1 0 2 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1199,8 +1199,8 @@ static void test_l98_longs_47(void) {
         TEST_ASSERT_EQUAL_STRING("--p 498 0 0 1 0 1 2500 1000 2500 10000", tfield(2));
     }
     {
-        static const char *const v[9] = {0, "ease forwards 7635ms paused ease-in, alternate a1 6.9154s", 0, 0, "initial, 100000, infinite, 0", "alternate-reverse,normal,alternate-reverse", "forwards,forwards,backwards", "ease forwards 7635ms paused ease-in, alternate a1 6.9154s", "none , replace"};
-        static const unsigned char sh[9] = {0, 1, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {0, "ease forwards 7635ms paused ease-in, alternate a1 6.9154s", 0, 0, "initial, 100000, infinite, 0", "alternate-reverse,normal,alternate-reverse", "forwards,forwards,backwards", "ease forwards 7635ms paused ease-in, alternate a1 6.9154s", "none , replace", 0};
+        static const unsigned char sh[10] = {0, 1, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 7635 0 10000 3 1 1 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1211,8 +1211,8 @@ static void test_l98_longs_47(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "11283ms", 0, 0, "0 , 3 , 100000", 0, "normal 11607ms 1071ms cubic-bezier(0.2,1,0.93,2.67) _x, 16.1862s ease 1 1s 2s 3s steps(5, jump-none)", "paused", "add,replace,add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 1, 0, 0};
+        static const char *const v[10] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "11283ms", 0, 0, "0 , 3 , 100000", 0, "normal 11607ms 1071ms cubic-bezier(0.2,1,0.93,2.67) _x, 16.1862s ease 1 1s 2s 3s steps(5, jump-none)", "paused", "add,replace,add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 11283 0 0 0 0 1 1 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1223,14 +1223,14 @@ static void test_l98_longs_47(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {0, "18775ms", 0, "0ms", "100000, 9.292, 1", "reverse", "both , both , forwards , none", 0, "replace, add, accumulate"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "18775ms", 0, "0ms", "100000, 9.292, 1", "reverse", "both , both , forwards , none", 0, "replace, add, accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 18775 0 1000000000 1 3 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"z", "auto", "cubic-bezier(0.4 , -2.37 , 0.86 , -2.965)", "3173ms , 0ms", "2.5,infinite,0.0001", "alternate, alternate-reverse, reverse, normal", 0, "paused", "replace,add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"z", "auto", "cubic-bezier(0.4 , -2.37 , 0.86 , -2.965)", "3173ms , 0ms", "2.5,infinite,0.0001", "alternate, alternate-reverse, reverse, normal", 0, "paused", "replace,add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 3173 25000 2 0 1 0 1 0 1 4000 -23700 8600 -29650", afield(0));
     }
@@ -1256,14 +1256,14 @@ static void test_l98_longs_48(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {0, 0, "cubic-bezier(0.534, 0, 0.085, 1),ease-in-out,cubic-bezier(0.9879,0,0,0.8),steps(99999, end)", "0s, 0ms, 5.239s, 0ms, paused running", "running _x 3 8.6314s cubic-bezier(0.63 , -0.344 , 0.395 , -0.6606), alternate-reverse 12.4658s k", "alternate-reverse, normal, normal", "backwards,none,forwards,both", "paused", "replace , add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 1, 0, 0, 0, 0};
+        static const char *const v[10] = {0, 0, "cubic-bezier(0.534, 0, 0.085, 1),ease-in-out,cubic-bezier(0.9879,0,0,0.8),steps(99999, end)", "0s, 0ms, 5.239s, 0ms, paused running", "running _x 3 8.6314s cubic-bezier(0.63 , -0.344 , 0.395 , -0.6606), alternate-reverse 12.4658s k", "alternate-reverse, normal, normal", "backwards,none,forwards,both", "paused", "replace , add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 1, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 30000 3 2 1 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {0, 0, 0, "0s", "infinite,1,9.5,0", "normal", "backwards , both", "paused, running, paused, running", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, 0, 0, "0s", "infinite,1,9.5,0", "normal", "backwards , both", "paused, running, paused, running", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 -1 0 2 1 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1274,16 +1274,16 @@ static void test_l98_longs_48(void) {
         TEST_ASSERT_EQUAL_STRING("--x 11668 -3786 1 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"fade-in , _x , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0, 0, "3 7.4599s k ease, both 19.1s 15.5752s cubic-bezier(0.6291 , 2.03 , 0.3857 , -1) a1", 0, "3 7.4599s k ease, both 19.1s 15.5752s cubic-bezier(0.6291 , 2.03 , 0.3857 , -1) a1", 0, 0, "replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {"fade-in , _x , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0, 0, "3 7.4599s k ease, both 19.1s 15.5752s cubic-bezier(0.6291 , 2.03 , 0.3857 , -1) a1", 0, "3 7.4599s k ease, both 19.1s 15.5752s cubic-bezier(0.6291 , 2.03 , 0.3857 , -1) a1", 0, 0, "replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("fade-in 0 0 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("_x 0 15575 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(1));
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(2));
     }
     {
-        static const char *const v[9] = {0, "-4111ms alternate 3s k, steps(5, jump-both) 11s normal 1s 2s 3s slide", 0, "0s", 0, "reverse", 0, 0, 0};
-        static const unsigned char sh[9] = {0, 1, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "-4111ms alternate 3s k, steps(5, jump-both) 11s normal 1s 2s 3s slide", 0, "0s", 0, "reverse", 0, 0, 0, 0};
+        static const unsigned char sh[10] = {0, 1, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 1 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1291,8 +1291,8 @@ static void test_l98_longs_48(void) {
 
 static void test_l98_longs_49(void) {
     {
-        static const char *const v[9] = {0, 0, 0, 0, 0, "reverse , reverse , normal , alternate", "backwards, none, forwards", "running,running,paused", "normal"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, 0, 0, 0, 0, "reverse , reverse , normal , alternate", "backwards, none, forwards", "running,running,paused", "normal", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 1 2 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1303,8 +1303,8 @@ static void test_l98_longs_49(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 2 0 3 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {0, "0ms , auto , 2.89s , 16s", "cubic-bezier(0,1.1,0.299,0.837)", "0ms, 0s, 6s", "100000", 0, 0, " , running , paused", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "0ms , auto , 2.89s , 16s", "cubic-bezier(0,1.1,0.299,0.837)", "0ms, 0s, 6s", "100000", 0, 0, " , running , paused", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 1000000000 0 0 0 0 1 0 1 0 11000 2990 8370", afield(0));
     }
@@ -1315,20 +1315,20 @@ static void test_l98_longs_49(void) {
         TEST_ASSERT_EQUAL_STRING("all 7000 0 0 2 0 5 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {"ease 0.25 12295ms none", 0, "ease 0.25 12295ms none", "0s, 0ms, 0s", "ease 0.25 12295ms none", 0, "ease 0.25 12295ms none", "ease 0.25 12295ms none", "add , accumulate , accumulate"};
-        static const unsigned char sh[9] = {1, 0, 1, 0, 1, 0, 1, 1, 0};
+        static const char *const v[10] = {"ease 0.25 12295ms none", 0, "ease 0.25 12295ms none", "0s, 0ms, 0s", "ease 0.25 12295ms none", 0, "ease 0.25 12295ms none", "ease 0.25 12295ms none", "add , accumulate , accumulate", 0};
+        static const unsigned char sh[10] = {1, 0, 1, 0, 1, 0, 1, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 2500 0 0 0 1 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"17s backwards reverse steps(2, start) _x", "17s backwards reverse steps(2, start) _x", "17s backwards reverse steps(2, start) _x", 0, "3.6", "reverse , normal , reverse , alternate-reverse", "backwards,backwards", 0, 0};
-        static const unsigned char sh[9] = {1, 1, 1, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"17s backwards reverse steps(2, start) _x", "17s backwards reverse steps(2, start) _x", "17s backwards reverse steps(2, start) _x", 0, "3.6", "reverse , normal , reverse , alternate-reverse", "backwards,backwards", 0, 0, 0};
+        static const unsigned char sh[10] = {1, 1, 1, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("_x 17000 0 36000 1 2 0 0 2 1 2 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"1 steps(7) none 16434ms, cubic-bezier(0.94, -0.2977, 0, 0.103) slide 7072ms 1572ms reverse, alternate-reverse 2.5 _x 11.6s 7.71s", "1 steps(7) none 16434ms, cubic-bezier(0.94, -0.2977, 0, 0.103) slide 7072ms 1572ms reverse, alternate-reverse 2.5 _x 11.6s 7.71s", "steps(3, jump-end), steps(10, end), steps(4), cubic-bezier(0.439,-0.04,0.2155,0.44)", 0, "0.0001", "alternate-reverse", 0, "paused", "add , add"};
-        static const unsigned char sh[9] = {1, 1, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"1 steps(7) none 16434ms, cubic-bezier(0.94, -0.2977, 0, 0.103) slide 7072ms 1572ms reverse, alternate-reverse 2.5 _x 11.6s 7.71s", "1 steps(7) none 16434ms, cubic-bezier(0.94, -0.2977, 0, 0.103) slide 7072ms 1572ms reverse, alternate-reverse 2.5 _x 11.6s 7.71s", "steps(3, jump-end), steps(10, end), steps(4), cubic-bezier(0.439,-0.04,0.2155,0.44)", 0, "0.0001", "alternate-reverse", 0, "paused", "add , add", 0};
+        static const unsigned char sh[10] = {1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 16434 0 1 3 0 1 1 2 0 3 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("slide 7072 0 1 3 0 1 1 2 0 10 0 0 0 0", afield(1));
@@ -1351,8 +1351,8 @@ static void test_l98_longs_50(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 0 -15400 2730 10000", tfield(1));
     }
     {
-        static const char *const v[9] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,1a,j,_x,fade-in", 0, 0, "4874ms steps(3, end) paused", 0, 0, 0, "paused , paused", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,1a,j,_x,fade-in", 0, 0, "4874ms steps(3, end) paused", 0, 0, 0, "paused , paused", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 1 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1363,8 +1363,8 @@ static void test_l98_longs_50(void) {
         TEST_ASSERT_EQUAL_STRING("all 11000 2151 0 2 0 4 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {0, "2539ms", "cubic-bezier(0.497 , 0.7 , 0.4 , 0.312) , steps(3,)", "0ms, 0s", "0.0001, infinite, 2.5", 0, "forwards,none,none", 0, 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "2539ms", "cubic-bezier(0.497 , 0.7 , 0.4 , 0.312) , steps(3,)", "0ms, 0s", "0.0001, infinite, 2.5", 0, "forwards,none,none", 0, 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 2539 0 1 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1383,14 +1383,14 @@ static void test_l98_longs_50(void) {
         TEST_ASSERT_EQUAL_STRING("--x 0 0 1 1 0 1 2500 1000 2500 10000", tfield(2));
     }
     {
-        static const char *const v[9] = {"_x", "normal steps(5, jump-end) a1 0.25 16.23s, both 3 7963ms -2790ms ease", "steps(7, jump-end)", "-2598ms", 0, 0, "forwards , forwards , backwards", "normal steps(5, jump-end) a1 0.25 16.23s, both 3 7963ms -2790ms ease", 0};
-        static const unsigned char sh[9] = {0, 1, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"_x", "normal steps(5, jump-end) a1 0.25 16.23s, both 3 7963ms -2790ms ease", "steps(7, jump-end)", "-2598ms", 0, 0, "forwards , forwards , backwards", "normal steps(5, jump-end) a1 0.25 16.23s, both 3 7963ms -2790ms ease", 0, 0};
+        static const unsigned char sh[10] = {0, 1, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("_x 16230 -2598 10000 0 1 0 0 2 0 7 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"z , j , ease", 0, "reverse ease-in none 2 both", "0s, 0ms, 0s", "reverse ease-in none 2 both", 0, "backwards", 0, "replace,add"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 1, 0, 0, 0, 0};
+        static const char *const v[10] = {"z , j , ease", 0, "reverse ease-in none 2 both", "0s, 0ms, 0s", "reverse ease-in none 2 both", 0, "backwards", 0, "replace,add", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 1, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 0 20000 0 2 0 0 1 0 1 4200 0 10000 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("j 0 0 20000 0 2 0 1 1 0 1 4200 0 10000 10000", afield(1));
@@ -1412,8 +1412,8 @@ static void test_l98_longs_51(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"--n", 0, 0, "1 cubic-bezier(0.6371 , -0.2692 , 0.9 , -1) k normal", "100000", "alternate,normal,alternate", "paused", "paused,running,running", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"--n", 0, 0, "1 cubic-bezier(0.6371 , -0.2692 , 0.9 , -1) k normal", "100000", "alternate,normal,alternate", "paused", "paused,running,running", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("--n 0 0 1000000000 2 0 1 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1424,8 +1424,8 @@ static void test_l98_longs_51(void) {
         TEST_ASSERT_EQUAL_STRING("all 14535 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {0, "13.6s, 18142ms, 5601ms, 2 3", "alternate 6s none k 16.457s steps(2), -1s 12191ms k steps(5, start) reverse 3415ms, slide forwards steps(5, end) 1px 0s 9645ms 0.25", "8400ms", 0, "alternate 6s none k 16.457s steps(2), -1s 12191ms k steps(5, start) reverse 3415ms, slide forwards steps(5, end) 1px 0s 9645ms 0.25", "both,none", "running", "accumulate, accumulate"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {0, "13.6s, 18142ms, 5601ms, 2 3", "alternate 6s none k 16.457s steps(2), -1s 12191ms k steps(5, start) reverse 3415ms, slide forwards steps(5, end) 1px 0s 9645ms 0.25", "8400ms", 0, "alternate 6s none k 16.457s steps(2), -1s 12191ms k steps(5, start) reverse 3415ms, slide forwards steps(5, end) 1px 0s 9645ms 0.25", "both,none", "running", "accumulate, accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 8400 10000 0 3 0 2 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1436,14 +1436,14 @@ static void test_l98_longs_51(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 2 1 4 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {"q,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,fade-in,revert", 0, "normal paused cubic-bezier(0, 1.34, 0, 0) slide, normal 9369ms none forwards cubic-bezier(0.443 , 2.91 , 0 , -1.202), none 19.9s _x", "0s , 13794ms", "normal paused cubic-bezier(0, 1.34, 0, 0) slide, normal 9369ms none forwards cubic-bezier(0.443 , 2.91 , 0 , -1.202), none 19.9s _x", "normal paused cubic-bezier(0, 1.34, 0, 0) slide, normal 9369ms none forwards cubic-bezier(0.443 , 2.91 , 0 , -1.202), none 19.9s _x", 0, 0, 0};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 1, 1, 0, 0, 0};
+        static const char *const v[10] = {"q,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,fade-in,revert", 0, "normal paused cubic-bezier(0, 1.34, 0, 0) slide, normal 9369ms none forwards cubic-bezier(0.443 , 2.91 , 0 , -1.202), none 19.9s _x", "0s , 13794ms", "normal paused cubic-bezier(0, 1.34, 0, 0) slide, normal 9369ms none forwards cubic-bezier(0.443 , 2.91 , 0 , -1.202), none 19.9s _x", "normal paused cubic-bezier(0, 1.34, 0, 0) slide, normal 9369ms none forwards cubic-bezier(0.443 , 2.91 , 0 , -1.202), none 19.9s _x", 0, 0, 0, 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 1, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 0 0 1 0 1 0 13400 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"paused infinite 4346ms alternate-reverse 11.2s k", 0, "steps(4, jump-start) , steps(4, start)", 0, 0, "alternate-reverse,reverse,reverse", "forwards", 0, "replace , replace , add"};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"paused infinite 4346ms alternate-reverse 11.2s k", 0, "steps(4, jump-start) , steps(4, start)", 0, 0, "alternate-reverse,reverse,reverse", "forwards", 0, "replace , replace , add", 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("k 0 0 10000 3 1 0 0 2 1 4 0 0 0 0", afield(0));
     }
@@ -1466,22 +1466,22 @@ static void test_l98_longs_52(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 1 2 1 10 0 0 0 0", tfield(1));
     }
     {
-        static const char *const v[9] = {"18s 5.354s paused both, 2.5 backwards none 8.74s 6.9286s, 16.2s infinite paused 15280ms alternate", "0ms , 5687ms , inherit , auto", "cubic-bezier(0.65,-1.6835,0.04,-2.726)", "19413ms, 0ms, 0ms, 10986ms", "infinite,1.329,0.0001,0.0001", "18s 5.354s paused both, 2.5 backwards none 8.74s 6.9286s, 16.2s infinite paused 15280ms alternate", "forwards", "stopped , running , paused , paused", "accumulate , add , add"};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {"18s 5.354s paused both, 2.5 backwards none 8.74s 6.9286s, 16.2s infinite paused 15280ms alternate", "0ms , 5687ms , inherit , auto", "cubic-bezier(0.65,-1.6835,0.04,-2.726)", "19413ms, 0ms, 0ms, 10986ms", "infinite,1.329,0.0001,0.0001", "18s 5.354s paused both, 2.5 backwards none 8.74s 6.9286s, 16.2s infinite paused 15280ms alternate", "forwards", "stopped , running , paused , paused", "accumulate , add , add", 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 19413 -1 0 1 0 2 1 0 1 6500 -16835 400 -27260", afield(0));
         TEST_ASSERT_EQUAL_STRING("- 0 0 13290 0 1 0 1 1 0 1 6500 -16835 400 -27260", afield(1));
         TEST_ASSERT_EQUAL_STRING("- 0 0 1 2 1 0 1 1 0 1 6500 -16835 400 -27260", afield(2));
     }
     {
-        static const char *const v[9] = {"none 16s ease-out -0.0427s", "auto, -5ms, 3.602s", "steps(6353, jump-none),ease-in-out,ease-out", "0ms , 0ms , 0s", 0, "forwards", "forwards,forwards,none,none", "none 16s ease-out -0.0427s", "add"};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"none 16s ease-out -0.0427s", "auto, -5ms, 3.602s", "steps(6353, jump-none),ease-in-out,ease-out", "0ms , 0ms , 0s", 0, "forwards", "forwards,forwards,none,none", "none 16s ease-out -0.0427s", "add", 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 1 0 1 2 2 6353 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"18.4474s 1 backwards none cubic-bezier(0.302, -1.968, 0.25, 0) 17782ms", "16459ms , 18461ms , 0ms , auto", "steps(7, jump-none),cubic-bezier(0.71 , 2.201 , 0.2 , -1.18),steps(1, end)", "18.4474s 1 backwards none cubic-bezier(0.302, -1.968, 0.25, 0) 17782ms", 0, "alternate-reverse", "18.4474s 1 backwards none cubic-bezier(0.302, -1.968, 0.25, 0) 17782ms", "paused, running, running", "add,add,accumulate,accumulate"};
-        static const unsigned char sh[9] = {1, 0, 0, 1, 0, 0, 1, 0, 0};
+        static const char *const v[10] = {"18.4474s 1 backwards none cubic-bezier(0.302, -1.968, 0.25, 0) 17782ms", "16459ms , 18461ms , 0ms , auto", "steps(7, jump-none),cubic-bezier(0.71 , 2.201 , 0.2 , -1.18),steps(1, end)", "18.4474s 1 backwards none cubic-bezier(0.302, -1.968, 0.25, 0) 17782ms", 0, "alternate-reverse", "18.4474s 1 backwards none cubic-bezier(0.302, -1.968, 0.25, 0) 17782ms", "paused, running, running", "add,add,accumulate,accumulate", 0};
+        static const unsigned char sh[10] = {1, 0, 0, 1, 0, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 16459 17782 10000 3 2 1 1 2 2 7 0 0 0 0", afield(0));
     }
@@ -1498,8 +1498,8 @@ static void test_l98_longs_52(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 2 0 10 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {"q,fade-in,_x,revert", 0, 0, "0s,0s,0s,0s", "0 , 100000 , 0 , 2.5", "normal,reverse,auto", "both , none , forwards , forwards", "paused", "accumulate, replace, replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"q,fade-in,_x,revert", 0, 0, "0s,0s,0s,0s", "0 , 100000 , 0 , 2.5", "normal,reverse,auto", "both , none , forwards , forwards", "paused", "accumulate, replace, replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 0 0 3 1 2 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1507,14 +1507,14 @@ static void test_l98_longs_52(void) {
 
 static void test_l98_longs_53(void) {
     {
-        static const char *const v[9] = {0, "5,15423ms,0ms,11646ms,12142ms", 0, 0, 0, "normal,alternate-reverse,normal", 0, "paused", "replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "5,15423ms,0ms,11646ms,12142ms", 0, 0, 0, "normal,alternate-reverse,normal", 0, "paused", "replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 1 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"j , ease , q , k", "auto", "0 ease 8842ms 15.9s paused alternate-reverse", "0ms , 0s , 9231ms , -3405ms", 0, 0, "0 ease 8842ms 15.9s paused alternate-reverse", "paused", "accumulate"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 0, 0, 1, 0, 0};
+        static const char *const v[10] = {"j , ease , q , k", "auto", "0 ease 8842ms 15.9s paused alternate-reverse", "0ms , 0s , 9231ms , -3405ms", 0, 0, "0 ease 8842ms 15.9s paused alternate-reverse", "paused", "accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("j 0 0 10000 0 0 1 2 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("ease 0 0 10000 0 0 1 2 1 0 1 2500 1000 2500 10000", afield(1));
@@ -1522,14 +1522,14 @@ static void test_l98_longs_53(void) {
         TEST_ASSERT_EQUAL_STRING("k 0 -3405 10000 0 0 1 2 1 0 1 2500 1000 2500 10000", afield(3));
     }
     {
-        static const char *const v[9] = {0, "0ms", "14969ms none alternate-reverse, a1 steps(2, start) -2099ms 3.438s", "0ms,8187ms,14906ms,0s,auto", 0, 0, 0, 0, "accumulate"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "0ms", "14969ms none alternate-reverse, a1 steps(2, start) -2099ms 3.438s", "0ms,8187ms,14906ms,0s,auto", 0, 0, 0, 0, "accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 0 2 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"z , fade-in , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa , slide", "fade-in -2 forwards steps(7, jump-end) alternate paused 0 0.8s, -3794ms none 17.87s steps(10, end) 2.5 _x running", "steps(1, jump-end)", "fade-in -2 forwards steps(7, jump-end) alternate paused 0 0.8s, -3794ms none 17.87s steps(10, end) 2.5 _x running", 0, "alternate , alternate", "fade-in -2 forwards steps(7, jump-end) alternate paused 0 0.8s, -3794ms none 17.87s steps(10, end) 2.5 _x running", "none", 0};
-        static const unsigned char sh[9] = {0, 1, 0, 1, 0, 0, 1, 0, 0};
+        static const char *const v[10] = {"z , fade-in , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa , slide", "fade-in -2 forwards steps(7, jump-end) alternate paused 0 0.8s, -3794ms none 17.87s steps(10, end) 2.5 _x running", "steps(1, jump-end)", "fade-in -2 forwards steps(7, jump-end) alternate paused 0 0.8s, -3794ms none 17.87s steps(10, end) 2.5 _x running", 0, "alternate , alternate", "fade-in -2 forwards steps(7, jump-end) alternate paused 0 0.8s, -3794ms none 17.87s steps(10, end) 2.5 _x running", "none", 0, 0};
+        static const unsigned char sh[10] = {0, 1, 0, 1, 0, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 0 10000 2 0 0 0 2 0 1 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("fade-in 0 0 10000 2 0 0 0 2 0 1 0 0 0 0", afield(1));
@@ -1549,14 +1549,14 @@ static void test_l98_longs_53(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {0, "12.925s", 0, 0, 0, 0, "", 0, "replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "12.925s", 0, 0, 0, 0, "", 0, "replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 12925 0 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"--n , --n , --n", 0, 0, "auto,0ms", "0", "reverse , alternate", "both slide 10503ms -3186ms steps(2, jump-end), 19.46s running initial reverse 10206ms ease, none 11.17s alternate-reverse cubic-bezier(0,0.4,0.8516,0) fade-in", "both slide 10503ms -3186ms steps(2, jump-end), 19.46s running initial reverse 10206ms ease, none 11.17s alternate-reverse cubic-bezier(0,0.4,0.8516,0) fade-in", "replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 1, 1, 0};
+        static const char *const v[10] = {"--n , --n , --n", 0, 0, "auto,0ms", "0", "reverse , alternate", "both slide 10503ms -3186ms steps(2, jump-end), 19.46s running initial reverse 10206ms ease, none 11.17s alternate-reverse cubic-bezier(0,0.4,0.8516,0) fade-in", "both slide 10503ms -3186ms steps(2, jump-end), 19.46s running initial reverse 10206ms ease, none 11.17s alternate-reverse cubic-bezier(0,0.4,0.8516,0) fade-in", "replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 1, 1, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("--n 0 0 0 1 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("--n 0 0 0 2 0 0 0 1 0 1 2500 1000 2500 10000", afield(1));
@@ -1566,8 +1566,8 @@ static void test_l98_longs_53(void) {
 
 static void test_l98_longs_54(void) {
     {
-        static const char *const v[9] = {"_x,z,--n", 0, 0, "both steps(10, start) 0.25 fade-in, k backwards 10891ms paused, backwards 16.64s alternate 0 running 19.7s k", 0, 0, "backwards", 0, 0};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"_x,z,--n", 0, 0, "both steps(10, start) 0.25 fade-in, k backwards 10891ms paused, backwards 16.64s alternate 0 running 19.7s k", 0, 0, "backwards", 0, 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("_x 0 0 10000 0 2 0 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("z 0 0 10000 0 2 0 0 1 0 1 2500 1000 2500 10000", afield(1));
@@ -1580,14 +1580,14 @@ static void test_l98_longs_54(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"fade-in", 0, "cubic-bezier(0.95 , 0.8 , 0.4286 , -1.0536) , steps(5, end)", "-4.17s steps(4, jump-end) none 5.407s", 0, 0, "none, both", "-4.17s steps(4, jump-end) none 5.407s", "add"};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"fade-in", 0, "cubic-bezier(0.95 , 0.8 , 0.4286 , -1.0536) , steps(5, end)", "-4.17s steps(4, jump-end) none 5.407s", 0, 0, "none, both", "-4.17s steps(4, jump-end) none 5.407s", "add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("fade-in 0 0 10000 0 0 0 1 1 0 1 9500 8000 4286 -10536", afield(0));
     }
     {
-        static const char *const v[9] = {"j, slide, slide", 0, "step-start,steps(1, jump-both),step-end", "_x steps(3, start) 5.692s 0.798s, -1.1s infinite paused slide 12.39s", 0, "reverse, alternate, alternate", 0, "_x steps(3, start) 5.692s 0.798s, -1.1s infinite paused slide 12.39s", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"j, slide, slide", 0, "step-start,steps(1, jump-both),step-end", "_x steps(3, start) 5.692s 0.798s, -1.1s infinite paused slide 12.39s", 0, "reverse, alternate, alternate", 0, "_x steps(3, start) 5.692s 0.798s, -1.1s infinite paused slide 12.39s", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("j 0 0 10000 1 0 0 0 2 1 1 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("slide 0 0 10000 2 0 0 0 2 3 1 0 0 0 0", afield(1));
@@ -1612,8 +1612,8 @@ static void test_l98_longs_54(void) {
         TEST_ASSERT_EQUAL_STRING("--q 4908 13600 0 1 0 1 423 20000 7250 5000", tfield(0));
     }
     {
-        static const char *const v[9] = {"--n, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "0ms", 0, 0, 0, 0, "forwards", "running , running , paused", "replace, accumulate, replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"--n, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "0ms", 0, 0, 0, 0, "forwards", "running , running , paused", "replace, accumulate, replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("--n 0 0 10000 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 10000 0 1 0 2 1 0 1 2500 1000 2500 10000", afield(1));
@@ -1623,22 +1623,22 @@ static void test_l98_longs_54(void) {
 
 static void test_l98_longs_55(void) {
     {
-        static const char *const v[9] = {"ease , j , slide", "ease 8.6117s running steps(3, start)", "cubic-bezier(0, -1.736, 0.3895, 1.5),steps(2, jump-end),cubic-bezier(0.614 , -0.3 , 0.517 , -1.9289),steps(7, end)", "ease 8.6117s running steps(3, start)", 0, "normal", 0, "ease 8.6117s running steps(3, start)", 0};
-        static const unsigned char sh[9] = {0, 1, 0, 1, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"ease , j , slide", "ease 8.6117s running steps(3, start)", "cubic-bezier(0, -1.736, 0.3895, 1.5),steps(2, jump-end),cubic-bezier(0.614 , -0.3 , 0.517 , -1.9289),steps(7, end)", "ease 8.6117s running steps(3, start)", 0, "normal", 0, "ease 8.6117s running steps(3, start)", 0, 0};
+        static const unsigned char sh[10] = {0, 1, 0, 1, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("ease 0 0 10000 0 0 0 0 1 0 1 0 -17360 3895 15000", afield(0));
         TEST_ASSERT_EQUAL_STRING("j 0 0 10000 0 0 0 0 2 0 2 0 0 0 0", afield(1));
         TEST_ASSERT_EQUAL_STRING("slide 0 0 10000 0 0 0 0 1 0 1 6140 -3000 5170 -19289", afield(2));
     }
     {
-        static const char *const v[9] = {0, "4555ms, 14746ms, auto", "steps(6496)", "0s", 0, "normal,normal,normal,alternate-reverse", "backwards,both,forwards,backwards", 0, "add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "4555ms, 14746ms, auto", "steps(6496)", "0s", 0, "normal,normal,normal,alternate-reverse", "backwards,both,forwards,backwards", 0, "add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 4555 0 10000 0 2 0 1 2 0 6496 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"5381ms initial a1", 0, "cubic-bezier(0.6686, -2, 0.6841, 2.1)", 0, "2", "reverse", "forwards", "5381ms initial a1", "accumulate"};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"5381ms initial a1", 0, "cubic-bezier(0.6686, -2, 0.6841, 2.1)", 0, "2", "reverse", "forwards", "5381ms initial a1", "accumulate", 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 20000 1 1 0 2 1 0 1 6686 -20000 6841 21000", afield(0));
     }
@@ -1649,8 +1649,8 @@ static void test_l98_longs_55(void) {
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 10027 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {0, "0ms, auto, 8434ms", "ease 6097ms, backwards 0 13378ms paused", "0ms", "0,infinite,100000,100000", "normal,alternate-reverse,reverse", "ease 6097ms, backwards 0 13378ms paused", "paused", "accumulate, add"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 0, 0, 1, 0, 0};
+        static const char *const v[10] = {0, "0ms, auto, 8434ms", "ease 6097ms, backwards 0 13378ms paused", "0ms", "0,infinite,100000,100000", "normal,alternate-reverse,reverse", "ease 6097ms, backwards 0 13378ms paused", "paused", "accumulate, add", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 0 0 0 1 2 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1661,14 +1661,14 @@ static void test_l98_longs_55(void) {
         TEST_ASSERT_EQUAL_STRING("all 8000 0 0 0 0 1 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {0, "0ms", "", 0, "0.0001", 0, "forwards", "running, paused, running, paused", ""};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "0ms", "", 0, "0.0001", 0, "forwards", "running, paused, running, paused", "", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 1 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"q", 0, 0, "fade-in 18s", 0, "fade-in 18s", "forwards , backwards , forwards , none", "fade-in 18s", "add"};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 1, 0, 1, 0};
+        static const char *const v[10] = {"q", 0, 0, "fade-in 18s", 0, "fade-in 18s", "forwards , backwards , forwards , none", "fade-in 18s", "add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 1, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("q 0 0 10000 0 1 0 1 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1676,16 +1676,16 @@ static void test_l98_longs_55(void) {
 
 static void test_l98_longs_56(void) {
     {
-        static const char *const v[9] = {"slide,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,_x", 0, 0, 0, 0, "sideways,alternate", "forwards", 0, "sum, add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"slide,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,_x", 0, 0, 0, 0, "sideways,alternate", "forwards", 0, "sum, add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("slide 0 0 10000 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 10000 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(1));
         TEST_ASSERT_EQUAL_STRING("_x 0 0 10000 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(2));
     }
     {
-        static const char *const v[9] = {"15690ms slide 2.5", 0, 0, "0ms, 0s, 0s", 0, "reverse,2 3,alternate", 0, "running,running", "add , replace , add"};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"15690ms slide 2.5", 0, 0, "0ms, 0s, 0s", 0, "reverse,2 3,alternate", 0, "running,running", "add , replace , add", 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("slide 0 0 10000 0 0 0 1 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1696,16 +1696,16 @@ static void test_l98_longs_56(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"9307ms steps(5) alternate-reverse 17.3308s slide, cubic-bezier(0.8,-1.8022,0,2.62) 4.17s 11.76s ease, 16s running 0 -3.853s steps(2, jump-none) alternate none", "auto", "steps(4) , step-start , cubic-bezier(0.0079,-2,0.8,-3)", "0s", 0, 0, "none", "paused", "add, replace"};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"9307ms steps(5) alternate-reverse 17.3308s slide, cubic-bezier(0.8,-1.8022,0,2.62) 4.17s 11.76s ease, 16s running 0 -3.853s steps(2, jump-none) alternate none", "auto", "steps(4) , step-start , cubic-bezier(0.0079,-2,0.8,-3)", "0s", 0, 0, "none", "paused", "add, replace", 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("slide 0 0 10000 0 0 1 1 2 0 4 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("ease 0 0 10000 0 0 1 0 2 1 1 0 0 0 0", afield(1));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 1 1 1 0 1 79 -20000 8000 -30000", afield(2));
     }
     {
-        static const char *const v[9] = {"--n, fade-in, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "fade-in paused none cubic-bezier(0.03,-0.241,0,1.9)", "fade-in paused none cubic-bezier(0.03,-0.241,0,1.9)", "11.5208s,0s,0ms", "fade-in paused none cubic-bezier(0.03,-0.241,0,1.9)", 0, 0, "fade-in paused none cubic-bezier(0.03,-0.241,0,1.9)", 0};
-        static const unsigned char sh[9] = {0, 1, 1, 0, 1, 0, 0, 1, 0};
+        static const char *const v[10] = {"--n, fade-in, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "fade-in paused none cubic-bezier(0.03,-0.241,0,1.9)", "fade-in paused none cubic-bezier(0.03,-0.241,0,1.9)", "11.5208s,0s,0ms", "fade-in paused none cubic-bezier(0.03,-0.241,0,1.9)", 0, 0, "fade-in paused none cubic-bezier(0.03,-0.241,0,1.9)", 0, 0};
+        static const unsigned char sh[10] = {0, 1, 1, 0, 1, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("--n 0 11521 10000 0 0 1 0 1 0 1 300 -2410 0 19000", afield(0));
         TEST_ASSERT_EQUAL_STRING("fade-in 0 0 10000 0 0 1 0 1 0 1 300 -2410 0 19000", afield(1));
@@ -1718,8 +1718,8 @@ static void test_l98_longs_56(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"k , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa , 1a", "0ms", "cubic-bezier(0.1312,-0.3,0.9039,-3)", 0, 0, "normal,alternate-reverse,alternate,alternate", "forwards , none", 0, 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"k , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa , 1a", "0ms", "cubic-bezier(0.1312,-0.3,0.9039,-3)", 0, 0, "normal,alternate-reverse,alternate,alternate", "forwards , none", 0, 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 1 0 0 1 0 1 1312 -3000 9039 -30000", afield(0));
     }
@@ -1739,8 +1739,8 @@ static void test_l98_longs_57(void) {
         TEST_ASSERT_EQUAL_STRING("all 18819 0 1 1 0 1 4200 0 10000 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"k", "0ms , 0ms", "alternate _x infinite 9.913s running, slide 13222ms paused none alternate", "0s", "0", "normal , normal , reverse", "none, forwards", "running , paused , running , running", "replace , add"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"k", "0ms , 0ms", "alternate _x infinite 9.913s running, slide 13222ms paused none alternate", "0s", "0", "normal , normal , reverse", "none, forwards", "running , paused , running , running", "replace , add", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("k 0 0 0 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1760,8 +1760,8 @@ static void test_l98_longs_57(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"paused -1s ease 6029ms running both, cubic-bezier(0.78,-0.4227,0,-3) 318ms alternate ease, 4467ms ease 9618ms", "19.008s , 0ms , 0ms , 5", "steps(5, jump-none)", "16378ms", "0.0001, 2.5, infinite, 1", "paused -1s ease 6029ms running both, cubic-bezier(0.78,-0.4227,0,-3) 318ms alternate ease, 4467ms ease 9618ms", "both , backwards , both , none", "paused", "add"};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {"paused -1s ease 6029ms running both, cubic-bezier(0.78,-0.4227,0,-3) 318ms alternate ease, 4467ms ease 9618ms", "19.008s , 0ms , 0ms , 5", "steps(5, jump-none)", "16378ms", "0.0001, 2.5, infinite, 1", "paused -1s ease 6029ms running both, cubic-bezier(0.78,-0.4227,0,-3) 318ms alternate ease, 4467ms ease 9618ms", "both , backwards , both , none", "paused", "add", 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 16378 1 0 3 1 1 2 2 5 0 0 0 0", afield(0));
     }
@@ -1772,14 +1772,14 @@ static void test_l98_longs_57(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"3.11s fade-in cubic-bezier(0, 0.1765, 0.924, -1.5685)", "auto", 0, "3.11s fade-in cubic-bezier(0, 0.1765, 0.924, -1.5685)", "1 , paused running , 5", " , normal , alternate-reverse,", "forwards, backwards, forwards, both", "paused,running,inherit", 0};
-        static const unsigned char sh[9] = {1, 0, 0, 1, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"3.11s fade-in cubic-bezier(0, 0.1765, 0.924, -1.5685)", "auto", 0, "3.11s fade-in cubic-bezier(0, 0.1765, 0.924, -1.5685)", "1 , paused running , 5", " , normal , alternate-reverse,", "forwards, backwards, forwards, both", "paused,running,inherit", 0, 0};
+        static const unsigned char sh[10] = {1, 0, 0, 1, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("fade-in 0 0 10000 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {0, "4005ms", "steps(5, end), steps(7, jump-none)", "", "0", 0, 0, "stopped , running , paused , paused", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "4005ms", "steps(5, end), steps(7, jump-none)", "", "0", 0, 0, "stopped , running , paused , paused", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 4005 0 0 0 0 0 0 2 0 5 0 0 0 0", afield(0));
     }
@@ -1793,8 +1793,8 @@ static void test_l98_longs_58(void) {
         TEST_ASSERT_EQUAL_STRING("--q 0 8921 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"k", "backwards 2571ms running paused steps(3, start), running a1 alternate-reverse 994ms 8.2s, running 13642ms ease 0.25 cubic-bezier(0, 2, 0.0119, -1.0163)", "backwards 2571ms running paused steps(3, start), running a1 alternate-reverse 994ms 8.2s, running 13642ms ease 0.25 cubic-bezier(0, 2, 0.0119, -1.0163)", 0, "backwards 2571ms running paused steps(3, start), running a1 alternate-reverse 994ms 8.2s, running 13642ms ease 0.25 cubic-bezier(0, 2, 0.0119, -1.0163)", "alternate-reverse , alternate , reverse , alternate-reverse", "backwards", "running", 0};
-        static const unsigned char sh[9] = {0, 1, 1, 0, 1, 0, 0, 0, 0};
+        static const char *const v[10] = {"k", "backwards 2571ms running paused steps(3, start), running a1 alternate-reverse 994ms 8.2s, running 13642ms ease 0.25 cubic-bezier(0, 2, 0.0119, -1.0163)", "backwards 2571ms running paused steps(3, start), running a1 alternate-reverse 994ms 8.2s, running 13642ms ease 0.25 cubic-bezier(0, 2, 0.0119, -1.0163)", 0, "backwards 2571ms running paused steps(3, start), running a1 alternate-reverse 994ms 8.2s, running 13642ms ease 0.25 cubic-bezier(0, 2, 0.0119, -1.0163)", "alternate-reverse , alternate , reverse , alternate-reverse", "backwards", "running", 0, 0};
+        static const unsigned char sh[10] = {0, 1, 1, 0, 1, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("k 0 0 10000 3 2 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1805,15 +1805,15 @@ static void test_l98_longs_58(void) {
         TEST_ASSERT_EQUAL_STRING("--x 0 0 1 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"q , _x", 0, "infinite 1950ms 6.74s k, step-end slide reverse 14.9s, a1 2.5s backwards cubic-bezier(0 , -2.6 , 0.6 , 0)", "infinite 1950ms 6.74s k, step-end slide reverse 14.9s, a1 2.5s backwards cubic-bezier(0 , -2.6 , 0.6 , 0)", "infinite 1950ms 6.74s k, step-end slide reverse 14.9s, a1 2.5s backwards cubic-bezier(0 , -2.6 , 0.6 , 0)", "reverse", "infinite 1950ms 6.74s k, step-end slide reverse 14.9s, a1 2.5s backwards cubic-bezier(0 , -2.6 , 0.6 , 0)", "running", "accumulate"};
-        static const unsigned char sh[9] = {0, 0, 1, 1, 1, 0, 1, 0, 0};
+        static const char *const v[10] = {"q , _x", 0, "infinite 1950ms 6.74s k, step-end slide reverse 14.9s, a1 2.5s backwards cubic-bezier(0 , -2.6 , 0.6 , 0)", "infinite 1950ms 6.74s k, step-end slide reverse 14.9s, a1 2.5s backwards cubic-bezier(0 , -2.6 , 0.6 , 0)", "infinite 1950ms 6.74s k, step-end slide reverse 14.9s, a1 2.5s backwards cubic-bezier(0 , -2.6 , 0.6 , 0)", "reverse", "infinite 1950ms 6.74s k, step-end slide reverse 14.9s, a1 2.5s backwards cubic-bezier(0 , -2.6 , 0.6 , 0)", "running", "accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 1, 1, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("q 0 6740 -1 1 0 0 2 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("_x 0 0 10000 1 0 0 2 2 0 1 0 0 0 0", afield(1));
     }
     {
-        static const char *const v[9] = {"none, _x, j, j", "1 a1 steps(3, jump-start) running 11436ms, none cubic-bezier(0, 2.2785, 0.5118, -2.7) infinite paused 0s, both 0 -2 k 0.1991s steps(1, jump-none) 13.161s", 0, "1 a1 steps(3, jump-start) running 11436ms, none cubic-bezier(0, 2.2785, 0.5118, -2.7) infinite paused 0s, both 0 -2 k 0.1991s steps(1, jump-none) 13.161s", "1 a1 steps(3, jump-start) running 11436ms, none cubic-bezier(0, 2.2785, 0.5118, -2.7) infinite paused 0s, both 0 -2 k 0.1991s steps(1, jump-none) 13.161s", "1 a1 steps(3, jump-start) running 11436ms, none cubic-bezier(0, 2.2785, 0.5118, -2.7) infinite paused 0s, both 0 -2 k 0.1991s steps(1, jump-none) 13.161s", 0, "1 a1 steps(3, jump-start) running 11436ms, none cubic-bezier(0, 2.2785, 0.5118, -2.7) infinite paused 0s, both 0 -2 k 0.1991s steps(1, jump-none) 13.161s", "inherit,add"};
-        static const unsigned char sh[9] = {0, 1, 0, 1, 1, 1, 0, 1, 0};
+        static const char *const v[10] = {"none, _x, j, j", "1 a1 steps(3, jump-start) running 11436ms, none cubic-bezier(0, 2.2785, 0.5118, -2.7) infinite paused 0s, both 0 -2 k 0.1991s steps(1, jump-none) 13.161s", 0, "1 a1 steps(3, jump-start) running 11436ms, none cubic-bezier(0, 2.2785, 0.5118, -2.7) infinite paused 0s, both 0 -2 k 0.1991s steps(1, jump-none) 13.161s", "1 a1 steps(3, jump-start) running 11436ms, none cubic-bezier(0, 2.2785, 0.5118, -2.7) infinite paused 0s, both 0 -2 k 0.1991s steps(1, jump-none) 13.161s", "1 a1 steps(3, jump-start) running 11436ms, none cubic-bezier(0, 2.2785, 0.5118, -2.7) infinite paused 0s, both 0 -2 k 0.1991s steps(1, jump-none) 13.161s", 0, "1 a1 steps(3, jump-start) running 11436ms, none cubic-bezier(0, 2.2785, 0.5118, -2.7) infinite paused 0s, both 0 -2 k 0.1991s steps(1, jump-none) 13.161s", "inherit,add", 0};
+        static const unsigned char sh[10] = {0, 1, 0, 1, 1, 1, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("_x 0 0 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(1));
@@ -1821,20 +1821,20 @@ static void test_l98_longs_58(void) {
         TEST_ASSERT_EQUAL_STRING("j 0 0 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(3));
     }
     {
-        static const char *const v[9] = {0, "slide 19567ms 3, k reverse 5s", "cubic-bezier(0.91 , 0.1 , 0.92 , -0.3),step-start,steps(427)", 0, "0.0001,0", 0, 0, "running , running , running , paused", "accumulate , accumulate , replace , add"};
-        static const unsigned char sh[9] = {0, 1, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "slide 19567ms 3, k reverse 5s", "cubic-bezier(0.91 , 0.1 , 0.92 , -0.3),step-start,steps(427)", 0, "0.0001,0", 0, 0, "running , running , running , paused", "accumulate , accumulate , replace , add", 0};
+        static const unsigned char sh[10] = {0, 1, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 19567 0 1 0 0 0 2 1 0 1 9100 1000 9200 -3000", afield(0));
     }
     {
-        static const char *const v[9] = {0, "0ms,16587ms,13071ms", "3s paused backwards, 14s cubic-bezier(0.4743,0,0.0043,-2.1) 14537ms fade-in", "0ms, 5.493s", 0, "alternate", "none , both , none , backwards , normal", "3s paused backwards, 14s cubic-bezier(0.4743,0,0.0043,-2.1) 14537ms fade-in", 0};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {0, "0ms,16587ms,13071ms", "3s paused backwards, 14s cubic-bezier(0.4743,0,0.0043,-2.1) 14537ms fade-in", "0ms, 5.493s", 0, "alternate", "none , both , none , backwards , normal", "3s paused backwards, 14s cubic-bezier(0.4743,0,0.0043,-2.1) 14537ms fade-in", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 2 0 1 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"ease 2029ms", "0ms , auto", 0, ", 0ms, 17.3s, 5", "0, 1, 0", 0, "forwards", "paused,running,none", 0};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"ease 2029ms", "0ms , auto", 0, ", 0ms, 17.3s, 5", "0, 1, 0", 0, "forwards", "paused,running,none", 0, 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 0 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1842,27 +1842,27 @@ static void test_l98_longs_58(void) {
 
 static void test_l98_longs_59(void) {
     {
-        static const char *const v[9] = {0, "auto , auto , auto , 15624ms", "cubic-bezier(0.7,1,0,-2.56)", "normal 0 10069ms k, 1 a1 alternate 5181ms", "infinite", "normal 0 10069ms k, 1 a1 alternate 5181ms", "backwards,forwards,both,both", "", "accumulate, accumulate"};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {0, "auto , auto , auto , 15624ms", "cubic-bezier(0.7,1,0,-2.56)", "normal 0 10069ms k, 1 a1 alternate 5181ms", "infinite", "normal 0 10069ms k, 1 a1 alternate 5181ms", "backwards,forwards,both,both", "", "accumulate, accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 -1 0 2 0 2 1 0 1 7000 10000 0 -25600", afield(0));
     }
     {
-        static const char *const v[9] = {"z , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "auto , 0ms , auto , 11.206s", 0, 0, "1", "reverse , alternate-reverse , alternate-reverse", "backwards,none,backwards,both", "a1 steps(10, jump-start) normal 1.689s none, steps(3, jump-end) ease 8440ms -1s 0.25, ease-in-out ease 16651ms", "add,auto"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"z , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "auto , 0ms , auto , 11.206s", 0, 0, "1", "reverse , alternate-reverse , alternate-reverse", "backwards,none,backwards,both", "a1 steps(10, jump-start) normal 1.689s none, steps(3, jump-end) ease 8440ms -1s 0.25, ease-in-out ease 16651ms", "add,auto", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 0 10000 1 2 0 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 10000 3 0 0 0 1 0 1 2500 1000 2500 10000", afield(1));
     }
     {
-        static const char *const v[9] = {0, "auto auto", "steps(5) , cubic-bezier(0.1, 2, 0.2, 0) , steps(2, jump-start) , steps(7, jump-end)", "0s,0s", 0, 0, "none,both,backwards,both", "paused , paused , inherit , paused", "add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "auto auto", "steps(5) , cubic-bezier(0.1, 2, 0.2, 0) , steps(2, jump-start) , steps(7, jump-end)", "0s,0s", 0, 0, "none,both,backwards,both", "paused , paused , inherit , paused", "add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 0 1 2 0 5 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {0, 0, "steps(3, jump-start)", "inherit, 0s", 0, "normal", "backwards , none , backwards , both", 0, "add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, 0, "steps(3, jump-start)", "inherit, 0s", 0, "normal", "backwards , none , backwards , both", 0, "add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 2 0 1 2 1 3 0 0 0 0", afield(0));
     }
@@ -1873,14 +1873,14 @@ static void test_l98_longs_59(void) {
         TEST_ASSERT_EQUAL_STRING("all 14412 0 1 2 3 2314 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {0, 0, "linear, cubic-bezier(0.103 , 1.846 , 0.17 , 1.065), steps(10, jump-end), ease-out, steps(5,)", 0, 0, "normal", "none", 0, 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, 0, "linear, cubic-bezier(0.103 , 1.846 , 0.17 , 1.065), steps(10, jump-end), ease-out, steps(5,)", 0, 0, "normal", "none", 0, 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"j", 0, 0, "19073ms", "0", 0, "none,paused", 0, 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"j", 0, 0, "19073ms", "0", 0, "none,paused", 0, 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("j 0 19073 0 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -1902,14 +1902,14 @@ static void test_l98_longs_60(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 107 9488 8139 -4699", tfield(0));
     }
     {
-        static const char *const v[9] = {0, "3s", "step-end , steps(10, jump-none) , steps(5, jump-start)", 0, "paused 0.25 alternate cubic-bezier(0.3,-0.2028,0.47,-1.31) fade-in", "paused 0.25 alternate cubic-bezier(0.3,-0.2028,0.47,-1.31) fade-in", 0, "inherit,running,paused,running,running", "accumulate"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 1, 1, 0, 0, 0};
+        static const char *const v[10] = {0, "3s", "step-end , steps(10, jump-none) , steps(5, jump-start)", 0, "paused 0.25 alternate cubic-bezier(0.3,-0.2028,0.47,-1.31) fade-in", "paused 0.25 alternate cubic-bezier(0.3,-0.2028,0.47,-1.31) fade-in", 0, "inherit,running,paused,running,running", "accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 1, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 3000 0 2500 2 0 0 2 2 0 1 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"z, j, slide, slide", 0, "steps(2, end) , inherit , steps(1, jump-start) , cubic-bezier(0.366 , -3 , 0 , -2) , linear", 0, "0, 1, 1", "normal", "cubic-bezier(0.21,0.8,0.73,-0.655) 8690ms 4894ms paused running, 9.6s _x", "cubic-bezier(0.21,0.8,0.73,-0.655) 8690ms 4894ms paused running, 9.6s _x", "replace , add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 1, 1, 0};
+        static const char *const v[10] = {"z, j, slide, slide", 0, "steps(2, end) , inherit , steps(1, jump-start) , cubic-bezier(0.366 , -3 , 0 , -2) , linear", 0, "0, 1, 1", "normal", "cubic-bezier(0.21,0.8,0.73,-0.655) 8690ms 4894ms paused running, 9.6s _x", "cubic-bezier(0.21,0.8,0.73,-0.655) 8690ms 4894ms paused running, 9.6s _x", "replace , add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 1, 1, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 0 0 0 0 1 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("j 0 0 10000 0 0 0 1 1 0 1 2500 1000 2500 10000", afield(1));
@@ -1929,22 +1929,22 @@ static void test_l98_longs_60(void) {
         TEST_ASSERT_EQUAL_STRING("--p 0 0 0 2 0 1 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {0, 0, "steps(7, jump-none)", "0ms, 0ms", "k 3s 7419ms, 0.25 5.7s -1s a1 none, slide 14824ms", "alternate,alternate-reverse,reverse", "k 3s 7419ms, 0.25 5.7s -1s a1 none, slide 14824ms", 0, 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 1, 0, 1, 0, 0};
+        static const char *const v[10] = {0, 0, "steps(7, jump-none)", "0ms, 0ms", "k 3s 7419ms, 0.25 5.7s -1s a1 none, slide 14824ms", "alternate,alternate-reverse,reverse", "k 3s 7419ms, 0.25 5.7s -1s a1 none, slide 14824ms", 0, 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 1, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 2 0 0 0 2 2 7 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"_x, none, fade-in", "auto,0ms", 0, 0, "2.5,infinite", "alternate", 0, "paused", "add , add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"_x, none, fade-in", "auto,0ms", 0, 0, "2.5,infinite", "alternate", 0, "paused", "add , add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("_x 0 0 25000 2 0 1 1 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("- 0 0 -1 2 0 1 1 1 0 1 2500 1000 2500 10000", afield(1));
         TEST_ASSERT_EQUAL_STRING("fade-in 0 0 25000 2 0 1 1 1 0 1 2500 1000 2500 10000", afield(2));
     }
     {
-        static const char *const v[9] = {"k, fade-in, slide", 0, "ease-out", "0s , 0s , 0s , 0ms , paused running", 0, "reverse", "backwards , none , forwards", 0, "add, accumulate"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"k, fade-in, slide", 0, "ease-out", "0s , 0s , 0s , 0ms , paused running", 0, "reverse", "backwards , none , forwards", 0, "add, accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("k 0 0 10000 1 2 0 1 1 0 1 0 0 5800 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("fade-in 0 0 10000 1 0 0 2 1 0 1 0 0 5800 10000", afield(1));
@@ -1954,8 +1954,8 @@ static void test_l98_longs_60(void) {
 
 static void test_l98_longs_61(void) {
     {
-        static const char *const v[9] = {"--n, q", 0, 0, "0s,0ms", "none 3 9.322s -4.7759s, 16.0237s paused both 15293ms alternate, both 1 steps(4, jump-start) 6425ms slide", 0, 0, "running,running", "accumulate"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 1, 0, 0, 0, 0};
+        static const char *const v[10] = {"--n, q", 0, 0, "0s,0ms", "none 3 9.322s -4.7759s, 16.0237s paused both 15293ms alternate, both 1 steps(4, jump-start) 6425ms slide", 0, 0, "running,running", "accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 1, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("--n 0 0 30000 0 0 0 2 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("q 0 0 10000 0 0 0 2 1 0 1 2500 1000 2500 10000", afield(1));
@@ -1973,8 +1973,8 @@ static void test_l98_longs_61(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 1445 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {0, 0, "steps(2990, jump-both)", 0, 0, 0, 0, "k 14458ms, 15872ms 2761ms fade-in none reverse, 17329ms linear a1 none", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {0, 0, "steps(2990, jump-both)", 0, 0, 0, 0, "k 14458ms, 15872ms 2761ms fade-in none reverse, 17329ms linear a1 none", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 0 0 2 3 2990 0 0 0 0", afield(0));
     }
@@ -1985,21 +1985,21 @@ static void test_l98_longs_61(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 2 1 10 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {"none, j", "0ms, 0ms, 0ms, 0ms", "steps(10)", "alternate-reverse 19.607s none, 19715ms alternate a1 2.5", "0.0001 , 0.772 , infinite , 9.4", 0, "forwards, forwards", "paused, paused", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"none, j", "0ms, 0ms, 0ms, 0ms", "steps(10)", "alternate-reverse 19.607s none, 19715ms alternate a1 2.5", "0.0001 , 0.772 , infinite , 9.4", 0, "forwards, forwards", "paused, paused", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 1 0 1 1 0 2 0 10 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("j 0 0 7720 0 1 1 0 2 0 10 0 0 0 0", afield(1));
     }
     {
-        static const char *const v[9] = {0, "14ms, 8s, auto", "steps(10001)", "1.4s none steps(10, jump-start) none, slide 8434ms, -1821ms reverse paused 0.2878s", 0, "1.4s none steps(10, jump-start) none, slide 8434ms, -1821ms reverse paused 0.2878s", "both, none", 0, "replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {0, "14ms, 8s, auto", "steps(10001)", "1.4s none steps(10, jump-start) none, slide 8434ms, -1821ms reverse paused 0.2878s", 0, "1.4s none steps(10, jump-start) none, slide 8434ms, -1821ms reverse paused 0.2878s", "both, none", 0, "replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 14 0 10000 0 3 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"q, _x", "auto", "steps(10, end) , steps(4, jump-none) , cubic-bezier(0.81,-2.8421,0.4,0) , cubic-bezier(0.5,-2.7,0.2,-2.5)", "0ms , 15.1392s , 0s , 0s", 0, "alternate-reverse, reverse", 0, "3.13s 0s ease", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"q, _x", "auto", "steps(10, end) , steps(4, jump-none) , cubic-bezier(0.81,-2.8421,0.4,0) , cubic-bezier(0.5,-2.7,0.2,-2.5)", "0ms , 15.1392s , 0s , 0s", 0, "alternate-reverse, reverse", 0, "3.13s 0s ease", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("q 0 0 10000 3 0 0 0 2 0 10 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("_x 0 15139 10000 1 0 0 0 2 2 4 0 0 0 0", afield(1));
@@ -2022,14 +2022,14 @@ static void test_l98_longs_62(void) {
         TEST_ASSERT_EQUAL_STRING("--p 0 3680 0 1 0 1 8200 21694 0 2000", tfield(2));
     }
     {
-        static const char *const v[9] = {"fade-in", 0, "fade-in 11s 7s 0.25, 3106ms _x cubic-bezier(0.724, -0.913, 0.89, 2.8)", 0, 0, 0, "none , none , none , backwards", "running, paused, paused, running", "add,normal,accumulate"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"fade-in", 0, "fade-in 11s 7s 0.25, 3106ms _x cubic-bezier(0.724, -0.913, 0.89, 2.8)", 0, 0, 0, "none , none , none , backwards", "running, paused, paused, running", "add,normal,accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("fade-in 0 0 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {0, "steps(7, jump-start) k alternate-reverse 1876ms, steps(7) -3365ms 8.969s ease", 0, 0, "100000 , 1 , 2.5", "inherit,normal", 0, "paused", "replace,accumulate,add"};
-        static const unsigned char sh[9] = {0, 1, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "steps(7, jump-start) k alternate-reverse 1876ms, steps(7) -3365ms 8.969s ease", 0, 0, "100000 , 1 , 2.5", "inherit,normal", 0, "paused", "replace,accumulate,add", 0};
+        static const unsigned char sh[10] = {0, 1, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 1000000000 0 0 1 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -2040,14 +2040,14 @@ static void test_l98_longs_62(void) {
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 1 1 0 1 2551 -18766 9500 -30000", tfield(0));
     }
     {
-        static const char *const v[9] = {"k", "19034ms,0ms,0ms,7898ms", "cubic-bezier(0 , -0.2 , 0.4 , 0.1), cubic-bezier(0.16,1.243,0.9415,-2)", "0s", "1 , 0.0001", "a1 both 2 10.04s alternate, 2 7533ms slide inherit", "backwards,both,backwards,forwards", 0, "accumulate"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {"k", "19034ms,0ms,0ms,7898ms", "cubic-bezier(0 , -0.2 , 0.4 , 0.1), cubic-bezier(0.16,1.243,0.9415,-2)", "0s", "1 , 0.0001", "a1 both 2 10.04s alternate, 2 7533ms slide inherit", "backwards,both,backwards,forwards", 0, "accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("k 19034 0 10000 0 2 0 2 1 0 1 0 -2000 4000 1000", afield(0));
     }
     {
-        static const char *const v[9] = {"q , j , fade-in", "normal 1563ms fade-in", 0, 0, "infinite , 0.0001 , 2.5 , 1", "reverse", "forwards", "normal 1563ms fade-in", 0};
-        static const unsigned char sh[9] = {0, 1, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"q , j , fade-in", "normal 1563ms fade-in", 0, 0, "infinite , 0.0001 , 2.5 , 1", "reverse", "forwards", "normal 1563ms fade-in", 0, 0};
+        static const unsigned char sh[10] = {0, 1, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("q 1563 0 -1 1 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("j 1563 0 1 1 1 0 0 1 0 1 2500 1000 2500 10000", afield(1));
@@ -2063,54 +2063,54 @@ static void test_l98_longs_62(void) {
 
 static void test_l98_longs_63(void) {
     {
-        static const char *const v[9] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, _x, fade-in", 0, "steps(10),cubic-bezier(0.735,2.562,0.17,-0.765)", "slide backwards infinite 13.1619s, steps(3, jump-both) 19.42s 18.209s a1", "2.5,infinite,0.6417", 0, 0, 0, 0};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, _x, fade-in", 0, "steps(10),cubic-bezier(0.735,2.562,0.17,-0.765)", "slide backwards infinite 13.1619s, steps(3, jump-both) 19.42s 18.209s a1", "2.5,infinite,0.6417", 0, 0, 0, 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 25000 0 0 0 0 2 0 10 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("_x 0 18209 -1 0 0 0 0 1 0 1 7350 25620 1700 -7650", afield(1));
         TEST_ASSERT_EQUAL_STRING("fade-in 0 0 6417 0 0 0 0 2 0 10 0 0 0 0", afield(2));
     }
     {
-        static const char *const v[9] = {"_x both inherit 18.398s", "6193ms,0ms,auto", 0, "0s", "2.5", 0, "forwards, backwards, forwards, none", 0, 0};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"_x both inherit 18.398s", "6193ms,0ms,auto", 0, "0s", "2.5", 0, "forwards, backwards, forwards, none", 0, 0, 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 6193 0 25000 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"slide", "16730ms,0ms,4467ms,auto", "steps(7, jump-none), steps(10, jump-start), cubic-bezier(0.286,-1.56,0.826,1.7614)", 0, "2.5", "a1 both steps(3, jump-end) 17s infinite", "a1 both steps(3, jump-end) 17s infinite", "stopped, running", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 1, 1, 0, 0};
+        static const char *const v[10] = {"slide", "16730ms,0ms,4467ms,auto", "steps(7, jump-none), steps(10, jump-start), cubic-bezier(0.286,-1.56,0.826,1.7614)", 0, "2.5", "a1 both steps(3, jump-end) 17s infinite", "a1 both steps(3, jump-end) 17s infinite", "stopped, running", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 1, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("slide 16730 0 25000 0 3 0 0 2 2 7 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {0, "19s", "ease", "reverse 0 fade-in 18175ms, k infinite 15850ms alternate, slide 11567ms both 11.4s", "1s , 6", "reverse 0 fade-in 18175ms, k infinite 15850ms alternate, slide 11567ms both 11.4s", "reverse 0 fade-in 18175ms, k infinite 15850ms alternate, slide 11567ms both 11.4s", "stopped", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 1, 1, 0, 0};
+        static const char *const v[10] = {0, "19s", "ease", "reverse 0 fade-in 18175ms, k infinite 15850ms alternate, slide 11567ms both 11.4s", "1s , 6", "reverse 0 fade-in 18175ms, k infinite 15850ms alternate, slide 11567ms both 11.4s", "reverse 0 fade-in 18175ms, k infinite 15850ms alternate, slide 11567ms both 11.4s", "stopped", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 1, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 19000 0 10000 1 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"k", 0, "steps(5, jump-both), cubic-bezier(0, 2.0664, 0.477, 0)", "-250ms,1ms 2ms,0s,", "1, 0.0001", "normal", "both, both", "running , running", "accumulate , replace , accumulate , replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"k", 0, "steps(5, jump-both), cubic-bezier(0, 2.0664, 0.477, 0)", "-250ms,1ms 2ms,0s,", "1, 0.0001", "normal", "both, both", "running , running", "accumulate , replace , accumulate , replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("k 0 0 10000 0 3 0 2 2 3 5 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"paused running", "auto, 0ms, auto", 0, 0, "infinite,1", 0, "none , backwards , backwards", "running,paused,paused", "replace, 1px, replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"paused running", "auto, 0ms, auto", 0, 0, "infinite,1", 0, "none , backwards , backwards", "running,paused,paused", "replace, 1px, replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 -1 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"z,k,k", 0, 0, 0, "2.278,1,0.0001", "alternate-reverse", "paused 2.56s, ease -1915ms normal 7.995s _x paused, infinite ease 2598ms steps(3, end) 7.2237s", "running,running,paused,paused,none", "add, replace, add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 1, 0, 0};
+        static const char *const v[10] = {"z,k,k", 0, 0, 0, "2.278,1,0.0001", "alternate-reverse", "paused 2.56s, ease -1915ms normal 7.995s _x paused, infinite ease 2598ms steps(3, end) 7.2237s", "running,running,paused,paused,none", "add, replace, add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 0 22780 3 0 0 1 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("k 0 0 10000 3 0 0 0 1 0 1 2500 1000 2500 10000", afield(1));
         TEST_ASSERT_EQUAL_STRING("k 0 0 1 3 0 0 1 1 0 1 2500 1000 2500 10000", afield(2));
     }
     {
-        static const char *const v[9] = {0, "0ms", "cubic-bezier(0.7936 , -0.4 , 0.3 , 0.785),steps(3, jump-none),steps(10, jump-end)", 0, "0.0001, 2.5", "alternate-reverse", "both, both", 0, "accumulate,add,add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "0ms", "cubic-bezier(0.7936 , -0.4 , 0.3 , 0.785),steps(3, jump-none),steps(10, jump-end)", 0, "0.0001, 2.5", "alternate-reverse", "both, both", 0, "accumulate,add,add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 1 3 3 0 2 1 0 1 7936 -4000 3000 7850", afield(0));
     }
@@ -2124,8 +2124,8 @@ static void test_l98_longs_64(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"--n , --n", 0, "steps(7)", 0, "9.72,0.0001,2.432,0", "alternate, reverse", "both", "running , paused , paused", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"--n , --n", 0, "steps(7)", 0, "9.72,0.0001,2.432,0", "alternate, reverse", "both", "running , paused , paused", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("--n 0 0 97200 2 3 0 0 2 0 7 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("--n 0 0 1 1 3 1 0 2 0 7 0 0 0 0", afield(1));
@@ -2138,8 +2138,8 @@ static void test_l98_longs_64(void) {
         TEST_ASSERT_EQUAL_STRING("all 1285 0 0 1 0 1 2500 1000 2500 10000", tfield(1));
     }
     {
-        static const char *const v[9] = {"k", "6.35s , auto , 0ms , 11.3022s", 0, 0, 0, 0, "none 13112ms paused 18993ms 0.25, -789ms 7958ms a1, 16.384s slide alternate backwards 2.5", "none 13112ms paused 18993ms 0.25, -789ms 7958ms a1, 16.384s slide alternate backwards 2.5", "replace, add, accumulate, accumulate"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 1, 1, 0};
+        static const char *const v[10] = {"k", "6.35s , auto , 0ms , 11.3022s", 0, 0, 0, 0, "none 13112ms paused 18993ms 0.25, -789ms 7958ms a1, 16.384s slide alternate backwards 2.5", "none 13112ms paused 18993ms 0.25, -789ms 7958ms a1, 16.384s slide alternate backwards 2.5", "replace, add, accumulate, accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 1, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("k 6350 0 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -2150,8 +2150,8 @@ static void test_l98_longs_64(void) {
         TEST_ASSERT_EQUAL_STRING("all 4000 10750 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"z,slide,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,ease", 0, "cubic-bezier(0.5, 2.77, 0.35, -0.609)", "0ms , 0ms , 0ms , 19.5s", "2.5,1,0", 0, "none", 0, "replace, accumulate, accumulate, add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"z,slide,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,ease", 0, "cubic-bezier(0.5, 2.77, 0.35, -0.609)", "0ms , 0ms , 0ms , 19.5s", "2.5,1,0", 0, "none", 0, "replace, accumulate, accumulate, add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 0 25000 0 0 0 0 1 0 1 5000 27700 3500 -6090", afield(0));
         TEST_ASSERT_EQUAL_STRING("slide 0 0 10000 0 0 0 2 1 0 1 5000 27700 3500 -6090", afield(1));
@@ -2166,8 +2166,8 @@ static void test_l98_longs_64(void) {
         TEST_ASSERT_EQUAL_STRING("--p 0 0 1 1 0 1 2500 1000 2500 10000", tfield(1));
     }
     {
-        static const char *const v[9] = {"revert", "15.69s , auto , auto", "linear", "5", "paused 8.106s -1678ms none k normal", 0, "none,both,both", "paused 8.106s -1678ms none k normal", "replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 1, 0, 0, 1, 0};
+        static const char *const v[10] = {"revert", "15.69s , auto , auto", "linear", "5", "paused 8.106s -1678ms none k normal", 0, "none,both,both", "paused 8.106s -1678ms none k normal", "replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 1, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 15690 0 10000 0 0 1 0 0 0 1 0 0 0 0", afield(0));
     }
@@ -2175,20 +2175,20 @@ static void test_l98_longs_64(void) {
 
 static void test_l98_longs_65(void) {
     {
-        static const char *const v[9] = {"ease", "", "slide paused 14808ms backwards 2.5, cubic-bezier(0.5781, 2, 0.4, -1) 5985ms 1 alternate-reverse paused, 12s paused", "9s", 0, "normal, normal", "forwards,forwards,backwards", 0, "sum,, k"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"ease", "", "slide paused 14808ms backwards 2.5, cubic-bezier(0.5781, 2, 0.4, -1) 5985ms 1 alternate-reverse paused, 12s paused", "9s", 0, "normal, normal", "forwards,forwards,backwards", 0, "sum,, k", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("ease 0 9000 10000 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "auto, auto", "steps(0) 8022ms a1 1 18563ms backwards", "0ms", "steps(0) 8022ms a1 1 18563ms backwards", 0, "normal", "paused, paused, running", "replace,accumulate"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 1, 0, 0, 0, 0};
+        static const char *const v[10] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "auto, auto", "steps(0) 8022ms a1 1 18563ms backwards", "0ms", "steps(0) 8022ms a1 1 18563ms backwards", 0, "normal", "paused, paused, running", "replace,accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 1, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 10000 0 0 1 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {0, "0ms", "steps(4, end)", "0ms, 0ms, 5, 0s", "paused, alternate-reverse steps(5, end) 0.25 4s paused 16031ms", "normal , forwards , normal , alternate-reverse , reverse", 0, "inherit", "accumulate , accumulate , replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 1, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "0ms", "steps(4, end)", "0ms, 0ms, 5, 0s", "paused, alternate-reverse steps(5, end) 0.25 4s paused 16031ms", "normal , forwards , normal , alternate-reverse , reverse", 0, "inherit", "accumulate , accumulate , replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 1, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 0 2 2 0 4 0 0 0 0", afield(0));
     }
@@ -2199,27 +2199,27 @@ static void test_l98_longs_65(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {0, 0, "16261ms running normal 1px slide", "5", "16261ms running normal 1px slide", "16261ms running normal 1px slide", "16261ms running normal 1px slide", "running, paused", "add,add,replace,replace"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 1, 1, 1, 0, 0};
+        static const char *const v[10] = {0, 0, "16261ms running normal 1px slide", "5", "16261ms running normal 1px slide", "16261ms running normal 1px slide", "16261ms running normal 1px slide", "running, paused", "add,add,replace,replace", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 1, 1, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 0 1 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {0, "ease-out 13s 16.7609s _x, a1 2.5 4.816s none cubic-bezier(0.8458,-2.5,0.925,2.41) paused, 1087ms steps(5, jump-end) forwards paused", "ease-out 13s 16.7609s _x, a1 2.5 4.816s none cubic-bezier(0.8458,-2.5,0.925,2.41) paused, 1087ms steps(5, jump-end) forwards paused", "0ms, 0s, paused running, 0ms", 0, 0, "add replace", "running,paused,running", "replace"};
-        static const unsigned char sh[9] = {0, 1, 1, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "ease-out 13s 16.7609s _x, a1 2.5 4.816s none cubic-bezier(0.8458,-2.5,0.925,2.41) paused, 1087ms steps(5, jump-end) forwards paused", "ease-out 13s 16.7609s _x, a1 2.5 4.816s none cubic-bezier(0.8458,-2.5,0.925,2.41) paused, 1087ms steps(5, jump-end) forwards paused", "0ms, 0s, paused running, 0ms", 0, 0, "add replace", "running,paused,running", "replace", 0};
+        static const unsigned char sh[10] = {0, 1, 1, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 13000 0 10000 0 0 0 0 1 0 1 0 0 5800 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"q, z", "auto,0ms,1.488s", 0, "15.54s , 0s , 1px", "infinite", "alternate,alternate-reverse,reverse", 0, "running, running, paused", "add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"q, z", "auto,0ms,1.488s", 0, "15.54s , 0s , 1px", "infinite", "alternate,alternate-reverse,reverse", 0, "running, running, paused", "add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("q 0 0 -1 2 0 0 1 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("z 0 0 -1 3 0 0 1 1 0 1 2500 1000 2500 10000", afield(1));
     }
     {
-        static const char *const v[9] = {0, 0, "both 11.7787s alternate cubic-bezier(0.88 , -3 , 0 , 1.2921) _x infinite", "16996ms", 0, 0, 0, 0, "accumulate"};
-        static const unsigned char sh[9] = {0, 0, 1, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, 0, "both 11.7787s alternate cubic-bezier(0.88 , -3 , 0 , 1.2921) _x infinite", "16996ms", 0, 0, 0, 0, "accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 1, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 16996 10000 0 0 0 2 1 0 1 8800 -30000 0 12921", afield(0));
     }
@@ -2240,8 +2240,8 @@ static void test_l98_longs_66(void) {
         TEST_ASSERT_EQUAL_STRING("--x 0 0 1 1 0 1 2500 1000 2500 10000", tfield(1));
     }
     {
-        static const char *const v[9] = {"k inherit backwards 13.4047s alternate, _x 18.532s 9s cubic-bezier(0.21 , 2.2611 , 0.5699 , 2.08) both", 0, "steps(2, jump-end), linear, steps(7, jump-both), steps(4, jump-both)", "0ms, 0ms, 0ms", 0, "alternate,reverse", 0, "running", "accumulate"};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"k inherit backwards 13.4047s alternate, _x 18.532s 9s cubic-bezier(0.21 , 2.2611 , 0.5699 , 2.08) both", 0, "steps(2, jump-end), linear, steps(7, jump-both), steps(4, jump-both)", "0ms, 0ms, 0ms", 0, "alternate,reverse", 0, "running", "accumulate", 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 2 0 0 2 2 0 2 0 0 0 0", afield(0));
     }
@@ -2252,8 +2252,8 @@ static void test_l98_longs_66(void) {
         TEST_ASSERT_EQUAL_STRING("- 9977 0 0 0 0 1 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {"fade-in,q,--n,ease", "2 19.8s linear slide 6s", "2 19.8s linear slide 6s", "0s,0ms,1.617s,0s", "infinite , 1 , 1 , 1", 0, "none, both", 0, "add, replace, replace"};
-        static const unsigned char sh[9] = {0, 1, 1, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"fade-in,q,--n,ease", "2 19.8s linear slide 6s", "2 19.8s linear slide 6s", "0s,0ms,1.617s,0s", "infinite , 1 , 1 , 1", 0, "none, both", 0, "add, replace, replace", 0};
+        static const unsigned char sh[10] = {0, 1, 1, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("fade-in 19800 0 -1 0 0 0 1 0 0 1 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("q 19800 0 10000 0 3 0 0 0 0 1 0 0 0 0", afield(1));
@@ -2267,8 +2267,8 @@ static void test_l98_longs_66(void) {
         TEST_ASSERT_EQUAL_STRING("all 5932 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"q", "0ms", "cubic-bezier(0.2194 , -1.5 , 0 , -1),cubic-bezier(0.82,2.772,0.7783,2.151),linear,ease-in", "5", "1", "alternate-reverse", "both", "14.59s steps(3475, jump-start) paused k", "replace , add , add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"q", "0ms", "cubic-bezier(0.2194 , -1.5 , 0 , -1),cubic-bezier(0.82,2.772,0.7783,2.151),linear,ease-in", "5", "1", "alternate-reverse", "both", "14.59s steps(3475, jump-start) paused k", "replace , add , add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("q 0 0 10000 3 3 1 0 1 0 1 2194 -15000 0 -10000", afield(0));
     }
@@ -2282,27 +2282,27 @@ static void test_l98_longs_66(void) {
 
 static void test_l98_longs_67(void) {
     {
-        static const char *const v[9] = {0, "auto", "steps(5, end)", 0, 0, 0, 0, "paused", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "auto", "steps(5, end)", 0, 0, 0, 0, "paused", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 0 1 0 2 0 5 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {0, 0, "steps(3, jump-both)", 0, "100000", "alternate", "8885ms steps(1) k, cubic-bezier(0.524,-0.41,0.4,1.91) _x 1 backwards", "paused , paused , paused , paused", "replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 1, 0, 0};
+        static const char *const v[10] = {0, 0, "steps(3, jump-both)", 0, "100000", "alternate", "8885ms steps(1) k, cubic-bezier(0.524,-0.41,0.4,1.91) _x 1 backwards", "paused , paused , paused , paused", "replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 1000000000 2 0 1 0 2 3 3 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"normal 0 1709ms 19966ms fade-in, normal 10519ms cubic-bezier(0,2.1,0.8104,1) a1 2.5", "normal 0 1709ms 19966ms fade-in, normal 10519ms cubic-bezier(0,2.1,0.8104,1) a1 2.5", 0, "0s", "1, 9.96, 100000, 0", "alternate, normal, alternate-reverse, normal, auto", "normal 0 1709ms 19966ms fade-in, normal 10519ms cubic-bezier(0,2.1,0.8104,1) a1 2.5", "running , paused", "add,accumulate,accumulate,add"};
-        static const unsigned char sh[9] = {1, 1, 0, 0, 0, 0, 1, 0, 0};
+        static const char *const v[10] = {"normal 0 1709ms 19966ms fade-in, normal 10519ms cubic-bezier(0,2.1,0.8104,1) a1 2.5", "normal 0 1709ms 19966ms fade-in, normal 10519ms cubic-bezier(0,2.1,0.8104,1) a1 2.5", 0, "0s", "1, 9.96, 100000, 0", "alternate, normal, alternate-reverse, normal, auto", "normal 0 1709ms 19966ms fade-in, normal 10519ms cubic-bezier(0,2.1,0.8104,1) a1 2.5", "running , paused", "add,accumulate,accumulate,add", 0};
+        static const unsigned char sh[10] = {1, 1, 0, 0, 0, 0, 1, 0, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("fade-in 1709 0 10000 0 0 0 1 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("a1 10519 0 99600 0 0 1 2 1 0 1 2500 1000 2500 10000", afield(1));
     }
     {
-        static const char *const v[9] = {"paused 4791ms steps(7) 10828ms", "paused 4791ms steps(7) 10828ms", "steps(5, jump-end) , step-start , cubic-bezier(0, -3, 0.93, -2.5) , steps(2, jump-none)", 0, "5.137, 4, 1, 0.0001", "1px, normal, alternate,", 0, "paused 4791ms steps(7) 10828ms", "replace, add, add"};
-        static const unsigned char sh[9] = {1, 1, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {"paused 4791ms steps(7) 10828ms", "paused 4791ms steps(7) 10828ms", "steps(5, jump-end) , step-start , cubic-bezier(0, -3, 0.93, -2.5) , steps(2, jump-none)", 0, "5.137, 4, 1, 0.0001", "1px, normal, alternate,", 0, "paused 4791ms steps(7) 10828ms", "replace, add, add", 0};
+        static const unsigned char sh[10] = {1, 1, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 4791 0 51370 0 0 1 0 2 0 5 0 0 0 0", afield(0));
     }
@@ -2313,14 +2313,14 @@ static void test_l98_longs_67(void) {
         TEST_ASSERT_EQUAL_STRING("all 2600 0 0 2 2 3945 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {"z", 0, "cubic-bezier(0 , -2.539 , 0.67 , 0) , steps(4, end) , linear , steps(10, jump-end)", "0ms,-2.4s", 0, "reverse", 0, "running", "replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"z", 0, "cubic-bezier(0 , -2.539 , 0.67 , 0) , steps(4, end) , linear , steps(10, jump-end)", "0ms,-2.4s", 0, "reverse", 0, "running", "replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 0 10000 1 0 0 0 1 0 1 0 -25390 6700 0", afield(0));
     }
     {
-        static const char *const v[9] = {"0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", "0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", "steps(4), steps(7, jump-end), linear", "0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", "0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", "0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", "none,forwards,both", "0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", 0};
-        static const unsigned char sh[9] = {1, 1, 0, 1, 1, 1, 0, 1, 0};
+        static const char *const v[10] = {"0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", "0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", "steps(4), steps(7, jump-end), linear", "0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", "0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", "0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", "none,forwards,both", "0 cubic-bezier(0.95, 0.148, 0.12, -2.4) _x 11902ms, 15714ms 0.25 slide", 0, 0};
+        static const unsigned char sh[10] = {1, 1, 0, 1, 1, 1, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("_x 11902 0 0 0 0 0 0 2 0 4 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("slide 15714 0 2500 0 1 0 0 2 0 7 0 0 0 0", afield(1));
@@ -2341,15 +2341,15 @@ static void test_l98_longs_68(void) {
         TEST_ASSERT_EQUAL_STRING("all 6708 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"j, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0, "ease-in-out, cubic-bezier(0.992, 0.9, 0.1, -2), steps(2)", 0, 0, "reverse,alternate,alternate-reverse,alternate-reverse", "none", "paused", "add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"j, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0, "ease-in-out, cubic-bezier(0.992, 0.9, 0.1, -2), steps(2)", 0, 0, "reverse,alternate,alternate-reverse,alternate-reverse", "none", "paused", "add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(2, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("j 0 0 10000 1 0 1 1 1 0 1 4200 0 5800 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 10000 2 0 1 1 1 0 1 9920 9000 1000 -20000", afield(1));
     }
     {
-        static const char *const v[9] = {"none , z , none , --n", "0ms, 13752ms, 12s, 19.1s", "cubic-bezier(0.66, -0.2, 0.213, 2.0398),cubic-bezier(0.513,1.38,0.203,0.389),steps(2, jump-end)", "0s", "-1", 0, "forwards", 0, "replace , accumulate , replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"none , z , none , --n", "0ms, 13752ms, 12s, 19.1s", "cubic-bezier(0.66, -0.2, 0.213, 2.0398),cubic-bezier(0.513,1.38,0.203,0.389),steps(2, jump-end)", "0s", "-1", 0, "forwards", 0, "replace , accumulate , replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 0 1 0 0 1 0 1 6600 -2000 2130 20398", afield(0));
         TEST_ASSERT_EQUAL_STRING("z 13752 0 10000 0 1 0 2 1 0 1 5130 13800 2030 3890", afield(1));
@@ -2369,8 +2369,8 @@ static void test_l98_longs_68(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"k j, none, q", 0, "cubic-bezier(0,-0.1739,0.1621,-1.3651) , steps(10, end) , linear", "0ms", "1,2.5,100000", "reverse", "none,forwards", "running, paused, paused", "replace , accumulate , accumulate , accumulate"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"k j, none, q", 0, "cubic-bezier(0,-0.1739,0.1621,-1.3651) , steps(10, end) , linear", "0ms", "1,2.5,100000", "reverse", "none,forwards", "running, paused, paused", "replace , accumulate , accumulate , accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 1 0 0 0 1 0 1 0 -1739 1621 -13651", afield(0));
     }
@@ -2396,8 +2396,8 @@ static void test_l98_longs_69(void) {
         TEST_ASSERT_EQUAL_STRING("- 2000 0 0 2 3 6121 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {"slide,k,--n,q", "auto", "k 11.02s 12168ms cubic-bezier(0.07,-1,0.958,0) reverse", "k 11.02s 12168ms cubic-bezier(0.07,-1,0.958,0) reverse", 0, "k 11.02s 12168ms cubic-bezier(0.07,-1,0.958,0) reverse", 0, "inherit", 0};
-        static const unsigned char sh[9] = {0, 0, 1, 1, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {"slide,k,--n,q", "auto", "k 11.02s 12168ms cubic-bezier(0.07,-1,0.958,0) reverse", "k 11.02s 12168ms cubic-bezier(0.07,-1,0.958,0) reverse", 0, "k 11.02s 12168ms cubic-bezier(0.07,-1,0.958,0) reverse", 0, "inherit", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 1, 1, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("slide 0 12168 10000 1 0 0 0 1 0 1 700 -10000 9580 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("k 0 12168 10000 1 0 0 0 1 0 1 700 -10000 9580 0", afield(1));
@@ -2411,8 +2411,8 @@ static void test_l98_longs_69(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"z , q , --n , slide", 0, 0, "0s,0ms,0ms,-0.73s", "2.5", "cubic-bezier(0.9,-2.72,0.062,0.8504) 7.846s k", 0, 0, "paused running"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {"z , q , --n , slide", 0, 0, "0s,0ms,0ms,-0.73s", "2.5", "cubic-bezier(0.9,-2.72,0.062,0.8504) 7.846s k", 0, 0, "paused running", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("z 0 0 25000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("q 0 0 25000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(1));
@@ -2426,8 +2426,8 @@ static void test_l98_longs_69(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 2 1 1 0 0 0 0", tfield(0));
     }
     {
-        static const char *const v[9] = {"_x 9.97s", "8516ms , auto , 2s , 0ms", "linear", "0s, 1ms 2ms", "5.746", 0, "none,backwards", "running, paused", 0};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"_x 9.97s", "8516ms , auto , 2s , 0ms", "linear", "0s, 1ms 2ms", "5.746", 0, "none,backwards", "running, paused", 0, 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("_x 8516 0 57460 0 0 0 0 0 0 1 0 0 0 0", afield(0));
     }
@@ -2453,8 +2453,8 @@ static void test_l98_longs_70(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {0, 0, "steps(0, jump-start)", "k cubic-bezier(0.552, -2.8, 0.256, 2.11) 0s 9.8s", 0, "normal,alternate-reverse,alternate-reverse", "k cubic-bezier(0.552, -2.8, 0.256, 2.11) 0s 9.8s", "k cubic-bezier(0.552, -2.8, 0.256, 2.11) 0s 9.8s", "add,add,normal"};
-        static const unsigned char sh[9] = {0, 0, 0, 1, 0, 0, 1, 1, 0};
+        static const char *const v[10] = {0, 0, "steps(0, jump-start)", "k cubic-bezier(0.552, -2.8, 0.256, 2.11) 0s 9.8s", 0, "normal,alternate-reverse,alternate-reverse", "k cubic-bezier(0.552, -2.8, 0.256, 2.11) 0s 9.8s", "k cubic-bezier(0.552, -2.8, 0.256, 2.11) 0s 9.8s", "add,add,normal", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 1, 0, 0, 1, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 9800 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -2465,16 +2465,16 @@ static void test_l98_longs_70(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {"q , none , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0, "steps(10, jump-none)", "add replace", "1 , 100000 , 100000 , 7.5279", "alternate,alternate,alternate,normal", "both", "running , running , paused , auto , running", 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"q , none , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0, "steps(10, jump-none)", "add replace", "1 , 100000 , 100000 , 7.5279", "alternate,alternate,alternate,normal", "both", "running , running , paused , auto , running", 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(3, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("q 0 0 10000 2 3 0 0 2 2 10 0 0 0 0", afield(0));
         TEST_ASSERT_EQUAL_STRING("- 0 0 1000000000 2 3 0 0 2 2 10 0 0 0 0", afield(1));
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 1000000000 2 3 0 0 2 2 10 0 0 0 0", afield(2));
     }
     {
-        static const char *const v[9] = {"none,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,slide,fade-in", 0, 0, 0, 0, "alternate-reverse", 0, "paused, paused, paused, running", "add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"none,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,slide,fade-in", 0, 0, 0, 0, "alternate-reverse", 0, "paused, paused, paused, running", "add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 0 10000 3 0 1 1 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 10000 3 0 1 1 1 0 1 2500 1000 2500 10000", afield(1));
@@ -2512,14 +2512,14 @@ static void test_l98_longs_71(void) {
         TEST_ASSERT_EQUAL_STRING("all 10968 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {0, "auto", "steps(1)", "8.37s", 0, "normal,alternate,forwards", 0, "paused 3169ms 15s cubic-bezier(0, 0.54, 0.94, -3), ease 13s 12787ms forwards", "add ,, sum , replace"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 1, 0};
+        static const char *const v[10] = {0, "auto", "steps(1)", "8.37s", 0, "normal,alternate,forwards", 0, "paused 3169ms 15s cubic-bezier(0, 0.54, 0.94, -3), ease 13s 12787ms forwards", "add ,, sum , replace", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 0 8370 10000 0 0 1 0 2 0 1 0 0 0 0", afield(0));
     }
     {
-        static const char *const v[9] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,_x,q,ease", "0ms,16s", 0, "0ms, 0s, 0ms, 11939ms", 0, 0, "forwards,both,none", 0, "none"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,_x,q,ease", "0ms,16s", 0, "0ms, 0s, 0ms, 11939ms", 0, 0, "forwards,both,none", 0, "none", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(4, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0 0 10000 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(0));
         TEST_ASSERT_EQUAL_STRING("_x 16000 0 10000 0 3 0 0 1 0 1 2500 1000 2500 10000", afield(1));
@@ -2527,8 +2527,8 @@ static void test_l98_longs_71(void) {
         TEST_ASSERT_EQUAL_STRING("ease 16000 11939 10000 0 1 0 0 1 0 1 2500 1000 2500 10000", afield(3));
     }
     {
-        static const char *const v[9] = {"18.9s 17333ms running fade-in", 0, 0, 0, "-1", "18.9s 17333ms running fade-in", "none", 0, 0};
-        static const unsigned char sh[9] = {1, 0, 0, 0, 0, 1, 0, 0, 0};
+        static const char *const v[10] = {"18.9s 17333ms running fade-in", 0, 0, 0, "-1", "18.9s 17333ms running fade-in", "none", 0, 0, 0};
+        static const unsigned char sh[10] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("fade-in 0 0 10000 0 0 0 0 1 0 1 2500 1000 2500 10000", afield(0));
     }
@@ -2545,8 +2545,8 @@ static void test_l98_longs_71(void) {
         TEST_ASSERT_EQUAL_STRING("all 17520 0 0 1 0 1 0 18100 2110 -20030", tfield(0));
     }
     {
-        static const char *const v[9] = {"ease", "auto , auto , auto", "steps(3, jump-end)", "0ms", "0.0001 , 100000 , 0", 0, "none, both, both, forwards", 0, 0};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"ease", "auto , auto , auto", "steps(3, jump-end)", "0ms", "0.0001 , 100000 , 0", 0, "none, both, both, forwards", 0, 0, 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("ease 0 0 1 0 0 0 0 2 0 3 0 0 0 0", afield(0));
     }
@@ -2572,14 +2572,14 @@ static void test_l98_longs_72(void) {
         TEST_ASSERT_EQUAL_STRING("all 0 0 0 1 0 1 2500 1000 2500 10000", tfield(0));
     }
     {
-        static const char *const v[9] = {0, "4s, 4883ms", 0, 0, 0, "forwards", "backwards,forwards,both,forwards", 0, "add"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {0, "4s, 4883ms", 0, 0, 0, "forwards", "backwards,forwards,both,forwards", 0, "add", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("- 4000 0 10000 0 2 0 1 1 0 1 2500 1000 2500 10000", afield(0));
     }
     {
-        static const char *const v[9] = {"slide", 0, 0, "-510ms , 0s , 13s , 0s", 0, "reverse, alternate, normal", 0, "running", "accumulate"};
-        static const unsigned char sh[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const char *const v[10] = {"slide", 0, 0, "-510ms , 0s , 13s , 0s", 0, "reverse, alternate, normal", 0, "running", "accumulate", 0};
+        static const unsigned char sh[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
         TEST_ASSERT_EQUAL_STRING("slide 0 -510 10000 1 0 0 2 1 0 1 2500 1000 2500 10000", afield(0));
     }

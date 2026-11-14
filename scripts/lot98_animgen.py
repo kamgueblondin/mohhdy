@@ -333,9 +333,15 @@ def write_longs():
         got = M.coord(anim, slots)
         vs = ", ".join("0" if s is None else cstr(s[1]) for s in slots)
         shs = ", ".join("1" if s and s[0] == "sh" else "0" for s in slots)
+        # Lot 99, converted: the animation slots are ten (animation-timeline
+        # last, not set here)
+        nv = nl + 1 if anim else nl
+        if anim:
+            vs += ", 0"
+            shs += ", 0"
         lines = ["{",
-                 "    static const char *const v[%d] = {%s};" % (nl, vs),
-                 "    static const unsigned char sh[%d] = {%s};" % (nl, shs),
+                 "    static const char *const v[%d] = {%s};" % (nv, vs),
+                 "    static const unsigned char sh[%d] = {%s};" % (nv, shs),
                  "    TEST_ASSERT_EQUAL(%d, %s(v, sh));" % (len(got), "acoord" if anim else "tcoord")]
         for j, x in enumerate(got):
             lines.append("    TEST_ASSERT_EQUAL_STRING(%s, %s(%d));" % (cstr(afield(x) if anim else tfield(x)),
