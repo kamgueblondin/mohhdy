@@ -11,9 +11,11 @@ server runs on the host and the guest reaches it as 10.0.2.2 (slirp).
     rectangles);
   * the reader (/lot96/grad.html, web-css): repeating gradients are passed
     on (1rad as 57.3deg, a radian conic "from" as 28.65deg, a 45.5deg
-    stop), a period of 0 refuses the gradient (the colour stays), a
-    registered <image> whose stops the reader refuses gives its initial
-    value, a conic gradient with stops at 0.25deg and 359.75deg is kept.
+    stop), a conic gradient with stops at 0.25deg and 359.75deg is kept.
+    Lot 97 (converted): a period of 0 is passed on (the engine paints its
+    average colour), so #flat96 keeps its colour and gets the gradient,
+    and the registered <image> with a period of 0 takes its own value
+    (Lot 96: refused, the colour alone and the initial value).
 No guest clock is involved (no -rtc option).
 """
 from __future__ import print_function
@@ -97,15 +99,15 @@ def step_reader(mon, proc, u):
     need(css, ["node div #rl96 display auto bgimg repeating-linear-gradient(57.3deg, #ff0000, #0000ff 20%)\n",
                "node div #rc96 display auto bgimg repeating-conic-gradient(from 28.65deg at 25% 75%, #ff0000, #0000ff 45.5deg)\n",
                "node div #rr96 display auto bgimg repeating-radial-gradient(circle 10px, #00ff00, #000000 50%)\n",
-               "node div #flat96 display auto bg #123456\n",
-               "node div #img96 display auto bgimg linear-gradient(#ff0000, #0000ff)\n",
+               "node div #flat96 display auto bg #123456 bgimg repeating-linear-gradient(#ff0000 50%, #0000ff 50%)\n",
+               "node div #img96 display auto bgimg repeating-linear-gradient(#ff0000 10%, #0000ff 10%)\n",
                "node div #deg96 display auto bgimg conic-gradient(#ff0000 0.25deg, #0000ff 359.75deg)\n",
                "css-props registered 1 rejected 0 "], "web-css grad")
     refuse(node_line(css, "rl96"), ["rad,", "1rad"], "web-css #rl96")
     refuse(node_line(css, "rc96"), ["0.5rad", "Repeating"], "web-css #rc96")
-    refuse(node_line(css, "img96"), ["10%", "var("], "web-css #img96")
+    refuse(node_line(css, "img96"), ["var(", "linear-gradient(#ff0000, #0000ff)"], "web-css #img96")
     say("reader: repeating linear/conic/radial passed on (1rad -> 57.3deg, from 0.5rad -> 28.65deg, 45.5deg stop); "
-        "a period of 0 refused; a registered <image> with a period of 0 -> its initial value; 0.25deg and 359.75deg stops")
+        "a period of 0 passed on (Lot 97); a registered <image> with a period of 0 -> its own value; 0.25deg and 359.75deg stops")
 
 
 def boot(hp):
