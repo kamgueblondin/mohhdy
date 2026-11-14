@@ -7,6 +7,21 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 99 (14 November 2026, base c3f691d, PR 256 merged)
+
+US-031 partial, phase3_complete=false. The reader paints opaque hsl()
+and hsla() colours (color, background-color, the background shorthand,
+var() values) with hues in deg, grad, rad or turn; accumulate is told
+apart from add on transforms (add concatenates transform lists,
+accumulate sums matching functions); the 0% and 100% keyframes a rule
+leaves out take the element's own value composed with the animation's
+composition (CSS Animations 2); animation-timeline is read, cascaded
+(reset by the shorthand), coordinated and stored, and an animation
+without an auto timeline is idle. A QEMU page (`make qemu-lot99`, CI
+job lot99-reader-composition) checks the reader at two clock values.
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097
+stay simule. See docs/lot99_plan.md.
+
 ### Lot 98 (14 November 2026, base bec0eba, PR 255 head)
 
 US-031 partial, phase3_complete=false. The reader reads the animation and
