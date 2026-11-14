@@ -21,7 +21,7 @@
 #define WF_CSSVAR_H
 
 #define WF_CSSVAR_DEPTH 8
-#define WF_CSSVAR_NAME 24
+#define WF_CSSVAR_NAME 32        /* Lot 95: 31 bytes (Lot 89: 23) */
 
 /* The value of the custom property name ("--x", lower case), 0 when it is
  * not defined. */

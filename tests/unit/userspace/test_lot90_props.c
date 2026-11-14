@@ -53,7 +53,10 @@ static void test_syntax(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length> +'", 12));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length>+#'", 12));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length> |'", 12));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<resolution>'", 14));
+    /* Lot 95 (converted): <resolution> is read now (Lot 90: WF_CSSPROP_BAD);
+     * an unknown type name stays refused */
+    TEST_ASSERT_EQUAL(WF_CSSPROP_RESOLUTION, wf_cssprop_syntax("'<resolution>'", 14));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<frequency>'", 13));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("''", 2));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'**'", 4));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax(0, 3));
@@ -148,7 +151,7 @@ static void test_parse(void) {
             "syntax: '<length>'; inherits: false; initial-value: red",     /* wrong type */
             "syntax: '<length>'; inherits: false; initial-value: 2em",     /* not independent */
             "syntax: '*'; inherits: false; initial-value: var(--y)",       /* not independent */
-            "syntax: '<resolution>'; inherits: false; initial-value: 1dpi", /* unsupported (Lot 91: <angle> is read) */
+            "syntax: '<frequency>'; inherits: false; initial-value: 1hz",   /* unsupported (Lot 95: <resolution> is read) */
             "syntax: '<length>'; inherits: false; initial-value: 4px; broken",
             "syntax: '<length>; inherits: false; initial-value: 4px",       /* open string */
             0
@@ -163,12 +166,28 @@ static void test_parse(void) {
     TEST_ASSERT_EQUAL(0, wf_cssprop_parse("x", 1, b1, (int)strlen(b1), &p));
     TEST_ASSERT_EQUAL(0, wf_cssprop_parse("--", 2, b1, (int)strlen(b1), &p));
     TEST_ASSERT_EQUAL(0, wf_cssprop_parse("--a b", 5, b1, (int)strlen(b1), &p));
-    TEST_ASSERT_EQUAL(0, wf_cssprop_parse("--aaaaaaaaaaaaaaaaaaaaaaa", 25, b1, (int)strlen(b1), &p));
+    /* Lot 95 (converted): names of up to 31 bytes (Lot 90: 23) */
+    TEST_ASSERT_EQUAL(0, wf_cssprop_parse("--aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 32, b1, (int)strlen(b1), &p));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_parse("--aaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 31, b1, (int)strlen(b1), &p));
+    TEST_ASSERT_EQUAL_STRING("--aaaaaaaaaaaaaaaaaaaaaaaaaaaaa", p.name);
     TEST_ASSERT_EQUAL(0, wf_cssprop_parse(0, 0, b1, 1, &p));
     TEST_ASSERT_EQUAL(0, wf_cssprop_parse("--x", 3, b1, (int)strlen(b1), 0));
     {
-        const char *b = "syntax: '<length>'; inherits: false; initial-value: 01234567890123456789012345678901234567890123456789012345678901234px";
+        /* Lot 95 (converted): initial values of up to 127 bytes (Lot 90: 63) */
+        const char *b = "syntax: '*'; inherits: false; initial-value: "
+                        "0123456789012345678901234567890123456789012345678901234567890123"
+                        "0123456789012345678901234567890123456789012345678901234567890123";
+        const char *c = "syntax: '*'; inherits: false; initial-value: "
+                        "0123456789012345678901234567890123456789012345678901234567890123"
+                        "012345678901234567890123456789012345678901234567890123456789012";
         TEST_ASSERT_EQUAL(0, wf_cssprop_parse("--x", 3, b, (int)strlen(b), &p));
+        TEST_ASSERT_EQUAL(1, wf_cssprop_parse("--x", 3, c, (int)strlen(c), &p));
+        TEST_ASSERT_EQUAL(127, (int)strlen(p.initial));
+    }
+    {
+        const char *b = "syntax: '<resolution>'; inherits: false; initial-value: 1dpi";
+        TEST_ASSERT_EQUAL(1, wf_cssprop_parse("--x", 3, b, (int)strlen(b), &p));
+        TEST_ASSERT_EQUAL(WF_CSSPROP_RESOLUTION, p.syntax);
     }
 }
 
@@ -236,11 +255,13 @@ static void test_keywords(void) {
 }
 
 static void test_bounds(void) {
-    /* a 63-byte value fits; a 64-byte one is left out (never cut) */
+    /* a 127-byte value fits; a 128-byte one is left out (never cut).
+     * Lot 95 (converted): 127 and 128 (Lot 90: 63 and 64); v63 and v64
+     * keep their Lot 90 names */
     char css[1024];
-    char v63[70], v64[70];
-    memset(v63, 'a', 63); v63[63] = 0;
-    memset(v64, 'b', 64); v64[64] = 0;
+    char v63[140], v64[140];
+    memset(v63, 'a', 127); v63[127] = 0;
+    memset(v64, 'b', 128); v64[128] = 0;
     snprintf(css, sizeof(css), ".x { --s: %s } .x { --t: 1px } .x { --t: %s } :root { --u: %s } :root { --w: %s }", v63, v64, v63, v64);
     prep(css, "<p id=p class=x>p</p>");
     TEST_ASSERT_EQUAL_STRING(v63, nv("p", "--s"));
@@ -248,7 +269,7 @@ static void test_bounds(void) {
     TEST_ASSERT_EQUAL_STRING(v63, wf_site_var(&g_d, "--u"));
     TEST_ASSERT_NULL(wf_site_var(&g_d, "--w"));
     TEST_ASSERT_EQUAL(2, g_d.dropped_vars);
-    /* a substitution longer than 63 bytes is invalid */
+    /* a substitution longer than 127 bytes is invalid */
     snprintf(css, sizeof(css), ".x { --s: %s; --t: var(--s) x }", v63);
     prep(css, "<p id=p class=x>p</p>");
     TEST_ASSERT_EQUAL_STRING("(none)", nv("p", "--t"));

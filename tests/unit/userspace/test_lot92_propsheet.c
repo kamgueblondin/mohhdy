@@ -719,10 +719,10 @@ static void test_l92_sheet_85(void) {
 
 static void test_l92_sheet_86(void) {
     prep("@property --p { syntax: '<length-percentage>'; inherits: true; initial-value: 1px } #o { --p: calc(104.1232px + 569.8926% - 158%/-5.0) }");
-    TEST_ASSERT_EQUAL_STRING("calc(104.1232px + 569.8926% - 158%/-5.0)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("calc(104.1232px + 569.8926% - 158%/-5.0)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("calc(601.4926% + 104.1232px)", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("calc(601.4926% + 104.1232px)", nv("i"));
     TEST_ASSERT_EQUAL_STRING("1px", nv("q"));
-    TEST_ASSERT_EQUAL_STRING("", tail());
+    TEST_ASSERT_EQUAL_STRING(" simplified 1", tail());
 }
 
 static void test_l92_sheet_87(void) {

@@ -322,7 +322,7 @@ static void test_compute(void) {
     TEST_ASSERT_EQUAL_STRING("2.7183", cv("'<length> | <number>'", "exp(1)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number>'", "log(0)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<time>'", "exp(1)"));
-    TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number>+'", "pow(2, 3)"));
+    TEST_ASSERT_EQUAL_STRING("8", cv("'<number>+'", "pow(2, 3)"));           /* Lot 95 (converted): list items computed */
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<number>'", "calc(infinity)"));
     TEST_ASSERT_EQUAL_STRING("KEEP", cv("'<length>'", "hypot(1em, 1px)"));
 }

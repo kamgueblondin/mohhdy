@@ -13,16 +13,22 @@ static void alt_is(int k, int type, int mult, const char *ident) {
 }
 
 static void test_l91_syntax_0(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <COLOR> | thin	|	-MoZ-tHinG  |<number>	|	<number> \"", 53));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <COLOR> | thin	|	-MoZ-tHinG  |<number>	|	<number> \"", 53, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <COLOR> | thin	|	-MoZ-tHinG  |<number>	|	<number> \"", 53));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <COLOR> | thin	|	-MoZ-tHinG  |<number>	|	<number> \"", 53, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_COLOR, 0, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "thin");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "-moz-thing");
+    alt_is(3, WF_CSSPROP_NUMBER, 0, "");
+    alt_is(4, WF_CSSPROP_NUMBER, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_syntax("\"<percentaGe> \"", 15));
     TEST_ASSERT_EQUAL(WF_CSSPROP_PERCENT, wf_cssprop_syntax_parse("\"<percentaGe> \"", 15, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_PERCENT, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <transform-list>\"", 19));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <transform-list>\"", 19, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_TLIST, wf_cssprop_syntax("\" <transform-list>\"", 19));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_TLIST, wf_cssprop_syntax_parse("\" <transform-list>\"", 19, &g_p));
+    TEST_ASSERT_EQUAL(1, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TLIST, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<custom-ident>| <InTeger>+'", 28));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<custom-ident>| <InTeger>+'", 28, &g_p));
     TEST_ASSERT_EQUAL(2, g_p.nalt);
@@ -82,9 +88,14 @@ static void test_l91_syntax_3(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax("' * '", 5));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax_parse("' * '", 5, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' LEFT-SIDE| <perceNtaGe>  |<angle>#	|	x | <percentage> '", 57));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' LEFT-SIDE| <perceNtaGe>  |<angle>#	|	x | <percentage> '", 57, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' LEFT-SIDE| <perceNtaGe>  |<angle>#	|	x | <percentage> '", 57));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' LEFT-SIDE| <perceNtaGe>  |<angle>#	|	x | <percentage> '", 57, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 0, "left-side");
+    alt_is(1, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(2, WF_CSSPROP_ANGLE, 2, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "x");
+    alt_is(4, WF_CSSPROP_PERCENT, 0, "");
 }
 
 static void test_l91_syntax_4(void) {
@@ -120,18 +131,28 @@ static void test_l91_syntax_5(void) {
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_COLOR, 1, "");
     alt_is(1, WF_CSSPROP_KEYWORD, 0, "thin");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<pErcenTAge>	|	<LENGTH-PERCENTAGE>#|StretcH#  |<color> | _unDer '", 66));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<pErcenTAge>	|	<LENGTH-PERCENTAGE>#|StretcH#  |<color> | _unDer '", 66, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<pErcenTAge>	|	<LENGTH-PERCENTAGE>#|StretcH#  |<color> | _unDer '", 66));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<pErcenTAge>	|	<LENGTH-PERCENTAGE>#|StretcH#  |<color> | _unDer '", 66, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(1, WF_CSSPROP_LENPCT, 2, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 2, "stretch");
+    alt_is(3, WF_CSSPROP_COLOR, 0, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 0, "_under");
 }
 
 static void test_l91_syntax_6(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'thIN| '", 8));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'thIN| '", 8, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<angle>#	|	<percentage>+| <tIme>+	|	<LENGTH-PERCENTAGE>+	|	<length-percentage>+\"", 81));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<angle>#	|	<percentage>+| <tIme>+	|	<LENGTH-PERCENTAGE>+	|	<length-percentage>+\"", 81, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<angle>#	|	<percentage>+| <tIme>+	|	<LENGTH-PERCENTAGE>+	|	<length-percentage>+\"", 81));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<angle>#	|	<percentage>+| <tIme>+	|	<LENGTH-PERCENTAGE>+	|	<length-percentage>+\"", 81, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_ANGLE, 2, "");
+    alt_is(1, WF_CSSPROP_PERCENT, 1, "");
+    alt_is(2, WF_CSSPROP_TIME, 1, "");
+    alt_is(3, WF_CSSPROP_LENPCT, 1, "");
+    alt_is(4, WF_CSSPROP_LENPCT, 1, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<length-percentage>| THIN# | left-siDe+ '", 42));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<length-percentage>| THIN# | left-siDe+ '", 42, &g_p));
     TEST_ASSERT_EQUAL(3, g_p.nalt);
@@ -167,9 +188,14 @@ static void test_l91_syntax_7(void) {
 }
 
 static void test_l91_syntax_8(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <CUSTOM-IDENT>#  |x#|<length>+| a1#|<custom-ident> \"", 54));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <CUSTOM-IDENT>#  |x#|<length>+| a1#|<custom-ident> \"", 54, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <CUSTOM-IDENT>#  |x#|<length>+| a1#|<custom-ident> \"", 54));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <CUSTOM-IDENT>#  |x#|<length>+| a1#|<custom-ident> \"", 54, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_CIDENT, 2, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 2, "x");
+    alt_is(2, WF_CSSPROP_LENGTH, 1, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 2, "a1");
+    alt_is(4, WF_CSSPROP_CIDENT, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <percentage>+#\"", 17));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <percentage>+#\"", 17, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -189,9 +215,14 @@ static void test_l91_syntax_9(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax("'*'", 3));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax_parse("'*'", 3, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <length-percentage>+|<resolution> | thin| <TIME>#|<TIME>'", 59));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <length-percentage>+|<resolution> | thin| <TIME>#|<TIME>'", 59, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <length-percentage>+|<resolution> | thin| <TIME>#|<TIME>'", 59));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <length-percentage>+|<resolution> | thin| <TIME>#|<TIME>'", 59, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 1, "");
+    alt_is(1, WF_CSSPROP_RESOLUTION, 0, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "thin");
+    alt_is(3, WF_CSSPROP_TIME, 2, "");
+    alt_is(4, WF_CSSPROP_TIME, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' -MOZ-THING# '", 15));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' -MOZ-THING# '", 15, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
@@ -247,9 +278,14 @@ static void test_l91_syntax_12(void) {
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_KEYWORD, 2, "small");
     alt_is(1, WF_CSSPROP_KEYWORD, 0, "thin");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <anGLe>	|	<color>+|<cOLor>+  |<INTEGER>  |<time>#\"", 52));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <anGLe>	|	<color>+|<cOLor>+  |<INTEGER>  |<time>#\"", 52, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <anGLe>	|	<color>+|<cOLor>+  |<INTEGER>  |<time>#\"", 52));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <anGLe>	|	<color>+|<cOLor>+  |<INTEGER>  |<time>#\"", 52, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(1, WF_CSSPROP_COLOR, 1, "");
+    alt_is(2, WF_CSSPROP_COLOR, 1, "");
+    alt_is(3, WF_CSSPROP_INTEGER, 0, "");
+    alt_is(4, WF_CSSPROP_TIME, 2, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"nONe#\"", 7));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"nONe#\"", 7, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
@@ -370,9 +406,14 @@ static void test_l91_syntax_18(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<number>+# '", 13));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<number>+# '", 13, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<length-percentage> | none  |<percentage>#  |<CUSTOM-IDENT>	|	<NUMBER>'", 72));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<length-percentage> | none  |<percentage>#  |<CUSTOM-IDENT>	|	<NUMBER>'", 72, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<length-percentage> | none  |<percentage>#  |<CUSTOM-IDENT>	|	<NUMBER>'", 72));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<length-percentage> | none  |<percentage>#  |<CUSTOM-IDENT>	|	<NUMBER>'", 72, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "none");
+    alt_is(2, WF_CSSPROP_PERCENT, 2, "");
+    alt_is(3, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(4, WF_CSSPROP_NUMBER, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<length>| <LENGTH-PERCENTAGE>'", 31));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<length>| <LENGTH-PERCENTAGE>'", 31, &g_p));
     TEST_ASSERT_EQUAL(2, g_p.nalt);
@@ -390,12 +431,22 @@ static void test_l91_syntax_19(void) {
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_NUMBER, 0, "");
     alt_is(1, WF_CSSPROP_INTEGER, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <LENGTH-PERCENTAGE>#  |<ANGLE>| <pErceNtage>|<percentage>|left-side+'", 71));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <LENGTH-PERCENTAGE>#  |<ANGLE>| <pErceNtage>|<percentage>|left-side+'", 71, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <PERCENTAGE>  |<length>| none  |a1# | LEFT-sIDE '", 51));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <PERCENTAGE>  |<length>| none  |a1# | LEFT-sIDE '", 51, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <LENGTH-PERCENTAGE>#  |<ANGLE>| <pErceNtage>|<percentage>|left-side+'", 71));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <LENGTH-PERCENTAGE>#  |<ANGLE>| <pErceNtage>|<percentage>|left-side+'", 71, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 2, "");
+    alt_is(1, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(2, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(3, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 1, "left-side");
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <PERCENTAGE>  |<length>| none  |a1# | LEFT-sIDE '", 51));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <PERCENTAGE>  |<length>| none  |a1# | LEFT-sIDE '", 51, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(1, WF_CSSPROP_LENGTH, 0, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "none");
+    alt_is(3, WF_CSSPROP_KEYWORD, 2, "a1");
+    alt_is(4, WF_CSSPROP_KEYWORD, 0, "left-side");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<number> | <time>+|<LENGTH-PERCENTAGE>+	|	<percentage>+\"", 57));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<number> | <time>+|<LENGTH-PERCENTAGE>+	|	<percentage>+\"", 57, &g_p));
     TEST_ASSERT_EQUAL(4, g_p.nalt);
@@ -430,9 +481,14 @@ static void test_l91_syntax_21(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"AUTO#\"", 7, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_KEYWORD, 2, "auto");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<time> | <cUstom-Ident>| big|BIG | <nuMbEr>#'", 46));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<time> | <cUstom-Ident>| big|BIG | <nuMbEr>#'", 46, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<time> | <cUstom-Ident>| big|BIG | <nuMbEr>#'", 46));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<time> | <cUstom-Ident>| big|BIG | <nuMbEr>#'", 46, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TIME, 0, "");
+    alt_is(1, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "big");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "big");
+    alt_is(4, WF_CSSPROP_NUMBER, 2, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' LEFT-SIDE  |<LenGtH-pErceNTagE>+ |  '", 39));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' LEFT-SIDE  |<LenGtH-pErceNTagE>+ |  '", 39, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -566,9 +622,14 @@ static void test_l91_syntax_27(void) {
 }
 
 static void test_l91_syntax_28(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<Length-peRCentage>| <custom-ident>+|_uNDEr| <NUMBER>#|<PERCENTAGE>#\"", 70));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<Length-peRCentage>| <custom-ident>+|_uNDEr| <NUMBER>#|<PERCENTAGE>#\"", 70, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<Length-peRCentage>| <custom-ident>+|_uNDEr| <NUMBER>#|<PERCENTAGE>#\"", 70));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<Length-peRCentage>| <custom-ident>+|_uNDEr| <NUMBER>#|<PERCENTAGE>#\"", 70, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(1, WF_CSSPROP_CIDENT, 1, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "_under");
+    alt_is(3, WF_CSSPROP_NUMBER, 2, "");
+    alt_is(4, WF_CSSPROP_PERCENT, 2, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<pErcentage>+\"", 15));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<pErcentage>+\"", 15, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
@@ -647,12 +708,19 @@ static void test_l91_syntax_32(void) {
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_ANGLE, 0, "");
     alt_is(1, WF_CSSPROP_INTEGER, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' X+| <ANGLE> | <angle>  |<number>	|	<number>'", 46));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' X+| <ANGLE> | <angle>  |<number>	|	<number>'", 46, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'red+ | <transform-list> '", 26));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'red+ | <transform-list> '", 26, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' X+| <ANGLE> | <angle>  |<number>	|	<number>'", 46));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' X+| <ANGLE> | <angle>  |<number>	|	<number>'", 46, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 1, "x");
+    alt_is(1, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(2, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(3, WF_CSSPROP_NUMBER, 0, "");
+    alt_is(4, WF_CSSPROP_NUMBER, 0, "");
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'red+ | <transform-list> '", 26));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'red+ | <transform-list> '", 26, &g_p));
+    TEST_ASSERT_EQUAL(2, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 1, "red");
+    alt_is(1, WF_CSSPROP_TLIST, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <percentage>+  |<iNtEger>+  |<leNgth>+| '", 43));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <percentage>+  |<iNtEger>+  |<leNgth>+| '", 43, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -692,9 +760,14 @@ static void test_l91_syntax_34(void) {
     alt_is(1, WF_CSSPROP_INTEGER, 1, "");
     alt_is(2, WF_CSSPROP_LENPCT, 0, "");
     alt_is(3, WF_CSSPROP_NUMBER, 1, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'leFT-SiDe+|<time> | <color>|none|AUTO+ '", 41));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'leFT-SiDe+|<time> | <color>|none|AUTO+ '", 41, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'leFT-SiDe+|<time> | <color>|none|AUTO+ '", 41));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'leFT-SiDe+|<time> | <color>|none|AUTO+ '", 41, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 1, "left-side");
+    alt_is(1, WF_CSSPROP_TIME, 0, "");
+    alt_is(2, WF_CSSPROP_COLOR, 0, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "none");
+    alt_is(4, WF_CSSPROP_KEYWORD, 1, "auto");
 }
 
 static void test_l91_syntax_35(void) {
@@ -745,9 +818,14 @@ static void test_l91_syntax_37(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"THIN+	|	stretch| \"", 19));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"THIN+	|	stretch| \"", 19, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<PERCENTAGE>+| NONE  |<NUMBER>#|<length-percentage>+	|	<angle># '", 66));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<PERCENTAGE>+| NONE  |<NUMBER>#|<length-percentage>+	|	<angle># '", 66, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<PERCENTAGE>+| NONE  |<NUMBER>#|<length-percentage>+	|	<angle># '", 66));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<PERCENTAGE>+| NONE  |<NUMBER>#|<length-percentage>+	|	<angle># '", 66, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_PERCENT, 1, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "none");
+    alt_is(2, WF_CSSPROP_NUMBER, 2, "");
+    alt_is(3, WF_CSSPROP_LENPCT, 1, "");
+    alt_is(4, WF_CSSPROP_ANGLE, 2, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <Time>| <integer> | \"", 23));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <Time>| <integer> | \"", 23, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -798,9 +876,14 @@ static void test_l91_syntax_39(void) {
 }
 
 static void test_l91_syntax_40(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' red  |<INTEGER>+ | <leNgTh-peRcentAge>#	|	-moZ-tHINg# | <NUMBER>+'", 68));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' red  |<INTEGER>+ | <leNgTh-peRcentAge>#	|	-moZ-tHINg# | <NUMBER>+'", 68, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' red  |<INTEGER>+ | <leNgTh-peRcentAge>#	|	-moZ-tHINg# | <NUMBER>+'", 68));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' red  |<INTEGER>+ | <leNgTh-peRcentAge>#	|	-moZ-tHINg# | <NUMBER>+'", 68, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 0, "red");
+    alt_is(1, WF_CSSPROP_INTEGER, 1, "");
+    alt_is(2, WF_CSSPROP_LENPCT, 2, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 2, "-moz-thing");
+    alt_is(4, WF_CSSPROP_NUMBER, 1, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <COLOR>+|<COLOR>'", 19));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <COLOR>+|<COLOR>'", 19, &g_p));
     TEST_ASSERT_EQUAL(2, g_p.nalt);
@@ -885,9 +968,14 @@ static void test_l91_syntax_44(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_CIDENT, wf_cssprop_syntax_parse("\"<cusToM-ident>\"", 16, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_CIDENT, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <lenGth-pErcenTaGe>|<peRceNtage># | none| SMALL#  |<Length-pErcentaGe>'", 73));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <lenGth-pErcenTaGe>|<peRceNtage># | none| SMALL#  |<Length-pErcentaGe>'", 73, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <lenGth-pErcenTaGe>|<peRceNtage># | none| SMALL#  |<Length-pErcentaGe>'", 73));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <lenGth-pErcenTaGe>|<peRceNtage># | none| SMALL#  |<Length-pErcentaGe>'", 73, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(1, WF_CSSPROP_PERCENT, 2, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "none");
+    alt_is(3, WF_CSSPROP_KEYWORD, 2, "small");
+    alt_is(4, WF_CSSPROP_LENPCT, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<LENGTH>\"", 10));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<LENGTH>\"", 10, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -904,15 +992,25 @@ static void test_l91_syntax_45(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<length-percentage>|<number>++\"", 32));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<length-percentage>|<number>++\"", 32, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<length-percentage>	|	<CUSTOM-IDENT>	|	<ANGLE>	|	<color>  |<LENGTH>\"", 69));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<length-percentage>	|	<CUSTOM-IDENT>	|	<ANGLE>	|	<color>  |<LENGTH>\"", 69, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<length-percentage>	|	<CUSTOM-IDENT>	|	<ANGLE>	|	<color>  |<LENGTH>\"", 69));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<length-percentage>	|	<CUSTOM-IDENT>	|	<ANGLE>	|	<color>  |<LENGTH>\"", 69, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(1, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(2, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(3, WF_CSSPROP_COLOR, 0, "");
+    alt_is(4, WF_CSSPROP_LENGTH, 0, "");
 }
 
 static void test_l91_syntax_46(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <number>+|smaLL|<pErcentaGe> | <length>| <color>+\"", 52));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <number>+|smaLL|<pErcentaGe> | <length>| <color>+\"", 52, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <number>+|smaLL|<pErcentaGe> | <length>| <color>+\"", 52));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <number>+|smaLL|<pErcentaGe> | <length>| <color>+\"", 52, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_NUMBER, 1, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "small");
+    alt_is(2, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(3, WF_CSSPROP_LENGTH, 0, "");
+    alt_is(4, WF_CSSPROP_COLOR, 1, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax("\"*\"", 3));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax_parse("\"*\"", 3, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -968,9 +1066,14 @@ static void test_l91_syntax_48(void) {
 }
 
 static void test_l91_syntax_49(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"red	|	<INTEger># | left-side| auto+| <NUMBER>+ \"", 49));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"red	|	<INTEger># | left-side| auto+| <NUMBER>+ \"", 49, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"red	|	<INTEger># | left-side| auto+| <NUMBER>+ \"", 49));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"red	|	<INTEger># | left-side| auto+| <NUMBER>+ \"", 49, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 0, "red");
+    alt_is(1, WF_CSSPROP_INTEGER, 2, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "left-side");
+    alt_is(3, WF_CSSPROP_KEYWORD, 1, "auto");
+    alt_is(4, WF_CSSPROP_NUMBER, 1, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'UNSET '", 8));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'UNSET '", 8, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -985,15 +1088,25 @@ static void test_l91_syntax_49(void) {
 }
 
 static void test_l91_syntax_50(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'left-side | <CUSTOM-IDENT>| <percentage>| <lenGth-peRcentAGe>| <angle>+ '", 74));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'left-side | <CUSTOM-IDENT>| <percentage>| <lenGth-peRcentAGe>| <angle>+ '", 74, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'left-side | <CUSTOM-IDENT>| <percentage>| <lenGth-peRcentAGe>| <angle>+ '", 74));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'left-side | <CUSTOM-IDENT>| <percentage>| <lenGth-peRcentAGe>| <angle>+ '", 74, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 0, "left-side");
+    alt_is(1, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(2, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(3, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(4, WF_CSSPROP_ANGLE, 1, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax("' * '", 5));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax_parse("' * '", 5, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" x#|<angle>#|<custom-ident> | auto | <color> \"", 47));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" x#|<angle>#|<custom-ident> | auto | <color> \"", 47, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" x#|<angle>#|<custom-ident> | auto | <color> \"", 47));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" x#|<angle>#|<custom-ident> | auto | <color> \"", 47, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 2, "x");
+    alt_is(1, WF_CSSPROP_ANGLE, 2, "");
+    alt_is(2, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "auto");
+    alt_is(4, WF_CSSPROP_COLOR, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'big #'", 7));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'big #'", 7, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -1028,9 +1141,14 @@ static void test_l91_syntax_52(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("NONE+", 5));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("NONE+", 5, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<LENGTH-PERCENTAGE>+	|	<angle> | <Number> | <CUSTOM-IDENT>+  |<integEr>+ \"", 75));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<LENGTH-PERCENTAGE>+	|	<angle> | <Number> | <CUSTOM-IDENT>+  |<integEr>+ \"", 75, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<LENGTH-PERCENTAGE>+	|	<angle> | <Number> | <CUSTOM-IDENT>+  |<integEr>+ \"", 75));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<LENGTH-PERCENTAGE>+	|	<angle> | <Number> | <CUSTOM-IDENT>+  |<integEr>+ \"", 75, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 1, "");
+    alt_is(1, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(2, WF_CSSPROP_NUMBER, 0, "");
+    alt_is(3, WF_CSSPROP_CIDENT, 1, "");
+    alt_is(4, WF_CSSPROP_INTEGER, 1, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax("'*'", 3));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax_parse("'*'", 3, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -1066,9 +1184,14 @@ static void test_l91_syntax_54(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_INTEGER, wf_cssprop_syntax_parse("'<INTEGER>'", 11, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_INTEGER, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <time>#	|	red#| <number>+  |<TIME>|_uNDER+ \"", 46));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <time>#	|	red#| <number>+  |<TIME>|_uNDER+ \"", 46, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <time>#	|	red#| <number>+  |<TIME>|_uNDER+ \"", 46));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <time>#	|	red#| <number>+  |<TIME>|_uNDER+ \"", 46, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TIME, 2, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 2, "red");
+    alt_is(2, WF_CSSPROP_NUMBER, 1, "");
+    alt_is(3, WF_CSSPROP_TIME, 0, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 1, "_under");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<custom-ident>+ | <PERCENTAGE>+ | none | <ANGLE>+ | None\"", 58));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<custom-ident>+ | <PERCENTAGE>+ | none | <ANGLE>+ | None\"", 58, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -1096,9 +1219,14 @@ static void test_l91_syntax_55(void) {
 }
 
 static void test_l91_syntax_56(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <time>+  |<AnGLE>+| <perCEntAgE>|<custom-ident>+|RED# \"", 57));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <time>+  |<AnGLE>+| <perCEntAgE>|<custom-ident>+|RED# \"", 57, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <time>+  |<AnGLE>+| <perCEntAgE>|<custom-ident>+|RED# \"", 57));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <time>+  |<AnGLE>+| <perCEntAgE>|<custom-ident>+|RED# \"", 57, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TIME, 1, "");
+    alt_is(1, WF_CSSPROP_ANGLE, 1, "");
+    alt_is(2, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(3, WF_CSSPROP_CIDENT, 1, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 2, "red");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"REVERT \"", 9));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"REVERT \"", 9, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -1113,9 +1241,14 @@ static void test_l91_syntax_56(void) {
 }
 
 static void test_l91_syntax_57(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'_UNDER#	|	-moz-tHinG|_UNDER  |<custom-ident>+| <nuMBEr>#'", 58));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'_UNDER#	|	-moz-tHinG|_UNDER  |<custom-ident>+| <nuMBEr>#'", 58, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'_UNDER#	|	-moz-tHinG|_UNDER  |<custom-ident>+| <nuMBEr>#'", 58));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'_UNDER#	|	-moz-tHinG|_UNDER  |<custom-ident>+| <nuMBEr>#'", 58, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 2, "_under");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "-moz-thing");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "_under");
+    alt_is(3, WF_CSSPROP_CIDENT, 1, "");
+    alt_is(4, WF_CSSPROP_NUMBER, 2, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <INtegeR>+ '", 14));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <INtegeR>+ '", 14, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
@@ -1130,9 +1263,14 @@ static void test_l91_syntax_57(void) {
 }
 
 static void test_l91_syntax_58(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" SMALL+	|	stretch| <PERCENTAGE># | -MOZ-THING  |left-side\"", 59));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" SMALL+	|	stretch| <PERCENTAGE># | -MOZ-THING  |left-side\"", 59, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" SMALL+	|	stretch| <PERCENTAGE># | -MOZ-THING  |left-side\"", 59));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" SMALL+	|	stretch| <PERCENTAGE># | -MOZ-THING  |left-side\"", 59, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 1, "small");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "stretch");
+    alt_is(2, WF_CSSPROP_PERCENT, 2, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "-moz-thing");
+    alt_is(4, WF_CSSPROP_KEYWORD, 0, "left-side");
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax("\" * \"", 5));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax_parse("\" * \"", 5, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -1184,9 +1322,14 @@ static void test_l91_syntax_60(void) {
     alt_is(0, WF_CSSPROP_PERCENT, 2, "");
     alt_is(1, WF_CSSPROP_TIME, 2, "");
     alt_is(2, WF_CSSPROP_CIDENT, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' _under|<lENgtH>+  |<custom-ident>| <custom-ident>#	|	<NUMBER># '", 66));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' _under|<lENgtH>+  |<custom-ident>| <custom-ident>#	|	<NUMBER># '", 66, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' _under|<lENgtH>+  |<custom-ident>| <custom-ident>#	|	<NUMBER># '", 66));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' _under|<lENgtH>+  |<custom-ident>| <custom-ident>#	|	<NUMBER># '", 66, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 0, "_under");
+    alt_is(1, WF_CSSPROP_LENGTH, 1, "");
+    alt_is(2, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(3, WF_CSSPROP_CIDENT, 2, "");
+    alt_is(4, WF_CSSPROP_NUMBER, 2, "");
 }
 
 static void test_l91_syntax_61(void) {
@@ -1409,17 +1552,27 @@ static void test_l91_syntax_72(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"-1x| small  |<percentage> \"", 28));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"-1x| small  |<percentage> \"", 28, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<Time>+|stretch#|<LENGTH-PERCENTAGE>	|	<INTEGER>#| <INTEGER> '", 63));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<Time>+|stretch#|<LENGTH-PERCENTAGE>	|	<INTEGER>#| <INTEGER> '", 63, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<Time>+|stretch#|<LENGTH-PERCENTAGE>	|	<INTEGER>#| <INTEGER> '", 63));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<Time>+|stretch#|<LENGTH-PERCENTAGE>	|	<INTEGER>#| <INTEGER> '", 63, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TIME, 1, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 2, "stretch");
+    alt_is(2, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(3, WF_CSSPROP_INTEGER, 2, "");
+    alt_is(4, WF_CSSPROP_INTEGER, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <percentage>	|	small \"", 24));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <percentage>	|	small \"", 24, &g_p));
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_PERCENT, 0, "");
     alt_is(1, WF_CSSPROP_KEYWORD, 0, "small");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"stretch| <CUSTOM-IDENT>|sTRetcH | sTREtch | LEFT-SIDE \"", 56));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"stretch| <CUSTOM-IDENT>|sTRetcH | sTREtch | LEFT-SIDE \"", 56, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"stretch| <CUSTOM-IDENT>|sTRetcH | sTREtch | LEFT-SIDE \"", 56));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"stretch| <CUSTOM-IDENT>|sTRetcH | sTREtch | LEFT-SIDE \"", 56, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 0, "stretch");
+    alt_is(1, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "stretch");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "stretch");
+    alt_is(4, WF_CSSPROP_KEYWORD, 0, "left-side");
 }
 
 static void test_l91_syntax_73(void) {
@@ -1616,9 +1769,14 @@ static void test_l91_syntax_82(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax("' * '", 5));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax_parse("' * '", 5, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<InTEGer>| <CUSTOM-IDENT>#	|	<LENGTH-PERCENTAGE>	|	BIG| <color> '", 66));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<InTEGer>| <CUSTOM-IDENT>#	|	<LENGTH-PERCENTAGE>	|	BIG| <color> '", 66, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<InTEGer>| <CUSTOM-IDENT>#	|	<LENGTH-PERCENTAGE>	|	BIG| <color> '", 66));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<InTEGer>| <CUSTOM-IDENT>#	|	<LENGTH-PERCENTAGE>	|	BIG| <color> '", 66, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_INTEGER, 0, "");
+    alt_is(1, WF_CSSPROP_CIDENT, 2, "");
+    alt_is(2, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "big");
+    alt_is(4, WF_CSSPROP_COLOR, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' red '", 7));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' red '", 7, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
@@ -1654,9 +1812,13 @@ static void test_l91_syntax_84(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_COLOR, wf_cssprop_syntax_parse("' <color>'", 10, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_COLOR, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <transform-list>|_under+	|	<color>#  |<inteGer>+ \"", 52));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <transform-list>|_under+	|	<color>#  |<inteGer>+ \"", 52, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <transform-list>|_under+	|	<color>#  |<inteGer>+ \"", 52));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <transform-list>|_under+	|	<color>#  |<inteGer>+ \"", 52, &g_p));
+    TEST_ASSERT_EQUAL(4, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TLIST, 0, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 1, "_under");
+    alt_is(2, WF_CSSPROP_COLOR, 2, "");
+    alt_is(3, WF_CSSPROP_INTEGER, 1, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <INTEGER># | NONE+ | <LENGTH>#'", 33));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <INTEGER># | NONE+ | <LENGTH>#'", 33, &g_p));
     TEST_ASSERT_EQUAL(3, g_p.nalt);
@@ -1666,9 +1828,14 @@ static void test_l91_syntax_84(void) {
 }
 
 static void test_l91_syntax_85(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' none | <Length>#|sTrETch  |THIN | <length-percentage>#'", 57));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' none | <Length>#|sTrETch  |THIN | <length-percentage>#'", 57, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' none | <Length>#|sTrETch  |THIN | <length-percentage>#'", 57));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' none | <Length>#|sTrETch  |THIN | <length-percentage>#'", 57, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 0, "none");
+    alt_is(1, WF_CSSPROP_LENGTH, 2, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "stretch");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "thin");
+    alt_is(4, WF_CSSPROP_LENPCT, 2, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <LENGTH>#| <integer>#| small| <LENGTH-PERCENTAGE> \"", 53));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <LENGTH>#| <integer>#| small| <LENGTH-PERCENTAGE> \"", 53, &g_p));
     TEST_ASSERT_EQUAL(4, g_p.nalt);
@@ -1702,9 +1869,14 @@ static void test_l91_syntax_86(void) {
 }
 
 static void test_l91_syntax_87(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' BIG#  |<percentage>  |<LENGth-pErcEnTage>  |-moz-tHINg | STrEtch#'", 68));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' BIG#  |<percentage>  |<LENGth-pErcEnTage>  |-moz-tHINg | STrEtch#'", 68, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' BIG#  |<percentage>  |<LENGth-pErcEnTage>  |-moz-tHINg | STrEtch#'", 68));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' BIG#  |<percentage>  |<LENGth-pErcEnTage>  |-moz-tHINg | STrEtch#'", 68, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 2, "big");
+    alt_is(1, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(2, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "-moz-thing");
+    alt_is(4, WF_CSSPROP_KEYWORD, 2, "stretch");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<angle>	|	<time>+|<nUMber>+\"", 29));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<angle>	|	<time>+|<nUMber>+\"", 29, &g_p));
     TEST_ASSERT_EQUAL(3, g_p.nalt);
@@ -1733,18 +1905,28 @@ static void test_l91_syntax_88(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" -	|	A1#|<integer>+  |<time>#| <NUMBER> \"", 42));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" -	|	A1#|<integer>+  |<time>#| <NUMBER> \"", 42, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' AUTO|none|thin+  |A1|<integer>'", 33));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' AUTO|none|thin+  |A1|<integer>'", 33, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' AUTO|none|thin+  |A1|<integer>'", 33));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' AUTO|none|thin+  |A1|<integer>'", 33, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 0, "auto");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "none");
+    alt_is(2, WF_CSSPROP_KEYWORD, 1, "thin");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "a1");
+    alt_is(4, WF_CSSPROP_INTEGER, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'x  |a#b	|	<COLOR> '", 20));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'x  |a#b	|	<COLOR> '", 20, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
 }
 
 static void test_l91_syntax_89(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <cuStOm-Ident>+	|	small+	|	-Moz-ThInG  |-moz-thing# | -MOZ-THING#'", 68));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <cuStOm-Ident>+	|	small+	|	-Moz-ThInG  |-moz-thing# | -MOZ-THING#'", 68, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <cuStOm-Ident>+	|	small+	|	-Moz-ThInG  |-moz-thing# | -MOZ-THING#'", 68));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <cuStOm-Ident>+	|	small+	|	-Moz-ThInG  |-moz-thing# | -MOZ-THING#'", 68, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_CIDENT, 1, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 1, "small");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "-moz-thing");
+    alt_is(3, WF_CSSPROP_KEYWORD, 2, "-moz-thing");
+    alt_is(4, WF_CSSPROP_KEYWORD, 2, "-moz-thing");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<NUMBER>#+	|	<ANGLE>#|<number>\"", 32));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<NUMBER>#+	|	<ANGLE>#|<number>\"", 32, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -1765,23 +1947,34 @@ static void test_l91_syntax_90(void) {
     alt_is(0, WF_CSSPROP_KEYWORD, 0, "auto");
     alt_is(1, WF_CSSPROP_TIME, 0, "");
     alt_is(2, WF_CSSPROP_COLOR, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<angle>  |<ANGLE>+  |nonE  |<CUSTOM-IDENT>  |auto '", 52));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<angle>  |<ANGLE>+  |nonE  |<CUSTOM-IDENT>  |auto '", 52, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<angle>  |<ANGLE>+  |nonE  |<CUSTOM-IDENT>  |auto '", 52));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<angle>  |<ANGLE>+  |nonE  |<CUSTOM-IDENT>  |auto '", 52, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(1, WF_CSSPROP_ANGLE, 1, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "none");
+    alt_is(3, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 0, "auto");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <peRCentage># | Thin'", 23));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <peRCentage># | Thin'", 23, &g_p));
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_PERCENT, 2, "");
     alt_is(1, WF_CSSPROP_KEYWORD, 0, "thin");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<anGle>	|	<angLe>|<LENGTH-PERCENTAGE>|<time>+  |<inteGEr> '", 60));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<anGle>	|	<angLe>|<LENGTH-PERCENTAGE>|<time>+  |<inteGEr> '", 60, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<anGle>	|	<angLe>|<LENGTH-PERCENTAGE>|<time>+  |<inteGEr> '", 60));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<anGle>	|	<angLe>|<LENGTH-PERCENTAGE>|<time>+  |<inteGEr> '", 60, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(1, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(2, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(3, WF_CSSPROP_TIME, 1, "");
+    alt_is(4, WF_CSSPROP_INTEGER, 0, "");
 }
 
 static void test_l91_syntax_91(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <url>\"", 8));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <url>\"", 8, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_URL, wf_cssprop_syntax("\" <url>\"", 8));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_URL, wf_cssprop_syntax_parse("\" <url>\"", 8, &g_p));
+    TEST_ASSERT_EQUAL(1, g_p.nalt);
+    alt_is(0, WF_CSSPROP_URL, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' A1 '", 6));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' A1 '", 6, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
@@ -1849,9 +2042,14 @@ static void test_l91_syntax_94(void) {
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_KEYWORD, 0, "small");
     alt_is(1, WF_CSSPROP_LENPCT, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <time>+	|	<COLOR>	|	x | <length-peRcENTage>+ | <PERCENTAGE>\"", 62));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <time>+	|	<COLOR>	|	x | <length-peRcENTage>+ | <PERCENTAGE>\"", 62, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <time>+	|	<COLOR>	|	x | <length-peRcENTage>+ | <PERCENTAGE>\"", 62));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <time>+	|	<COLOR>	|	x | <length-peRcENTage>+ | <PERCENTAGE>\"", 62, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TIME, 1, "");
+    alt_is(1, WF_CSSPROP_COLOR, 0, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "x");
+    alt_is(3, WF_CSSPROP_LENPCT, 1, "");
+    alt_is(4, WF_CSSPROP_PERCENT, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" < length > \"", 14));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" < length > \"", 14, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -1874,9 +2072,14 @@ static void test_l91_syntax_95(void) {
     alt_is(0, WF_CSSPROP_KEYWORD, 2, "big");
     alt_is(1, WF_CSSPROP_KEYWORD, 1, "red");
     alt_is(2, WF_CSSPROP_LENGTH, 1, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<IntEgEr> | <INTEGER>+  |<number>#|red | thin+'", 48));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<IntEgEr> | <INTEGER>+  |<number>#|red | thin+'", 48, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<IntEgEr> | <INTEGER>+  |<number>#|red | thin+'", 48));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<IntEgEr> | <INTEGER>+  |<number>#|red | thin+'", 48, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_INTEGER, 0, "");
+    alt_is(1, WF_CSSPROP_INTEGER, 1, "");
+    alt_is(2, WF_CSSPROP_NUMBER, 2, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "red");
+    alt_is(4, WF_CSSPROP_KEYWORD, 1, "thin");
 }
 
 static void test_l91_syntax_96(void) {
@@ -1949,9 +2152,14 @@ static void test_l91_syntax_99(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<TIME>+ \"", 10, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_TIME, 1, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <length-percentage> | <number>#| <NUmber>| <percentage>#  |strEtch'", 69));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <length-percentage> | <number>#| <NUmber>| <percentage>#  |strEtch'", 69, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <length-percentage> | <number>#| <NUmber>| <percentage>#  |strEtch'", 69));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <length-percentage> | <number>#| <NUmber>| <percentage>#  |strEtch'", 69, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(1, WF_CSSPROP_NUMBER, 2, "");
+    alt_is(2, WF_CSSPROP_NUMBER, 0, "");
+    alt_is(3, WF_CSSPROP_PERCENT, 2, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 0, "stretch");
     TEST_ASSERT_EQUAL(WF_CSSPROP_INTEGER, wf_cssprop_syntax("\"<InTEger>\"", 11));
     TEST_ASSERT_EQUAL(WF_CSSPROP_INTEGER, wf_cssprop_syntax_parse("\"<InTEger>\"", 11, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
@@ -1969,9 +2177,10 @@ static void test_l91_syntax_100(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"sMalL \"", 8, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_KEYWORD, 0, "small");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<transform-list>\"", 18));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<transform-list>\"", 18, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_TLIST, wf_cssprop_syntax("\"<transform-list>\"", 18));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_TLIST, wf_cssprop_syntax_parse("\"<transform-list>\"", 18, &g_p));
+    TEST_ASSERT_EQUAL(1, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TLIST, 0, "");
 }
 
 static void test_l91_syntax_101(void) {
@@ -1985,9 +2194,14 @@ static void test_l91_syntax_101(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<LENGTH> # | <LENGTH>#	|	LEFT-SIDE\"", 36));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<LENGTH> # | <LENGTH>#	|	LEFT-SIDE\"", 36, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'BIG+ | <CUSTOM-IDENT>|<CUSTOM-IDENT> | <LENGTH-PERCENTAGE>|<LENGTH-PERCENTAGE>'", 80));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'BIG+ | <CUSTOM-IDENT>|<CUSTOM-IDENT> | <LENGTH-PERCENTAGE>|<LENGTH-PERCENTAGE>'", 80, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'BIG+ | <CUSTOM-IDENT>|<CUSTOM-IDENT> | <LENGTH-PERCENTAGE>|<LENGTH-PERCENTAGE>'", 80));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'BIG+ | <CUSTOM-IDENT>|<CUSTOM-IDENT> | <LENGTH-PERCENTAGE>|<LENGTH-PERCENTAGE>'", 80, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 1, "big");
+    alt_is(1, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(2, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(3, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(4, WF_CSSPROP_LENPCT, 0, "");
 }
 
 static void test_l91_syntax_102(void) {
@@ -2001,9 +2215,14 @@ static void test_l91_syntax_102(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<color>+ | <Length>	|	<length>	|	<percentage> #\"", 49));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<color>+ | <Length>	|	<length>	|	<percentage> #\"", 49, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" a1	|	NOne| <integer>|RED#|<CUstom-IDENt>+ \"", 45));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" a1	|	NOne| <integer>|RED#|<CUstom-IDENt>+ \"", 45, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" a1	|	NOne| <integer>|RED#|<CUstom-IDENt>+ \"", 45));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" a1	|	NOne| <integer>|RED#|<CUstom-IDENt>+ \"", 45, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 0, "a1");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "none");
+    alt_is(2, WF_CSSPROP_INTEGER, 0, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 2, "red");
+    alt_is(4, WF_CSSPROP_CIDENT, 1, "");
 }
 
 static void test_l91_syntax_103(void) {
@@ -2017,9 +2236,14 @@ static void test_l91_syntax_103(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" AUTO#\"", 8, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_KEYWORD, 2, "auto");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <ANGLE> | <iNteGeR> | <COlor>+  |left-side+	|	<integer>'", 58));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <ANGLE> | <iNteGeR> | <COlor>+  |left-side+	|	<integer>'", 58, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <ANGLE> | <iNteGeR> | <COlor>+  |left-side+	|	<integer>'", 58));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <ANGLE> | <iNteGeR> | <COlor>+  |left-side+	|	<integer>'", 58, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(1, WF_CSSPROP_INTEGER, 0, "");
+    alt_is(2, WF_CSSPROP_COLOR, 1, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 1, "left-side");
+    alt_is(4, WF_CSSPROP_INTEGER, 0, "");
 }
 
 static void test_l91_syntax_104(void) {
@@ -2030,12 +2254,22 @@ static void test_l91_syntax_104(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_LENGTH, wf_cssprop_syntax_parse("\"<LENGTH> \"", 11, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_LENGTH, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <percentage>  |<custom-ident>	|	SmaLl+  |<angle>+ | -Moz-thinG+ '", 67));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <percentage>  |<custom-ident>	|	SmaLl+  |<angle>+ | -Moz-thinG+ '", 67, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <leNgth>+|<COLOR>	|	<percentage>#| <lEngTh-PErcEntage>#|<CUStom-IDENt>'", 73));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <leNgth>+|<COLOR>	|	<percentage>#| <lEngTh-PErcEntage>#|<CUStom-IDENt>'", 73, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <percentage>  |<custom-ident>	|	SmaLl+  |<angle>+ | -Moz-thinG+ '", 67));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <percentage>  |<custom-ident>	|	SmaLl+  |<angle>+ | -Moz-thinG+ '", 67, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(1, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 1, "small");
+    alt_is(3, WF_CSSPROP_ANGLE, 1, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 1, "-moz-thing");
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <leNgth>+|<COLOR>	|	<percentage>#| <lEngTh-PErcEntage>#|<CUStom-IDENt>'", 73));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <leNgth>+|<COLOR>	|	<percentage>#| <lEngTh-PErcEntage>#|<CUStom-IDENt>'", 73, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENGTH, 1, "");
+    alt_is(1, WF_CSSPROP_COLOR, 0, "");
+    alt_is(2, WF_CSSPROP_PERCENT, 2, "");
+    alt_is(3, WF_CSSPROP_LENPCT, 2, "");
+    alt_is(4, WF_CSSPROP_CIDENT, 0, "");
 }
 
 static void test_l91_syntax_105(void) {
@@ -2044,9 +2278,14 @@ static void test_l91_syntax_105(void) {
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_NUMBER, 0, "");
     alt_is(1, WF_CSSPROP_INTEGER, 2, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <lEngTh-percentAGe>#| <TIME>+	|	<ANGLE>| <angle>#| <TIME>#\"", 61));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <lEngTh-percentAGe>#| <TIME>+	|	<ANGLE>| <angle>#| <TIME>#\"", 61, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <lEngTh-percentAGe>#| <TIME>+	|	<ANGLE>| <angle>#| <TIME>#\"", 61));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <lEngTh-percentAGe>#| <TIME>+	|	<ANGLE>| <angle>#| <TIME>#\"", 61, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 2, "");
+    alt_is(1, WF_CSSPROP_TIME, 1, "");
+    alt_is(2, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(3, WF_CSSPROP_ANGLE, 2, "");
+    alt_is(4, WF_CSSPROP_TIME, 2, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'NONE+ | <CuSTom-IdenT>	|	<LENGTH>#	|	<INTEGER>+  | '", 53));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'NONE+ | <CuSTom-IdenT>	|	<LENGTH>#	|	<INTEGER>+  | '", 53, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -2117,18 +2356,25 @@ static void test_l91_syntax_108(void) {
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_COLOR, 1, "");
     alt_is(1, WF_CSSPROP_TIME, 2, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <color>	|	<LENGTH>#  |THIN+ | big#	|	RED#\"", 44));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <color>	|	<LENGTH>#  |THIN+ | big#	|	RED#\"", 44, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <color>	|	<LENGTH>#  |THIN+ | big#	|	RED#\"", 44));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <color>	|	<LENGTH>#  |THIN+ | big#	|	RED#\"", 44, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_COLOR, 0, "");
+    alt_is(1, WF_CSSPROP_LENGTH, 2, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 1, "thin");
+    alt_is(3, WF_CSSPROP_KEYWORD, 2, "big");
+    alt_is(4, WF_CSSPROP_KEYWORD, 2, "red");
 }
 
 static void test_l91_syntax_109(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("none+", 5));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("none+", 5, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <transform-list> | <nUmBeR> '", 31));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <transform-list> | <nUmBeR> '", 31, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <transform-list> | <nUmBeR> '", 31));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <transform-list> | <nUmBeR> '", 31, &g_p));
+    TEST_ASSERT_EQUAL(2, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TLIST, 0, "");
+    alt_is(1, WF_CSSPROP_NUMBER, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' BIG|big#'", 11));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' BIG|big#'", 11, &g_p));
     TEST_ASSERT_EQUAL(2, g_p.nalt);
@@ -2191,9 +2437,10 @@ static void test_l91_syntax_112(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <time>+'", 10, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_TIME, 1, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<transform-list>'", 18));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<transform-list>'", 18, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_TLIST, wf_cssprop_syntax("'<transform-list>'", 18));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_TLIST, wf_cssprop_syntax_parse("'<transform-list>'", 18, &g_p));
+    TEST_ASSERT_EQUAL(1, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TLIST, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' revert-layer|<CUstom-IDeNt>+  |<ANGLE>+ '", 43));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' revert-layer|<CUstom-IDeNt>+  |<ANGLE>+ '", 43, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -2287,9 +2534,14 @@ static void test_l91_syntax_117(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax("' * '", 5));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANY, wf_cssprop_syntax_parse("' * '", 5, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<LEngth-pErCentaGE>  |SMALL  |-Moz-Thing#| <percentage>	|	STRETCH\"", 67));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<LEngth-pErCentaGE>  |SMALL  |-Moz-Thing#| <percentage>	|	STRETCH\"", 67, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<LEngth-pErCentaGE>  |SMALL  |-Moz-Thing#| <percentage>	|	STRETCH\"", 67));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<LEngth-pErCentaGE>  |SMALL  |-Moz-Thing#| <percentage>	|	STRETCH\"", 67, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "small");
+    alt_is(2, WF_CSSPROP_KEYWORD, 2, "-moz-thing");
+    alt_is(3, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 0, "stretch");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"red+| <integer>#  |<LENGTH>+++ \"", 33));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"red+| <integer>#  |<LENGTH>+++ \"", 33, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -2303,12 +2555,22 @@ static void test_l91_syntax_117(void) {
 }
 
 static void test_l91_syntax_118(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<NuMbEr> | <iNteGer>+  |<length-percentage>  |<length-percentage>#|small\"", 74));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<NuMbEr> | <iNteGer>+  |<length-percentage>  |<length-percentage>#|small\"", 74, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<LENGTH-PERCENTAGE>+|<TIME>+ | rEd#	|	<custom-ident>	|	<length>\"", 65));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<LENGTH-PERCENTAGE>+|<TIME>+ | rEd#	|	<custom-ident>	|	<length>\"", 65, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<NuMbEr> | <iNteGer>+  |<length-percentage>  |<length-percentage>#|small\"", 74));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<NuMbEr> | <iNteGer>+  |<length-percentage>  |<length-percentage>#|small\"", 74, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_NUMBER, 0, "");
+    alt_is(1, WF_CSSPROP_INTEGER, 1, "");
+    alt_is(2, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(3, WF_CSSPROP_LENPCT, 2, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 0, "small");
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<LENGTH-PERCENTAGE>+|<TIME>+ | rEd#	|	<custom-ident>	|	<length>\"", 65));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<LENGTH-PERCENTAGE>+|<TIME>+ | rEd#	|	<custom-ident>	|	<length>\"", 65, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 1, "");
+    alt_is(1, WF_CSSPROP_TIME, 1, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 2, "red");
+    alt_is(3, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(4, WF_CSSPROP_LENGTH, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <NUMBER>+  |<number> '", 24));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <NUMBER>+  |<number> '", 24, &g_p));
     TEST_ASSERT_EQUAL(2, g_p.nalt);
@@ -2325,9 +2587,14 @@ static void test_l91_syntax_119(void) {
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_NUMBER, 0, "");
     alt_is(1, WF_CSSPROP_ANGLE, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" X+ | bIg	|	<cOLor>#  |auto | <number> \"", 41));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" X+ | bIg	|	<cOLor>#  |auto | <number> \"", 41, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" X+ | bIg	|	<cOLor>#  |auto | <number> \"", 41));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" X+ | bIg	|	<cOLor>#  |auto | <number> \"", 41, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 1, "x");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "big");
+    alt_is(2, WF_CSSPROP_COLOR, 2, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "auto");
+    alt_is(4, WF_CSSPROP_NUMBER, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" default|<integer>#|<percentaGe>\"", 34));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" default|<integer>#|<percentaGe>\"", 34, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -2442,9 +2709,14 @@ static void test_l91_syntax_125(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <length-percentage> # \"", 25));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <length-percentage> # \"", 25, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' thin#| small| <CUSTOM-IDENT>	|	<number>	|	NONE+ '", 51));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' thin#| small| <CUSTOM-IDENT>	|	<number>	|	NONE+ '", 51, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' thin#| small| <CUSTOM-IDENT>	|	<number>	|	NONE+ '", 51));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' thin#| small| <CUSTOM-IDENT>	|	<number>	|	NONE+ '", 51, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 2, "thin");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "small");
+    alt_is(2, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(3, WF_CSSPROP_NUMBER, 0, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 1, "none");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" big+\"", 7));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" big+\"", 7, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
@@ -2458,9 +2730,14 @@ static void test_l91_syntax_126(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"< length > \"", 13));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"< length > \"", 13, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <TIME>|auto| smaLl  |<custom-ident>	|	BIG# '", 46));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <TIME>|auto| smaLl  |<custom-ident>	|	BIG# '", 46, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("' <TIME>|auto| smaLl  |<custom-ident>	|	BIG# '", 46));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' <TIME>|auto| smaLl  |<custom-ident>	|	BIG# '", 46, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TIME, 0, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "auto");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "small");
+    alt_is(3, WF_CSSPROP_CIDENT, 0, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 2, "big");
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_syntax("\" <ANGLE>\"", 10));
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_syntax_parse("\" <ANGLE>\"", 10, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
@@ -2475,9 +2752,14 @@ static void test_l91_syntax_127(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'< length >'", 12));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'< length >'", 12, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'<time>+ | <ANgle> | <coLoR>+  |<PERCENTAGE> | <INTEGER>'", 57));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'<time>+ | <ANgle> | <coLoR>+  |<PERCENTAGE> | <INTEGER>'", 57, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'<time>+ | <ANgle> | <coLoR>+  |<PERCENTAGE> | <INTEGER>'", 57));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'<time>+ | <ANgle> | <coLoR>+  |<PERCENTAGE> | <INTEGER>'", 57, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_TIME, 1, "");
+    alt_is(1, WF_CSSPROP_ANGLE, 0, "");
+    alt_is(2, WF_CSSPROP_COLOR, 1, "");
+    alt_is(3, WF_CSSPROP_PERCENT, 0, "");
+    alt_is(4, WF_CSSPROP_INTEGER, 0, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"a1+|_uNDer| <coloR>+  |STRETCH\"", 32));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"a1+|_uNDer| <coloR>+  |STRETCH\"", 32, &g_p));
     TEST_ASSERT_EQUAL(4, g_p.nalt);
@@ -2556,9 +2838,14 @@ static void test_l91_syntax_131(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("' none'", 7, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_KEYWORD, 0, "none");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"<lengtH-perCentAGE> | <cOLoR>  |AUTO | stretch#	|	Red\"", 55));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"<lengtH-perCentAGE> | <cOLoR>  |AUTO | stretch#	|	Red\"", 55, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"<lengtH-perCentAGE> | <cOLoR>  |AUTO | stretch#	|	Red\"", 55));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"<lengtH-perCentAGE> | <cOLoR>  |AUTO | stretch#	|	Red\"", 55, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_LENPCT, 0, "");
+    alt_is(1, WF_CSSPROP_COLOR, 0, "");
+    alt_is(2, WF_CSSPROP_KEYWORD, 0, "auto");
+    alt_is(3, WF_CSSPROP_KEYWORD, 2, "stretch");
+    alt_is(4, WF_CSSPROP_KEYWORD, 0, "red");
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"_UNDER  |<NUMBER>|<length-percentage>\"", 39));
     TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"_UNDER  |<NUMBER>|<length-percentage>\"", 39, &g_p));
     TEST_ASSERT_EQUAL(3, g_p.nalt);
@@ -2630,9 +2917,14 @@ static void test_l91_syntax_134(void) {
 }
 
 static void test_l91_syntax_135(void) {
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\" <angle>#  |-moz-thing | <NUMBER>+	|	<CUSTOM-IDENT>+|<custom-ident>#\"", 70));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\" <angle>#  |-moz-thing | <NUMBER>+	|	<CUSTOM-IDENT>+|<custom-ident>#\"", 70, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\" <angle>#  |-moz-thing | <NUMBER>+	|	<CUSTOM-IDENT>+|<custom-ident>#\"", 70));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\" <angle>#  |-moz-thing | <NUMBER>+	|	<CUSTOM-IDENT>+|<custom-ident>#\"", 70, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_ANGLE, 2, "");
+    alt_is(1, WF_CSSPROP_KEYWORD, 0, "-moz-thing");
+    alt_is(2, WF_CSSPROP_NUMBER, 1, "");
+    alt_is(3, WF_CSSPROP_CIDENT, 1, "");
+    alt_is(4, WF_CSSPROP_CIDENT, 2, "");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("' <percentage>+ #| <COLOR>#'", 28));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("' <percentage>+ #| <COLOR>#'", 28, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -2675,9 +2967,14 @@ static void test_l91_syntax_137(void) {
     TEST_ASSERT_EQUAL(2, g_p.nalt);
     alt_is(0, WF_CSSPROP_INTEGER, 2, "");
     alt_is(1, WF_CSSPROP_LENGTH, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("\"THIN#|<NUMBER>+|<color>+ | <aNGle>#	|	big#\"", 44));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("\"THIN#|<NUMBER>+|<color>+ | <aNGle>#	|	big#\"", 44, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("\"THIN#|<NUMBER>+|<color>+ | <aNGle>#	|	big#\"", 44));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("\"THIN#|<NUMBER>+|<color>+ | <aNGle>#	|	big#\"", 44, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 2, "thin");
+    alt_is(1, WF_CSSPROP_NUMBER, 1, "");
+    alt_is(2, WF_CSSPROP_COLOR, 1, "");
+    alt_is(3, WF_CSSPROP_ANGLE, 2, "");
+    alt_is(4, WF_CSSPROP_KEYWORD, 2, "big");
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("x | auto", 8));
     TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("x | auto", 8, &g_p));
     TEST_ASSERT_EQUAL(0, g_p.nalt);
@@ -2913,9 +3210,14 @@ static void test_l91_syntax_148(void) {
     TEST_ASSERT_EQUAL(WF_CSSPROP_ANGLE, wf_cssprop_syntax_parse("\" <ANGLE>\"", 10, &g_p));
     TEST_ASSERT_EQUAL(1, g_p.nalt);
     alt_is(0, WF_CSSPROP_ANGLE, 0, "");
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax("'THIN  |<color> | <TIME># | auTO|<NumbER>+ '", 44));
-    TEST_ASSERT_EQUAL(WF_CSSPROP_BAD, wf_cssprop_syntax_parse("'THIN  |<color> | <TIME># | auTO|<NumbER>+ '", 44, &g_p));
-    TEST_ASSERT_EQUAL(0, g_p.nalt);
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax("'THIN  |<color> | <TIME># | auTO|<NumbER>+ '", 44));
+    TEST_ASSERT_EQUAL(WF_CSSPROP_COMPLEX, wf_cssprop_syntax_parse("'THIN  |<color> | <TIME># | auTO|<NumbER>+ '", 44, &g_p));
+    TEST_ASSERT_EQUAL(5, g_p.nalt);
+    alt_is(0, WF_CSSPROP_KEYWORD, 0, "thin");
+    alt_is(1, WF_CSSPROP_COLOR, 0, "");
+    alt_is(2, WF_CSSPROP_TIME, 2, "");
+    alt_is(3, WF_CSSPROP_KEYWORD, 0, "auto");
+    alt_is(4, WF_CSSPROP_NUMBER, 1, "");
 }
 
 static void test_l91_syntax_149(void) {

@@ -56,13 +56,13 @@ static int vname_index(const wf_site_t *d, const char *name) {
 
 /* registers --name (n bytes at s, lower case); full table: counted */
 static void vname_add(wf_site_t *d, const char *s, int n) {
-    char nm[24];
+    char nm[WF_SITE_VNAME];
     if (n < 3 || s[0] != '-' || s[1] != '-') return;
     if (n >= (int)sizeof(nm)) { d->dropped_vars++; return; }
     slower(nm, (int)sizeof(nm), s, n);
     if (vname_index(d, nm) >= 0) return;
     if (d->nvnames >= WF_SITE_VNAMES) { d->dropped_vars++; return; }
-    scopy(d->vname[d->nvnames], 24, nm, slen(nm));
+    scopy(d->vname[d->nvnames], WF_SITE_VNAME, nm, slen(nm));
     d->nvnames++;
 }
 
@@ -72,7 +72,7 @@ static int evar_intern(wf_site_t *d, int k, const char *val) {
     for (e = 0; e < d->nevars; e++)
         if (eq(d->evar[e].name, d->vname[k]) && eq(d->evar[e].value, val)) return e;
     if (d->nevars >= WF_SITE_EVARS) { d->dropped_vars++; return -1; }
-    scopy(d->evar[d->nevars].name, 24, d->vname[k], slen(d->vname[k]));
+    scopy(d->evar[d->nevars].name, WF_SITE_VNAME, d->vname[k], slen(d->vname[k]));
     scopy(d->evar[d->nevars].value, WF_SITE_VVAL, val, slen(val));
     return d->nevars++;
 }
@@ -1606,12 +1606,12 @@ static int names_elem_var(const wf_site_t *d, const char *val) {
     int i, k;
     if (!d || !d->nvnames) return 0;
     for (i = 0; val[i]; i++) {
-        char nm[24];
+        char nm[WF_SITE_VNAME];
         if (!(val[i] == 'v' && val[i + 1] == 'a' && val[i + 2] == 'r' && val[i + 3] == '(')) continue;
         i += 4;
         while (val[i] == ' ') i++;
         k = 0;
-        while (val[i] && val[i] != ',' && val[i] != ')' && val[i] != ' ' && k < 23) nm[k++] = val[i++];
+        while (val[i] && val[i] != ',' && val[i] != ')' && val[i] != ' ' && k < WF_SITE_VNAME - 1) nm[k++] = val[i++];
         nm[k] = 0;
         if (vname_index(d, nm) >= 0) return 1;
         if (!val[i]) break;
@@ -1974,7 +1974,10 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
     proto->revert = WF_SITE_RV_NONE;
     g_nmore = 0;
     while (i < n) {
-        char prop[24], val[WF_SITE_VAL];
+        /* Lot 95: one byte more than a declaration value, so a custom
+         * property value of WF_SITE_VVAL bytes is still read (and counted as
+         * a dropped custom property, as in Lot 90) now that both are 128 */
+        char prop[WF_SITE_VNAME], val[WF_SITE_VAL + 1];
         int a, b, imp = 0, vs, ve;
         i = skip_noise(body, n, i);
         a = i;
@@ -2010,6 +2013,12 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             /* Lot 90: a value over 63 bytes is counted once (the sheet
              * pass and the style attribute pass both run with g_vnode -1) */
             if (k >= 0 && vl >= (int)sizeof(proto->vval) && d && g_vnode < 0) ((wf_site_t *)d)->dropped_vars++;
+            if (i < n && body[i] == ';') i++;
+            continue;
+        }
+        if (slen(val) >= WF_SITE_VAL) {
+            /* Lot 95: the extra byte is for custom properties only */
+            if (d) ((wf_site_t *)d)->long_values++;
             if (i < n && body[i] == ';') i++;
             continue;
         }
@@ -2699,13 +2708,13 @@ static void take_vars(wf_site_t *d, const char *sel, int sn, const char *body, i
         while (ve > vs && is_sp(body[ve - 1])) ve--;
         {
             /* Lot 90: a registered name (@property) is always per element */
-            char nm[24];
+            char nm[WF_SITE_VNAME];
             if (b - a >= (int)sizeof(nm)) { d->errors++; continue; }
             slower(nm, (int)sizeof(nm), body + a, b - a);
             if (wf_site_prop(d, nm)) { vname_add(d, body + a, b - a); continue; }
         }
         for (k = 0; k < d->nvars; k++) {
-            char nm[24];
+            char nm[WF_SITE_VNAME];
             slower(nm, (int)sizeof(nm), body + a, b - a);
             if (eq(d->var[k].name, nm)) break;
         }
@@ -2810,7 +2819,9 @@ static uint8_t initial_b(wf_site_t *d, int k) {
     if (!p) return 0;
     if (!p->has_initial) return WF_SITE_VINVALID;
     /* Lot 92: a math initial value is computed like a declared one */
-    if (wf_cssprop_compute(p, p->initial, cv, (int)sizeof(cv))) e = evar_intern(d, k, cv);
+    wf_cssprop_ctx_t c;
+    c.vw = d->vw; c.vh = d->vh;
+    if (wf_cssprop_compute_ctx(p, p->initial, &c, cv, (int)sizeof(cv))) e = evar_intern(d, k, cv);
     else e = evar_intern(d, k, p->initial);
     if (e < 0) return WF_SITE_VINVALID;
     d->prop_initial++;
@@ -2894,8 +2905,12 @@ static void compute_vars(wf_site_t *d) {
                 /* Lot 92: a math value of a numeric type is computed (the
                  * descendants inherit the computed value, as CSS says) */
                 static char cv[WF_CSSPROP_VAL];
+                wf_cssprop_ctx_t c;
                 int e;
-                if (wf_cssprop_compute(p, d->evar[nb[k] - 1].value, cv, (int)sizeof(cv)) &&
+                c.vw = d->vw; c.vh = d->vh;
+                /* Lot 95: plain dimensions, lists, mixes and viewport units
+                 * too; counted when the text changes */
+                if (wf_cssprop_compute_ctx(p, d->evar[nb[k] - 1].value, &c, cv, (int)sizeof(cv)) &&
                     (e = evar_intern(d, k, cv)) >= 0) {
                     nd->vbind[k] = (uint8_t)(e + 1);
                     d->prop_simplified++;

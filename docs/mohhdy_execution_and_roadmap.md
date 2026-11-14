@@ -7,6 +7,19 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 95 (14 November 2026, base 3173f47, Lot 94 head)
+
+US-031 partial, phase3_complete=false. The reader's @property takes 8
+alternatives, 31-byte names, 127-byte values and 16 registrations, and
+the types <url>, <image>, <resolution>, <transform-function>,
+<transform-list> and <string>. Registered values are computed for plain
+dimensions, lists, length-percentage mixes in calc(), viewport units and
+transform arguments. A QEMU page (`make qemu-lot95`, CI job lot95-reader)
+checks the limits and computed values in the reader. Fractional degrees
+and repeating gradients are left for lot 96. US-068/073, US-076, US-080
+and US-081 stay partial. US-078 and US-097 stay simule. See
+docs/lot95_plan.md.
+
 ### Lot 94 (13 November 2026, base 8bc8ef5, Lot 93 head)
 
 US-031 partial, phase3_complete=false. The engine paints linear

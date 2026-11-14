@@ -8,6 +8,12 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 95 (@property limits, more syntax types and computed values; base 3173f47, Lot 94 head)
+
+- Reader (wf_cssprop.c, wf_sitecss.c): @property takes 8 alternatives, 31-byte names, 127-byte values and 16 registrations (32 custom property names and 96 bound values per element); the syntax types <url>, <image>, <resolution>, <transform-function>, <transform-list> and <string> are read. Registered values are computed for plain dimensions (1in is 96px), each item of a '+' or '#' list, length-percentage mixes inside calc() ("calc(P% + Lpx)"), viewport units with the reader viewport and the arguments of transform functions; em, rem, ex and ch are kept. Every computed text is written only when it fits whole. Proof: test_lot95_syntax.c, test_lot95_match.c, test_lot95_compute.c, test_lot95_sheet.c, test_lot95_props.c, `make qemu-lot95` (/lot95/props.html).
+- wf_site_t 447372 bytes, we_doc_t unchanged (870824 bytes, < 1 MiB). Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false; US-068/US-073, US-076, US-080 and US-081 unchanged (partial); US-078 and US-097 simule.
+- Detail and gaps: docs/lot95_plan.md.
+
 ## Lot 94 (angled linear gradients, corners and conic gradients; base 8bc8ef5, Lot 93 head)
 
 - Engine (webeng.c): linear gradients at any angle (whole degrees) and to a corner, and conic gradients (from, at, % and degree stops) are painted in at most 32 flat cells per box (each cell takes the colour at its centre; integer sin table, CORDIC turns, shift-subtract division, no libgcc helper). Quarter turns keep their bands. Children of vertical boxes map the angle and corner to the logical frame; a conic child of a vertical box is refused. Proof: test_lot94_cells.c, test_lot94_sheet.c, test_lot94_engine.c, `make qemu-lot94` (/web/lot94.html, 94 rectangles checked against the model).

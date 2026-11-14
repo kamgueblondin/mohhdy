@@ -1666,7 +1666,7 @@ static void test_l90_vars_64(void) {
     TEST_ASSERT_EQUAL(2, g_d.nprops);
     TEST_ASSERT_EQUAL_STRING("0", nv("n0", "--a"));
     TEST_ASSERT_EQUAL_STRING("3", nv("n0", "--b"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n0", "--c"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n0", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--z"));
     TEST_ASSERT_EQUAL_STRING("0", nv("n1", "--a"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n1", "--b"));
@@ -2451,7 +2451,7 @@ static void test_l90_vars_94(void) {
     static const char html[] = "<html><head><style>@property --a { syntax: '<length>'; inherits: true; initial-value: 4px } #n1 { --b: var(--z) } .c3 { --b: var(--z, 1.5) } :root { --a: 0 } span { --a: var(--b, 3) } span { --a: 2px }</style></head><body><p id=n0 class=c2><span id=n1 class=c3>t</span><span id=n2 class=c3>t</span><span id=n5 class=c3>t</span></p><span id=n3 class=c3>t</span><p id=n4><span id=n6 class=c3>t</span></p></body></html>";
     TEST_ASSERT_EQUAL(0, wf_site_prepare(&g_d, html, (int)strlen(html)));
     TEST_ASSERT_EQUAL(1, g_d.nprops);
-    TEST_ASSERT_EQUAL_STRING("0", nv("n0", "--a"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n0", "--a"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--z"));
     TEST_ASSERT_EQUAL_STRING("2px", nv("n1", "--a"));
@@ -2463,7 +2463,7 @@ static void test_l90_vars_94(void) {
     TEST_ASSERT_EQUAL_STRING("2px", nv("n3", "--a"));
     TEST_ASSERT_EQUAL_STRING("1.5", nv("n3", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--z"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n4", "--a"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n4", "--a"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--z"));
     TEST_ASSERT_EQUAL_STRING("2px", nv("n5", "--a"));
@@ -3354,7 +3354,7 @@ static void test_l90_vars_127(void) {
     TEST_ASSERT_EQUAL_STRING("red", nv("n0", "--a"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--c"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n0", "--d"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n0", "--d"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--z"));
     TEST_ASSERT_EQUAL_STRING("red", nv("n1", "--a"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n1", "--b"));
@@ -3364,7 +3364,7 @@ static void test_l90_vars_127(void) {
     TEST_ASSERT_EQUAL_STRING("red", nv("n2", "--a"));
     TEST_ASSERT_EQUAL_STRING("0", nv("n2", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n2", "--c"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n2", "--d"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n2", "--d"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n2", "--z"));
     TEST_ASSERT_EQUAL_STRING("red", nv("n3", "--a"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--b"));
@@ -3374,7 +3374,7 @@ static void test_l90_vars_127(void) {
     TEST_ASSERT_EQUAL_STRING("red", nv("n4", "--a"));
     TEST_ASSERT_EQUAL_STRING("0", nv("n4", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--c"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n4", "--d"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n4", "--d"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--z"));
     TEST_ASSERT_EQUAL_STRING("red", nv("n5", "--a"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n5", "--b"));
@@ -4089,7 +4089,7 @@ static void test_l90_vars_154(void) {
     TEST_ASSERT_EQUAL_STRING("7", nv("n2", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n2", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n3", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n3", "--b"));
     TEST_ASSERT_EQUAL_STRING("0", nv("n3", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--a"));
@@ -6214,23 +6214,23 @@ static void test_l90_vars_232(void) {
     TEST_ASSERT_EQUAL(0, wf_site_prepare(&g_d, html, (int)strlen(html)));
     TEST_ASSERT_EQUAL(1, g_d.nprops);
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n0", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n0", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n1", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n1", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n1", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n1", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n1", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n2", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n2", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n2", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n2", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n2", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n3", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n3", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n4", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n4", "--b"));
     TEST_ASSERT_EQUAL_STRING("2px", nv("n4", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--z"));
 }
@@ -7636,19 +7636,19 @@ static void test_l90_vars_285(void) {
     TEST_ASSERT_EQUAL_STRING("4px", nv("n1", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n1", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n2", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n2", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n2", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n2", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n3", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n3", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n4", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n4", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n5", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n5", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n5", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n5", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n6", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n6", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n6", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n6", "--z"));
 }
 
@@ -7812,15 +7812,15 @@ static void test_l90_vars_291(void) {
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n0", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n1", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n1", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n1", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n1", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n1", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n2", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n2", "--b"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n2", "--c"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n2", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n2", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n2", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n3", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n3", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n3", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--a"));
@@ -7828,11 +7828,11 @@ static void test_l90_vars_291(void) {
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n4", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n5", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n5", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n5", "--b"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n5", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n5", "--z"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n6", "--a"));
-    TEST_ASSERT_EQUAL_STRING("0", nv("n6", "--b"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("n6", "--b"));
     TEST_ASSERT_EQUAL_STRING("0", nv("n6", "--c"));
     TEST_ASSERT_EQUAL_STRING("(none)", nv("n6", "--z"));
 }
