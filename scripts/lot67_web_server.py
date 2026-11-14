@@ -93,6 +93,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       inside @scope, animation-composition: add, a
                       transition between hsl() colours, ex and ch from the
                       engine font
+  /lot99/anim.html    Lot 99: hsl() painted with turn and grad hues, the
+                      generated 0% and 100% keyframes composed with add,
+                      animation-timeline: none (idle), an hsl() value of a
+                      registered colour read through var()
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -491,6 +495,32 @@ LOT98_PAGES = {
 }
 
 
+# Lot 99: reader page (tests/scripts/test_qemu_lot99.py); the guest sets
+# the reader clock first (web-css time N)
+LOT99_PAGES = {
+    "/lot99/anim.html": (
+        "<!doctype html><html><head><title>Lot 99 composition</title><style>"
+        "@property --w99 { syntax: '<length>'; inherits: true; initial-value: 0px }\n"
+        "@property --c99 { syntax: '<color>'; inherits: false; initial-value: black }\n"
+        "@property --h99 { syntax: '<color>'; inherits: false; initial-value: black }\n"
+        "@keyframes k99 { to { --w99: 20px } }\n"
+        "@keyframes m99 { from { --c99: rgb(0, 0, 0) } to { --c99: rgb(200, 0, 0) } }\n"
+        "#c99 { color: hsl(0.5turn 100% 50%) }\n"
+        "#g99 { background: hsl(200grad 100% 25%) }\n"
+        "#a99 { --w99: 10px; animation: k99 1000ms linear; animation-composition: add }\n"
+        "#a99 span { font-size: var(--w99) }\n"
+        "#n99 { --c99: rgb(0, 0, 200); color: var(--c99); animation: m99 1000ms linear; animation-timeline: none }\n"
+        "#h99 { --h99: hsl(0.25turn 100% 50%); background-color: var(--h99) }\n"
+        "</style></head><body><h1>Composition 99</h1>"
+        "<div id=\"c99\"><p>ckeep99</p></div>"
+        "<div id=\"g99\"><p>gkeep99</p></div>"
+        "<div id=\"a99\"><p>akeep99 <span id=\"sp99\">spkeep99</span></p></div>"
+        "<div id=\"n99\"><p>nkeep99</p></div>"
+        "<div id=\"h99\"><p>hkeep99</p></div>"
+        "<p>fin99</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -692,6 +722,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT98_PAGES:
             self._send(200, LOT98_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT99_PAGES:
+            self._send(200, LOT99_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

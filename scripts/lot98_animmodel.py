@@ -27,7 +27,8 @@ Numbers are integers in 1/10000; rhalf rounds half away from zero.
   value that does not match the same alternative, is not additive: the
   value replaces the one below. accumulate is the same as add here (Web
   Animations 1 only tells them apart for values this reader keeps
-  discrete).
+  discrete; Lot 99: transforms, which scripts/lot99_animmodel.py adds and
+  accumulates).
 * longhands: animation-name (none or an identifier, not a CSS-wide
   keyword, under 32 bytes), -duration (auto = 0s, or a time not negative),
   -timing-function, -delay, -iteration-count (infinite or a number
@@ -48,9 +49,13 @@ Numbers are integers in 1/10000; rhalf rounds half away from zero.
   that is not set is its initial value.
 * composition: an animation whose composition (or a keyframe's own
   animation-composition) is add or accumulate puts each keyframe value
-  given in the rule on the value below it; the keyframes 0% and 100% filled
-  in from the value below stay that value. Animations stack in list
-  order: each one's value below is the result of the ones before it.
+  given in the rule on the value below it. Lot 99, converted: the
+  keyframes 0% and 100% the rule leaves out take the element's own value
+  composed with the animation's composition (CSS Animations 2; Lot 98
+  filled them in with the value below, uncomposed), and accumulate is
+  told apart from add on transforms (scripts/lot99_animmodel.py).
+  Animations stack in list order: each one's value below is the result
+  of the ones before it.
 * @keyframes inside @scope (up to four nested at-rules deep) count like
   top-level ones (keyframe names are global); @property inside @scope is
   not taken.
@@ -338,24 +343,40 @@ def coord(anim, slots):
     return out
 
 
-def anim_value(alts, a, frames, under, ms):
+def anim_value(alts, a, frames, under, ms, base=None):
     """frames: sorted [(offset, value, ease or None, comp or None)] of the
-    rule; (value or None, composed)"""
+    rule; (value or None, composed). Lot 99, converted: base is the
+    element's own value (under when not given); the generated 0% and 100%
+    keyframes compose it with the animation's composition, and accumulate
+    is lot99_animmodel.combine (distinct from add on transforms)"""
+    import lot99_animmodel as M99
+    if base is None:
+        base = under
     pr = A.progress(a, ms)
     if pr is None or not frames:
         return None, False
     composed = False
     fr = []
     for o, v, e, c in frames:
-        if (c or a["comp"]) != "replace":
-            r, code = add(alts, under, v)
+        cc = c or a["comp"]
+        if cc != "replace":
+            r, code = M99.combine(alts, cc, under, v)
             if code == 2:
                 v, composed = r, True
         fr.append((o, v, e))
+
+    def generated():
+        nonlocal composed
+        if a["comp"] != "replace":
+            r, code = M99.combine(alts, a["comp"], under, base)
+            if code == 2:
+                composed = True
+                return r
+        return base
     if fr[0][0] > 0:
-        fr.insert(0, (0, under, None))
+        fr.insert(0, (0, generated(), None))
     if fr[-1][0] < S:
-        fr.append((S, under, None))
+        fr.append((S, generated(), None))
     p, before = pr
     j = 0
     while j + 2 < len(fr) and fr[j + 1][0] <= p:
@@ -369,10 +390,12 @@ def stack(alts, anims, kfs, under, ms):
     """the value after the animations in list order (kfs: name -> frames),
     whether one animated and whether one composed"""
     animated = composed = False
+    base = under
     for a in anims:
-        if not a["name"] or a["name"] not in kfs:
+        # Lot 99: an animation whose timeline is not auto has no effect
+        if not a["name"] or a["name"] not in kfs or a.get("timeline", "auto") != "auto":
             continue
-        v, c = anim_value(alts, a, kfs[a["name"]], under, ms)
+        v, c = anim_value(alts, a, kfs[a["name"]], under, ms, base)
         if v is not None:
             under, animated = v, True
             composed = composed or c

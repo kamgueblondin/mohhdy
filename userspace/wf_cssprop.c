@@ -1113,12 +1113,14 @@ static int cp_color(const char *v) {
     for (k = 0; fns[k]; k++) {
         int m = cp_len(fns[k]), i, depth = 0;
         if (n <= m || !cp_eqn(v, m, fns[k])) continue;
-        /* one level, digits, '.', '%', ',', '/', spaces and "deg" */
+        /* one level, digits, '.', '%', ',', '/', spaces and "deg"; Lot
+         * 99: the letters of grad, rad and turn in hsl() and hsla() */
         for (i = m; i < n - 1; i++) {
             char c = cp_low(v[i]);
             if (c == '(' || c == ')') { depth++; break; }
             if (!(cp_digit(c) || c == '.' || c == '%' || c == ',' || c == '/' || cp_sp(c) || c == 'd' || c == 'e' ||
-                  c == 'g' || c == '-' || c == '+'))
+                  c == 'g' || c == '-' || c == '+' ||
+                  (k >= 2 && (c == 'r' || c == 'a' || c == 't' || c == 'u' || c == 'n'))))
                 return 0;
         }
         return !depth && v[n - 1] == ')' && n - 1 > m;
@@ -1913,6 +1915,127 @@ static int cp_interp_color(const char *a, const char *b, int t, int add, char *o
     return len;
 }
 
+/* ---- Lot 99: transform lists added and accumulated -------------------- */
+
+/* s[*a..*b) without the spaces around it */
+static void cp_trim(const char *s, int *a, int *b) {
+    while (*a < *b && cp_sp(s[*a])) (*a)++;
+    while (*b > *a && cp_sp(s[*b - 1])) (*b)--;
+}
+
+/* the transform function s[a..b), one exactly and already matched (by
+ * cp_alt_index, so its name is known and it has 1 to 6 arguments): its
+ * index in cp_tfns and its argument ranges without their spaces; the
+ * count */
+static int cp_tf_args(const char *s, int a, int b, int *fn, int *xa, int *xb) {
+    int i = a, n = 0, depth = 0, st;
+    while (s[i] != '(') i++;
+    *fn = cp_tfn(s, a, i - a);
+    st = ++i;
+    for (; i < b; i++) {
+        if (s[i] == '(') depth++;
+        else if (s[i] == ')' && i < b - 1) depth--;
+        else if ((s[i] == ',' && !depth) || i == b - 1) {
+            xa[n] = st; xb[n] = i;
+            cp_trim(s, &xa[n], &xb[n]);
+            n++;
+            st = i + 1;
+        }
+    }
+    return n;
+}
+
+/* the same text at s[a0..b0) and u[a1..b1) */
+static int cp_same(const char *s, int a0, int b0, const char *u, int a1, int b1) {
+    int k;
+    if (b0 - a0 != b1 - a1) return 0;
+    for (k = 0; k < b0 - a0; k++) if (s[a0 + k] != u[a1 + k]) return 0;
+    return 1;
+}
+
+/* two transform functions accumulated (CSS Transforms 2 section 15): the
+ * same function with as many arguments, summed argument by argument (the
+ * one-based scale arguments as a + b - 1); -1 when they do not combine
+ * this way (matrix(), perspective(), another function, rotate3d() about
+ * another axis), -2 when cap is short, else the length */
+static int cp_tf_acc(const char *s, int a0, int b0, const char *u, int a1, int b1, char *out, int cap) {
+    int fa, fb, xa[6], xb[6], ya[6], yb[6], na, nb, k, len = 0, r;
+    const char *nm;
+    na = cp_tf_args(s, a0, b0, &fa, xa, xb);
+    nb = cp_tf_args(u, a1, b1, &fb, ya, yb);
+    if (na != nb || fa != fb) return -1;
+    nm = cp_tfns[fa].name;
+    if (cp_eqn(nm, cp_len(nm), "matrix") || cp_eqn(nm, cp_len(nm), "perspective")) return -1;
+    if (!cp_put(out, &len, cap, nm, cp_len(nm)) || !cp_put(out, &len, cap, "(", 1)) return -2;
+    for (k = 0; k < na; k++) {
+        char kind = cp_tfns[fa].args[k];
+        /* each piece is checked as it is written: the first failure, the
+         * room (-2) or the sum (-1), decides */
+        if (k && !cp_put(out, &len, cap, ", ", 2)) return -2;
+        if (kind == 'N') {
+            /* the axis of rotate3d(): kept when both write it the same */
+            if (!cp_same(s, xa[k], xb[k], u, ya[k], yb[k])) return -1;
+            if (!cp_put(out, &len, cap, s + xa[k], xb[k] - xa[k])) return -2;
+        } else if (kind == 'S') {
+            long long x, y, v;
+            int px, py;
+            if (!cp_tok_num(s, xa[k], xb[k], &x, &px) || !cp_tok_num(u, ya[k], yb[k], &y, &py)) return -1;
+            if (px) x = cp_div(x, 100, 0);
+            if (py) y = cp_div(y, 100, 0);
+            v = x + y - CP_S;
+            if (!cp_fits(v)) return -1;
+            r = cp_fmt(v, "", out + len, cap - len);
+            if (r < 0) return -2;
+            len += r;
+        } else {
+            /* a length or length-percentage (a bare number is a length
+             * there), or an angle */
+            int typ = kind == 'A' ? WF_CSSPROP_ANGLE : WF_CSSPROP_LENPCT;
+            r = cp_interp_num(typ, s, xa[k], xb[k], u, ya[k], yb[k], (int)CP_S, 1, out + len, cap - len);
+            if (r < 0) return r;
+            len += r;
+        }
+    }
+    return cp_put(out, &len, cap, ")", 1) ? len : -2;
+}
+
+/* two transform lists: add 1 concatenates them (under, then v), add 2
+ * accumulates their functions pair by pair and keeps the tail of the
+ * longer one; -1 / -2 / the length as cp_tf_acc */
+static int cp_tl_combine(const char *s, int a0, int b0, const char *u, int a1, int b1, int add, char *out, int cap) {
+    int len = 0, i = a0, j = a1, r;
+    if (add == 1) {
+        cp_trim(s, &a0, &b0);
+        cp_trim(u, &a1, &b1);
+        if (!cp_put(out, &len, cap, s + a0, b0 - a0) || !cp_put(out, &len, cap, " ", 1) ||
+            !cp_put(out, &len, cap, u + a1, b1 - a1))
+            return -2;
+        return len;
+    }
+    for (;;) {
+        int ei, ej;
+        while (i < b0 && cp_sp(s[i])) i++;
+        while (j < b1 && cp_sp(u[j])) j++;
+        if (i >= b0 && j >= b1) break;
+        if (len && !cp_put(out, &len, cap, " ", 1)) return -2;
+        /* both lists are matched already: each function ends */
+        ei = i < b0 ? cp_tfunc_end(s, i, b0) : i;
+        ej = j < b1 ? cp_tfunc_end(u, j, b1) : j;
+        if (i >= b0 || j >= b1) {
+            /* the tail of the longer list: the identity functions it is
+             * paired with change nothing */
+            if (i < b0 ? !cp_put(out, &len, cap, s + i, ei - i) : !cp_put(out, &len, cap, u + j, ej - j)) return -2;
+        } else {
+            r = cp_tf_acc(s, i, ei, u, j, ej, out + len, cap - len);
+            if (r < 0) return r;
+            len += r;
+        }
+        i = ei;
+        j = ej;
+    }
+    return len;
+}
+
 /* one item of type t: -1 discrete, -2 short, else its length */
 static int cp_interp_item(int t, const char *s, int a0, int b0, const char *u, int a1, int b1, int tt, int add, char *out,
                           int cap) {
@@ -1923,11 +2046,15 @@ static int cp_interp_item(int t, const char *s, int a0, int b0, const char *u, i
         if (cp_copy_item(x, (int)sizeof(x), s, a0, b0) < 0 || cp_copy_item(y, (int)sizeof(y), u, a1, b1) < 0) return -1;
         return cp_interp_color(x, y, tt, add, out, cap);
     }
+    if (add && t == WF_CSSPROP_TLIST) return cp_tl_combine(s, a0, b0, u, a1, b1, add, out, cap);
+    /* Lot 99: one function has no sum that is one function: only
+     * accumulate combines it (the value or list item is trimmed already) */
+    if (add == 2 && t == WF_CSSPROP_TFUNC) return cp_tf_acc(s, a0, b0, u, a1, b1, out, cap);
     return -1;
 }
 
-/* wf_cssprop_interp (add 0) and wf_cssprop_add (add 1, t 10000: the
- * fallback is b) */
+/* wf_cssprop_interp (add 0), wf_cssprop_add (add 1) and Lot 99
+ * wf_cssprop_accumulate (add 2); t 10000 for both: the fallback is b */
 static int cp_combine(const wf_cssprop_t *p, const char *a, const char *b, int t, int add, char *out, int cap) {
     const wf_cssprop_alt_t *al;
     wf_cssprop_alt_t one;
@@ -1948,8 +2075,10 @@ static int cp_combine(const wf_cssprop_t *p, const char *a, const char *b, int t
     if (ia < 0 || ia != ib) goto discrete;
     if (p->nalt) al = &p->alt[ia];
     else { one.type = p->syntax; one.mult = WF_CSSPROP_ONE; one.ident[0] = 0; al = &one; }
-    if (al->mult == WF_CSSPROP_ONE) {
-        r = cp_interp_item(al->type, a, 0, na, b, 0, nb, t, add, out, cap);
+    if (al->mult == WF_CSSPROP_ONE || (add && al->type == WF_CSSPROP_TFUNC && al->mult == WF_CSSPROP_PLUS)) {
+        /* Lot 99: <transform-function>+ adds and accumulates as a
+         * transform list (CSS Properties and Values 1) */
+        r = cp_interp_item(al->mult == WF_CSSPROP_ONE ? al->type : WF_CSSPROP_TLIST, a, 0, na, b, 0, nb, t, add, out, cap);
         if (r == -2) { out[0] = 0; return 0; }
         if (r < 0) goto discrete;
         return 2;
@@ -1985,6 +2114,30 @@ int wf_cssprop_interp(const wf_cssprop_t *p, const char *a, const char *b, int t
 
 int wf_cssprop_add(const wf_cssprop_t *p, const char *under, const char *v, char *out, int cap) {
     return cp_combine(p, under, v, (int)CP_S, 1, out, cap);
+}
+
+int wf_cssprop_accumulate(const wf_cssprop_t *p, const char *under, const char *v, char *out, int cap) {
+    return cp_combine(p, under, v, (int)CP_S, 2, out, cap);
+}
+
+int wf_cssprop_rgb24(const char *v, int n, unsigned int *rgb) {
+    char buf[WF_CSSPROP_VAL];
+    int a = 0, b, k;
+    cp_rgba_t c;
+    if (!v || !rgb) return 0;
+    while (a < n && cp_sp(v[a])) a++;
+    for (b = a; b < n && v[b] != ')'; b++) {}
+    if (b >= n || b + 1 - a >= (int)sizeof(buf)) return 0;
+    for (k = b + 1; k < n && cp_sp(v[k]); k++) {}
+    if (k < n && v[k] != ';' && v[k] != '!') return 0;
+    for (k = a; k <= b; k++) buf[k - a] = v[k];
+    buf[b + 1 - a] = 0;
+    /* hsl() only: the reader takes its other colours itself; cp_rgba
+     * checks the arguments (letters in any case; buf ends at its only
+     * ')') */
+    if ((!cp_eqn(buf, 4, "hsl(") && !cp_eqn(buf, 5, "hsla(")) || !cp_rgba(buf, &c) || c.a != CP_S) return 0;
+    *rgb = (unsigned int)((cp_div(c.c[0], CP_S, 0) << 16) | (cp_div(c.c[1], CP_S, 0) << 8) | cp_div(c.c[2], CP_S, 0));
+    return 1;
 }
 
 /* ---- Lot 97: easing functions ------------------------------------------ */
@@ -2368,10 +2521,20 @@ static int cp_anim_long_one(int which, const char *v, int a, int b, wf_cssanim_t
         k = cp_kw(w, l, cp_plays);
         if (k) o->paused = (unsigned char)(k - 1);
         return k > 0;
-    default:
+    case WF_CSSANIM_L_COMPOSITION:
         k = cp_kw(w, l, cp_comps);
         if (k) o->comp = (unsigned char)(k - 1);
         return k > 0;
+    default:
+        /* Lot 99: animation-timeline */
+        /* tlname is meaningful for WF_CSSANIM_TL_NAMED only */
+        if (cp_eqn(w, l, "auto")) { o->timeline = WF_CSSANIM_TL_AUTO; return 1; }
+        if (cp_eqn(w, l, "none")) { o->timeline = WF_CSSANIM_TL_NONE; return 1; }
+        if (l < 3 || w[0] != '-' || w[1] != '-' || !cp_is_ident(w, l) || l >= WF_CSSPROP_NAME) return 0;
+        o->timeline = WF_CSSANIM_TL_NAMED;
+        for (k = 0; k < l; k++) o->tlname[k] = w[k];
+        o->tlname[l] = 0;
+        return 1;
     }
 }
 
@@ -2441,7 +2604,11 @@ static void cp_anim_field(int k, wf_cssanim_t *dst, const wf_cssanim_t *src) {
     case WF_CSSANIM_L_DIRECTION: dst->dir = src->dir; break;
     case WF_CSSANIM_L_FILL: dst->fill = src->fill; break;
     case WF_CSSANIM_L_PLAY: dst->paused = src->paused; break;
-    default: dst->comp = src->comp; break;
+    case WF_CSSANIM_L_COMPOSITION: dst->comp = src->comp; break;
+    default:
+        dst->timeline = src->timeline;
+        for (j = 0; j < WF_CSSPROP_NAME; j++) dst->tlname[j] = src->tlname[j];
+        break;
     }
 }
 

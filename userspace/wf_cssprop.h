@@ -244,7 +244,24 @@ int wf_cssprop_parse(const char *pre, int pn, const char *body, int bn, wf_csspr
  * '#' lists item by item when the lengths match (CSS Properties and
  * Values 1: simple lists). Returns 2 (composed into out), 1 (the values do
  * not add: out is v, the composite falls back to replace) or 0 (out too
- * small, or no value). */
+ * small, or no value).
+ *
+ * Lot 99: the two operations differ where Web Animations 1 and CSS
+ * Transforms 2 make them differ. wf_cssprop_add of transform lists
+ * (<transform-list>, and <transform-function>+ which interpolates like a
+ * transform) is their concatenation, under then v; a single
+ * <transform-function> (and each item of a <transform-function>#) has no
+ * sum that is one function, so v replaces it. wf_cssprop_accumulate pairs
+ * the functions of under and v in order: two functions with the same name
+ * and argument count are combined argument by argument (lengths,
+ * percentages, angles and numbers summed; the one-based scale arguments
+ * as a + b - 1, a percentage taken as its hundredth; rotate3d() only
+ * about the same written axis), and the functions of the longer list past
+ * the shorter one are kept as they are (the identity functions of the
+ * padding change nothing). matrix() and perspective(), or two functions
+ * that differ, need the matrix forms of CSS Transforms 1, which this
+ * reader does not build: v replaces the value then. Every other type
+ * accumulates exactly as it adds. Same returns as wf_cssprop_add. */
 #define WF_CSSPROP_EX_NUM 5      /* Lot 98: ex = 5/16 em (inked rows of "x" in the 8x8 font) */
 #define WF_CSSPROP_EX_DEN 16
 #define WF_CSSPROP_CH_NUM 8      /* Lot 98: ch = 8/16 em (WE_CHAR_W at WE_FONT_PX_DEFAULT) */
@@ -253,6 +270,15 @@ typedef struct { int vw, vh, em, rem; } wf_cssprop_fctx_t;
 int wf_cssprop_compute_font(const wf_cssprop_t *p, const char *value, const wf_cssprop_fctx_t *c, char *out, int cap);
 int wf_cssprop_interp(const wf_cssprop_t *p, const char *a, const char *b, int t, char *out, int cap);
 int wf_cssprop_add(const wf_cssprop_t *p, const char *under, const char *v, char *out, int cap);
+int wf_cssprop_accumulate(const wf_cssprop_t *p, const char *under, const char *v, char *out, int cap);
+/* Lot 99: an opaque hsl() or hsla() colour v[0..n) (spaces around it and
+ * a following ';' or '!' allowed), as a reader colour: 1 and *rgb
+ * (0xRRGGBB, each channel of the conversion rounded half away from zero
+ * to 0..255) when v is one wf_cssprop_match takes as <color> and its alpha
+ * is 1 (or 100%), else 0. The hue takes deg, grad, rad and turn (rad
+ * through 1800000000 / 31415927 deg, the angle conversion of this reader
+ * since Lot 92). */
+int wf_cssprop_rgb24(const char *v, int n, unsigned int *rgb);
 
 /* An easing function (CSS Easing 1): linear, ease, ease-in, ease-out,
  * ease-in-out, cubic-bezier(x1, y1, x2, y2) (x in 0..1, y in -100..100,
@@ -288,12 +314,18 @@ enum { WF_CSSANIM_NORMAL = 0, WF_CSSANIM_REVERSE = 1, WF_CSSANIM_ALTERNATE = 2, 
 enum { WF_CSSANIM_FILL_NONE = 0, WF_CSSANIM_FORWARDS = 1, WF_CSSANIM_BACKWARDS = 2, WF_CSSANIM_BOTH = 3 };
 /* Lot 98: animation-composition (CSS Animations 2) */
 enum { WF_CSSANIM_REPLACE = 0, WF_CSSANIM_ADD = 1, WF_CSSANIM_ACCUMULATE = 2 };
+/* Lot 99: animation-timeline (CSS Animations 2): auto (the document
+ * timeline, the reader clock), none, or a <dashed-ident> naming a scroll
+ * or view timeline (the reader has none: no timeline either) */
+enum { WF_CSSANIM_TL_AUTO = 0, WF_CSSANIM_TL_NONE = 1, WF_CSSANIM_TL_NAMED = 2 };
 typedef struct {
     char name[WF_CSSPROP_NAME];
     int dur, delay, iters;
     unsigned char dir, fill, paused;
     unsigned char comp;           /* Lot 98: WF_CSSANIM_REPLACE, _ADD or _ACCUMULATE */
     wf_cssease_t ease;
+    unsigned char timeline;       /* Lot 99: WF_CSSANIM_TL_* */
+    char tlname[WF_CSSPROP_NAME]; /* Lot 99: the <dashed-ident> of TL_NAMED */
 } wf_cssanim_t;
 /* the comma separated list v (lower case, trimmed): the number of
  * animations written to out (at most max), -1 when the list is not valid
@@ -319,7 +351,9 @@ int wf_csstrans_parse(const char *v, wf_csstrans_t *out, int max);
  *   animation-timing-function (an easing function), animation-delay (a
  *   time), animation-iteration-count (infinite or a number 0..100000),
  *   animation-direction, animation-fill-mode, animation-play-state and
- *   animation-composition (replace, add, accumulate);
+ *   animation-composition (replace, add, accumulate), Lot 99:
+ *   animation-timeline (auto, none or a <dashed-ident> under 32 bytes;
+ *   scroll() and view() are not taken: the list is dropped);
  *   transition-property (all, an identifier, or none alone),
  *   transition-duration (>= 0), transition-timing-function,
  *   transition-delay, transition-behavior (normal, allow-discrete).
@@ -328,7 +362,8 @@ int wf_csstrans_parse(const char *v, wf_csstrans_t *out, int max);
  * count, -1 when the list is not valid or longer than max. */
 enum {
     WF_CSSANIM_L_NAME = 0, WF_CSSANIM_L_DURATION, WF_CSSANIM_L_TIMING, WF_CSSANIM_L_DELAY, WF_CSSANIM_L_COUNT,
-    WF_CSSANIM_L_DIRECTION, WF_CSSANIM_L_FILL, WF_CSSANIM_L_PLAY, WF_CSSANIM_L_COMPOSITION, WF_CSSANIM_LONGS
+    WF_CSSANIM_L_DIRECTION, WF_CSSANIM_L_FILL, WF_CSSANIM_L_PLAY, WF_CSSANIM_L_COMPOSITION, WF_CSSANIM_L_TIMELINE,
+    WF_CSSANIM_LONGS
 };
 enum {
     WF_CSSTRANS_L_PROPERTY = 0, WF_CSSTRANS_L_DURATION, WF_CSSTRANS_L_TIMING, WF_CSSTRANS_L_DELAY,
@@ -339,8 +374,10 @@ int wf_csstrans_long(int which, const char *v, wf_csstrans_t *out, int max);
 /* Lot 98: the coordinated lists (CSS Values 4, coordinating list-valued
  * properties). v[k] is the value of longhand k (0: its initial value),
  * sh[k] 1 when v[k] is a list of the shorthand (whose items give longhand
- * k). The number of animations is the length of the animation-name list
- * (of transitions, of transition-property); the other lists are repeated
+ * k; the animation shorthand gives animation-timeline its initial value
+ * auto, a reset-only longhand as in browsers). The number of animations
+ * is the length of the animation-name list (of transitions, of
+ * transition-property); the other lists are repeated
  * or cut to that length. A list that does not parse counts as its
  * initial value. Returns the count written to out (at most max). */
 int wf_cssanim_coord(const char *const *v, const unsigned char *sh, wf_cssanim_t *out, int max);

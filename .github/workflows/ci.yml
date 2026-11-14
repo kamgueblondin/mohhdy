@@ -1277,6 +1277,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 99: one boot of make qemu-lot99 (about 40 s locally)
+  lot99-reader-composition:
+    name: QEMU hsl paint and hue units, generated keyframes, animation-timeline (Lot 99)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 99 boot
+        run: make qemu-lot99
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot99-reader-composition-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 98: one boot of make qemu-lot98 (about 40 s locally)
   lot98-reader-longhands:
     name: QEMU animation longhands, composition, hsl and font metrics (Lot 98)

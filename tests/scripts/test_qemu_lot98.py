@@ -13,14 +13,14 @@ in sRGB, Lot 97 switched at one half); calc(2ex + 1ch) on a 16px element
 is 18px (ex is 5/16 em, ch 1/2 em, from the engine font); an @property
 inside @scope is not taken (registered 3); the css-anim line counts them
 with "composed 1". At 2000ms the animations and the transition are over
-(an hsl() end value is not a reader colour: no bg). The Lot 97 page is
+(Lot 99, converted: the hsl() end value is now a reader colour, bg
+#0000ff; Lot 98 refused bg there). The Lot 97 page is
 checked by make qemu-lot97.
 No guest clock is involved (no -rtc option).
 """
 from __future__ import print_function
 
 import os
-import re
 import subprocess
 import sys
 import time
@@ -47,13 +47,6 @@ def say(msg):
     print("[lot98] %s" % msg, flush=True)
 
 
-def node_line(css, ident):
-    m = re.search(r"node \w+ #%s [^\n]*\n" % ident, css)
-    if not m:
-        raise RuntimeError("no node line for #%s: %r" % (ident, css[-900:]))
-    return m.group(0)
-
-
 def at_time(mon, proc, u, ms):
     lw.run(mon, proc, "web-css time %d" % ms, "web-css time %d\n" % ms, 20)
     lw.run(mon, proc, "web-open %s/lot98/anim.html" % u, "osui web page sections", fail=["error="])
@@ -75,13 +68,13 @@ def step_reader(mon, proc, u):
     need(css, ["node div #a98 display auto color #000000\n",
                "node div #b98 display auto color #000064\n",
                "node span #sp98 display auto size 18px\n",
+               "node div #h98 display auto bg #0000ff\n",
                "css-anim keyframes 1 animated 0 transitioned 0 font 1 at 2000ms\n"], "web-css at 2000ms")
-    refuse(node_line(css, "h98"), ["bg"], "web-css #h98 at 2000ms")
     refuse(css, ["composed"], "web-css at 2000ms")
     lw.run(mon, proc, "web-css time 0", "web-css time 0\n", 20)
     lw.run(mon, proc, "web-css off", "web-css off", 20)
     say("reader: at 500ms longhands from @scope keyframes #643200, composition add #643264, hsl transition "
-        "bg #800080, calc(2ex + 1ch) 18px, composed 1; at 2000ms over")
+        "bg #800080, calc(2ex + 1ch) 18px, composed 1; at 2000ms over (hsl end bg #0000ff)")
 
 
 def boot(hp):
