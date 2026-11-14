@@ -47,6 +47,13 @@ static void slower(char *d, int cap, const char *s, int n) {
  * that element (-1: the sheet-wide values) */
 static int g_vnode = -1;
 
+/* Lot 97: the reader clock (wf_site_set_time) and the depth of
+ * @starting-style blocks being parsed */
+static int g_anim_ms;
+static int g_starting;
+
+void wf_site_set_time(int ms) { g_anim_ms = ms < 0 ? 0 : ms > WF_CSSANIM_MS_MAX ? WF_CSSANIM_MS_MAX : ms; }
+
 static int vname_index(const wf_site_t *d, const char *name) {
     int k;
     if (!d || !name) return -1;
@@ -515,6 +522,31 @@ static int parse_color(const char *s, int n, uint32_t *out) {
             return 1;
         }
         return 0;
+    }
+    if (n - i >= 4 && lc(s[i]) == 'r' && lc(s[i + 1]) == 'g' && lc(s[i + 2]) == 'b') {
+        /* Lot 97: rgb(R, G, B) with integers 0..255, the form an animated
+         * opaque <color> computes to (rgba() too with an alpha of 1) */
+        int c[4], k = 0, a = 0;
+        i += 3;
+        if (i < n && lc(s[i]) == 'a') { a = 1; i++; }
+        if (i >= n || s[i] != '(') return 0;
+        i++;
+        while (k < 3 + a) {
+            int v = 0, dg = 0;
+            while (i < n && is_sp(s[i])) i++;
+            while (i < n && s[i] >= '0' && s[i] <= '9' && dg < 4) { v = v * 10 + s[i] - '0'; i++; dg++; }
+            if (!dg || v > 255) return 0;
+            c[k++] = v;
+            while (i < n && is_sp(s[i])) i++;
+            if (k < 3 + a) { if (i >= n || s[i] != ',') return 0; i++; }
+        }
+        if (a && c[3] != 1) return 0;
+        if (i >= n || s[i] != ')') return 0;
+        i++;
+        while (i < n && is_sp(s[i])) i++;
+        if (i < n && s[i] != ';' && s[i] != '!') return 0;
+        *out = (uint32_t)((c[0] << 16) | (c[1] << 8) | c[2]);
+        return 1;
     }
     {
         char name[16];
@@ -986,11 +1018,22 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
         /* Lot 89: the strongest --x on this element wins, like any
          * property; inheritance is done once every element has its own */
         int k = (int)r->vname - 1, e;
-        if (k < 0 || k >= d->nvnames || rank < nd->vrank[k]) return;
+        uint8_t *bind = r->starting ? nd->sbind : nd->vbind;
+        int *rr = r->starting ? nd->srank : nd->vrank;
+        if (k < 0 || k >= d->nvnames || rank < rr[k]) return;
         e = evar_intern(d, k, r->vval);
         if (e < 0) return;
-        nd->vbind[k] = (uint8_t)(e + 1);
-        nd->vrank[k] = rank > 0 ? rank : 1;
+        bind[k] = (uint8_t)(e + 1);
+        rr[k] = rank > 0 ? rank : 1;
+        return;
+    }
+    if (r->kind == WF_SITE_K_ANIM || r->kind == WF_SITE_K_TRANS) {
+        /* Lot 97: the strongest animation (transition) list wins */
+        uint8_t *v = r->kind == WF_SITE_K_ANIM ? &nd->anim : &nd->trans;
+        int *rr = r->kind == WF_SITE_K_ANIM ? &nd->anim_rank : &nd->trans_rank;
+        if (rank < *rr) return;
+        *v = r->lidx;
+        *rr = rank > 0 ? rank : 1;
         return;
     }
     if (r->revert && r->kind >= 1 && r->kind <= WF_SITE_K_MAX) {
@@ -1395,6 +1438,9 @@ static int skip_block(const char *s, int n, int i) {
 static int add_rule(wf_site_t *d, const wf_site_rule_t *src) {
     wf_site_rule_t *r;
     int p, b;
+    /* Lot 97: an @starting-style rule only gives starting values of
+     * custom properties; its other declarations are left out */
+    if (src->starting && src->kind != WF_SITE_K_VAR) return 0;
     if (d->nrules >= WF_SITE_RULES) { d->dropped_rules++; return -1; }
     r = &d->rule[d->nrules];
     clear(r, (int)sizeof(*r));
@@ -1420,6 +1466,7 @@ static int add_rule(wf_site_t *d, const wf_site_rule_t *src) {
     scopy(r->dprop, (int)sizeof(r->dprop), src->dprop, slen(src->dprop));
     scopy(r->draw, (int)sizeof(r->draw), src->draw, slen(src->draw));
     r->lidx = src->lidx;
+    r->starting = src->starting;
     r->order = d->nrules;
     for (p = 0; p < src->nparts && p < WF_SITE_PARTS; p++) {
         const unsigned char *a = (const unsigned char *)&src->part[p];
@@ -2042,6 +2089,21 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             if (i < n && body[i] == ';') i++;
             continue;
         }
+        if (eq(prop, "animation") || eq(prop, "transition")) {
+            /* Lot 97: the list is checked here and kept as written (lower
+             * case); none, initial and unset give no list */
+            static wf_cssanim_t al[WF_CSSANIM_MAX];
+            static wf_csstrans_t tl[WF_CSSANIM_MAX];
+            int an = eq(prop, "animation"), kind = an ? WF_SITE_K_ANIM : WF_SITE_K_TRANS, c;
+            if (eq(val, "none") || eq(val, "initial") || eq(val, "unset")) {
+                (void)long_proto(d, kind, val, 0, proto);
+                return 1;
+            }
+            c = an ? wf_cssanim_parse(val, al, WF_CSSANIM_MAX) : wf_csstrans_parse(val, tl, WF_CSSANIM_MAX);
+            if (c > 0 && long_proto(d, kind, val, 1, proto)) return 1;
+            if (i < n && body[i] == ';') i++;
+            continue;
+        }
         if (eq(prop, "all")) {
             /* Lot 88: every reader property at once; any other value is
              * invalid for all */
@@ -2341,6 +2403,7 @@ static int parse_selector(wf_site_t *d, const char *s, int n, const wf_site_rule
         scopy(rule.dprop, (int)sizeof(rule.dprop), proto->dprop, slen(proto->dprop));
         scopy(rule.draw, (int)sizeof(rule.draw), proto->draw, slen(proto->draw));
         rule.lidx = proto->lidx;
+        rule.starting = proto->starting;
         {
             uint8_t lead = WF_SITE_REL_DESC;
             int has_scope = 0, q;
@@ -2748,6 +2811,29 @@ static void take_prop(wf_site_t *d, const char *pre, int pn, const char *body, i
     vname_add(d, p.name, slen(p.name));
 }
 
+/* Lot 97: one @keyframes rule (the name is an identifier, or a quoted
+ * string); the last one of a name wins */
+static void take_kf(wf_site_t *d, const char *pre, int pn, int at, int bn) {
+    char nm[WF_CSSPROP_NAME];
+    int a = 0, b = pn, k;
+    while (a < b && is_sp(pre[a])) a++;
+    while (b > a && is_sp(pre[b - 1])) b--;
+    if (b - a >= 2 && (pre[a] == '"' || pre[a] == '\'') && pre[b - 1] == pre[a]) { a++; b--; }
+    if (b <= a || b - a >= (int)sizeof(nm)) { d->dropped_kf++; return; }
+    for (k = a; k < b; k++)
+        if (!((pre[k] >= 'a' && pre[k] <= 'z') || (pre[k] >= 'A' && pre[k] <= 'Z') || (pre[k] >= '0' && pre[k] <= '9') ||
+              pre[k] == '-' || pre[k] == '_')) { d->dropped_kf++; return; }
+    slower(nm, (int)sizeof(nm), pre + a, b - a);
+    for (k = 0; k < d->nkf; k++) if (eq(d->kf[k].name, nm)) break;
+    if (k == d->nkf) {
+        if (d->nkf >= WF_SITE_KFS) { d->dropped_kf++; return; }
+        d->nkf++;
+    }
+    scopy(d->kf[k].name, WF_CSSPROP_NAME, nm, slen(nm));
+    d->kf[k].at = at;
+    d->kf[k].n = bn;
+}
+
 /* Pass 0: @property at the top level and in applying @media, @supports
  * and @layer blocks, before any custom property is read */
 static void scan_props(wf_site_t *d, const char *s, int n, int depth) {
@@ -2763,6 +2849,8 @@ static void scan_props(wf_site_t *d, const char *s, int n, int depth) {
                 int body = i + 1, after = skip_block(s, n, i), blen = after - 1 - body;
                 if (blen < 0) blen = 0;
                 if (at_is(s, n, prelude, "property")) take_prop(d, s + prelude + 9, i - prelude - 9, s + body, blen);
+                else if (at_is(s, n, prelude, "keyframes"))
+                    take_kf(d, s + prelude + 10, i - prelude - 10, (int)(s + body - d->css), blen);
                 else if (depth < 4 && blen > 0 &&
                          ((prelude + 6 <= n && lc(s[prelude + 1]) == 'm' && lc(s[prelude + 2]) == 'e' &&
                            media_ok(s + prelude, body - 1 - prelude, d->vw, d->vh)) ||
@@ -2842,6 +2930,11 @@ static uint8_t inherited_b(wf_site_t *d, int i, int k) {
  * computed on that element (CSS-wide keywords, then var(), then the
  * syntax of a registration), and that computed value is what descendants
  * inherit. Nodes are in document order: the parent is done first. */
+/* Lot 97: per element, the registered names whose own value matched
+ * (computed there, bit k) and those set there without inheriting (that,
+ * or initial) */
+static uint32_t g_vown[WF_SITE_NODES], g_vexp[WF_SITE_NODES];
+
 static void compute_vars(wf_site_t *d) {
     static uint8_t own[WF_SITE_VNAMES], nb[WF_SITE_VNAMES];
     int i, k;
@@ -2849,6 +2942,8 @@ static void compute_vars(wf_site_t *d) {
     for (i = 0; i < d->nnodes; i++) {
         wf_site_node_t *nd = &d->node[i];
         int any = 0;
+        g_vown[i] = 0;
+        g_vexp[i] = 0;
         for (k = 0; k < d->nvnames; k++) {
             own[k] = nd->vbind[k];
             if (own[k]) any = 1;
@@ -2863,6 +2958,7 @@ static void compute_vars(wf_site_t *d) {
             if (eq(v, "initial")) {
                 const wf_cssprop_t *p = kprop(d, k);
                 nd->vbind[k] = p ? initial_b(d, k) : WF_SITE_VINVALID;
+                g_vexp[i] |= 1u << k;
             } else if (eq(v, "inherit")) {
                 int par = nd->parent;
                 nd->vbind[k] = (par >= 0 && par < i && d->node[par].vbind[k]) ? d->node[par].vbind[k] :
@@ -2907,6 +3003,8 @@ static void compute_vars(wf_site_t *d) {
                 static char cv[WF_CSSPROP_VAL];
                 wf_cssprop_ctx_t c;
                 int e;
+                g_vown[i] |= 1u << k;
+                g_vexp[i] |= 1u << k;
                 c.vw = d->vw; c.vh = d->vh;
                 /* Lot 95: plain dimensions, lists, mixes and viewport units
                  * too; counted when the text changes */
@@ -3294,6 +3392,7 @@ static void scope_decls(wf_site_t *d, const char *s, int n, uint8_t origin, int 
         proto.origin = origin;
         proto.layer = (uint8_t)layer;
         proto.scope = (uint8_t)scope;
+        proto.starting = (uint8_t)(g_starting > 0);
         if (decl_rules(d, s + p, semi - p, &proto, got, &ng))
             for (k = 0; k < ng; k++) parse_selector(d, "&", 1, &got[k]);
         p = semi < n ? semi + 1 : n;
@@ -3349,6 +3448,15 @@ static int parse_sheet_in(wf_site_t *d, const char *s, int n, uint8_t origin, in
                 int blen = after - 1 - body;
                 if (blen > 0 && depth < 6) parse_sheet_in(d, s + body, blen, origin, layer, depth + 1, scope);
                 i = after;
+            } else if (i < n && s[i] == '{' && at_is(s, n, prelude, "starting-style")) {
+                /* Lot 97: the rules inside give starting values only */
+                int body = i + 1, after = skip_block(s, n, i), blen = after - 1 - body;
+                if (blen > 0 && depth < 6) {
+                    g_starting++;
+                    parse_sheet_in(d, s + body, blen, origin, layer, depth + 1, scope);
+                    g_starting--;
+                }
+                i = after;
             } else if (i < n && s[i] == '{' && at_is(s, n, prelude, "scope")) {
                 /* Lot 88: @scope, nested up to WF_SITE_SCOPE_DEPTH */
                 int body = i + 1, after = skip_block(s, n, i), blen = after - 1 - body;
@@ -3384,6 +3492,7 @@ static int parse_sheet_in(wf_site_t *d, const char *s, int n, uint8_t origin, in
                     proto.origin = origin;
                     proto.layer = (uint8_t)layer;
                     proto.scope = (uint8_t)scope;
+                    proto.starting = (uint8_t)(g_starting > 0);
                     if (decl_rules(d, s + body + p, semi - p, &proto, got, &ng))
                         for (k = 0; k < ng; k++) parse_selector(d, s + sel, brace - sel, &got[k]);
                     p = semi < body_n ? semi + 1 : body_n;
@@ -3670,6 +3779,322 @@ static void resolve_lengths(wf_site_t *d) {
     }
 }
 
+
+/* ---- Lot 97: font-relative values, animations and transitions -------- */
+
+/* a keyframe selector: from, to or N% with up to two decimals (0..100):
+ * the offset in 1/10000, -1 when it is not one */
+static int kf_offset(const char *s, int n) {
+    int k = 0, v = 0, dec = 0, dot = 0;
+    if (n == 4 && lc(s[0]) == 'f' && lc(s[1]) == 'r' && lc(s[2]) == 'o' && lc(s[3]) == 'm') return 0;
+    if (n == 2 && lc(s[0]) == 't' && lc(s[1]) == 'o') return 10000;
+    if (n < 2 || s[n - 1] != '%') return -1;
+    for (k = 0; k < n - 1; k++) {
+        if (s[k] == '.' && !dot && k > 0) { dot = 1; continue; }
+        if (s[k] < '0' || s[k] > '9' || v > 100000) return -1;
+        if (dot && ++dec > 2) return -1;
+        v = v * 10 + (s[k] - '0');
+    }
+    if (dot && !dec) return -1;
+    while (dec < 2) { v *= 10; dec++; }
+    return v > 10000 ? -1 : v;
+}
+
+/* the frames of one property in one @keyframes rule */
+typedef struct {
+    int n;
+    int off[WF_SITE_FRAMES + 2];
+    int has_ease[WF_SITE_FRAMES + 2];
+    wf_cssease_t ease[WF_SITE_FRAMES + 2];
+    char val[WF_SITE_FRAMES + 2][WF_CSSPROP_VAL];
+} kf_frames_t;
+
+/* one frame value (lower case, trimmed) of registration p: computed with
+ * the font context into out; 0 when it is left out */
+static int kf_take(const wf_cssprop_t *p, const char *s, int n, const wf_cssprop_fctx_t *fc, char *out, int cap) {
+    char raw[WF_CSSPROP_VAL];
+    int a = 0, b = n, k;
+    while (a < b && is_sp(s[a])) a++;
+    while (b > a && is_sp(s[b - 1])) b--;
+    if (b <= a || b - a >= (int)sizeof(raw)) return 0;
+    slower(raw, (int)sizeof(raw), s + a, b - a);
+    for (k = 0; raw[k]; k++) {
+        if (raw[k] == '!') return 0;                                      /* !important: ignored in keyframes */
+        if (raw[k] == 'v' && raw[k + 1] == 'a' && raw[k + 2] == 'r' && raw[k + 3] == '(') return 0;
+    }
+    if (!wf_cssprop_match_prop(p, raw)) return 0;
+    if (!wf_cssprop_compute_font(p, raw, fc, out, cap)) scopy(out, cap, raw, slen(raw));
+    return 1;
+}
+
+/* the frames of name k (registration p) in kf: sorted by offset, one per
+ * offset (the later block wins) */
+static void kf_collect(const wf_site_t *d, const wf_site_kf_t *kf, int k, const wf_cssprop_t *p,
+                       const wf_cssprop_fctx_t *fc, kf_frames_t *f) {
+    const char *s = d->css + kf->at;
+    int n = kf->n, i = 0;
+    f->n = 0;
+    while (i < n) {
+        int sel, brace, body, after, offs[WF_SITE_FRAMES], noff = 0, ok = 1, j, has_e = 0, has_v = 0;
+        wf_cssease_t e;
+        static char v[WF_CSSPROP_VAL];
+        i = skip_noise(s, n, i);
+        if (i >= n) break;
+        sel = i;
+        while (i < n && s[i] != '{') i++;
+        if (i >= n) break;
+        brace = i;
+        after = skip_block(s, n, i);
+        body = brace + 1;
+        /* the selector list */
+        j = sel;
+        while (j < brace && ok) {
+            int a, b, o;
+            while (j < brace && (is_sp(s[j]) || s[j] == ',')) j++;
+            if (j >= brace) break;
+            a = j;
+            while (j < brace && s[j] != ',' && !is_sp(s[j])) j++;
+            b = j;
+            o = kf_offset(s + a, b - a);
+            if (o < 0 || noff >= WF_SITE_FRAMES) ok = 0;
+            else offs[noff++] = o;
+        }
+        if (!noff) ok = 0;
+        /* the declarations: name k and animation-timing-function */
+        if (ok) {
+            int q = body, end = after - 1;
+            while (q < end) {
+                int a, colon, semi, b;
+                char prop[WF_SITE_VNAME + 8];
+                while (q < end && (is_sp(s[q]) || s[q] == ';')) q++;
+                if (q >= end) break;
+                a = q;
+                while (q < end && s[q] != ':' && s[q] != ';') q++;
+                if (q >= end || s[q] != ':') { while (q < end && s[q] != ';') q++; continue; }
+                colon = q;
+                semi = colon + 1;
+                while (semi < end && s[semi] != ';') semi++;
+                b = colon;
+                while (b > a && is_sp(s[b - 1])) b--;
+                if (b - a < (int)sizeof(prop)) {
+                    slower(prop, (int)sizeof(prop), s + a, b - a);
+                    if (eq(prop, d->vname[k])) {
+                        if (kf_take(p, s + colon + 1, semi - colon - 1, fc, v, (int)sizeof(v))) has_v = 1;
+                    } else if (eq(prop, "animation-timing-function")) {
+                        char ev[64];
+                        int x = colon + 1, y = semi;
+                        while (x < y && is_sp(s[x])) x++;
+                        while (y > x && is_sp(s[y - 1])) y--;
+                        if (y - x < (int)sizeof(ev)) {
+                            slower(ev, (int)sizeof(ev), s + x, y - x);
+                            if (wf_cssease_parse(ev, slen(ev), &e)) has_e = 1;
+                        }
+                    }
+                }
+                q = semi;
+            }
+        }
+        if (ok && has_v) {
+            for (j = 0; j < noff; j++) {
+                int at = 0, m;
+                while (at < f->n && f->off[at] < offs[j]) at++;
+                if (at < f->n && f->off[at] == offs[j]) m = at;          /* the later block wins */
+                else {
+                    if (f->n >= WF_SITE_FRAMES) continue;
+                    for (m = f->n; m > at; m--) {
+                        f->off[m] = f->off[m - 1];
+                        f->has_ease[m] = f->has_ease[m - 1];
+                        f->ease[m] = f->ease[m - 1];
+                        scopy(f->val[m], WF_CSSPROP_VAL, f->val[m - 1], slen(f->val[m - 1]));
+                    }
+                    f->n++;
+                    m = at;
+                }
+                f->off[m] = offs[j];
+                f->has_ease[m] = has_e;
+                if (has_e) f->ease[m] = e;
+                scopy(f->val[m], WF_CSSPROP_VAL, v, slen(v));
+            }
+        }
+        i = after;
+    }
+}
+
+/* the value of animation a (keyframes kf) for name k at the reader clock,
+ * under the value below: 1 and out, 0 when it gives none */
+static int anim_value(const wf_site_t *d, const wf_cssanim_t *a, const wf_site_kf_t *kf, int k, const wf_cssprop_t *p,
+                      const wf_cssprop_fctx_t *fc, const char *under, char *out, int cap) {
+    static kf_frames_t f;
+    int prog, before, j, x, m;
+    const wf_cssease_t *e;
+    if (!wf_cssanim_progress(a, d->anim_ms, &prog, &before)) return 0;
+    kf_collect(d, kf, k, p, fc, &f);
+    if (!f.n) return 0;
+    if (f.off[0] > 0) {
+        for (m = f.n; m > 0; m--) {
+            f.off[m] = f.off[m - 1]; f.has_ease[m] = f.has_ease[m - 1]; f.ease[m] = f.ease[m - 1];
+            scopy(f.val[m], WF_CSSPROP_VAL, f.val[m - 1], slen(f.val[m - 1]));
+        }
+        f.off[0] = 0; f.has_ease[0] = 0;
+        scopy(f.val[0], WF_CSSPROP_VAL, under, slen(under));
+        f.n++;
+    }
+    if (f.off[f.n - 1] < 10000) {
+        f.off[f.n] = 10000; f.has_ease[f.n] = 0;
+        scopy(f.val[f.n], WF_CSSPROP_VAL, under, slen(under));
+        f.n++;
+    }
+    for (j = 0; j + 2 < f.n && f.off[j + 1] <= prog; j++) {}
+    x = ((prog - f.off[j]) * 20000 / (f.off[j + 1] - f.off[j]) + 1) / 2;   /* at most 2e8 */
+    e = f.has_ease[j] ? &f.ease[j] : &a->ease;
+    return wf_cssprop_interp(p, f.val[j], f.val[j + 1], wf_cssease_at(e, x, before), out, cap) > 0;
+}
+
+/* the keyframes of a name, 0 */
+static const wf_site_kf_t *kf_find(const wf_site_t *d, const char *name) {
+    int k;
+    if (!name[0]) return 0;
+    for (k = 0; k < d->nkf; k++) if (eq(d->kf[k].name, name)) return &d->kf[k];
+    return 0;
+}
+
+/* floor(10000 e / dur) for 0 <= e < dur <= 1e8, by shift and subtract
+ * (no 64-bit division helper in the freestanding guest) */
+static int site_frac(int e, int dur) {
+    unsigned long long n = (unsigned long long)e * 10000u, r = 0;
+    int q = 0, b;
+    for (b = 47; b >= 0; b--) {
+        r = (r << 1) | ((n >> b) & 1u);
+        q <<= 1;
+        if (r >= (unsigned long long)dur) { r -= (unsigned long long)dur; q |= 1; }
+    }
+    return q;
+}
+
+/* the value of the transitions of node nd for name k: 1 and out while a
+ * transition runs (or waits in its delay), 0 otherwise */
+static int trans_value(wf_site_t *d, const wf_site_node_t *nd, int k, const wf_cssprop_t *p, const wf_cssprop_fctx_t *fc,
+                       const char *end, char *out, int cap) {
+    static wf_csstrans_t tl[WF_CSSANIM_MAX];
+    static char start[WF_CSSPROP_VAL];
+    const wf_csstrans_t *t = 0;
+    int c, j, sb = nd->sbind[k];
+    long long e;
+    if (!nd->trans || nd->trans > d->nlongs || !sb || sb > d->nevars) return 0;
+    c = wf_csstrans_parse(d->lpool[nd->trans - 1], tl, WF_CSSANIM_MAX);
+    for (j = 0; j < c; j++) if (eq(tl[j].prop, "all") || eq(tl[j].prop, d->vname[k])) t = &tl[j];
+    if (!t || (long long)t->dur + t->delay <= 0) return 0;
+    if (!kf_take(p, d->evar[sb - 1].value, slen(d->evar[sb - 1].value), fc, start, (int)sizeof(start))) return 0;
+    if (eq(start, end)) return 0;
+    if (wf_cssprop_interp(p, start, end, 5000, out, cap) == 1 && !t->discrete) return 0;
+    e = (long long)d->anim_ms - t->delay;
+    if (e >= t->dur) return 0;
+    if (e < 0) { scopy(out, cap, start, slen(start)); return 1; }
+    return wf_cssprop_interp(p, start, end, wf_cssease_at(&t->ease, site_frac((int)e, t->dur), 0), out, cap) > 0;
+}
+
+/* After the first cascade: the registered values of each element (in
+ * document order, so a parent is final first) are computed with its font
+ * size, inherited ones are taken from the parent's final value, then its
+ * animations and transitions apply. Returns the number of changed
+ * bindings. */
+static int anim_pass(wf_site_t *d) {
+    static uint8_t orig[WF_SITE_NODES][WF_SITE_VNAMES];
+    static char cur[WF_CSSPROP_VAL], val[WF_CSSPROP_VAL];
+    static wf_cssanim_t al[WF_CSSANIM_MAX];
+    int i, k, changed = 0;
+    for (i = 0; i < d->nnodes; i++) for (k = 0; k < d->nvnames; k++) orig[i][k] = d->node[i].vbind[k];
+    for (i = 0; i < d->nnodes; i++) {
+        wf_site_node_t *nd = &d->node[i];
+        int par = nd->parent, na = 0, j;
+        wf_cssprop_fctx_t fc;
+        fc.vw = d->vw; fc.vh = d->vh; fc.em = d->fs[i]; fc.rem = d->root_fs;
+        if (nd->anim && nd->anim <= d->nlongs) na = wf_cssanim_parse(d->lpool[nd->anim - 1], al, WF_CSSANIM_MAX);
+        for (k = 0; k < d->nvnames; k++) {
+            const wf_cssprop_t *p = kprop(d, k);
+            int b, animated = 0, e;
+            if (!p) continue;
+            if (!(g_vexp[i] & (1u << k)) && p->inherits && par >= 0 && par < i) nd->vbind[k] = d->node[par].vbind[k];
+            b = nd->vbind[k];
+            if (!b || b > d->nevars) { if (b != orig[i][k]) changed++; continue; }
+            scopy(cur, WF_CSSPROP_VAL, d->evar[b - 1].value, slen(d->evar[b - 1].value));
+            if ((g_vown[i] & (1u << k)) && wf_cssprop_font_relative(cur) &&
+                wf_cssprop_compute_font(p, cur, &fc, val, (int)sizeof(val))) {
+                scopy(cur, WF_CSSPROP_VAL, val, slen(val));
+                d->prop_font++;
+            }
+            /* an !important own declaration keeps its value against the
+             * animations (rank_of: importance is the top bit, 2^30) */
+            if (nd->vrank[k] < (1 << 30))
+                for (j = 0; j < na; j++) {
+                    const wf_site_kf_t *kf = kf_find(d, al[j].name);
+                    if (kf && anim_value(d, &al[j], kf, k, p, &fc, cur, val, (int)sizeof(val))) {
+                        scopy(cur, WF_CSSPROP_VAL, val, slen(val));
+                        animated = 1;
+                    }
+                }
+            if (animated) d->prop_animated++;
+            else if (trans_value(d, nd, k, p, &fc, cur, val, (int)sizeof(val))) {
+                scopy(cur, WF_CSSPROP_VAL, val, slen(val));
+                d->prop_transitioned++;
+            }
+            if (!eq(cur, d->evar[b - 1].value) && (e = evar_intern(d, k, cur)) >= 0) nd->vbind[k] = (uint8_t)(e + 1);
+            if (nd->vbind[k] != orig[i][k]) changed++;
+        }
+    }
+    return changed;
+}
+
+int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
+    int n = 0, i, lists = 0;
+    if (!out || cap <= 0) return 0;
+    out[0] = 0;
+    if (!d) return 0;
+    for (i = 0; i < d->nnodes; i++) if (d->node[i].anim || d->node[i].trans) lists = 1;
+    if (!d->nkf && !d->dropped_kf && !lists && !d->prop_font) return 0;
+    n = app(out, cap, n, "keyframes ");
+    n = app_u(out, cap, n, (unsigned)d->nkf);
+    n = app(out, cap, n, " animated ");
+    n = app_u(out, cap, n, (unsigned)d->prop_animated);
+    n = app(out, cap, n, " transitioned ");
+    n = app_u(out, cap, n, (unsigned)d->prop_transitioned);
+    n = app(out, cap, n, " font ");
+    n = app_u(out, cap, n, (unsigned)d->prop_font);
+    n = app(out, cap, n, " at ");
+    n = app_u(out, cap, n, (unsigned)d->anim_ms);
+    n = app(out, cap, n, "ms");
+    if (d->dropped_kf) {
+        n = app(out, cap, n, " dropped ");
+        n = app_u(out, cap, n, (unsigned)d->dropped_kf);
+    }
+    return n;
+}
+
+/* the reader properties: every rule but the custom properties, then the
+ * style attributes, revert, inherit and the font sizes */
+static void cascade_props(wf_site_t *d) {
+    int i, r;
+    d->scoped_hits = 0;
+    d->deferred_hits = 0;
+    d->deferred_dropped = 0;
+    for (r = 0; r < d->nrules; r++) {
+        if (d->rule[r].kind == WF_SITE_K_VAR) continue;
+        for (i = 0; i < d->nnodes; i++) {
+            int m = rule_match(d, i, &d->rule[r]);
+            if (!m) continue;
+            if (d->rule[r].scope) d->scoped_hits++;
+            paint_matched(d, i, &d->rule[r], m - 1, 0);
+        }
+    }
+    apply_inline(d);
+    d->reverts = 0;
+    d->inherits = 0;
+    resolve_reverts(d);
+    d->len_resolved = 0;
+    d->len_dropped = 0;
+    resolve_lengths(d);
+}
+
 int wf_site_apply(wf_site_t *d) {
     int i, r;
     if (!d) return -1;
@@ -3703,22 +4128,20 @@ int wf_site_apply(wf_site_t *d) {
     }
     inline_vars(d);
     compute_vars(d);
-    for (r = 0; r < d->nrules; r++) {
-        if (d->rule[r].kind == WF_SITE_K_VAR) continue;
+    cascade_props(d);
+    /* Lot 97: font-relative, animated and transitioned registered values,
+     * then the reader properties again when one changed (var() reads it) */
+    d->anim_ms = g_anim_ms;
+    if (d->nprops && anim_pass(d)) {
+        int k;
         for (i = 0; i < d->nnodes; i++) {
-            int m = rule_match(d, i, &d->rule[r]);
-            if (!m) continue;
-            if (d->rule[r].scope) d->scoped_hits++;
-            paint_matched(d, i, &d->rule[r], m - 1, 0);
+            for (k = 1; k <= WF_SITE_K_MAX; k++) reset_kind(&d->node[i], k);
+            d->node[i].anim = 0; d->node[i].trans = 0;
+            d->node[i].anim_rank = 0; d->node[i].trans_rank = 0;
         }
+        cascade_props(d);
+        d->recascades = 1;
     }
-    apply_inline(d);
-    d->reverts = 0;
-    d->inherits = 0;
-    resolve_reverts(d);
-    d->len_resolved = 0;
-    d->len_dropped = 0;
-    resolve_lengths(d);
     d->ready = 1;
     return 0;
 }

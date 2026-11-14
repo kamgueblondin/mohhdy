@@ -14,7 +14,9 @@ Numbers are kept in 1/10000 of the canonical unit (px, %, deg, s, dppx or
 a plain number). A leaf N<unit> is N (at most four decimals here) times
 the unit's ratio, rounded half away from zero; a viewport unit is N times
 the viewport side / 100, rounded the same way; em, rem, ex and ch are not
-known. A product with a number and a quotient by a number are rounded
+known (Lot 97, converted: they are N times the font size when the context
+carries one, vp = (vw, vh, em, rem) in px thousandths, ex and ch being half
+an em, rounded the same way). A product with a number and a quotient by a number are rounded
 half away from zero at each step; sums are exact. Any value past 100000
 units is not known. A length and a percentage add into a mix written
 "calc(P% + Lpx)" (" - " and |L| when L < 0). An item whose value is not
@@ -164,11 +166,17 @@ def leaf(text, vp):
         return None
     kind, ratio = UNITS[u]
     if ratio == 0:
-        return Q(kind, 0, 0, False)
+        if not vp or len(vp) < 4:
+            return Q(kind, 0, 0, False)
+        fs = vp[3] if u == "rem" else vp[2]
+        if fs <= 0:
+            return Q(kind, 0, 0, False)
+        v = rhalf(F(raw * fs, 2000 if u in ("ex", "ch") else 1000))
+        return Q(kind, v, 0, ok and fits(v))
     if ratio is None:
         if not vp or vp[0] <= 0 or vp[1] <= 0:
             return Q(kind, 0, 0, False)
-        w, h = vp
+        w, h = vp[0], vp[1]
         base = {"vw": w, "vh": h, "vmin": min(w, h), "vmax": max(w, h)}[u]
         v = rhalf(F(raw * base, 100))
     else:

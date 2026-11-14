@@ -55,7 +55,40 @@
  * not resolve there makes the property guaranteed-invalid, which its
  * descendants inherit. initial, inherit and unset on a custom property.
  * @property (wf_cssprop.c) registers a type, an initial value and
- * whether it inherits; a registered name is always per element. */
+ * whether it inherits; a registered name is always per element.
+ * Lot 97: registered values with em, rem, ex or ch are computed on their
+ * element with its font size (ex and ch half an em), and registered
+ * values are animated and transitioned at the reader clock
+ * (wf_site_set_time, ms from the document start, 0 by default):
+ *   - @keyframes name { from / to / N% (two decimals) { --x: v;
+ *     animation-timing-function: e } } at the top level and in applying
+ *     @media, @supports and @layer blocks (WF_SITE_KFS, the last one of a
+ *     name wins), and the animation shorthand (wf_cssanim_parse) on any
+ *     element, cascaded as one property (not inherited). Each animation of
+ *     the list, later ones on top, gives its registered properties the
+ *     value of its keyframes at the directed progress
+ *     (wf_cssanim_progress): the frames that declare the property (a
+ *     value that does not match the syntax, uses var() or is !important
+ *     is left out; the later block wins at one offset), the value below
+ *     (the cascade, or the earlier animation) at 0% and 100% when no frame
+ *     is there, the segment progress rounded half away from zero to
+ *     1/10000 and eased by the frame's timing function or the
+ *     animation's, then wf_cssprop_interp. An !important declaration of
+ *     the property on the element keeps its value;
+ *   - @starting-style { rules } (top level or inside applying blocks):
+ *     its rules give custom properties a starting value per element
+ *     (sbind, cascaded like the others, used for nothing else), and the
+ *     transition shorthand (wf_csstrans_parse) runs a transition of a
+ *     registered property from that starting value to the value of the
+ *     cascade when the two differ, the last transition of the list that
+ *     names the property (or all) wins, its combined duration (duration +
+ *     delay) is above 0 and the pair interpolates (or allow-discrete is
+ *     given): the starting value during the delay, then the eased
+ *     interpolation, then the cascade value. A property an animation sets
+ *     is not transitioned.
+ * Animated, transitioned and font-relative values are computed after a
+ * first cascade (the font sizes come from it); the reader properties are
+ * then cascaded again so var() reads them. */
 #ifndef WF_SITECSS_H
 #define WF_SITECSS_H
 #include <stdint.h>
@@ -95,6 +128,8 @@
 #define WF_SITE_LONGS 32            /* Lot 90: long values (backgrounds, list images) */
 #define WF_SITE_LONG 128
 #define WF_SITE_LKINDS 8            /* Lot 90: the kinds kept in the pool (Lot 91: + clip, origin) */
+#define WF_SITE_KFS 8               /* Lot 97: @keyframes rules kept (by name) */
+#define WF_SITE_FRAMES 16           /* Lot 97: keyframes of one property in one rule */
 
 enum {
     WF_SITE_DISP_NONE = 3,
@@ -169,7 +204,11 @@ enum {
     WF_SITE_K_BGORIGIN = 24,  /* background-origin: one box keyword */
     WF_SITE_K_MAX = 24,
     WF_SITE_K_ALL = 25,       /* the all shorthand: a CSS-wide keyword on every kind (Lot 90: 23) */
-    WF_SITE_K_VAR = 26        /* Lot 89: a custom property set on the elements a rule matches (Lot 90: 24) */
+    WF_SITE_K_VAR = 26,       /* Lot 89: a custom property set on the elements a rule matches (Lot 90: 24) */
+    /* Lot 97: outside the kinds of K_MAX (all, revert and inherit leave
+     * them alone): lidx is the list in lpool, 0 for none */
+    WF_SITE_K_ANIM = 27,      /* the animation shorthand */
+    WF_SITE_K_TRANS = 28      /* the transition shorthand */
 };
 /* Lot 89: a compound that names the scoping root */
 enum {
@@ -247,6 +286,14 @@ typedef struct {
      * gave, and the rank of the winning declaration */
     uint8_t lv[WF_SITE_LKINDS], lv_val[WF_SITE_LKINDS];
     int lv_rank[WF_SITE_LKINDS];
+    /* Lot 97: the starting value of each custom property name (an evar
+     * index + 1 from @starting-style rules, 0 none) and its rank; the
+     * animation and transition lists (lpool index + 1, 0 none) and the
+     * ranks of their winning declarations */
+    uint8_t sbind[WF_SITE_VNAMES];
+    int srank[WF_SITE_VNAMES];
+    uint8_t anim, trans;
+    int anim_rank, trans_rank;
 } wf_site_node_t;
 
 typedef struct {
@@ -297,6 +344,7 @@ typedef struct {
     char dprop[20];
     char draw[WF_SITE_VAL];      /* Lot 90: 128 (Lot 89: 48) */
     uint8_t lidx;                 /* Lot 90: a pool kind's value, index + 1 in lpool */
+    uint8_t starting;             /* Lot 97: a custom property of an @starting-style rule */
 } wf_site_rule_t;
 
 /* Lot 88: one @scope rule. A root is an element that matches start (or,
@@ -322,6 +370,12 @@ typedef struct {
     char value[WF_SITE_VVAL];
     uint8_t invalid;              /* Lot 90: its var() did not resolve where it was declared */
 } wf_site_var_t;
+
+/* Lot 97: one @keyframes rule: its name and its block in css[] */
+typedef struct {
+    char name[WF_CSSPROP_NAME];
+    int at, n;
+} wf_site_kf_t;
 
 typedef struct {
     char href[WF_SITE_HREF];
@@ -381,6 +435,14 @@ typedef struct {
     int fs[WF_SITE_NODES];        /* font size of each element, px thousandths */
     int root_fs;                  /* the root element's (rem), px thousandths */
     int len_resolved, len_dropped;   /* lengths the reader resolved; out of bounds there */
+    /* Lot 97 */
+    wf_site_kf_t kf[WF_SITE_KFS];
+    int nkf, dropped_kf;          /* @keyframes kept; over the table */
+    int anim_ms;                  /* the reader clock of this prepare */
+    int prop_font;                /* registered values computed with the font size */
+    int prop_animated;            /* (element, property) values set by an animation */
+    int prop_transitioned;        /* ... by a running (or delayed) transition */
+    int recascades;               /* reader properties cascaded again (0 or 1) */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */
@@ -436,4 +498,11 @@ int wf_site_vars_text(const wf_site_t *d, char *out, int cap);
 int wf_site_props_text(const wf_site_t *d, char *out, int cap);
 /* Lot 90: the registration of a custom property name, or 0. */
 const wf_cssprop_t *wf_site_prop(const wf_site_t *d, const char *name);
+/* Lot 97: the reader clock (ms since the document start, 0..1e8) used by
+ * the next prepares (animations and transitions); 0 by default. */
+void wf_site_set_time(int ms);
+/* Lot 97: "keyframes K animated A transitioned T font F at Nms" (and
+ * " dropped D" when @keyframes were over the table); length, 0 when the
+ * page had no keyframes, animation, transition or font-relative value. */
+int wf_site_anim_text(const wf_site_t *d, char *out, int cap);
 #endif

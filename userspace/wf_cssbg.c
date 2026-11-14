@@ -491,7 +491,7 @@ static int radial_shape(const char *s, int a, int b) {
 
 int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
     int a = 0, b = n, ia[6], ib[6], c, k, first = 0, radial, conic, rad = 0, degrees = 0, pl = 16, repeat = 0;
-    int p0 = 0, top = 0, pos;
+    int pos;
     bo_t o;
     bo_init(&o, out, cap);
     if (!v) return 0;
@@ -528,14 +528,10 @@ int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
     }
     if (c - first < 2 || c - first > 4) return 0;
     for (k = first; k < c; k++) {
+        /* Lot 97: a repeating gradient with a period of 0 is passed on
+         * (the engine paints its average colour; Lot 96 refused it) */
         if (!stop_ok(v, ia[k], ib[k], conic, &pos)) return 0;
-        /* Lot 96: the engine repeats the first to the last stop and
-         * refuses a period of 0: the last stop is at least every earlier
-         * one (the default 100% when it has none) */
-        if (k == first) p0 = top = pos < 0 ? 0 : pos;
-        else if (pos > top || (k == c - 1 && pos < 0)) top = pos < 0 ? 10000 : pos;
     }
-    if (repeat && top <= p0) return 0;
     if (repeat) bo_s(&o, "repeating-", 10);
     bo_s(&o, conic ? "conic-gradient(" : radial ? "radial-gradient(" : "linear-gradient(", pl);
     for (k = 0; k < c; k++) {

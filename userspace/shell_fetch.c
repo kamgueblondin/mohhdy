@@ -734,6 +734,25 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
         scat(out, cap, "web-css off\n");
         return 0;
     }
+    if (a[0] == 't' && a[1] == 'i' && a[2] == 'm' && a[3] == 'e' && (a[4] == 0 || a[4] == ' ')) {
+        /* Lot 97: "web-css time N": the reader clock in ms (0..1e8) for
+         * the animations and transitions of the next page */
+        const char *t = a + 4;
+        long v = 0;
+        int dg = 0;
+        while (*t == ' ') t++;
+        while (*t >= '0' && *t <= '9' && dg < 10) { v = v * 10 + (*t - '0'); t++; dg++; }
+        while (*t == ' ') t++;
+        if (!dg || *t || v > WF_CSSANIM_MS_MAX) {
+            scat(out, cap, "usage: web-css time <0..100000000>\n");
+            return -1;
+        }
+        wf_html_set_csstime((int)v);
+        scat(out, cap, "web-css time ");
+        scat_int(out, cap, (int)v);
+        scat(out, cap, "\n");
+        return 0;
+    }
     if (wf_html_sitecss_report(out, cap) <= 0) scat(out, cap, "css none\n");
     {
         /* Lot 88: the @scope summary of the page */
@@ -752,6 +771,13 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
         /* Lot 90: @property registrations and declaration-time values */
         if (wf_html_sitecss_props(sc, (int)sizeof(sc)) > 0) {
             scat(out, cap, "css-props ");
+            scat(out, cap, sc);
+            scat(out, cap, "\n");
+        }
+        /* Lot 97: keyframes, animated, transitioned and font-relative
+         * registered values (only on a page that has any) */
+        if (wf_html_sitecss_anim(sc, (int)sizeof(sc)) > 0) {
+            scat(out, cap, "css-anim ");
             scat(out, cap, sc);
             scat(out, cap, "\n");
         }

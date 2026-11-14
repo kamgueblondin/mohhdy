@@ -197,4 +197,102 @@ int wf_cssprop_independent(const char *value);
  * pre) and the block body (bn bytes at body, without braces). 1 and out
  * filled when the rule is valid, 0 when it is not (out cleared). */
 int wf_cssprop_parse(const char *pre, int pn, const char *body, int bn, wf_cssprop_t *out);
+
+/* ---- Lot 97: font-relative lengths, interpolation and timing ---------
+ * wf_cssprop_compute_font is wf_cssprop_compute_ctx with a font context:
+ * em is the element's font size and rem the root's, both in px
+ * thousandths (0: not known, the unit is kept as text); ex and ch are
+ * half an em (the CSS fallback when no font metrics are known: the reader
+ * has none). Each item is rounded half away from zero to 1/10000 px, from
+ * the exact product of its value and the font size.
+ *
+ * wf_cssprop_interp interpolates two computed values of a registration
+ * at progress t (1/10000, may leave 0..10000 after an easing): both must
+ * match the same alternative of the syntax, else (or for '*', keywords,
+ * idents, urls, strings, images, transform functions and lists, a list of
+ * another length, a value that is not known as a number) the values flip
+ * at t = 5000 (discrete, CSS Properties and Values 1). Numbers, lengths,
+ * percentages, angles, times and resolutions interpolate as
+ * a + round((b - a) t / 10000) (half away from zero) in their canonical
+ * unit; a length with a percentage gives calc(P% + Lpx); an integer is
+ * rounded half toward +infinity; '+' and '#' lists item by item. Colours
+ * (hex, rgb(), rgba(), the 19 names, transparent) interpolate in sRGB with
+ * premultiplied alpha (CSS Color 4 for legacy colours), each channel
+ * rounded half away from zero to 0..255, alpha to 1/10000 in 0..1, written
+ * "rgb(R, G, B)" or "rgba(R, G, B, A)"; hsl(), hsla() and currentcolor
+ * are discrete. t 0 gives a and t 10000 gives b as written. Returns 2
+ * (interpolated), 1 (discrete) or 0 (out too small, or no value). */
+typedef struct { int vw, vh, em, rem; } wf_cssprop_fctx_t;
+int wf_cssprop_compute_font(const wf_cssprop_t *p, const char *value, const wf_cssprop_fctx_t *c, char *out, int cap);
+/* 1 when value names em, rem, ex or ch outside a name or a string */
+int wf_cssprop_font_relative(const char *value);
+int wf_cssprop_interp(const wf_cssprop_t *p, const char *a, const char *b, int t, char *out, int cap);
+
+/* An easing function (CSS Easing 1): linear, ease, ease-in, ease-out,
+ * ease-in-out, cubic-bezier(x1, y1, x2, y2) (x in 0..1, y in -100..100,
+ * four decimals), step-start, step-end and steps(n[, jump-start |
+ * jump-end | jump-none | jump-both | start | end]) with 1 <= n <= 10000
+ * (2 for jump-none). linear() is not taken. */
+enum { WF_CSSEASE_LINEAR = 0, WF_CSSEASE_BEZIER = 1, WF_CSSEASE_STEPS = 2 };
+enum { WF_CSSEASE_END = 0, WF_CSSEASE_START = 1, WF_CSSEASE_NONE = 2, WF_CSSEASE_BOTH = 3 };
+typedef struct {
+    unsigned char kind, pos;
+    int n;                        /* steps */
+    int x1, y1, x2, y2;           /* cubic-bezier, 1/10000 */
+} wf_cssease_t;
+/* 1 and *e when s[0..n) is one easing function (lower case), else 0 */
+int wf_cssease_parse(const char *s, int n, wf_cssease_t *e);
+/* the output progress at input progress x (1/10000, 0..10000); before:
+ * the before flag of the steps (the animation is in its before phase).
+ * A cubic-bezier is solved by bisection on its parameter in 1/2^30 with
+ * 128-bit products (within 1/10000 of the exact curve); steps are exact
+ * (step / jumps rounded half away from zero). */
+int wf_cssease_at(const wf_cssease_t *e, int x, int before);
+
+/* One animation of the animation shorthand (CSS Animations 1): the
+ * keyframes name ("" for none), duration and delay in ms (seconds and
+ * milliseconds rounded half away from zero to 1 ms, at most 1e8 ms; a
+ * negative duration is invalid), the iteration count in 1/10000 (-1
+ * infinite), direction, fill mode, play state and easing. A keyword that
+ * a property not yet given accepts goes to that property before the name
+ * (so "ease" alone is an easing, "ease ease" names ease). */
+#define WF_CSSANIM_MAX 4          /* animations (or transitions) in one list */
+#define WF_CSSANIM_MS_MAX 100000000
+enum { WF_CSSANIM_NORMAL = 0, WF_CSSANIM_REVERSE = 1, WF_CSSANIM_ALTERNATE = 2, WF_CSSANIM_ALT_REVERSE = 3 };
+enum { WF_CSSANIM_FILL_NONE = 0, WF_CSSANIM_FORWARDS = 1, WF_CSSANIM_BACKWARDS = 2, WF_CSSANIM_BOTH = 3 };
+typedef struct {
+    char name[WF_CSSPROP_NAME];
+    int dur, delay, iters;
+    unsigned char dir, fill, paused;
+    wf_cssease_t ease;
+} wf_cssanim_t;
+/* the comma separated list v (lower case, trimmed): the number of
+ * animations written to out (at most max), -1 when the list is not valid
+ * or longer than max ("none" alone is one animation without a name) */
+int wf_cssanim_parse(const char *v, wf_cssanim_t *out, int max);
+
+/* One transition of the transition shorthand (CSS Transitions 1 and 2):
+ * the property ("all", a name, or "" for none), duration (>= 0) and delay
+ * in ms, easing, and 1 for allow-discrete (transition-behavior). */
+typedef struct {
+    char prop[WF_CSSPROP_NAME];
+    int dur, delay;
+    unsigned char discrete;
+    wf_cssease_t ease;
+} wf_csstrans_t;
+/* as wf_cssanim_parse; "none" is valid alone only */
+int wf_csstrans_parse(const char *v, wf_csstrans_t *out, int max);
+
+/* Lot 97: the directed progress of one animation at local time ms (CSS
+ * Animations 1 and Web Animations 1 timing: delay, duration, iteration
+ * count, direction, fill mode; a paused animation stays at time 0, the
+ * document start): 1 and *p (1/10000, 0..10000), *before (the before
+ * phase, for steps) when the animation has an effect, 0 when it has none
+ * (before or after its active interval without the fill mode, a zero
+ * duration with an infinite count). Iteration and progress are taken
+ * from the exact elapsed time: iteration floor(e / dur), progress
+ * floor(10000 (e mod dur) / dur); at the end of a whole count the
+ * progress is 10000 of the last iteration; a fractional count ends at
+ * its fraction. */
+int wf_cssanim_progress(const wf_cssanim_t *a, int ms, int *p, int *before);
 #endif

@@ -2618,6 +2618,24 @@ static int conic_shape(const char *a, int l, int16_t at[2], uint8_t *at_pct, int
     return position_pair(a + t[k + 1], l - t[k + 1], at, at_pct) ? -1 : 1;
 }
 
+/* Lot 97: the average colour of a repeating gradient whose period is 0:
+ * its stops taken evenly spaced, the mean of the premultiplied linear
+ * interpolation (weights 1 at both ends, 2 between); each channel and the
+ * opacity rounded half up */
+static uint32_t grad_average(const uint32_t *color, int count) {
+    int num[3] = { 0, 0, 0 }, tot = 0;      /* at most 2 * 255 * 255 per stop */
+    uint32_t out = 0;
+    int k, ch;
+    for (k = 0; k < count; k++) {
+        int w = k == 0 || k == count - 1 ? 1 : 2, a = 255 - (int)(color[k] >> WE_ALPHA_SHIFT);
+        tot += w * a;
+        for (ch = 0; ch < 3; ch++) num[ch] += w * a * (int)((color[k] >> (8 * ch)) & 0xFF);
+    }
+    if (!tot) return with_alpha(0, 0);
+    for (ch = 0; ch < 3; ch++) out |= (uint32_t)((num[ch] + tot / 2) / tot) << (8 * ch);
+    return with_alpha(out, (tot + (count - 1)) / (2 * (count - 1)));
+}
+
 static int parse_gradient(we_node_t *n, const char *v, int len) {
     int start[WE_GRAD_STOPS + 1], length[WE_GRAD_STOPS + 1], count, k, first = 0, dir = WE_GRAD_BOTTOM;
     int pos[WE_GRAD_STOPS], last, radial, conic, shape = 0, pl = 16, corner = 0, angle = 0, repeat = 0;
@@ -2695,9 +2713,17 @@ static int parse_gradient(we_node_t *n, const char *v, int len) {
         }
         last = k;
     }
-    /* Lot 96: a repeating gradient repeats its first to last stop; a
-     * period of 0 is refused (CSS paints the average colour) */
-    if (repeat && pos[count - 1] <= pos[0]) return -1;
+    /* Lot 96: a repeating gradient repeats its first to last stop. Lot 97:
+     * a period of 0 paints the average colour (Lot 96 refused it) */
+    if (repeat && pos[count - 1] <= pos[0]) {
+        /* one colour along the y axis: the axis runs paint one rectangle */
+        uint32_t avg = grad_average(color, count);
+        dir = WE_GRAD_ANGLE;
+        shape = 0; angle = 18000; corner = 0; conic = 0; repeat = 0;
+        count = 2;
+        color[0] = color[1] = avg;
+        pos[0] = 0; pos[1] = 10000;
+    }
     n->grad_dir = (uint8_t)dir;
     n->grad_shape = (uint8_t)shape;
     n->grad_repeat = (uint8_t)repeat;
@@ -7898,11 +7924,15 @@ static uint64_t grad_isqrt64(uint64_t n) {
 /* Lot 96: 1 when a doubled offset is past WE_GRAD_OFFSET_MAX */
 static int grad_far(int v) { return v > WE_GRAD_OFFSET_MAX || v < -WE_GRAD_OFFSET_MAX; }
 
+/* Lot 97: marks of the vertical-rl pass in grad_repeat (bit 1: repeating) */
+#define WE_GRAD_REP_MIRROR 2
+#define WE_GRAD_REP_RL 4
+
 /* Lot 96: a repeating gradient's position p mapped into its first to
  * last stop: pos0 + (p - pos0) modulo the period (0 <= result < period) */
 static int grad_repeat_p(const we_node_t *n, int p) {
     int p0 = n->grad_pos[0], period = n->grad_pos[n->grad_count - 1] - p0, r;
-    if (!n->grad_repeat) return p;              /* parse_gradient refuses a period of 0 */
+    if (!(n->grad_repeat & 1)) return p;        /* not repeating (Lot 97: bits 2 and 4 are rl marks) */
     r = (p - p0) % period;
     if (r < 0) r += period;
     return p0 + r;
@@ -7953,6 +7983,43 @@ static int grad_isqrt(int n) {
     return r;
 }
 
+/* Lot 97: a repeating linear gradient along an axis painted per pixel:
+ * the colour of every pixel line across the axis (at its centre), equal
+ * neighbours merged into one rectangle. Used when the runs fit the
+ * reserved items (count); 0 otherwise (the cells are painted). */
+static int axis_runs(we_doc_t *d, int idx, int slot, int count, const int *o, int ax0, int ay0, int aw, int ah) {
+    static int16_t at[WE_GRAD_CELLS + 1];
+    static uint32_t col[WE_GRAD_CELLS];
+    const we_node_t *n = &d->nodes[idx];
+    int angle = n->grad_angle * 100 + n->grad_frac, vert = angle % 18000 == 0, len = vert ? ah : aw;
+    int runs = 0, q, sign = angle == 0 || angle == 27000 ? -1 : 1;
+    int c2 = vert ? 2 * o[1] + o[3] : 2 * o[0] + o[2], ext = vert ? o[3] : o[2], start = vert ? ay0 : ax0;
+    /* count <= WE_GRAD_CELLS (gradient_reserve) and ext > 0 (the painted
+     * area is inside the origin box) */
+    for (q = 0; q < len; q++) {
+        /* 1/2 + sign (2 q + 1 - c2) / (2 ext), rounded half up (0..10000:
+         * the pixel centre is inside the origin box) */
+        int64_t num = (int64_t)5000 * 2 * ext + 10000 * (int64_t)sign * (2 * (start + q) + 1 - c2);
+        int p = (int)grad_udiv((uint64_t)(2 * num + 2 * ext), (uint64_t)(4 * ext));
+        uint32_t c = gradient_at(n, grad_repeat_p(n, p));
+        if (runs && col[runs - 1] == c) continue;
+        if (runs == count) return 0;
+        at[runs] = (int16_t)q;
+        col[runs++] = c;
+    }
+    at[runs] = (int16_t)len;
+    for (q = 0; q < runs; q++) {
+        os_fb_web_item_t *it = &d->items[slot + q];
+        it->kind = OS_FB_WEB_RECT;
+        it->color = col[q];
+        it->x = (int16_t)(vert ? ax0 : ax0 + at[q]);
+        it->y = (int16_t)(vert ? ay0 + at[q] : ay0);
+        it->w = (uint16_t)(vert ? aw : at[q + 1] - at[q]);
+        it->h = (uint16_t)(vert ? at[q + 1] - at[q] : ah);
+    }
+    return 1;
+}
+
 /* Lot 94: a linear gradient at an angle or to a corner, or a conic one.
  * The painted area is the origin box cut to the clip box (as the bands);
  * it is split into at most WE_GRAD_CELLS cells, rows = isqrt(32 h / w)
@@ -7990,6 +8057,10 @@ static void cells_fill(we_doc_t *d, int idx, int slot, int count, const int *o, 
         /* Lot 96: a repeating radial gradient, its radii as the rings' */
         int cx, cy;
         radial_radii(n, o, &cx, &cy, &rx, &ry);
+        /* Lot 97: in a vertical-rl box the logical frame runs against the
+         * physical x axis, so the centre is mirrored in it (the radii
+         * only depend on the distances to both sides) */
+        if (n->grad_repeat & WE_GRAD_REP_MIRROR) cy = 2 * o[1] + o[3] - cy;
         cx2 = 2 * cx; cy2 = 2 * cy;
         /* the doubled cell centres lie in [2 ax0, 2 ax1] x [2 ay0, 2 ay1] */
         if (rx > WE_GRAD_RADIUS_MAX || ry > WE_GRAD_RADIUS_MAX || grad_far(2 * ax0 - cx2) || grad_far(2 * ax1 - cx2) ||
@@ -8010,14 +8081,20 @@ static void cells_fill(we_doc_t *d, int idx, int slot, int count, const int *o, 
     if (n->grad_dir == WE_GRAD_ANGLE && !n->grad_corner && angle % 9000 == 0) {
         /* Lot 96: only a repeating gradient keeps a quarter turn as an
          * angle (no corner): along an axis, the 32 cells in
-         * one column (top, bottom) or one row (left, right) */
+         * one column (top, bottom) or one row (left, right). Lot 97: and
+         * the average colour of a period of 0; both try the runs first */
         if (angle % 18000 == 0) { cols = 1; rows = ah < WE_GRAD_CELLS ? ah : WE_GRAD_CELLS; }
         else { rows = 1; cols = aw < WE_GRAD_CELLS ? aw : WE_GRAD_CELLS; }
     }
     for (k = 1; k < n->grad_count; k++) if (n->grad_color[k] != n->grad_color[0]) gradient_banded = 1;
+    if (n->grad_dir == WE_GRAD_ANGLE && !n->grad_corner && angle % 9000 == 0 && axis_runs(d, idx, slot, count, o, ax0, ay0, aw, ah))
+        return;
     k = 0;
     for (j = 0; j < rows; j++) {
-        int y0 = ay0 + j * ah / rows, y1 = ay0 + (j + 1) * ah / rows;
+        /* Lot 97: in a vertical-rl box the rows are cut from the logical
+         * bottom (the physical left), as the physical columns would be */
+        int y0 = n->grad_repeat & WE_GRAD_REP_RL ? ay1 - (rows - j) * ah / rows : ay0 + j * ah / rows;
+        int y1 = n->grad_repeat & WE_GRAD_REP_RL ? ay1 - (rows - j - 1) * ah / rows : ay0 + (j + 1) * ah / rows;
         for (i = 0; i < cols && k < count; i++, k++) {
             os_fb_web_item_t *it = &d->items[slot + k];
             int x0 = ax0 + i * aw / cols, x1 = ax0 + (i + 1) * aw / cols;
@@ -8898,12 +8975,14 @@ static void vertical_style(we_doc_t *d, int i, int rl, int forward) {
          * physical width: refused (lot 95) */
         n->grad_dir = 0;
         diag(d, "conic refused in vertical flow", i);
-    } else if (n->grad_dir == WE_GRAD_RADIAL && n->grad_repeat && rl) {
-        /* Lot 96: repeating radial cells are rotated with the box, their
-         * rl centre needs the physical width as the conic one: refused
-         * (vertical-lr transposes them and keeps them) */
-        n->grad_dir = 0;
-        diag(d, "repeating radial refused in rl", i);
+    }
+    if (rl && n->grad_dir && (n->grad_dir >= WE_GRAD_ANGLE || n->grad_repeat)) {
+        /* Lot 97: cells in a vertical-rl box are cut from the physical
+         * left, and a repeating radial centre is mirrored (Lot 96 refused
+         * it); both marks go with the back pass */
+        uint8_t bits = (uint8_t)(WE_GRAD_REP_RL | (n->grad_dir == WE_GRAD_RADIAL ? WE_GRAD_REP_MIRROR : 0));
+        if (forward) n->grad_repeat |= bits;
+        else n->grad_repeat &= (uint8_t)~bits;
     }
     if (n->grad_dir == WE_GRAD_RADIAL) {
         swap16(&n->grad_at[0], &n->grad_at[1]);

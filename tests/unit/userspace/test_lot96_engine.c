@@ -126,9 +126,13 @@ static void test_repeat_by_hand(void) {
     TEST_ASSERT_EQUAL(10, g_doc.items[0].h);
     render("<div style='width:100px;height:10px;background:repeating-linear-gradient(-0.25turn, red, blue 10%)'></div>");
     TEST_ASSERT_EQUAL(32, rects());
-    /* a small box: no more cells than pixels */
+    /* a small box: no more cells than pixels. Lot 97 (converted): painted
+     * per pixel, the five pixel centres all fall on the period's start, so
+     * one rectangle (was 5 cells of the same colour) */
     render("<div style='width:3px;height:5px;background:repeating-linear-gradient(to top, red, blue 10%)'></div>");
-    TEST_ASSERT_EQUAL(5, rects());
+    TEST_ASSERT_EQUAL(1, rects());
+    TEST_ASSERT_EQUAL(3, g_doc.items[0].w);
+    TEST_ASSERT_EQUAL(5, g_doc.items[0].h);
     /* radial: 9x1, circle 2px at 4px: |dx| 0..4 -> 0, 2500 (0.5px), ...;
      * period 5000 (black to white at 50%) */
     render("<div style='width:9px;height:1px;background:repeating-radial-gradient(circle 2px at 4px 0, #000000, #ffffff 50%)'></div>");
@@ -278,12 +282,15 @@ static void test_vertical(void) {
     TEST_ASSERT_EQUAL(1, diag_count("conic refused in vertical flow"));
     TEST_ASSERT_EQUAL(1, rects());
     TEST_ASSERT_EQUAL_HEX32(0x00123456, g_doc.items[0].color);
-    /* a repeating radial one in vertical-rl (its centre would need the
-     * physical width); a radial one that does not repeat keeps its rings */
+    /* a repeating radial one in vertical-rl. Lot 97 (converted): painted
+     * in cells with its centre mirrored (was refused, one rectangle and
+     * grad_dir 0); the rl marks are gone after the layout. A radial one
+     * that does not repeat keeps its rings */
     render("<div style='writing-mode:vertical-rl'><div id=a style='width:40px;height:20px;background:#123456 repeating-radial-gradient(#000000, #ffffff 10%)'></div></div>");
-    TEST_ASSERT_EQUAL(1, diag_count("repeating radial refused in rl"));
-    TEST_ASSERT_EQUAL(1, rects());
-    TEST_ASSERT_EQUAL(0, node("a")->grad_dir);
+    TEST_ASSERT_EQUAL(0, diag_count("repeating radial refused in rl"));
+    TEST_ASSERT_EQUAL(33, rects());
+    TEST_ASSERT_EQUAL(WE_GRAD_RADIAL, node("a")->grad_dir);
+    TEST_ASSERT_EQUAL(1, node("a")->grad_repeat);
     render("<div style='writing-mode:vertical-rl'><div id=a style='width:40px;height:20px;background:radial-gradient(#000000, #ffffff 10%)'></div></div>");
     TEST_ASSERT_EQUAL(0, diag_count("refused in vertical"));
     TEST_ASSERT_EQUAL(WE_GRAD_RADIAL, node("a")->grad_dir);

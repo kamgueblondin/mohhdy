@@ -183,6 +183,8 @@ typedef struct { int t, ok; long long v, p; } cp_q_t;
 /* Lot 95: the viewport of the value being computed (vw, vh, vmin, vmax);
  * 0 outside wf_cssprop_compute_ctx */
 static const wf_cssprop_ctx_t *cp_ctx;
+/* Lot 97: the font context (em, rem, ex, ch); 0 outside wf_cssprop_compute_font */
+static const wf_cssprop_fctx_t *cp_fctx;
 
 static const char *const cp_fn_names[] = {"calc", "min", "max", "clamp", "abs", "sign", "round", "mod", "rem",
                                           "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
@@ -304,6 +306,17 @@ static void cp_mleaf(cp_mp_t *m, cp_q_t *q) {
         if (!cp_units[k].num) {
             /* Lot 95: viewport units with the context's viewport */
             long long base = cp_vp(s + a, i - a);
+            /* Lot 97: em, rem, ex and ch with the font context (px
+             * thousandths; ex and ch half an em) */
+            if (cp_fctx && (cp_eqn(s + a, i - a, "em") || cp_eqn(s + a, i - a, "rem") ||
+                            cp_eqn(s + a, i - a, "ex") || cp_eqn(s + a, i - a, "ch"))) {
+                long long fs = cp_eqn(s + a, i - a, "rem") ? cp_fctx->rem : cp_fctx->em;
+                long long den = cp_eqn(s + a, i - a, "ex") || cp_eqn(s + a, i - a, "ch") ? 2000 : 1000;
+                if (fs <= 0) { q->ok = 0; return; }
+                if (q->ok) q->v = cp_div(raw * fs, den, 0);
+                if (!cp_fits(q->v)) q->ok = 0;
+                return;
+            }
             if (!base) { q->ok = 0; return; }
             if (q->ok) q->v = cp_div(raw * base, 100, 0);
             if (!cp_fits(q->v)) q->ok = 0;
@@ -1600,5 +1613,649 @@ int wf_cssprop_parse(const char *pre, int pn, const char *body, int bn, wf_csspr
         cp_clear(out);
         return 0;
     }
+    return 1;
+}
+
+/* ---- Lot 97: font-relative lengths ------------------------------------ */
+
+/* 1 when value names em, rem, ex or ch as the unit of a number (outside a
+ * quoted string) */
+int wf_cssprop_font_relative(const char *v) {
+    int i;
+    char q = 0;
+    if (!v) return 0;
+    for (i = 0; v[i]; i++) {
+        int a, k;
+        if (q) { if (v[i] == q) q = 0; continue; }
+        if (v[i] == '"' || v[i] == '\'') { q = v[i]; continue; }
+        if (!cp_digit(v[i])) continue;
+        if (i > 0 && cp_ident(v[i - 1]) && !cp_digit(v[i - 1]) && v[i - 1] != '-' && v[i - 1] != '+' &&
+            v[i - 1] != '.')
+            continue;   /* a digit inside a name ("h1em") */
+        k = i;
+        while (cp_digit(v[k]) || v[k] == '.') k++;
+        a = k;
+        while ((v[k] >= 'a' && v[k] <= 'z') || (v[k] >= 'A' && v[k] <= 'Z')) k++;
+        if (cp_eqn(v + a, k - a, "em") || cp_eqn(v + a, k - a, "rem") || cp_eqn(v + a, k - a, "ex") ||
+            cp_eqn(v + a, k - a, "ch"))
+            return 1;
+        i = k - 1;
+    }
+    return 0;
+}
+
+int wf_cssprop_compute_font(const wf_cssprop_t *p, const char *v, const wf_cssprop_fctx_t *c, char *out, int cap) {
+    wf_cssprop_ctx_t vc;
+    int r;
+    if (!c) return wf_cssprop_compute_ctx(p, v, 0, out, cap);
+    vc.vw = c->vw; vc.vh = c->vh;
+    cp_fctx = c;
+    r = wf_cssprop_compute_ctx(p, v, &vc, out, cap);
+    cp_fctx = 0;
+    return r;
+}
+
+/* ---- Lot 97: interpolation of computed values ------------------------- */
+
+/* the index of the first alternative of p that v matches (0 for a syntax
+ * of one type), -1 */
+static int cp_alt_index(const wf_cssprop_t *p, const char *v) {
+    int k;
+    if (!p->nalt) return wf_cssprop_match(p->syntax, v) ? 0 : -1;
+    for (k = 0; k < p->nalt && k < WF_CSSPROP_ALTS; k++) if (cp_alt(&p->alt[k], v)) return k;
+    return -1;
+}
+
+/* the next item of a '+' or '#' list from *i: [*a, *b) trimmed; 0 at the
+ * end */
+static int cp_next_item(const char *v, int n, int mult, int *i, int *a, int *b) {
+    int depth = 0, start;
+    while (*i <= n) {
+        start = *i;
+        depth = 0;
+        while (*i < n) {
+            char ch = v[*i];
+            if (ch == '(') depth++;
+            else if (ch == ')') depth--;
+            else if (depth == 0 && ((mult == WF_CSSPROP_HASH && ch == ',') || (mult == WF_CSSPROP_PLUS && cp_sp(ch)))) break;
+            (*i)++;
+        }
+        *a = start; *b = *i;
+        while (*a < *b && cp_sp(v[*a])) (*a)++;
+        while (*b > *a && cp_sp(v[*b - 1])) (*b)--;
+        (*i)++;
+        if (*b > *a) return 1;
+        if (*i > n) return 0;
+    }
+    return 0;
+}
+
+/* one numeric item as a known quantity (a unitless zero of a length is
+ * 0px): 1, 0 when it is not known */
+static int cp_item_q(int t, const char *s, int a, int b, cp_q_t *q) {
+    char item[WF_CSSPROP_VAL];
+    if (cp_copy_item(item, (int)sizeof(item), s, a, b) < 0) return 0;
+    q->t = 0; q->ok = 0; q->v = 0; q->p = 0;
+    if (cp_mfn(item)) cp_mwhole(item, q);
+    else {
+        cp_mp_t m;
+        m.s = item; m.i = 0; m.depth = 0;
+        cp_mleaf(&m, q);
+        if (item[m.i]) return 0;
+        if (q->t == WF_CSSPROP_NUMBER && (t == WF_CSSPROP_LENGTH || t == WF_CSSPROP_LENPCT)) q->t = WF_CSSPROP_LENGTH;
+    }
+    return q->t && cp_known(q);
+}
+
+/* a + round((b - a) t / 10000), half away from zero */
+static long long cp_lerp(long long a, long long b, int t) { return a + cp_div((b - a) * t, CP_S, 0); }
+
+/* one numeric item of type t: its interpolated text, -1 when it is not
+ * known or does not fit (the caller goes discrete), -2 when cap is short */
+static int cp_interp_num(int t, const char *s, int a0, int b0, const char *u, int a1, int b1, int tt, char *out, int cap) {
+    cp_q_t qa, qb, r;
+    long long pa, ca, pb, cb;
+    int n;
+    if (!cp_item_q(t, s, a0, b0, &qa) || !cp_item_q(t, u, a1, b1, &qb)) return -1;
+    cp_parts(&qa, &pa, &ca);
+    cp_parts(&qb, &pb, &cb);
+    r.ok = 1;
+    r.v = cp_lerp(pa, pb, tt);
+    r.p = cp_lerp(ca, cb, tt);
+    if (qa.t == qb.t && qa.t != WF_CSSPROP_LENPCT) {
+        r.t = qa.t;
+        if (r.t == WF_CSSPROP_PERCENT) r.v = r.p;
+    } else if ((qa.t == WF_CSSPROP_LENGTH || qa.t == WF_CSSPROP_PERCENT || qa.t == WF_CSSPROP_LENPCT) &&
+               (qb.t == WF_CSSPROP_LENGTH || qb.t == WF_CSSPROP_PERCENT || qb.t == WF_CSSPROP_LENPCT))
+        r.t = WF_CSSPROP_LENPCT;
+    else return -1;
+    if (t == WF_CSSPROP_INTEGER) r.v = cp_div(2 * r.v + CP_S, 2 * CP_S, 1) * CP_S;
+    if (!cp_fits(r.v) || !cp_fits(r.p)) return -1;
+    n = cp_fmt_q(&r, out, cap);
+    return n < 0 ? -2 : n;
+}
+
+/* a colour in sRGB: channels in 1/10000 of 0..255, alpha in 1/10000 of
+ * 0..1; 0 when it is not one this reader interpolates */
+typedef struct { long long c[3], a; } cp_rgba_t;
+
+static int cp_hexv(char c) { return cp_digit(c) ? c - '0' : (cp_low(c) - 'a' + 10); }
+
+/* one number or percentage token [a, b): *v in 1/10000, *pct 1 for % */
+static int cp_tok_num(const char *s, int a, int b, long long *v, int *pct) {
+    char item[32];
+    cp_q_t q;
+    cp_mp_t m;
+    if (cp_copy_item(item, (int)sizeof(item), s, a, b) < 0) return 0;
+    m.s = item; m.i = 0; m.depth = 0;
+    cp_mleaf(&m, &q);
+    if (item[m.i] || !q.ok || (q.t != WF_CSSPROP_NUMBER && q.t != WF_CSSPROP_PERCENT)) return 0;
+    *v = q.v;
+    *pct = q.t == WF_CSSPROP_PERCENT;
+    return 1;
+}
+
+static long long cp_clampll(long long v, long long lo, long long hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+static int cp_rgba(const char *v, cp_rgba_t *o) {
+    static const struct { const char *name; unsigned char r, g, b; } named[] = {
+        {"black", 0, 0, 0}, {"white", 255, 255, 255}, {"red", 255, 0, 0}, {"green", 0, 128, 0},
+        {"blue", 0, 0, 255}, {"yellow", 255, 255, 0}, {"gray", 128, 128, 128}, {"grey", 128, 128, 128},
+        {"silver", 192, 192, 192}, {"maroon", 128, 0, 0}, {"purple", 128, 0, 128}, {"fuchsia", 255, 0, 255},
+        {"lime", 0, 255, 0}, {"olive", 128, 128, 0}, {"navy", 0, 0, 128}, {"teal", 0, 128, 128},
+        {"aqua", 0, 255, 255}, {"orange", 255, 165, 0}, {0, 0, 0, 0}};
+    int n = cp_len(v), k;
+    o->a = CP_S;
+    if (cp_eqn(v, n, "transparent")) { o->c[0] = o->c[1] = o->c[2] = 0; o->a = 0; return 1; }
+    for (k = 0; named[k].name; k++)
+        if (cp_eqn(v, n, named[k].name)) {
+            o->c[0] = named[k].r * CP_S; o->c[1] = named[k].g * CP_S; o->c[2] = named[k].b * CP_S;
+            return 1;
+        }
+    if (v[0] == '#') {
+        int d = n == 4 || n == 5 ? 1 : 2, i;
+        if (n != 4 && n != 5 && n != 7 && n != 9) return 0;
+        for (k = 1; k < n; k++) if (!cp_hex(v[k])) return 0;
+        for (i = 0; i < 4; i++) {
+            int x;
+            if (1 + i * d >= n) break;
+            x = d == 1 ? cp_hexv(v[1 + i]) * 17 : cp_hexv(v[1 + 2 * i]) * 16 + cp_hexv(v[2 + 2 * i]);
+            if (i < 3) o->c[i] = x * CP_S;
+            else o->a = cp_div((long long)x * CP_S, 255, 0);
+        }
+        return 1;
+    }
+    if ((n > 5 && cp_eqn(v, 4, "rgb(")) || (n > 6 && cp_eqn(v, 5, "rgba("))) {
+        /* three channels and an optional alpha, by commas or by spaces
+         * with "/ alpha" */
+        int i = v[3] == '(' ? 4 : 5, got = 0, slash = 0, commas = -1;
+        if (v[n - 1] != ')') return 0;
+        while (i < n - 1) {
+            int a, b;
+            long long x;
+            int pct;
+            while (i < n - 1 && cp_sp(v[i])) i++;
+            if (i >= n - 1) break;
+            if (got > 0) {
+                int sep = 0;
+                if (v[i] == ',') { sep = 1; i++; }
+                else if (v[i] == '/') { sep = 2; i++; }
+                if (sep == 1) { if (commas == 0) return 0; commas = 1; }
+                else {
+                    if (commas == 1) return 0;
+                    commas = 0;
+                    if (sep == 2) { if (got != 3) return 0; slash = 1; }
+                }
+                if (commas == 0 && got == 3 && !slash) return 0;
+                while (i < n - 1 && cp_sp(v[i])) i++;
+            }
+            a = i;
+            while (i < n - 1 && !cp_sp(v[i]) && v[i] != ',' && v[i] != '/') i++;
+            b = i;
+            if (b == a || got >= 4 || !cp_tok_num(v, a, b, &x, &pct)) return 0;
+            if (got < 3) o->c[got] = cp_clampll(pct ? cp_div(x * 255, 100, 0) : x, 0, 255 * CP_S);
+            else o->a = cp_clampll(pct ? cp_div(x, 100, 0) : x, 0, CP_S);
+            got++;
+        }
+        return got == 3 || got == 4;
+    }
+    return 0;
+}
+
+static int cp_put_u(char *out, int *len, int cap, long long v) {
+    char d[24];
+    int k = 0;
+    unsigned long long u = (unsigned long long)v, r;
+    do { u = cp_udiv(u, 10, &r); d[k++] = (char)('0' + (int)r); } while (u && k < 20);
+    if (*len + k >= cap) return 0;
+    while (k) out[(*len)++] = d[--k];
+    out[*len] = 0;
+    return 1;
+}
+
+/* the interpolated colour text, -1 when a value is not a colour taken
+ * here, -2 when cap is short */
+static int cp_interp_color(const char *a, const char *b, int t, char *out, int cap) {
+    cp_rgba_t x, y;
+    long long an, ch[3];
+    int k, len = 0, alpha;
+    if (!cp_rgba(a, &x) || !cp_rgba(b, &y)) return -1;
+    /* alpha * 10^8: Aa 10^4 + (Ab - Aa) t */
+    an = cp_clampll(x.a * CP_S + (y.a - x.a) * t, 0, CP_S * CP_S);
+    for (k = 0; k < 3; k++) {
+        long long pa = x.c[k] * x.a, pb = y.c[k] * y.a;
+        long long pn = pa * CP_S + (pb - pa) * t;
+        ch[k] = an ? cp_clampll(cp_div(pn, an * CP_S, 0), 0, 255) : 0;
+    }
+    alpha = (int)cp_div(an, CP_S, 0);
+    if (!cp_put(out, &len, cap, alpha == CP_S ? "rgb(" : "rgba(", alpha == CP_S ? 4 : 5)) return -2;
+    for (k = 0; k < 3; k++) {
+        if (k && !cp_put(out, &len, cap, ", ", 2)) return -2;
+        if (!cp_put_u(out, &len, cap, ch[k])) return -2;
+    }
+    if (alpha != CP_S) {
+        int m;
+        if (!cp_put(out, &len, cap, ", ", 2)) return -2;
+        m = cp_fmt(alpha, "", out + len, cap - len);
+        if (m < 0) return -2;
+        len += m;
+    }
+    if (!cp_put(out, &len, cap, ")", 1)) return -2;
+    return len;
+}
+
+/* one item of type t: -1 discrete, -2 short, else its length */
+static int cp_interp_item(int t, const char *s, int a0, int b0, const char *u, int a1, int b1, int tt, char *out, int cap) {
+    if ((t >= WF_CSSPROP_LENGTH && t <= WF_CSSPROP_TIME && t != WF_CSSPROP_COLOR) || t == WF_CSSPROP_RESOLUTION)
+        return cp_interp_num(t, s, a0, b0, u, a1, b1, tt, out, cap);
+    if (t == WF_CSSPROP_COLOR) {
+        char x[WF_CSSPROP_VAL], y[WF_CSSPROP_VAL];
+        if (cp_copy_item(x, (int)sizeof(x), s, a0, b0) < 0 || cp_copy_item(y, (int)sizeof(y), u, a1, b1) < 0) return -1;
+        return cp_interp_color(x, y, tt, out, cap);
+    }
+    return -1;
+}
+
+int wf_cssprop_interp(const wf_cssprop_t *p, const char *a, const char *b, int t, char *out, int cap) {
+    const wf_cssprop_alt_t *al;
+    wf_cssprop_alt_t one;
+    int ia, ib, na, nb, len = 0, r;
+    if (!out || cap < 1) return 0;
+    out[0] = 0;
+    if (!a || !b) return 0;
+    na = cp_len(a); nb = cp_len(b);
+    if (t == 0 || t == CP_S) {
+        const char *w = t == 0 ? a : b;
+        int n = t == 0 ? na : nb;
+        if (!cp_put(out, &len, cap, w, n)) { out[0] = 0; return 0; }
+        return 2;
+    }
+    if (!p || p->syntax == WF_CSSPROP_ANY) goto discrete;
+    ia = cp_alt_index(p, a);
+    ib = cp_alt_index(p, b);
+    if (ia < 0 || ia != ib) goto discrete;
+    if (p->nalt) al = &p->alt[ia];
+    else { one.type = p->syntax; one.mult = WF_CSSPROP_ONE; one.ident[0] = 0; al = &one; }
+    if (al->mult == WF_CSSPROP_ONE) {
+        r = cp_interp_item(al->type, a, 0, na, b, 0, nb, t, out, cap);
+        if (r == -2) { out[0] = 0; return 0; }
+        if (r < 0) goto discrete;
+        return 2;
+    }
+    {
+        int i = 0, j = 0, x0, x1, y0, y1, ga, gb;
+        for (;;) {
+            ga = cp_next_item(a, na, al->mult, &i, &x0, &x1);
+            gb = cp_next_item(b, nb, al->mult, &j, &y0, &y1);
+            if (ga != gb) goto discrete;
+            if (!ga) break;
+            if (len && !cp_put(out, &len, cap, al->mult == WF_CSSPROP_HASH ? ", " : " ", al->mult == WF_CSSPROP_HASH ? 2 : 1)) {
+                out[0] = 0;
+                return 0;
+            }
+            r = cp_interp_item(al->type, a, x0, x1, b, y0, y1, t, out + len, cap - len);
+            if (r == -2) { out[0] = 0; return 0; }
+            if (r < 0) goto discrete;
+            len += r;
+        }
+        return len ? 2 : 0;
+    }
+discrete:
+    len = 0;
+    out[0] = 0;
+    if (!cp_put(out, &len, cap, t < 5000 ? a : b, t < 5000 ? na : nb)) { out[0] = 0; return 0; }
+    return 1;
+}
+
+/* ---- Lot 97: easing functions ------------------------------------------ */
+
+/* a number token [a, b) in 1/10000 (four decimals, the fifth rounds half
+ * away from zero), no unit: 1 */
+static int cp_tok_plain(const char *s, int a, int b, long long *v) {
+    int pct;
+    return cp_tok_num(s, a, b, v, &pct) && !pct;
+}
+
+/* the arguments of fn(...) at s[0..n): up to max token ranges split at
+ * commas; the count, -1 when it is not "name(...)" */
+static int cp_fn_args(const char *s, int n, const char *name, int *ta, int *tb, int max) {
+    int m = cp_len(name), i, c = 0, a;
+    if (n <= m + 1 || !cp_eqn(s, m, name) || s[m] != '(' || s[n - 1] != ')') return -1;
+    i = m + 1;
+    for (;;) {
+        int x, y;
+        a = i;
+        while (i < n - 1 && s[i] != ',') { if (s[i] == '(' || s[i] == ')') return -1; i++; }
+        x = a; y = i;
+        while (x < y && cp_sp(s[x])) x++;
+        while (y > x && cp_sp(s[y - 1])) y--;
+        if (y == x || c >= max) return -1;
+        ta[c] = x; tb[c] = y; c++;
+        if (i >= n - 1) break;
+        i++;
+    }
+    return c;
+}
+
+int wf_cssease_parse(const char *s, int n, wf_cssease_t *e) {
+    static const struct { const char *w; int x1, y1, x2, y2; } kw[] = {
+        {"ease", 2500, 1000, 2500, 10000}, {"ease-in", 4200, 0, 10000, 10000},
+        {"ease-out", 0, 0, 5800, 10000}, {"ease-in-out", 4200, 0, 5800, 10000}, {0, 0, 0, 0, 0}};
+    int ta[4], tb[4], c, k;
+    long long v[4];
+    if (!s || !e || n <= 0) return 0;
+    e->kind = WF_CSSEASE_LINEAR; e->pos = WF_CSSEASE_END; e->n = 1;
+    e->x1 = e->y1 = e->x2 = e->y2 = 0;
+    if (cp_eqn(s, n, "linear")) return 1;
+    for (k = 0; kw[k].w; k++)
+        if (cp_eqn(s, n, kw[k].w)) {
+            e->kind = WF_CSSEASE_BEZIER;
+            e->x1 = kw[k].x1; e->y1 = kw[k].y1; e->x2 = kw[k].x2; e->y2 = kw[k].y2;
+            return 1;
+        }
+    if (cp_eqn(s, n, "step-start")) { e->kind = WF_CSSEASE_STEPS; e->pos = WF_CSSEASE_START; return 1; }
+    if (cp_eqn(s, n, "step-end")) { e->kind = WF_CSSEASE_STEPS; e->pos = WF_CSSEASE_END; return 1; }
+    c = cp_fn_args(s, n, "cubic-bezier", ta, tb, 4);
+    if (c >= 0) {
+        if (c != 4) return 0;
+        for (k = 0; k < 4; k++) if (!cp_tok_plain(s, ta[k], tb[k], &v[k])) return 0;
+        if (v[0] < 0 || v[0] > CP_S || v[2] < 0 || v[2] > CP_S) return 0;
+        if (v[1] < -100 * CP_S || v[1] > 100 * CP_S || v[3] < -100 * CP_S || v[3] > 100 * CP_S) return 0;
+        e->kind = WF_CSSEASE_BEZIER;
+        e->x1 = (int)v[0]; e->y1 = (int)v[1]; e->x2 = (int)v[2]; e->y2 = (int)v[3];
+        return 1;
+    }
+    c = cp_fn_args(s, n, "steps", ta, tb, 2);
+    if (c >= 1) {
+        int steps = 0;
+        for (k = ta[0]; k < tb[0]; k++) {
+            if (!cp_digit(s[k]) || steps > 10000) return 0;
+            steps = steps * 10 + (s[k] - '0');
+        }
+        if (steps < 1 || steps > 10000) return 0;
+        e->pos = WF_CSSEASE_END;
+        if (c == 2) {
+            const char *w = s + ta[1];
+            int l = tb[1] - ta[1];
+            if (cp_eqn(w, l, "jump-start") || cp_eqn(w, l, "start")) e->pos = WF_CSSEASE_START;
+            else if (cp_eqn(w, l, "jump-end") || cp_eqn(w, l, "end")) e->pos = WF_CSSEASE_END;
+            else if (cp_eqn(w, l, "jump-none")) e->pos = WF_CSSEASE_NONE;
+            else if (cp_eqn(w, l, "jump-both")) e->pos = WF_CSSEASE_BOTH;
+            else return 0;
+        }
+        if (e->pos == WF_CSSEASE_NONE && steps < 2) return 0;
+        e->kind = WF_CSSEASE_STEPS;
+        e->n = steps;
+        return 1;
+    }
+    return 0;
+}
+
+/* 3 c1 (1-u)^2 u + 3 c2 (1-u) u^2 + 10000 u^3, u in 1/2^30, as a 128-bit
+ * value in 1/10000 * 2^-90 */
+static cp_w_t cp_bez(long long c1, long long c2, long long u) {
+    long long q = (1LL << 30) - u;
+    cp_w_t t1 = cp_wmul(cp_wmul(cp_w(q * q), u), 3 * c1);
+    cp_w_t t2 = cp_wmul(cp_wmul(cp_w(u * u), q), 3 * c2);
+    cp_w_t t3 = cp_wmul(cp_wmul(cp_w(u * u), u), CP_S);
+    return cp_wadd(cp_wadd(t1, t2), t3);
+}
+
+int wf_cssease_at(const wf_cssease_t *e, int x, int before) {
+    if (!e) return x;
+    if (e->kind == WF_CSSEASE_STEPS) {
+        long long cur = cp_div((long long)x * e->n, CP_S, 1), jumps = e->n;
+        if (e->pos == WF_CSSEASE_START || e->pos == WF_CSSEASE_BOTH) cur++;
+        if (before && (x * e->n) % CP_S == 0) cur--;     /* x, n <= 10000: fits an int */
+        if (x >= 0 && cur < 0) cur = 0;
+        if (e->pos == WF_CSSEASE_NONE) jumps = e->n - 1;
+        else if (e->pos == WF_CSSEASE_BOTH) jumps = e->n + 1;
+        if (x <= CP_S && cur > jumps) cur = jumps;
+        return (int)cp_div(cur * CP_S, jumps, 0);
+    }
+    if (e->kind == WF_CSSEASE_BEZIER) {
+        long long lo = 0, hi = 1LL << 30;
+        cp_w_t want;
+        if (x <= 0 || x >= CP_S) return x;
+        /* the smallest u with x(u) >= x: x(u) grows with u (x1, x2 in 0..1) */
+        want = cp_wshl(cp_w(x), 90);
+        while (hi - lo > 1) {
+            long long mid = (lo + hi) / 2;
+            if (cp_wlt(cp_bez(e->x1, e->x2, mid), want)) lo = mid;
+            else hi = mid;
+        }
+        return (int)cp_wshr(cp_bez(e->y1, e->y2, hi), 90).lo;
+    }
+    return x;
+}
+
+/* ---- Lot 97: the animation and transition shorthands ------------------ */
+
+/* a time token: 1 and *ms (rounded half away from zero to 1 ms) */
+static int cp_time_ms(const char *s, int a, int b, long long *ms) {
+    char item[32];
+    int i = 0, frac, k, neg = 0, fd = 0;
+    long long raw = 0;
+    if (cp_copy_item(item, (int)sizeof(item), s, a, b) < 0 || !cp_number(item, &i, &frac)) return 0;
+    k = 0;
+    if (item[k] == '+' || item[k] == '-') { neg = item[k] == '-'; k++; }
+    for (; k < i && item[k] != '.'; k++) {
+        if (raw > CP_LIM) return 0;
+        raw = raw * 10 + (item[k] - '0');
+    }
+    raw *= CP_S;
+    if (k < i) {
+        int place = 1000;
+        for (k++; k < i; k++, fd++) {
+            if (fd < 4) { raw += (item[k] - '0') * place; place /= 10; }
+            else if (fd == 4 && item[k] >= '5') raw++;
+        }
+    }
+    if (raw > CP_LIM * 10) return 0;
+    if (neg) raw = -raw;
+    if (cp_eqn(item + i, cp_len(item + i), "s")) *ms = cp_div(raw * 1000, CP_S, 0);
+    else if (cp_eqn(item + i, cp_len(item + i), "ms")) *ms = cp_div(raw, CP_S, 0);
+    else return 0;
+    return *ms <= WF_CSSANIM_MS_MAX && *ms >= -WF_CSSANIM_MS_MAX;
+}
+
+/* the next token of one list item from *i (a function with its
+ * parentheses is one token): [*a, *b); 0 at the end */
+static int cp_next_tok(const char *s, int n, int *i, int *a, int *b) {
+    int depth = 0;
+    while (*i < n && cp_sp(s[*i])) (*i)++;
+    if (*i >= n) return 0;
+    *a = *i;
+    while (*i < n && (depth || !cp_sp(s[*i]))) {
+        if (s[*i] == '(') depth++;
+        else if (s[*i] == ')') { if (!depth) return 0; depth--; }
+        (*i)++;
+    }
+    *b = *i;
+    return depth == 0;
+}
+
+/* the comma separated items of v: their ranges, the count, -1 when there
+ * are more than max or one is empty */
+static int cp_list_items(const char *v, int *ia, int *ib, int max) {
+    int n = cp_len(v), i = 0, c = 0, a, b;
+    if (!n) return -1;
+    while (cp_next_item(v, n, WF_CSSPROP_HASH, &i, &a, &b)) {
+        if (c >= max) return -1;
+        ia[c] = a; ib[c] = b; c++;
+        if (i > n) break;
+    }
+    /* an empty item ("a, , b" or a trailing comma) */
+    {
+        int commas = 0, depth = 0, k;
+        for (k = 0; k < n; k++) {
+            if (v[k] == '(') depth++;
+            else if (v[k] == ')') depth--;
+            else if (v[k] == ',' && !depth) commas++;
+        }
+        if (commas + 1 != c) return -1;
+    }
+    return c;
+}
+
+static int cp_anim_one(const char *v, int a, int b, wf_cssanim_t *o) {
+    int i = a, x, y, times = 0, have_ease = 0, have_count = 0, have_dir = 0, have_fill = 0, have_play = 0, have_name = 0;
+    long long ms;
+    int k;
+    for (k = 0; k < (int)sizeof(*o); k++) ((unsigned char *)o)[k] = 0;
+    o->iters = (int)CP_S;
+    o->ease.kind = WF_CSSEASE_BEZIER;
+    o->ease.x1 = 2500; o->ease.y1 = 1000; o->ease.x2 = 2500; o->ease.y2 = 10000; o->ease.n = 1;
+    while (cp_next_tok(v, b, &i, &x, &y)) {
+        const char *w = v + x;
+        int l = y - x;
+        wf_cssease_t e;
+        long long cnt;
+        if (cp_time_ms(v, x, y, &ms)) {
+            if (times == 0) { if (ms < 0) return 0; o->dur = (int)ms; }
+            else if (times == 1) o->delay = (int)ms;
+            else return 0;
+            times++;
+            continue;
+        }
+        if (!have_ease && wf_cssease_parse(w, l, &e)) { o->ease = e; have_ease = 1; continue; }
+        if (!have_count && cp_eqn(w, l, "infinite")) { o->iters = -1; have_count = 1; continue; }
+        if (!have_count && cp_tok_plain(v, x, y, &cnt)) {
+            if (cnt < 0 || cnt > 100000 * CP_S) return 0;
+            o->iters = (int)cnt;
+            have_count = 1;
+            continue;
+        }
+        if (!have_dir) {
+            int d = cp_eqn(w, l, "normal") ? 1 : cp_eqn(w, l, "reverse") ? 2 : cp_eqn(w, l, "alternate") ? 3 :
+                    cp_eqn(w, l, "alternate-reverse") ? 4 : 0;
+            if (d) { o->dir = (unsigned char)(d - 1); have_dir = 1; continue; }
+        }
+        if (!have_fill) {
+            int f = cp_eqn(w, l, "none") ? 1 : cp_eqn(w, l, "forwards") ? 2 : cp_eqn(w, l, "backwards") ? 3 :
+                    cp_eqn(w, l, "both") ? 4 : 0;
+            if (f) { o->fill = (unsigned char)(f - 1); have_fill = 1; continue; }
+        }
+        if (!have_play) {
+            if (cp_eqn(w, l, "running")) { have_play = 1; continue; }
+            if (cp_eqn(w, l, "paused")) { o->paused = 1; have_play = 1; continue; }
+        }
+        if (have_name) return 0;
+        if (cp_eqn(w, l, "none")) { have_name = 1; continue; }
+        if (!cp_is_ident(w, l) || cp_reserved(w, l) || l >= WF_CSSPROP_NAME) return 0;
+        for (k = 0; k < l; k++) o->name[k] = w[k];
+        o->name[l] = 0;
+        have_name = 1;
+    }
+    return 1;
+}
+
+int wf_cssanim_parse(const char *v, wf_cssanim_t *out, int max) {
+    int ia[WF_CSSANIM_MAX], ib[WF_CSSANIM_MAX], c, k;
+    if (!v || !out || max < 1) return -1;
+    if (max > WF_CSSANIM_MAX) max = WF_CSSANIM_MAX;
+    c = cp_list_items(v, ia, ib, max);
+    if (c < 1) return -1;
+    for (k = 0; k < c; k++) if (!cp_anim_one(v, ia[k], ib[k], &out[k])) return -1;
+    return c;
+}
+
+static int cp_trans_one(const char *v, int a, int b, wf_csstrans_t *o, int *none) {
+    int i = a, x, y, times = 0, have_ease = 0, have_prop = 0, have_beh = 0, k;
+    long long ms;
+    for (k = 0; k < (int)sizeof(*o); k++) ((unsigned char *)o)[k] = 0;
+    o->ease.kind = WF_CSSEASE_BEZIER;
+    o->ease.x1 = 2500; o->ease.y1 = 1000; o->ease.x2 = 2500; o->ease.y2 = 10000; o->ease.n = 1;
+    *none = 0;
+    o->prop[0] = 'a'; o->prop[1] = 'l'; o->prop[2] = 'l'; o->prop[3] = 0;
+    while (cp_next_tok(v, b, &i, &x, &y)) {
+        const char *w = v + x;
+        int l = y - x;
+        wf_cssease_t e;
+        if (cp_time_ms(v, x, y, &ms)) {
+            if (times == 0) { if (ms < 0) return 0; o->dur = (int)ms; }
+            else if (times == 1) o->delay = (int)ms;
+            else return 0;
+            times++;
+            continue;
+        }
+        if (!have_ease && wf_cssease_parse(w, l, &e)) { o->ease = e; have_ease = 1; continue; }
+        if (!have_beh && (cp_eqn(w, l, "allow-discrete") || cp_eqn(w, l, "normal"))) {
+            o->discrete = (unsigned char)cp_eqn(w, l, "allow-discrete");
+            have_beh = 1;
+            continue;
+        }
+        if (have_prop) return 0;
+        if (cp_eqn(w, l, "none")) { *none = 1; o->prop[0] = 0; have_prop = 1; continue; }
+        if (!cp_is_ident(w, l) || l >= WF_CSSPROP_NAME ||
+            (cp_reserved(w, l) && !cp_eqn(w, l, "all")))
+            return 0;
+        for (k = 0; k < l; k++) o->prop[k] = w[k];
+        o->prop[l] = 0;
+        have_prop = 1;
+    }
+    return 1;
+}
+
+int wf_csstrans_parse(const char *v, wf_csstrans_t *out, int max) {
+    int ia[WF_CSSANIM_MAX], ib[WF_CSSANIM_MAX], c, k, none;
+    if (!v || !out || max < 1) return -1;
+    if (max > WF_CSSANIM_MAX) max = WF_CSSANIM_MAX;
+    c = cp_list_items(v, ia, ib, max);
+    if (c < 1) return -1;
+    for (k = 0; k < c; k++) {
+        if (!cp_trans_one(v, ia[k], ib[k], &out[k], &none)) return -1;
+        if (none && c > 1) return -1;
+    }
+    return c;
+}
+
+int wf_cssanim_progress(const wf_cssanim_t *a, int ms, int *p, int *before) {
+    long long t, e, it = 0, simple = 0;
+    int dir;
+    if (!a || !p || !before) return 0;
+    *p = 0; *before = 0;
+    if (a->dur == 0 && a->iters < 0) return 0;
+    t = a->paused ? 0 : ms;
+    e = t - a->delay;
+    if (e < 0) {
+        if (!(a->fill & WF_CSSANIM_BACKWARDS)) return 0;
+        *before = 1;
+    } else if (a->dur > 0 && (a->iters < 0 || e * CP_S < (long long)a->dur * a->iters)) {
+        long long r;
+        it = cp_div(e, a->dur, 1);
+        r = e - it * a->dur;
+        simple = cp_div(r * CP_S, a->dur, 1);
+    } else {
+        if (!(a->fill & WF_CSSANIM_FORWARDS)) return 0;
+        if (a->iters == 0) { it = 0; simple = 0; }
+        else if (a->iters % CP_S == 0) { it = a->iters / CP_S - 1; simple = CP_S; }
+        else { it = a->iters / CP_S; simple = a->iters % CP_S; }
+    }
+    dir = a->dir;
+    if (dir == WF_CSSANIM_REVERSE || (dir == WF_CSSANIM_ALTERNATE && (it & 1)) ||
+        (dir == WF_CSSANIM_ALT_REVERSE && !(it & 1)))
+        simple = CP_S - simple;
+    *p = (int)simple;
     return 1;
 }

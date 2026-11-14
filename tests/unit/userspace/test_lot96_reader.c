@@ -48,24 +48,26 @@ static void test_repeating(void) {
                              grad("repeating-radial-gradient(circle 4px at 1px 2px, red, blue 10%)"));
     TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(from 10.5deg, red 0deg, blue 30.25deg)",
                              grad("repeating-conic-gradient(from 10.5deg, red 0deg, blue 30.25deg)"));
-    /* the period: the last stop past the first */
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-linear-gradient(red 10%, blue 10%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-linear-gradient(red 10%, blue 5%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-linear-gradient(red 100%, blue)"));
+    /* the period: the last stop past the first. Lot 97 (converted): a
+     * period of 0 is written (the engine paints the average colour; these
+     * three and the two below were REFUSED) */
+    TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red 10%, blue 10%)", grad("repeating-linear-gradient(red 10%, blue 10%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red 10%, blue 5%)", grad("repeating-linear-gradient(red 10%, blue 5%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red 100%, blue)", grad("repeating-linear-gradient(red 100%, blue)"));
     /* lime 40% is raised to 50%, blue has the default 100% */
     TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red 50%, lime 40%, blue)", grad("repeating-linear-gradient(red 50%, lime 40%, blue)"));
     TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red 50%, lime 60%, blue 0%)", grad("repeating-linear-gradient(red 50%, lime 60%, blue 0%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-linear-gradient(red 50%, lime 40%, blue 0%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-conic-gradient(red 36deg, blue 10%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red 50%, lime 40%, blue 0%)", grad("repeating-linear-gradient(red 50%, lime 40%, blue 0%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(red 36deg, blue 10%)", grad("repeating-conic-gradient(red 36deg, blue 10%)"));
     TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(red 36deg, blue 10.1%)", grad("repeating-conic-gradient(red 36deg, blue 10.1%)"));
     /* stop positions: 10.5deg is 292/10000 of a turn (2.9% is 290),
      * 0.35deg 10/10000 (rounded), 0.34deg 9/10000; 10.5% is 1050 */
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-conic-gradient(red 10.5deg, blue 2.9%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(red 10.5deg, blue 2.9%)", grad("repeating-conic-gradient(red 10.5deg, blue 2.9%)"));   /* Lot 97 (converted): was REFUSED (period 0) */
     TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(red 10.5deg, blue 3%)", grad("repeating-conic-gradient(red 10.5deg, blue 3%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-conic-gradient(red 0.35deg, blue 0.1%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(red 0.35deg, blue 0.1%)", grad("repeating-conic-gradient(red 0.35deg, blue 0.1%)"));   /* Lot 97 (converted): was REFUSED (period 0) */
     TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(red 0.34deg, blue 0.1%)", grad("repeating-conic-gradient(red 0.34deg, blue 0.1%)"));
     TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red 10%, blue 10.5%)", grad("repeating-linear-gradient(red 10%, blue 10.5%)"));
-    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-linear-gradient(red, blue 0%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red, blue 0%)", grad("repeating-linear-gradient(red, blue 0%)"));   /* Lot 97 (converted): was REFUSED (period 0) */
     TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red, blue 0.1%)", grad("repeating-linear-gradient(red, blue 0.1%)"));
     /* a gradient that does not repeat keeps a period of 0 */
     TEST_ASSERT_EQUAL_STRING("linear-gradient(red 10%, blue 10%)", grad("linear-gradient(red 10%, blue 10%)"));
@@ -105,7 +107,8 @@ static void test_layers_and_shorthand(void) {
     TEST_ASSERT(wf_cssbg_image("url(a.png), repeating-linear-gradient(red, blue 10%)", g_v, (int)sizeof(g_v)) > 0);
     TEST_ASSERT_EQUAL_STRING("url(a.png), repeating-linear-gradient(red, blue 10%)", g_v);
     TEST_ASSERT_EQUAL(0, wf_cssbg_image("repeating-linear-gradient(red, blue 10%), url(a.png)", g_v, (int)sizeof(g_v)));
-    TEST_ASSERT_EQUAL(0, wf_cssbg_image("repeating-linear-gradient(red 10%, blue 10%)", g_v, (int)sizeof(g_v)));
+    TEST_ASSERT(wf_cssbg_image("repeating-linear-gradient(red 10%, blue 10%)", g_v, (int)sizeof(g_v)) > 0);   /* Lot 97 (converted): was 0 */
+    TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red 10%, blue 10%)", g_v);
     TEST_ASSERT(wf_cssbg_shorthand("repeating-radial-gradient(red, blue 10%) no-repeat center", &g_bg));
     TEST_ASSERT_EQUAL_STRING("repeating-radial-gradient(red, blue 10%)", g_bg.image);
     TEST_ASSERT_EQUAL_STRING("no-repeat", g_bg.repeat);
@@ -117,13 +120,13 @@ static void test_layers_and_shorthand(void) {
          "#c { background-image: url(a.png), repeating-linear-gradient(1rad, red, blue 10%) }",
          "<div id=a>a</div><div id=b>b</div><div id=c>c</div>");
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:repeating-conic-gradient(from 28.65deg, red, blue 25%)\"", style_of("a"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-image:repeating-linear-gradient(red 10%, blue 10%)\"", style_of("b"));   /* Lot 97 (converted): was "" */
     TEST_ASSERT_EQUAL_STRING(" style=\"background-image:url(a.png), repeating-linear-gradient(57.3deg, red, blue 10%)\"", style_of("c"));
 }
 
 static void test_registered_image(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-linear-gradient(red, blue 10%)"));
-    TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-linear-gradient(red 10%, blue 10%)"));
+    TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "repeating-linear-gradient(red 10%, blue 10%)"));   /* Lot 97 (converted): was 0 */
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "linear-gradient(red, 10px)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_IMAGE, "conic-gradient(red 400deg, blue)"));
@@ -131,7 +134,10 @@ static void test_registered_image(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_IMAGE, "url(a.png)"));
     /* a list of images: each one is checked */
     TEST_ASSERT_EQUAL(1, mp("'<image>+'", "linear-gradient(red, blue) repeating-radial-gradient(red, blue 5%)"));
-    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "linear-gradient(red, blue) repeating-radial-gradient(red 5%, blue 5%)"));
+    /* Lot 97 (converted): a period of 0 matches now (was 0); a gradient
+     * with one stop still makes the list fail */
+    TEST_ASSERT_EQUAL(1, mp("'<image>+'", "linear-gradient(red, blue) repeating-radial-gradient(red 5%, blue 5%)"));
+    TEST_ASSERT_EQUAL(0, mp("'<image>+'", "linear-gradient(red, blue) repeating-radial-gradient(red 5%)"));
     TEST_ASSERT_EQUAL(1, mp("'<image># | <color>'", "url(a.png), repeating-conic-gradient(red, blue 1deg)"));
     TEST_ASSERT_EQUAL(0, mp("'<image># | <color>'", "url(a.png), repeating-conic-gradient(red 1.111deg, blue)"));
 }
