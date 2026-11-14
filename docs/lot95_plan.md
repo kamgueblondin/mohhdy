@@ -55,7 +55,8 @@ docs) and about 720 lines of converted suites (review point 6). This is above th
 7. Removed while writing the mutations, since no result could change: the fits check of cp_num_item (cp_known already covers it), the trailing-text check after a plain leaf (the item already matches its type, f45e51f), the length check of cp_image, the space check of cp_tfunc_end and the early capacity checks of the mix writer; all appends of computed text go through one helper (cp_put). The byte sweep of the hand test found that the transform writer refused a value that fit its buffer exactly (one spare byte); fixed in ec63a3f.
 8. Mutations: 130 applied / 130 killed / 0 survived (129 host mutations of rows A to D, and one QEMU mutation: WF_CSSVAR_NAME 32 to 24, qemu-lot95 failed on #long95, the 31-byte name). The first host run on ec63a3f (130 mutations) left 10 survivors; f45e51f adds witnesses for nine (vmax without a viewport width, a px overflow undone by a later subtraction, unclosed transform functions such as "rotate(0degX", a percentage z in translate3d, an all-space transform list, a url ending in a backslash, a control byte in a url, a 31-byte name set and read on one element, and a byte sweep of as-written list items), all killed by a second run (9/9); the tenth (M95-cv-trail) could not change a result and its check was removed (point 7), so it is not counted (mutations.txt).
 9. CI: one new job, lot95-reader (make qemu-lot95, no guest clock option). The pull_request trigger keeps no branches filter.
-10. ASan: see Gates.
+10. ASan: base and head fail the same 5 suites, no new failure (see Gates).
+12. qemu-web-layout failed once in the gate run (timeout after lot56.html rendered) and passed when rerun alone; both results are in Gates.
 11. Size: about 11300 added lines, above the 8000 to 10000 target; the generated suites are 7759 of them. Fractional degrees and repeating gradients were therefore not started (Not done 1).
 
 ## Not done (first gaps for lot 96)
@@ -77,4 +78,57 @@ QEMU: tests/scripts/test_qemu_lot95.py, `make qemu-lot95` (one boot at 1x): /lot
 
 ## Gates on the box
 
-Gates are run on the head of this commit; the results are added by the next docs commit.
+Run on 12bd3a5 (the code of this lot; the later commit changes docs only) on 14 November 2026 (UTC+4), gate starts 00:54:12 to 04:53:22 (DONE 04:53), one QEMU guest at a time (scripts in /workspace/run/lot95: gates.sh). Failed: qemu-web-layout (see below; rerun alone once, it passed); every other gate passed and none was rerun.
+
+| Gate | Result | Time |
+|------|--------|------|
+| make-all | pass | 1 s |
+| test-all | pass | 269 s |
+| roadmap-check | pass | 0 s |
+| font-check | pass | 0 s |
+| secrets | pass | 7 s |
+| strict-image | pass | 1 s |
+| qemu-lot95 | pass | 32 s |
+| qemu-lot94 | pass | 40 s |
+| qemu-lot93 | pass | 31 s |
+| qemu-lot92 | pass | 467 s |
+| qemu-lot91 | pass | 869 s |
+| qemu-lot90 | pass | 1308 s |
+| qemu-gui-text-scale | pass | 166 s |
+| qemu-gui-parity | pass | 831 s |
+| qemu-lot89 | pass | 663 s |
+| qemu-p2p | pass | 1496 s |
+| qemu-p2p-mesh | pass | 107 s |
+| qemu-p2p-phase5 | pass | 606 s |
+| qemu-net-wire | pass | 84 s |
+| qemu-lot67-web | pass | 684 s |
+| qemu-lot88-desk | pass | 686 s |
+| qemu-lot88-tv | pass | 867 s |
+| qemu-lot87 | pass | 209 s |
+| qemu-lot86 | pass | 585 s |
+| qemu-lot85 | pass | 154 s |
+| qemu-lot84 | pass | 562 s |
+| qemu-lot83 | pass | 108 s |
+| qemu-lot82 | pass | 97 s |
+| qemu-lot81 | pass | 360 s |
+| qemu-lot80 | pass | 97 s |
+| qemu-lot79 | pass | 534 s |
+| qemu-lot78 | pass | 39 s |
+| qemu-lot77 | pass | 25 s |
+| qemu-lot76 | pass | 21 s |
+| qemu-lot75 | pass | 91 s |
+| qemu-lot74 | pass | 96 s |
+| qemu-lot73 | pass | 235 s |
+| qemu-lot72 | pass | 265 s |
+| qemu-lot71 | pass | 685 s |
+| qemu-web-layout | FAIL rc=2 | 901 s |
+| qemu-production | pass | 71 s |
+| tree-clean | pass | 0 s |
+
+make test-all: 21520 tests, 21520 passed, 0 failed (Lot 94 head: 21041).
+
+ASan and UBSan (TEST_CC="gcc -fsanitize=address,undefined -fno-sanitize-recover=all", make test-all on git archive copies of each tree): base 3173f47 20956 tests, 5 failed (test_gpt2_infer, test_pmm, test_vfs_service, test_lot87_web, test_webrt), 1140 s; head 12bd3a5 21435 tests, 5 failed (the same five), 1612 s. All Lot 95 suites and the converted suites pass under ASan; no new failure. The ASan runs overlapped the mutation run and the first gates.
+
+qemu-web-layout: the gate run failed it (rc=2, 901 s): the harness timed out waiting for 'osui web close file=/web/lot56.html' after the page had rendered and its 1952 pixels had been compared (logs/gate_qemu-web-layout.txt; the log tail ends in the middle of that line). The page has no style rules or custom properties (render line: rules 0, vars 0), and Lot 95 changes no engine, shell or kernel code (webeng.c is unchanged). A rerun of make qemu-web-layout alone on 12bd3a5 after the gate run (04:57 to 05:13, logs/gate_qemu-web-layout-rerun.txt) passed in 952 s ("QEMU web layout contract passed"). Read as a likely timing flake (the guests were slower than in Lot 94 on this box: qemu-lot90 1308 s vs 597 s, qemu-p2p 1496 s vs 1109 s); both results are reported and the table keeps the failure. No base comparison was run because the rerun passed.
+
+Mutations: 130 applied / 130 killed / 0 survived (129 host, 1 QEMU), see review point 8.
