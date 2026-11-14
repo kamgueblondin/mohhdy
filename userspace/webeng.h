@@ -260,12 +260,20 @@ typedef struct { uint8_t kind, pct; int16_t x, y; } we_transform_t;
 /* Lot 62: linear gradients, axis-aligned, up to 4 stops, at most
  * WE_GRAD_BANDS solid bands per box. Lot 94: a linear gradient at any
  * whole-degree angle or towards a corner (WE_GRAD_ANGLE) and a conic
- * gradient (WE_GRAD_CONIC) paint at most WE_GRAD_CELLS solid cells. */
+ * gradient (WE_GRAD_CONIC) paint at most WE_GRAD_CELLS solid cells.
+ * Lot 96: angles in 1/100 degree; repeating-* gradients (grad_repeat)
+ * are all painted in cells. */
 enum { WE_BOX_BORDER = 0, WE_BOX_PADDING = 1, WE_BOX_CONTENT = 2 };
 enum { WE_TT_NONE = 0, WE_TT_UPPER = 1, WE_TT_LOWER = 2, WE_TT_CAPITALIZE = 3 };
 #define WE_GRAD_STOPS 4
 #define WE_GRAD_BANDS 8
 #define WE_GRAD_CELLS 32
+/* Lot 96: a repeating radial gradient is painted when both radii are at
+ * most WE_GRAD_RADIUS_MAX px and every doubled cell offset from the
+ * centre at most WE_GRAD_OFFSET_MAX ("repeating gradient too large"
+ * otherwise; 64-bit bounds) */
+#define WE_GRAD_RADIUS_MAX 8191
+#define WE_GRAD_OFFSET_MAX 32767
 enum { WE_GRAD_BOTTOM = 1, WE_GRAD_RIGHT = 2, WE_GRAD_TOP = 3, WE_GRAD_LEFT = 4, WE_GRAD_RADIAL = 5,
        WE_GRAD_ANGLE = 6, WE_GRAD_CONIC = 7 };
 /* lot 62 round 2: radial ending shape, bit 0 circle, bits 1..2 extent */
@@ -474,6 +482,10 @@ typedef struct {
      * grad_at (as radial) and stop positions are 1/10000 of a turn. */
     int16_t grad_angle;
     uint8_t grad_corner;
+    /* Lot 96: the hundredths of grad_angle (the angle is grad_angle +
+     * grad_frac / 100 degrees, 0..359.99), and 1 for a repeating-*
+     * gradient (its first to last stop repeat; painted in cells). */
+    uint8_t grad_frac, grad_repeat;
     /* Lot 63: radial centre (bit 0/1: x/y in percent) and explicit size
      * (-1: the extent keyword; bit 2/3 of grad_at_pct: rx/ry in percent). */
     int16_t grad_at[2], grad_size[2];

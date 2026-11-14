@@ -1,5 +1,6 @@
 /* wf_cssprop.c - Lot 90: see wf_cssprop.h. */
 #include "wf_cssprop.h"
+#include "wf_cssbg.h"
 
 static int cp_sp(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 static char cp_low(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
@@ -1160,23 +1161,13 @@ static int cp_group_end(const char *s, int i, int b) {
     return -1;
 }
 
-/* <image>: a url, or a gradient function whose parentheses balance and
- * close at the end (its stops are checked by the background reader, not
- * here) */
+/* <image>: a url, or a gradient the background reader takes (Lot 96: its
+ * stops are checked by wf_cssbg_gradient; Lot 95: only balanced
+ * parentheses closing at the end) */
 static int cp_image(const char *s, int a, int b) {
-    static const char *const g[] = {"linear-gradient(", "radial-gradient(", "conic-gradient(",
-                                    "repeating-linear-gradient(", "repeating-radial-gradient(",
-                                    "repeating-conic-gradient(", 0};
-    int k, i;
+    char t[WF_CSSBG_VAL];
     if (cp_url(s, a, b)) return 1;
-    for (k = 0; g[k]; k++) {
-        int l = cp_len(g[k]);
-        if (!cp_eqn(s + a, l, g[k])) continue;
-        if (cp_group_end(s, a + l - 1, b) != b) return 0;
-        for (i = a + l; i < b - 1; i++) if (!cp_sp(s[i])) return 1;
-        return 0;
-    }
-    return 0;
+    return wf_cssbg_gradient(s + a, b - a, t, (int)sizeof t) > 0;
 }
 
 /* the transform functions and their arguments: P length-percentage, L

@@ -166,7 +166,10 @@ static void test_parse(void) {
     TEST_ASSERT_EQUAL(100, n->grad_at[1]);
     TEST_ASSERT_EQUAL(3, n->grad_at_pct);
     TEST_ASSERT_EQUAL(WE_GRAD_RIGHT, node("f")->grad_dir);          /* a quarter turn keeps its bands */
-    TEST_ASSERT_EQUAL(45, node("g")->grad_angle);                   /* half away from zero */
+    /* Lot 96 (converted): kept to 1/100 degree (Lot 94: 45, whole
+     * degrees half away from zero) */
+    TEST_ASSERT_EQUAL(44, node("g")->grad_angle);
+    TEST_ASSERT_EQUAL(50, node("g")->grad_frac);
     TEST_ASSERT_EQUAL(0, node("g")->grad_corner);
     /* a conic layer after an image layer, and the shorthand with a repeat */
     render("<div id=a style='background-image:url(a.png), conic-gradient(from 90deg, red, blue)'></div>"

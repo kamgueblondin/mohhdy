@@ -28,7 +28,8 @@ the engine draws):
   Lot 94 (converted): any angle the engine reads is taken: deg |v| <= 3600
   (four decimals), grad |v| <= 4000 and turn |v| <= 10 (two decimals),
   any radian value (two integer digits, four decimals) written as its
-  whole degrees, and "to" a corner; see scripts/lot94_gradgen.py.
+  whole degrees (Lot 96 (converted): to 1/100 degree), and "to" a corner;
+  see scripts/lot94_gradgen.py.
 * background-clip / background-origin: one of border-box, padding-box,
   content-box, or a list of up to four that all name the same box (the
   engine paints every layer in one box); text is refused.
@@ -47,6 +48,9 @@ Run: python3 scripts/lot91_bggen.py
 import math
 import os
 import random
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import lot96_gradmodel as M96  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "tests", "unit", "userspace")
@@ -202,16 +206,16 @@ def radial_case(rng):
 def rad_degrees(t):
     """Lot 92: the degrees a radian angle stands for, or None. Lot 94
     (converted): every radian value is its whole degrees, x * 180 / pi
-    rounded half away from zero (Lot 92 kept only multiples of 90)"""
+    rounded half away from zero (Lot 92 kept only multiples of 90). Lot 96
+    (converted): to 1/100 degree (scripts/lot96_gradmodel.py)"""
     body = t[:-3]
     try:
-        r = float(body)
+        float(body)
     except ValueError:
         return None
-    deg = abs(r) * 180.0 / math.pi
-    w = int(math.floor(deg + 0.5))
-    assert abs(deg - math.floor(deg) - 0.5) > 1e-6
-    return "%ddeg" % (-w if r < 0 and w else w)
+    c = M96.rad_centi(body)
+    assert c is not None
+    return M96.centi_text(c)
 
 
 def angle_case(rng):

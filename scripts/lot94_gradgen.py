@@ -8,21 +8,31 @@ in docs/lot94_plan.md), not from the C sources.
   linear gradient, a gradient to a corner or a conic gradient; every
   painted rectangle (x, y, w, h, colour) is checked;
 * test_lot94_bgval.c: the reader (wf_cssbg.c) checks and writes gradient
-  values: any linear angle (deg, turn, grad; radians as whole degrees),
+  values: any linear angle (deg, turn, grad; radians as degrees, Lot 96:
+  to 1/100 degree),
   "to" a corner, conic-gradient() with from, at and angle stops;
 * test_lot94_sheet.c: a sheet goes through the reader, the style it gives
   goes on a sized div, and the engine's rectangles are checked (radians
-  and registered angles end up as whole degrees).
+  and registered angles end up as degrees).
+
+Lot 96 (converted): angles are kept to 1/100 degree (Lot 94: whole
+degrees): the engine's cells for fractional angles, the reader's radians
+written to 1/100 degree, a radian conic "from" taken, a conic stop with
+two decimals taken ("red 45.5deg" was a refused stop; "red 45.555deg" now
+is), and the accept check reads the angle as grad_angle * 100 + grad_frac.
+See scripts/lot96_gradmodel.py.
 
 Run: python3 scripts/lot94_gradgen.py
 """
 import math
 import os
+from fractions import Fraction as F
 import random
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lot94_gradmodel as M  # noqa: E402
+import lot96_gradmodel as M96  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "tests", "unit", "userspace")
@@ -128,7 +138,7 @@ def paint(o, c, stops, pfun):
 
 # angles as the engine reads them (tf_angle): exact decimal values
 def engine_angle(rng):
-    """(text, whole degrees) that is not a multiple of 90"""
+    """(text, degrees: Lot 96 a Fraction to 1/100) not a multiple of 90"""
     while True:
         k = rng.randrange(5)
         if k <= 1:
@@ -358,11 +368,11 @@ def reader_angle(rng):
             t = neg + body + rcase(rng, "rad")
             if (len(str(whole)) if ip else 0) > 2 or places > 4:
                 return t, None
-            d = M.rad_whole_degrees(neg + body)
+            d = M96.rad_centi(neg + body)
             if d is None:
                 STATS["ambiguous"] += 1
                 continue
-            return t, "%ddeg" % d
+            return t, M96.centi_text(d)
     if k == 7:
         v, h = rng.choice(CORNERS)
         words = [v, h] if rng.random() < 0.5 else [h, v]
@@ -391,8 +401,11 @@ def conic_reader_first(rng):
         return None, None, True
     if k in (1, 2):
         a, aw = reader_angle(rng)
-        if aw is None or (a.lower().endswith("rad") and not a.lower().endswith("grad")) or a.lower().startswith("to"):
+        if aw is None or a.lower().startswith("to"):
             return rcase(rng, "from") + " " + a, None, False
+        # Lot 96 (converted): a radian "from" is taken, written as degrees
+        if a.lower().endswith("rad") and not a.lower().endswith("grad"):
+            return rcase(rng, "from") + " " + a, "from " + aw, True
         return rcase(rng, "from") + " " + a, None, True
     if k in (3, 4):
         pt, _, _ = position(rng)
@@ -404,17 +417,17 @@ def conic_reader_first(rng):
     if k == 6:
         pt = rng.choice(["left", "top", "center", "30%", "12px", "right bottom", "left 10px", "0 0"])
         return rcase(rng, "at") + " " + pt, None, True
-    t = rng.choice(["from", "at", "from 45px", "from 1rad", "at left from 45deg", "from 45deg left", "from 45deg at",
+    t = rng.choice(["from", "at", "from 45px", "from 1.rad", "at left from 45deg", "from 45deg left", "from 45deg at",
                     "at left right", "at top bottom", "at 10em 10px", "from at left", "45deg", "from 10deg 20deg",
                     "at left top center"])
     return t, None, False
 
 
 def conic_val_case(rng):
-    first, _, ok = conic_reader_first(rng)
+    first, fw, ok = conic_reader_first(rng)
     st = reader_stops(rng, conic=True)
     if rng.random() < 0.12:
-        bad = rng.choice(["red 361deg", "red 45.5deg", "red -10deg", "red 1turn", "red 0360deg", "red 10deg 20%",
+        bad = rng.choice(["red 361deg", "red 45.555deg", "red -10deg", "red 1turn", "red 0360deg", "red 10deg 20%",
                           "red deg", "red 1rad", "red 100.5%"])
         st[rng.randrange(len(st))] = bad
         ok = False
@@ -425,7 +438,7 @@ def conic_val_case(rng):
     src = rcase(rng, "conic-gradient(") + sp(rng) + ("," + sp(rng)).join(args) + sp(rng) + ")"
     if not ok:
         return src, None
-    normal = "conic-gradient(" + ", ".join(norm_words(x) for x in args) + ")"
+    normal = "conic-gradient(" + ", ".join(fw if (fw and k == 0) else norm_words(x) for k, x in enumerate(args)) + ")"
     return src, (normal if len(normal) <= 127 else None)
 
 
@@ -456,16 +469,24 @@ def write_val():
                  ("linear-gradient(10.01turn, red, blue)", None),
                  ("linear-gradient(4000grad, red, blue)", "linear-gradient(4000grad, red, blue)"),
                  ("linear-gradient(4000.01grad, red, blue)", None),
-                 ("linear-gradient(99.9999rad, red, blue)", "linear-gradient(%ddeg, red, blue)" % M.rad_whole_degrees("99.9999")),
-                 ("linear-gradient(-99.9999rad, red, blue)", "linear-gradient(%ddeg, red, blue)" % M.rad_whole_degrees("-99.9999")),
-                 ("linear-gradient(0.0087rad, red, blue)", "linear-gradient(0deg, red, blue)"),
-                 ("linear-gradient(0.0088rad, red, blue)", "linear-gradient(1deg, red, blue)"),
-                 ("linear-gradient(-0.0088rad, red, blue)", "linear-gradient(-1deg, red, blue)"),
+                 ("linear-gradient(99.9999rad, red, blue)", "linear-gradient(%s, red, blue)" % M96.centi_text(M96.rad_centi("99.9999"))),
+                 ("linear-gradient(-99.9999rad, red, blue)", "linear-gradient(%s, red, blue)" % M96.centi_text(M96.rad_centi("-99.9999"))),
+                 # Lot 96 (converted): to 1/100 degree (Lot 94: 0deg, 1deg, -1deg)
+                 ("linear-gradient(0.0087rad, red, blue)", "linear-gradient(0.5deg, red, blue)"),
+                 ("linear-gradient(0.0088rad, red, blue)", "linear-gradient(0.5deg, red, blue)"),
+                 ("linear-gradient(-0.0088rad, red, blue)", "linear-gradient(-0.5deg, red, blue)"),
+                 ("linear-gradient(0.0001rad, red, blue)", "linear-gradient(0.01deg, red, blue)"),
+                 ("linear-gradient(0.0000rad, red, blue)", "linear-gradient(0deg, red, blue)"),
                  ("linear-gradient(to left top, red, blue)", "linear-gradient(to left top, red, blue)"),
                  ("linear-gradient(to left left, red, blue)", None),
                  ("linear-gradient(to top left top, red, blue)", None),
                  ("linear-gradient(to top left top left, red, blue)", None),
-                 ("conic-gradient(from 1rad, red, blue)", None),
+                 # Lot 96 (converted): a radian "from" is taken (Lot 94: refused)
+                 ("conic-gradient(from 1rad, red, blue)", "conic-gradient(from 57.3deg, red, blue)"),
+                 ("conic-gradient(from -1rad at 10px 0, red, blue)", "conic-gradient(from -57.3deg at 10px 0, red, blue)"),
+                 ("conic-gradient(red 45.5deg, blue 359.99deg)", "conic-gradient(red 45.5deg, blue 359.99deg)"),
+                 ("conic-gradient(red 360.01deg, blue)", None), ("conic-gradient(red 45.555deg, blue)", None),
+                 ("conic-gradient(red 45.deg, blue)", None), ("conic-gradient(red .5deg, blue)", None),
                  ("conic-gradient(from -3600deg at 0 0, red, blue)", "conic-gradient(from -3600deg at 0 0, red, blue)"),
                  ("conic-gradient(at left, red, blue)", "conic-gradient(at left, red, blue)"),
                  ("conic-gradient(from 10deg, red, blue, lime, navy, black)", None)]:
@@ -516,6 +537,7 @@ def split_args(normal):
 
 
 def angle_degrees(text):
+    """Lot 96 (converted): a Fraction in 1/100 degree"""
     for unit in ("turn", "grad", "deg"):
         if text.endswith(unit):
             return M.decimal_degrees(text[:-len(unit)], unit)
@@ -550,7 +572,7 @@ def engine_reading(normal):
     if d is None:
         return "WE_GRAD_BOTTOM", 0, 0, len(args)
     if d % 90 == 0:
-        return QUARTERS[(d // 90) % 4], 0, 0, len(args) - 1
+        return QUARTERS[int(d // 90) % 4], 0, 0, len(args) - 1
     return "WE_GRAD_ANGLE", d % 360, 0, len(args) - 1
 
 
@@ -580,7 +602,7 @@ def write_accept(normals):
          "    if (!g_n) return;",
          "    n = g_n;",
          "    TEST_ASSERT_EQUAL(dir, n->grad_dir);",
-         "    TEST_ASSERT_EQUAL(angle, n->grad_angle);",
+         "    TEST_ASSERT_EQUAL(angle, n->grad_angle * 100 + n->grad_frac);   /* Lot 96: 1/100 degree */",
          "    TEST_ASSERT_EQUAL(corner, n->grad_corner);",
          "    TEST_ASSERT_EQUAL(stops, n->grad_count);",
          "}", ""]
@@ -591,7 +613,7 @@ def write_accept(normals):
         o.append("static void %s(void) {" % name)
         for v in normals[b:b + per]:
             d, a, c, n = engine_reading(v)
-            o.append("    check(%s, %s, %d, %d, %d);" % (cstr(v), d, a, c, n))
+            o.append("    check(%s, %s, %d, %d, %d);" % (cstr(v), d, int(F(a) * 100), c, n))
         o.append("}")
         o.append("")
     finish(o, names, "test_lot94_accept.c")
@@ -629,13 +651,15 @@ def sheet_case(rng):
     reg = ""
     while True:
         if k == 0:
-            # radians: the reader writes whole degrees
+            # radians: the reader writes degrees (Lot 96 (converted): to
+            # 1/100 degree, Lot 94: whole degrees)
             body = "%d.%04d" % (rng.randrange(0, 13), rng.randrange(10000))
             if rng.random() < 0.3:
                 body = "-" + body
-            d = M.rad_whole_degrees(body)
-            if d is None or d % 90 == 0:
+            d = M96.rad_centi(body)
+            if d is None or d % 9000 == 0:
                 continue
+            d = F(d, 100)
             first = body + "rad"
             pfun = (lambda d: lambda cell: M.linear_p(o, cell, angle=d))(d)
             kind = "linear"

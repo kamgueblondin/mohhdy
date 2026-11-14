@@ -31,884 +31,906 @@ static void check(const char *v, int dir, int angle, int corner, int stops) {
     if (!g_n) return;
     n = g_n;
     TEST_ASSERT_EQUAL(dir, n->grad_dir);
-    TEST_ASSERT_EQUAL(angle, n->grad_angle);
+    TEST_ASSERT_EQUAL(angle, n->grad_angle * 100 + n->grad_frac);   /* Lot 96: 1/100 degree */
     TEST_ASSERT_EQUAL(corner, n->grad_corner);
     TEST_ASSERT_EQUAL(stops, n->grad_count);
 }
 
 static void test_l94_accept_0(void) {
-    check("linear-gradient(2.03turn, #579 6.4%, white 24.7%, rgb(47, 49, 69), orange 0.2%)", WE_GRAD_ANGLE, 11, 0, 4);
-    check("linear-gradient(3054deg, #4432f5, navy)", WE_GRAD_ANGLE, 174, 0, 2);
-    check("linear-gradient(3704deg, #877, rgb(244, 98, 220) 64.9%, #a40a6d, #d09 90.2%)", WE_GRAD_ANGLE, 104, 0, 4);
-    check("linear-gradient(29deg, #a99a9b 7.8%, teal)", WE_GRAD_ANGLE, 29, 0, 2);
-    check("linear-gradient(-3227.0760deg, rgb(172, 86, 42), white, rgb(22, 13, 152) 10%)", WE_GRAD_ANGLE, 13, 0, 3);
-    check("linear-gradient(4379deg, #b1e, navy, blue)", WE_GRAD_ANGLE, 59, 0, 3);
-    check("linear-gradient(523.7deg, rgb(128, 20, 210), gray)", WE_GRAD_ANGLE, 164, 0, 2);
-    check("linear-gradient(-1629deg, #1e8, #a50)", WE_GRAD_ANGLE, 171, 0, 2);
+    check("linear-gradient(2.03turn, #579 6.4%, white 24.7%, rgb(47, 49, 69), orange 0.2%)", WE_GRAD_ANGLE, 1080, 0, 4);
+    check("linear-gradient(3054deg, #4432f5, navy)", WE_GRAD_ANGLE, 17400, 0, 2);
+    check("linear-gradient(3704.23deg, #877, rgb(244, 98, 220) 64.9%, #a40a6d, #d09 90.2%)", WE_GRAD_ANGLE, 10423, 0, 4);
+    check("linear-gradient(28.65deg, #a99a9b 7.8%, teal)", WE_GRAD_ANGLE, 2865, 0, 2);
+    check("linear-gradient(-3227.0760deg, rgb(172, 86, 42), white, rgb(22, 13, 152) 10%)", WE_GRAD_ANGLE, 1292, 0, 3);
+    check("linear-gradient(4378.54deg, #b1e, navy, blue)", WE_GRAD_ANGLE, 5854, 0, 3);
+    check("linear-gradient(523.7deg, rgb(128, 20, 210), gray)", WE_GRAD_ANGLE, 16370, 0, 2);
+    check("linear-gradient(-1629deg, #1e8, #a50)", WE_GRAD_ANGLE, 17100, 0, 2);
 }
 
 static void test_l94_accept_1(void) {
-    check("linear-gradient(524.8deg, white, black)", WE_GRAD_ANGLE, 165, 0, 2);
-    check("linear-gradient(2044.0537deg, #948, rgb(213, 241, 56))", WE_GRAD_ANGLE, 244, 0, 2);
-    check("linear-gradient(-13deg, rgb(232, 183, 205), lime, #0e9, #f51 77.6%)", WE_GRAD_ANGLE, 347, 0, 4);
-    check("linear-gradient(529deg, #66122f, teal, #c71, blue 14.5%)", WE_GRAD_ANGLE, 169, 0, 4);
-    check("linear-gradient(1deg, #774 53.5%, white, rgb(87, 98, 169), rgb(63, 191, 203))", WE_GRAD_ANGLE, 1, 0, 4);
-    check("linear-gradient(-2924deg, #cee0c3, rgb(40, 154, 238), gray 30.1%, rgb(75, 33, 85))", WE_GRAD_ANGLE, 316, 0, 4);
+    check("linear-gradient(524.8deg, white, black)", WE_GRAD_ANGLE, 16480, 0, 2);
+    check("linear-gradient(2044.0537deg, #948, rgb(213, 241, 56))", WE_GRAD_ANGLE, 24405, 0, 2);
+    check("linear-gradient(-13.18deg, rgb(232, 183, 205), lime, #0e9, #f51 77.6%)", WE_GRAD_ANGLE, 34682, 0, 4);
+    check("linear-gradient(529deg, #66122f, teal, #c71, blue 14.5%)", WE_GRAD_ANGLE, 16900, 0, 4);
+    check("linear-gradient(1deg, #774 53.5%, white, rgb(87, 98, 169), rgb(63, 191, 203))", WE_GRAD_ANGLE, 100, 0, 4);
+    check("linear-gradient(-2924deg, #cee0c3, rgb(40, 154, 238), gray 30.1%, rgb(75, 33, 85))", WE_GRAD_ANGLE, 31600, 0, 4);
     check("linear-gradient(to left top, rgb(232, 87, 172), rgb(233, 234, 69) 30.8%)", WE_GRAD_ANGLE, 0, 2, 2);
-    check("linear-gradient(3540deg, rgb(43, 241, 106), rgb(42, 91, 69) 41.7%, #44b5bd, #69d984)", WE_GRAD_ANGLE, 300, 0, 4);
+    check("linear-gradient(3540deg, rgb(43, 241, 106), rgb(42, 91, 69) 41.7%, #44b5bd, #69d984)", WE_GRAD_ANGLE, 30000, 0, 4);
 }
 
 static void test_l94_accept_2(void) {
-    check("linear-gradient(218deg, red 30.7%, #3b1)", WE_GRAD_ANGLE, 218, 0, 2);
-    check("linear-gradient(2682.5422deg, rgb(14, 40, 118), red 72.5%)", WE_GRAD_ANGLE, 163, 0, 2);
-    check("linear-gradient(286deg, gray, rgb(195, 175, 168), #b0f, teal)", WE_GRAD_ANGLE, 286, 0, 4);
-    check("linear-gradient(-3229deg, #59d, black, #e533e4, rgb(159, 64, 213))", WE_GRAD_ANGLE, 11, 0, 4);
-    check("linear-gradient(634grad, rgb(181, 3, 173), rgb(177, 129, 228) 19.8%, blue 63.6%, #f25654)", WE_GRAD_ANGLE, 211, 0, 4);
+    check("linear-gradient(218.42deg, red 30.7%, #3b1)", WE_GRAD_ANGLE, 21842, 0, 2);
+    check("linear-gradient(2682.5422deg, rgb(14, 40, 118), red 72.5%)", WE_GRAD_ANGLE, 16254, 0, 2);
+    check("linear-gradient(286.48deg, gray, rgb(195, 175, 168), #b0f, teal)", WE_GRAD_ANGLE, 28648, 0, 4);
+    check("linear-gradient(-3229deg, #59d, black, #e533e4, rgb(159, 64, 213))", WE_GRAD_ANGLE, 1100, 0, 4);
+    check("linear-gradient(634grad, rgb(181, 3, 173), rgb(177, 129, 228) 19.8%, blue 63.6%, #f25654)", WE_GRAD_ANGLE, 21060, 0, 4);
     check("linear-gradient(to bottom right, #f96, gray, rgb(104, 32, 122) 71.2%)", WE_GRAD_ANGLE, 0, 3, 3);
-    check("linear-gradient(1837deg, rgb(37, 140, 236), #fca, red, #edf)", WE_GRAD_ANGLE, 37, 0, 4);
-    check("linear-gradient(37deg, lime, black)", WE_GRAD_ANGLE, 37, 0, 2);
+    check("linear-gradient(1837deg, rgb(37, 140, 236), #fca, red, #edf)", WE_GRAD_ANGLE, 3700, 0, 4);
+    check("linear-gradient(37.24deg, lime, black)", WE_GRAD_ANGLE, 3724, 0, 2);
 }
 
 static void test_l94_accept_3(void) {
-    check("linear-gradient(1508deg, rgb(149, 8, 14) 33.2%, rgb(235, 7, 35), #b94 31.9%)", WE_GRAD_ANGLE, 68, 0, 3);
-    check("linear-gradient(-4698deg, black, rgb(253, 1, 177), gray)", WE_GRAD_ANGLE, 342, 0, 3);
+    check("linear-gradient(1508deg, rgb(149, 8, 14) 33.2%, rgb(235, 7, 35), #b94 31.9%)", WE_GRAD_ANGLE, 6800, 0, 3);
+    check("linear-gradient(-4698.25deg, black, rgb(253, 1, 177), gray)", WE_GRAD_ANGLE, 34175, 0, 3);
     check("linear-gradient(to left top, rgb(235, 82, 174), navy)", WE_GRAD_ANGLE, 0, 2, 2);
-    check("linear-gradient(1.31turn, red 50.7%, rgb(113, 205, 143))", WE_GRAD_ANGLE, 112, 0, 2);
-    check("linear-gradient(3339.83grad, white 17.7%, navy 49.8%, black 20.3%, #3bb 20.7%)", WE_GRAD_ANGLE, 126, 0, 4);
-    check("linear-gradient(1683.05grad, navy 82.8%, #82bd93, #ede60f)", WE_GRAD_ANGLE, 75, 0, 3);
-    check("linear-gradient(1825deg, lime 98.3%, rgb(234, 100, 149))", WE_GRAD_ANGLE, 25, 0, 2);
+    check("linear-gradient(1.31turn, red 50.7%, rgb(113, 205, 143))", WE_GRAD_ANGLE, 11160, 0, 2);
+    check("linear-gradient(3339.83grad, white 17.7%, navy 49.8%, black 20.3%, #3bb 20.7%)", WE_GRAD_ANGLE, 12585, 0, 4);
+    check("linear-gradient(1683.05grad, navy 82.8%, #82bd93, #ede60f)", WE_GRAD_ANGLE, 7475, 0, 3);
+    check("linear-gradient(1825deg, lime 98.3%, rgb(234, 100, 149))", WE_GRAD_ANGLE, 2500, 0, 2);
     check("linear-gradient(to right bottom, #8f7, #caf 44.9%, black 66.4%)", WE_GRAD_ANGLE, 0, 3, 3);
 }
 
 static void test_l94_accept_4(void) {
     check("linear-gradient(to left top, #6208c3 8%, rgb(173, 164, 82), red, teal 93.5%)", WE_GRAD_ANGLE, 0, 2, 4);
-    check("linear-gradient(177deg, #110, rgb(166, 65, 71) 76.2%)", WE_GRAD_ANGLE, 177, 0, 2);
+    check("linear-gradient(177.34deg, #110, rgb(166, 65, 71) 76.2%)", WE_GRAD_ANGLE, 17734, 0, 2);
     check("linear-gradient(to top right, rgb(81, 253, 24), #3d7, #543359, red)", WE_GRAD_ANGLE, 0, 1, 4);
-    check("linear-gradient(21deg, #29b, rgb(201, 212, 141), gray, rgb(14, 76, 30))", WE_GRAD_ANGLE, 21, 0, 4);
-    check("linear-gradient(-5463deg, #196, rgb(110, 241, 198) 65.9%, #2be31c, #531)", WE_GRAD_ANGLE, 297, 0, 4);
-    check("linear-gradient(10grad, #e1735a, rgb(76, 9, 170))", WE_GRAD_ANGLE, 9, 0, 2);
+    check("linear-gradient(21deg, #29b, rgb(201, 212, 141), gray, rgb(14, 76, 30))", WE_GRAD_ANGLE, 2100, 0, 4);
+    check("linear-gradient(-5463deg, #196, rgb(110, 241, 198) 65.9%, #2be31c, #531)", WE_GRAD_ANGLE, 29700, 0, 4);
+    check("linear-gradient(10grad, #e1735a, rgb(76, 9, 170))", WE_GRAD_ANGLE, 900, 0, 2);
     check("linear-gradient(to bottom right, lime, #6fa41f, #cd9)", WE_GRAD_ANGLE, 0, 3, 3);
-    check("linear-gradient(1237.0deg, rgb(51, 81, 53), gray, rgb(40, 210, 18))", WE_GRAD_ANGLE, 157, 0, 3);
+    check("linear-gradient(1237.0deg, rgb(51, 81, 53), gray, rgb(40, 210, 18))", WE_GRAD_ANGLE, 15700, 0, 3);
 }
 
 static void test_l94_accept_5(void) {
-    check("linear-gradient(158.4deg, gray 13.4%, rgb(163, 185, 79))", WE_GRAD_ANGLE, 158, 0, 2);
-    check("linear-gradient(1063.257deg, navy, blue)", WE_GRAD_ANGLE, 343, 0, 2);
-    check("linear-gradient(341deg, rgb(110, 236, 221) 2.7%, rgb(153, 167, 55))", WE_GRAD_ANGLE, 341, 0, 2);
-    check("linear-gradient(556deg, #9bb, #b710b6, rgb(161, 249, 87), #db286b)", WE_GRAD_ANGLE, 196, 0, 4);
-    check("linear-gradient(2426grad, #c69333, navy, rgb(216, 115, 109), blue)", WE_GRAD_ANGLE, 23, 0, 4);
-    check("linear-gradient(3236.9794deg, rgb(192, 102, 131) 52.8%, rgb(157, 145, 238), navy)", WE_GRAD_ANGLE, 357, 0, 3);
-    check("linear-gradient(592deg, navy, rgb(9, 160, 125), orange)", WE_GRAD_ANGLE, 232, 0, 3);
-    check("linear-gradient(5.4turn, rgb(120, 156, 40), rgb(93, 21, 99))", WE_GRAD_ANGLE, 144, 0, 2);
+    check("linear-gradient(158.4deg, gray 13.4%, rgb(163, 185, 79))", WE_GRAD_ANGLE, 15840, 0, 2);
+    check("linear-gradient(1063.257deg, navy, blue)", WE_GRAD_ANGLE, 34326, 0, 2);
+    check("linear-gradient(341deg, rgb(110, 236, 221) 2.7%, rgb(153, 167, 55))", WE_GRAD_ANGLE, 34100, 0, 2);
+    check("linear-gradient(556deg, #9bb, #b710b6, rgb(161, 249, 87), #db286b)", WE_GRAD_ANGLE, 19600, 0, 4);
+    check("linear-gradient(2426grad, #c69333, navy, rgb(216, 115, 109), blue)", WE_GRAD_ANGLE, 2340, 0, 4);
+    check("linear-gradient(3236.9794deg, rgb(192, 102, 131) 52.8%, rgb(157, 145, 238), navy)", WE_GRAD_ANGLE, 35698, 0, 3);
+    check("linear-gradient(592deg, navy, rgb(9, 160, 125), orange)", WE_GRAD_ANGLE, 23200, 0, 3);
+    check("linear-gradient(5.4turn, rgb(120, 156, 40), rgb(93, 21, 99))", WE_GRAD_ANGLE, 14400, 0, 2);
 }
 
 static void test_l94_accept_6(void) {
-    check("linear-gradient(97deg, orange, teal)", WE_GRAD_ANGLE, 97, 0, 2);
-    check("linear-gradient(733deg, #1f6, #96d, gray 56.4%)", WE_GRAD_ANGLE, 13, 0, 3);
-    check("linear-gradient(1793deg, navy 60%, rgb(106, 60, 133) 16.5%)", WE_GRAD_ANGLE, 353, 0, 2);
-    check("linear-gradient(1292deg, rgb(143, 1, 132) 29.4%, navy 85.2%)", WE_GRAD_ANGLE, 212, 0, 2);
-    check("linear-gradient(-392deg, black, #c27536 75.8%, #3e2)", WE_GRAD_ANGLE, 328, 0, 3);
-    check("linear-gradient(2088deg, #673, rgb(151, 248, 29))", WE_GRAD_ANGLE, 288, 0, 2);
-    check("linear-gradient(888.5049deg, rgb(217, 77, 150), rgb(103, 120, 14))", WE_GRAD_ANGLE, 169, 0, 2);
-    check("linear-gradient(143deg, white 60.7%, rgb(39, 236, 88))", WE_GRAD_ANGLE, 143, 0, 2);
+    check("linear-gradient(97.13deg, orange, teal)", WE_GRAD_ANGLE, 9713, 0, 2);
+    check("linear-gradient(733deg, #1f6, #96d, gray 56.4%)", WE_GRAD_ANGLE, 1300, 0, 3);
+    check("linear-gradient(1792.73deg, navy 60%, rgb(106, 60, 133) 16.5%)", WE_GRAD_ANGLE, 35273, 0, 2);
+    check("linear-gradient(1292deg, rgb(143, 1, 132) 29.4%, navy 85.2%)", WE_GRAD_ANGLE, 21200, 0, 2);
+    check("linear-gradient(-392.11deg, black, #c27536 75.8%, #3e2)", WE_GRAD_ANGLE, 32789, 0, 3);
+    check("linear-gradient(2088deg, #673, rgb(151, 248, 29))", WE_GRAD_ANGLE, 28800, 0, 2);
+    check("linear-gradient(888.5049deg, rgb(217, 77, 150), rgb(103, 120, 14))", WE_GRAD_ANGLE, 16850, 0, 2);
+    check("linear-gradient(143.41deg, white 60.7%, rgb(39, 236, 88))", WE_GRAD_ANGLE, 14341, 0, 2);
 }
 
 static void test_l94_accept_7(void) {
-    check("linear-gradient(-2433.81deg, rgb(52, 122, 238), #a9e534, rgb(66, 183, 65), orange)", WE_GRAD_ANGLE, 86, 0, 4);
-    check("linear-gradient(-1837.7deg, rgb(150, 118, 100), #d58, #faf98f 17.3%)", WE_GRAD_ANGLE, 322, 0, 3);
-    check("linear-gradient(4962deg, red, #249, #545 39.9%)", WE_GRAD_ANGLE, 282, 0, 3);
-    check("linear-gradient(-412deg, rgb(130, 84, 78), #12f 15.6%, rgb(55, 107, 33) 73.4%)", WE_GRAD_ANGLE, 308, 0, 3);
-    check("linear-gradient(4349deg, rgb(224, 141, 172), #98cd2d, orange, #287)", WE_GRAD_ANGLE, 29, 0, 4);
-    check("linear-gradient(54deg, orange 26.2%, red, #674668, #d84 66.4%)", WE_GRAD_ANGLE, 54, 0, 4);
-    check("linear-gradient(2861.4deg, lime 53.6%, rgb(254, 101, 222), teal, orange)", WE_GRAD_ANGLE, 341, 0, 4);
-    check("linear-gradient(137deg, #9fb, rgb(242, 133, 43))", WE_GRAD_ANGLE, 137, 0, 2);
+    check("linear-gradient(-2433.81deg, rgb(52, 122, 238), #a9e534, rgb(66, 183, 65), orange)", WE_GRAD_ANGLE, 8619, 0, 4);
+    check("linear-gradient(-1837.7deg, rgb(150, 118, 100), #d58, #faf98f 17.3%)", WE_GRAD_ANGLE, 32230, 0, 3);
+    check("linear-gradient(4961.97deg, red, #249, #545 39.9%)", WE_GRAD_ANGLE, 28197, 0, 3);
+    check("linear-gradient(-412deg, rgb(130, 84, 78), #12f 15.6%, rgb(55, 107, 33) 73.4%)", WE_GRAD_ANGLE, 30800, 0, 3);
+    check("linear-gradient(4348.83deg, rgb(224, 141, 172), #98cd2d, orange, #287)", WE_GRAD_ANGLE, 2883, 0, 4);
+    check("linear-gradient(53.97deg, orange 26.2%, red, #674668, #d84 66.4%)", WE_GRAD_ANGLE, 5397, 0, 4);
+    check("linear-gradient(2861.4deg, lime 53.6%, rgb(254, 101, 222), teal, orange)", WE_GRAD_ANGLE, 34140, 0, 4);
+    check("linear-gradient(137deg, #9fb, rgb(242, 133, 43))", WE_GRAD_ANGLE, 13700, 0, 2);
 }
 
 static void test_l94_accept_8(void) {
-    check("linear-gradient(46deg, #910, gray 89.9%, #736)", WE_GRAD_ANGLE, 46, 0, 3);
-    check("linear-gradient(-181deg, #528, red, red, white)", WE_GRAD_ANGLE, 179, 0, 4);
+    check("linear-gradient(46.18deg, #910, gray 89.9%, #736)", WE_GRAD_ANGLE, 4618, 0, 3);
+    check("linear-gradient(-181deg, #528, red, red, white)", WE_GRAD_ANGLE, 17900, 0, 4);
     check("linear-gradient(to right top, rgb(102, 53, 147) 58.7%, lime 68.4%, #763 56%, rgb(110, 249, 143))", WE_GRAD_ANGLE, 0, 1, 4);
-    check("linear-gradient(1998.0deg, #6f5, black)", WE_GRAD_ANGLE, 198, 0, 2);
-    check("linear-gradient(6.84turn, #953, teal)", WE_GRAD_ANGLE, 302, 0, 2);
+    check("linear-gradient(1998.0deg, #6f5, black)", WE_GRAD_ANGLE, 19800, 0, 2);
+    check("linear-gradient(6.84turn, #953, teal)", WE_GRAD_ANGLE, 30240, 0, 2);
     check("linear-gradient(to right bottom, rgb(212, 142, 242), rgb(35, 214, 29) 0%, #4fd, rgb(236, 49, 65) 86.2%)", WE_GRAD_ANGLE, 0, 3, 4);
-    check("linear-gradient(1100deg, navy, rgb(206, 64, 112), #1c6c81)", WE_GRAD_ANGLE, 20, 0, 3);
-    check("linear-gradient(1938.2grad, #eea797, rgb(173, 213, 46), #c87 70.8%, red 29.2%)", WE_GRAD_ANGLE, 304, 0, 4);
+    check("linear-gradient(1100.08deg, navy, rgb(206, 64, 112), #1c6c81)", WE_GRAD_ANGLE, 2008, 0, 3);
+    check("linear-gradient(1938.2grad, #eea797, rgb(173, 213, 46), #c87 70.8%, red 29.2%)", WE_GRAD_ANGLE, 30438, 0, 4);
 }
 
 static void test_l94_accept_9(void) {
-    check("linear-gradient(598deg, gray, red 14.5%)", WE_GRAD_ANGLE, 238, 0, 2);
+    check("linear-gradient(598deg, gray, red 14.5%)", WE_GRAD_ANGLE, 23800, 0, 2);
     check("linear-gradient(5turn, rgb(144, 84, 248) 47%, rgb(54, 178, 0) 10.3%, blue 65.6%)", WE_GRAD_TOP, 0, 0, 3);
-    check("linear-gradient(1859.22deg, rgb(193, 66, 119) 59.2%, rgb(65, 212, 52) 23.5%)", WE_GRAD_ANGLE, 59, 0, 2);
-    check("linear-gradient(-1258deg, rgb(86, 153, 61), navy, #dfc424, #e1f)", WE_GRAD_ANGLE, 182, 0, 4);
-    check("linear-gradient(11deg, #5466e2, orange, teal, lime)", WE_GRAD_ANGLE, 11, 0, 4);
-    check("linear-gradient(975.96grad, #5b2f14 88.6%, lime, rgb(235, 240, 106), teal)", WE_GRAD_ANGLE, 158, 0, 4);
-    check("linear-gradient(1201deg, #74e, rgb(76, 210, 74), rgb(219, 220, 38), #985f92)", WE_GRAD_ANGLE, 121, 0, 4);
-    check("linear-gradient(2496deg, #57b2ad, rgb(217, 29, 35) 71.6%)", WE_GRAD_ANGLE, 336, 0, 2);
+    check("linear-gradient(1859.22deg, rgb(193, 66, 119) 59.2%, rgb(65, 212, 52) 23.5%)", WE_GRAD_ANGLE, 5922, 0, 2);
+    check("linear-gradient(-1258deg, rgb(86, 153, 61), navy, #dfc424, #e1f)", WE_GRAD_ANGLE, 18200, 0, 4);
+    check("linear-gradient(10.73deg, #5466e2, orange, teal, lime)", WE_GRAD_ANGLE, 1073, 0, 4);
+    check("linear-gradient(975.96grad, #5b2f14 88.6%, lime, rgb(235, 240, 106), teal)", WE_GRAD_ANGLE, 15836, 0, 4);
+    check("linear-gradient(1201.49deg, #74e, rgb(76, 210, 74), rgb(219, 220, 38), #985f92)", WE_GRAD_ANGLE, 12149, 0, 4);
+    check("linear-gradient(2496deg, #57b2ad, rgb(217, 29, 35) 71.6%)", WE_GRAD_ANGLE, 33600, 0, 2);
 }
 
 static void test_l94_accept_10(void) {
-    check("linear-gradient(1004deg, rgb(176, 81, 199), #6d9, #5f3d5b, rgb(4, 98, 155) 67.1%)", WE_GRAD_ANGLE, 284, 0, 4);
-    check("linear-gradient(-2701deg, #7146e6, gray)", WE_GRAD_ANGLE, 179, 0, 2);
-    check("linear-gradient(1631.45grad, #4c2645, rgb(206, 192, 255))", WE_GRAD_ANGLE, 28, 0, 2);
-    check("linear-gradient(2560deg, rgb(213, 202, 205), #740, #a361a5)", WE_GRAD_ANGLE, 40, 0, 3);
-    check("linear-gradient(3285deg, rgb(244, 25, 71) 10.3%, #b23 25.8%, #4ef2d2, rgb(202, 237, 5) 69.5%)", WE_GRAD_ANGLE, 45, 0, 4);
-    check("linear-gradient(5225deg, rgb(65, 19, 48), rgb(161, 156, 140) 83.7%, rgb(253, 25, 195), red)", WE_GRAD_ANGLE, 185, 0, 4);
-    check("linear-gradient(2789deg, #f3a22f, lime)", WE_GRAD_ANGLE, 269, 0, 2);
-    check("linear-gradient(-26deg, red 2.5%, #df6, orange)", WE_GRAD_ANGLE, 334, 0, 3);
+    check("linear-gradient(1004deg, rgb(176, 81, 199), #6d9, #5f3d5b, rgb(4, 98, 155) 67.1%)", WE_GRAD_ANGLE, 28400, 0, 4);
+    check("linear-gradient(-2701.5deg, #7146e6, gray)", WE_GRAD_ANGLE, 17850, 0, 2);
+    check("linear-gradient(1631.45grad, #4c2645, rgb(206, 192, 255))", WE_GRAD_ANGLE, 2831, 0, 2);
+    check("linear-gradient(2560.26deg, rgb(213, 202, 205), #740, #a361a5)", WE_GRAD_ANGLE, 4026, 0, 3);
+    check("linear-gradient(3285deg, rgb(244, 25, 71) 10.3%, #b23 25.8%, #4ef2d2, rgb(202, 237, 5) 69.5%)", WE_GRAD_ANGLE, 4500, 0, 4);
+    check("linear-gradient(5225.38deg, rgb(65, 19, 48), rgb(161, 156, 140) 83.7%, rgb(253, 25, 195), red)", WE_GRAD_ANGLE, 18538, 0, 4);
+    check("linear-gradient(2789deg, #f3a22f, lime)", WE_GRAD_ANGLE, 26900, 0, 2);
+    check("linear-gradient(-26deg, red 2.5%, #df6, orange)", WE_GRAD_ANGLE, 33400, 0, 3);
 }
 
 static void test_l94_accept_11(void) {
-    check("linear-gradient(-3.51turn, #062, navy)", WE_GRAD_ANGLE, 176, 0, 2);
+    check("linear-gradient(-3.51turn, #062, navy)", WE_GRAD_ANGLE, 17640, 0, 2);
     check("linear-gradient(to top right, blue 15.2%, #3e2, rgb(100, 204, 234))", WE_GRAD_ANGLE, 0, 1, 3);
-    check("linear-gradient(1277deg, gray, gray)", WE_GRAD_ANGLE, 197, 0, 2);
-    check("linear-gradient(3108deg, #45d, navy)", WE_GRAD_ANGLE, 228, 0, 2);
-    check("linear-gradient(-1906deg, #e35372, #5f7a7a)", WE_GRAD_ANGLE, 254, 0, 2);
+    check("linear-gradient(1277.39deg, gray, gray)", WE_GRAD_ANGLE, 19739, 0, 2);
+    check("linear-gradient(3108deg, #45d, navy)", WE_GRAD_ANGLE, 22800, 0, 2);
+    check("linear-gradient(-1906deg, #e35372, #5f7a7a)", WE_GRAD_ANGLE, 25400, 0, 2);
     check("linear-gradient(to bottom left, #6e3, gray)", WE_GRAD_ANGLE, 0, 4, 2);
-    check("linear-gradient(1339deg, #6d8, #1652f3 51.6%)", WE_GRAD_ANGLE, 259, 0, 2);
-    check("linear-gradient(3152deg, #583 7%, orange)", WE_GRAD_ANGLE, 272, 0, 2);
+    check("linear-gradient(1339deg, #6d8, #1652f3 51.6%)", WE_GRAD_ANGLE, 25900, 0, 2);
+    check("linear-gradient(3152deg, #583 7%, orange)", WE_GRAD_ANGLE, 27200, 0, 2);
 }
 
 static void test_l94_accept_12(void) {
-    check("linear-gradient(1814.78deg, #f42, #da1)", WE_GRAD_ANGLE, 15, 0, 2);
-    check("linear-gradient(-3304.1grad, #929441, rgb(32, 167, 174), blue)", WE_GRAD_ANGLE, 266, 0, 3);
-    check("linear-gradient(2459deg, orange, #fef 94.1%)", WE_GRAD_ANGLE, 299, 0, 2);
+    check("linear-gradient(1814.78deg, #f42, #da1)", WE_GRAD_ANGLE, 1478, 0, 2);
+    check("linear-gradient(-3304.1grad, #929441, rgb(32, 167, 174), blue)", WE_GRAD_ANGLE, 26631, 0, 3);
+    check("linear-gradient(2459deg, orange, #fef 94.1%)", WE_GRAD_ANGLE, 29900, 0, 2);
     check("linear-gradient(to top left, rgb(221, 86, 134), #4d4)", WE_GRAD_ANGLE, 0, 2, 2);
-    check("linear-gradient(1259deg, rgb(64, 238, 208) 15.9%, #435, #83255d, #712626)", WE_GRAD_ANGLE, 179, 0, 4);
-    check("linear-gradient(2581deg, rgb(69, 176, 221), teal 17.3%)", WE_GRAD_ANGLE, 61, 0, 2);
-    check("linear-gradient(2094deg, rgb(163, 101, 161), blue)", WE_GRAD_ANGLE, 294, 0, 2);
+    check("linear-gradient(1259deg, rgb(64, 238, 208) 15.9%, #435, #83255d, #712626)", WE_GRAD_ANGLE, 17900, 0, 4);
+    check("linear-gradient(2581deg, rgb(69, 176, 221), teal 17.3%)", WE_GRAD_ANGLE, 6100, 0, 2);
+    check("linear-gradient(2094deg, rgb(163, 101, 161), blue)", WE_GRAD_ANGLE, 29400, 0, 2);
     check("linear-gradient(to bottom right, red, #7ce, gray 10.5%, lime)", WE_GRAD_ANGLE, 0, 3, 4);
 }
 
 static void test_l94_accept_13(void) {
     check("linear-gradient(to top right, #a9529e, rgb(115, 133, 196))", WE_GRAD_ANGLE, 0, 1, 2);
-    check("linear-gradient(3119deg, #a2c 48.2%, #4d1af5, red 79.3%)", WE_GRAD_ANGLE, 239, 0, 3);
-    check("linear-gradient(2903deg, red 35.1%, #045ce1, #51fca5, blue)", WE_GRAD_ANGLE, 23, 0, 4);
-    check("linear-gradient(1633deg, gray 84.6%, rgb(18, 214, 195), #fd5077)", WE_GRAD_ANGLE, 193, 0, 3);
-    check("linear-gradient(3183deg, #5af 55.8%, #d45b7d, white)", WE_GRAD_ANGLE, 303, 0, 3);
-    check("linear-gradient(565.39deg, blue, rgb(159, 132, 197))", WE_GRAD_ANGLE, 205, 0, 2);
-    check("linear-gradient(1195deg, #471, rgb(154, 57, 1))", WE_GRAD_ANGLE, 115, 0, 2);
-    check("linear-gradient(4.96turn, #c32a50, rgb(249, 224, 125), #6b7b9e 9.2%)", WE_GRAD_ANGLE, 346, 0, 3);
+    check("linear-gradient(3119.35deg, #a2c 48.2%, #4d1af5, red 79.3%)", WE_GRAD_ANGLE, 23935, 0, 3);
+    check("linear-gradient(2902.78deg, red 35.1%, #045ce1, #51fca5, blue)", WE_GRAD_ANGLE, 2278, 0, 4);
+    check("linear-gradient(1633deg, gray 84.6%, rgb(18, 214, 195), #fd5077)", WE_GRAD_ANGLE, 19300, 0, 3);
+    check("linear-gradient(3183deg, #5af 55.8%, #d45b7d, white)", WE_GRAD_ANGLE, 30300, 0, 3);
+    check("linear-gradient(565.39deg, blue, rgb(159, 132, 197))", WE_GRAD_ANGLE, 20539, 0, 2);
+    check("linear-gradient(1195deg, #471, rgb(154, 57, 1))", WE_GRAD_ANGLE, 11500, 0, 2);
+    check("linear-gradient(4.96turn, #c32a50, rgb(249, 224, 125), #6b7b9e 9.2%)", WE_GRAD_ANGLE, 34560, 0, 3);
 }
 
 static void test_l94_accept_14(void) {
-    check("linear-gradient(-3592deg, red, black 5.4%, navy)", WE_GRAD_ANGLE, 8, 0, 3);
+    check("linear-gradient(-3592.45deg, red, black 5.4%, navy)", WE_GRAD_ANGLE, 755, 0, 3);
     check("linear-gradient(to right top, white, red, rgb(22, 211, 244))", WE_GRAD_ANGLE, 0, 1, 3);
-    check("linear-gradient(457.93deg, rgb(76, 50, 216) 53.6%, black 34.2%, rgb(205, 9, 147), navy 56.7%)", WE_GRAD_ANGLE, 98, 0, 4);
-    check("linear-gradient(643deg, #373e45, rgb(202, 1, 40), #c03be7 74.3%, #47d)", WE_GRAD_ANGLE, 283, 0, 4);
-    check("linear-gradient(212deg, navy, orange, rgb(101, 48, 49), rgb(216, 44, 206) 23.8%)", WE_GRAD_ANGLE, 212, 0, 4);
+    check("linear-gradient(457.93deg, rgb(76, 50, 216) 53.6%, black 34.2%, rgb(205, 9, 147), navy 56.7%)", WE_GRAD_ANGLE, 9793, 0, 4);
+    check("linear-gradient(643deg, #373e45, rgb(202, 1, 40), #c03be7 74.3%, #47d)", WE_GRAD_ANGLE, 28300, 0, 4);
+    check("linear-gradient(211.99deg, navy, orange, rgb(101, 48, 49), rgb(216, 44, 206) 23.8%)", WE_GRAD_ANGLE, 21199, 0, 4);
     check("linear-gradient(to left bottom, white 54.3%, rgb(113, 62, 222), rgb(30, 233, 36))", WE_GRAD_ANGLE, 0, 4, 3);
-    check("linear-gradient(-321deg, #cb6e28, white)", WE_GRAD_ANGLE, 39, 0, 2);
-    check("linear-gradient(-441deg, #2af, blue 59.1%, #c96041)", WE_GRAD_ANGLE, 279, 0, 3);
+    check("linear-gradient(-320.86deg, #cb6e28, white)", WE_GRAD_ANGLE, 3914, 0, 2);
+    check("linear-gradient(-441deg, #2af, blue 59.1%, #c96041)", WE_GRAD_ANGLE, 27900, 0, 3);
 }
 
 static void test_l94_accept_15(void) {
     check("linear-gradient(to right bottom, #ebac95 9.7%, #180443)", WE_GRAD_ANGLE, 0, 3, 2);
-    check("linear-gradient(879.9949deg, #bcbeef 35%, #175be2 70.3%, navy)", WE_GRAD_ANGLE, 160, 0, 3);
+    check("linear-gradient(879.9949deg, #bcbeef 35%, #175be2 70.3%, navy)", WE_GRAD_ANGLE, 15999, 0, 3);
     check("linear-gradient(to right top, navy, blue 40.1%, red 22.5%, lime 48.2%)", WE_GRAD_ANGLE, 0, 1, 4);
-    check("linear-gradient(2502.3911deg, teal 28.4%, navy, rgb(28, 215, 84) 64.4%)", WE_GRAD_ANGLE, 342, 0, 3);
-    check("linear-gradient(968deg, rgb(37, 67, 246), #a27b2a, rgb(4, 172, 66), gray 85.9%)", WE_GRAD_ANGLE, 248, 0, 4);
-    check("linear-gradient(89deg, gray, teal, #0eb9e5, rgb(165, 201, 28) 40.9%)", WE_GRAD_ANGLE, 89, 0, 4);
-    check("linear-gradient(1616deg, red, rgb(28, 125, 156))", WE_GRAD_ANGLE, 176, 0, 2);
-    check("linear-gradient(-14deg, rgb(75, 201, 19) 67.5%, #beb)", WE_GRAD_ANGLE, 346, 0, 2);
+    check("linear-gradient(2502.3911deg, teal 28.4%, navy, rgb(28, 215, 84) 64.4%)", WE_GRAD_ANGLE, 34239, 0, 3);
+    check("linear-gradient(968deg, rgb(37, 67, 246), #a27b2a, rgb(4, 172, 66), gray 85.9%)", WE_GRAD_ANGLE, 24800, 0, 4);
+    check("linear-gradient(88.75deg, gray, teal, #0eb9e5, rgb(165, 201, 28) 40.9%)", WE_GRAD_ANGLE, 8875, 0, 4);
+    check("linear-gradient(1615.74deg, red, rgb(28, 125, 156))", WE_GRAD_ANGLE, 17574, 0, 2);
+    check("linear-gradient(-14deg, rgb(75, 201, 19) 67.5%, #beb)", WE_GRAD_ANGLE, 34600, 0, 2);
 }
 
 static void test_l94_accept_16(void) {
     check("linear-gradient(to bottom right, rgb(75, 109, 198), #416)", WE_GRAD_ANGLE, 0, 3, 2);
-    check("linear-gradient(4631deg, lime, #9738f2 31.4%)", WE_GRAD_ANGLE, 311, 0, 2);
-    check("linear-gradient(1431deg, rgb(15, 189, 206) 17.6%, white, #fe6a72)", WE_GRAD_ANGLE, 351, 0, 3);
-    check("linear-gradient(-2276.0228deg, #02e, orange)", WE_GRAD_ANGLE, 244, 0, 2);
-    check("linear-gradient(135grad, #4ef, #254, navy 59.3%, lime 85.9%)", WE_GRAD_ANGLE, 122, 0, 4);
-    check("linear-gradient(646.3grad, rgb(175, 206, 212), #791 36.6%, #e94578)", WE_GRAD_ANGLE, 222, 0, 3);
-    check("linear-gradient(1984deg, lime, rgb(33, 51, 19))", WE_GRAD_ANGLE, 184, 0, 2);
-    check("linear-gradient(2871.93grad, #6b5, #ab7)", WE_GRAD_ANGLE, 65, 0, 2);
+    check("linear-gradient(4630.62deg, lime, #9738f2 31.4%)", WE_GRAD_ANGLE, 31062, 0, 2);
+    check("linear-gradient(1431deg, rgb(15, 189, 206) 17.6%, white, #fe6a72)", WE_GRAD_ANGLE, 35100, 0, 3);
+    check("linear-gradient(-2276.0228deg, #02e, orange)", WE_GRAD_ANGLE, 24398, 0, 2);
+    check("linear-gradient(135grad, #4ef, #254, navy 59.3%, lime 85.9%)", WE_GRAD_ANGLE, 12150, 0, 4);
+    check("linear-gradient(646.3grad, rgb(175, 206, 212), #791 36.6%, #e94578)", WE_GRAD_ANGLE, 22167, 0, 3);
+    check("linear-gradient(1984deg, lime, rgb(33, 51, 19))", WE_GRAD_ANGLE, 18400, 0, 2);
+    check("linear-gradient(2871.93grad, #6b5, #ab7)", WE_GRAD_ANGLE, 6474, 0, 2);
 }
 
 static void test_l94_accept_17(void) {
-    check("linear-gradient(0deg, #f78, teal, #b5b149)", WE_GRAD_TOP, 0, 0, 3);
-    check("linear-gradient(188deg, rgb(102, 130, 50) 62.1%, #4e1c63)", WE_GRAD_ANGLE, 188, 0, 2);
-    check("linear-gradient(-400deg, rgb(220, 208, 198), rgb(6, 82, 57))", WE_GRAD_ANGLE, 320, 0, 2);
-    check("linear-gradient(-3896deg, rgb(116, 87, 174), #d26c93)", WE_GRAD_ANGLE, 64, 0, 2);
-    check("linear-gradient(2683.854deg, red, #977d59 90.9%)", WE_GRAD_ANGLE, 164, 0, 2);
-    check("linear-gradient(-642.1deg, navy, #24a)", WE_GRAD_ANGLE, 78, 0, 2);
-    check("linear-gradient(2263deg, rgb(50, 102, 111), rgb(153, 114, 116), rgb(11, 56, 213))", WE_GRAD_ANGLE, 103, 0, 3);
-    check("linear-gradient(-1.58turn, rgb(93, 224, 68), rgb(140, 86, 246), gray 81.1%)", WE_GRAD_ANGLE, 151, 0, 3);
+    check("linear-gradient(0.17deg, #f78, teal, #b5b149)", WE_GRAD_ANGLE, 17, 0, 3);
+    check("linear-gradient(188deg, rgb(102, 130, 50) 62.1%, #4e1c63)", WE_GRAD_ANGLE, 18800, 0, 2);
+    check("linear-gradient(-399.82deg, rgb(220, 208, 198), rgb(6, 82, 57))", WE_GRAD_ANGLE, 32018, 0, 2);
+    check("linear-gradient(-3896.11deg, rgb(116, 87, 174), #d26c93)", WE_GRAD_ANGLE, 6389, 0, 2);
+    check("linear-gradient(2683.854deg, red, #977d59 90.9%)", WE_GRAD_ANGLE, 16385, 0, 2);
+    check("linear-gradient(-642.1deg, navy, #24a)", WE_GRAD_ANGLE, 7790, 0, 2);
+    check("linear-gradient(2263deg, rgb(50, 102, 111), rgb(153, 114, 116), rgb(11, 56, 213))", WE_GRAD_ANGLE, 10300, 0, 3);
+    check("linear-gradient(-1.58turn, rgb(93, 224, 68), rgb(140, 86, 246), gray 81.1%)", WE_GRAD_ANGLE, 15120, 0, 3);
 }
 
 static void test_l94_accept_18(void) {
     check("linear-gradient(-8turn, rgb(199, 123, 94) 40.3%, #c11 22.2%, rgb(102, 90, 220))", WE_GRAD_TOP, 0, 0, 3);
-    check("linear-gradient(1471deg, rgb(138, 37, 21), #daaf2e 66%)", WE_GRAD_ANGLE, 31, 0, 2);
-    check("linear-gradient(2928deg, white 78.4%, #dcb)", WE_GRAD_ANGLE, 48, 0, 2);
-    check("linear-gradient(429deg, teal 79.3%, #d116b8)", WE_GRAD_ANGLE, 69, 0, 2);
-    check("linear-gradient(1.37turn, rgb(71, 125, 196), rgb(241, 16, 26), rgb(198, 36, 2), #d7b)", WE_GRAD_ANGLE, 133, 0, 4);
-    check("linear-gradient(400deg, #0a12f8, lime)", WE_GRAD_ANGLE, 40, 0, 2);
-    check("linear-gradient(-681deg, teal, teal)", WE_GRAD_ANGLE, 39, 0, 2);
-    check("linear-gradient(9.52turn, rgb(201, 148, 35), gray, navy, #b90134)", WE_GRAD_ANGLE, 187, 0, 4);
+    check("linear-gradient(1471deg, rgb(138, 37, 21), #daaf2e 66%)", WE_GRAD_ANGLE, 3100, 0, 2);
+    check("linear-gradient(2928deg, white 78.4%, #dcb)", WE_GRAD_ANGLE, 4800, 0, 2);
+    check("linear-gradient(429deg, teal 79.3%, #d116b8)", WE_GRAD_ANGLE, 6900, 0, 2);
+    check("linear-gradient(1.37turn, rgb(71, 125, 196), rgb(241, 16, 26), rgb(198, 36, 2), #d7b)", WE_GRAD_ANGLE, 13320, 0, 4);
+    check("linear-gradient(400deg, #0a12f8, lime)", WE_GRAD_ANGLE, 4000, 0, 2);
+    check("linear-gradient(-681deg, teal, teal)", WE_GRAD_ANGLE, 3900, 0, 2);
+    check("linear-gradient(9.52turn, rgb(201, 148, 35), gray, navy, #b90134)", WE_GRAD_ANGLE, 18720, 0, 4);
 }
 
 static void test_l94_accept_19(void) {
-    check("linear-gradient(2811.3deg, #f4f, black)", WE_GRAD_ANGLE, 291, 0, 2);
-    check("linear-gradient(3375deg, gray 79.3%, navy)", WE_GRAD_ANGLE, 135, 0, 2);
-    check("linear-gradient(243grad, #f21, blue 74.6%, navy)", WE_GRAD_ANGLE, 219, 0, 3);
-    check("linear-gradient(2074deg, rgb(120, 46, 87), rgb(232, 32, 37))", WE_GRAD_ANGLE, 274, 0, 2);
+    check("linear-gradient(2811.3deg, #f4f, black)", WE_GRAD_ANGLE, 29130, 0, 2);
+    check("linear-gradient(3375deg, gray 79.3%, navy)", WE_GRAD_ANGLE, 13500, 0, 2);
+    check("linear-gradient(243grad, #f21, blue 74.6%, navy)", WE_GRAD_ANGLE, 21870, 0, 3);
+    check("linear-gradient(2074deg, rgb(120, 46, 87), rgb(232, 32, 37))", WE_GRAD_ANGLE, 27400, 0, 2);
     check("linear-gradient(to top right, rgb(116, 131, 136), white, #c38822 9.1%, red 81.3%)", WE_GRAD_ANGLE, 0, 1, 4);
-    check("linear-gradient(2756deg, white, lime, orange)", WE_GRAD_ANGLE, 236, 0, 3);
-    check("linear-gradient(3119deg, #08a1fd 56.6%, white)", WE_GRAD_ANGLE, 239, 0, 2);
+    check("linear-gradient(2755.93deg, white, lime, orange)", WE_GRAD_ANGLE, 23593, 0, 3);
+    check("linear-gradient(3119deg, #08a1fd 56.6%, white)", WE_GRAD_ANGLE, 23900, 0, 2);
     check("linear-gradient(to bottom right, #1eff5d, white)", WE_GRAD_ANGLE, 0, 3, 2);
 }
 
 static void test_l94_accept_20(void) {
-    check("linear-gradient(-626deg, #e693da, #20a96e 10.8%, #4b2de1, rgb(213, 17, 216))", WE_GRAD_ANGLE, 94, 0, 4);
-    check("linear-gradient(1893deg, #bbe29a, red)", WE_GRAD_ANGLE, 93, 0, 2);
-    check("linear-gradient(2562.8deg, gray, rgb(189, 79, 202))", WE_GRAD_ANGLE, 43, 0, 2);
-    check("linear-gradient(881.2grad, #68b, rgb(235, 120, 24))", WE_GRAD_ANGLE, 73, 0, 2);
-    check("linear-gradient(7.39turn, navy 44.1%, #7f7)", WE_GRAD_ANGLE, 140, 0, 2);
-    check("linear-gradient(3765deg, #c22b2e, black)", WE_GRAD_ANGLE, 165, 0, 2);
-    check("linear-gradient(-3724deg, red 85.7%, orange 93.8%, rgb(217, 88, 88), rgb(50, 12, 113))", WE_GRAD_ANGLE, 236, 0, 4);
-    check("linear-gradient(2258deg, #3fb, rgb(180, 40, 98) 54.7%, rgb(104, 32, 96), rgb(173, 243, 218) 39.9%)", WE_GRAD_ANGLE, 98, 0, 4);
+    check("linear-gradient(-626deg, #e693da, #20a96e 10.8%, #4b2de1, rgb(213, 17, 216))", WE_GRAD_ANGLE, 9400, 0, 4);
+    check("linear-gradient(1893deg, #bbe29a, red)", WE_GRAD_ANGLE, 9300, 0, 2);
+    check("linear-gradient(2562.8deg, gray, rgb(189, 79, 202))", WE_GRAD_ANGLE, 4280, 0, 2);
+    check("linear-gradient(881.2grad, #68b, rgb(235, 120, 24))", WE_GRAD_ANGLE, 7308, 0, 2);
+    check("linear-gradient(7.39turn, navy 44.1%, #7f7)", WE_GRAD_ANGLE, 14040, 0, 2);
+    check("linear-gradient(3765.48deg, #c22b2e, black)", WE_GRAD_ANGLE, 16548, 0, 2);
+    check("linear-gradient(-3724.23deg, red 85.7%, orange 93.8%, rgb(217, 88, 88), rgb(50, 12, 113))", WE_GRAD_ANGLE, 23577, 0, 4);
+    check("linear-gradient(2258deg, #3fb, rgb(180, 40, 98) 54.7%, rgb(104, 32, 96), rgb(173, 243, 218) 39.9%)", WE_GRAD_ANGLE, 9800, 0, 4);
 }
 
 static void test_l94_accept_21(void) {
-    check("linear-gradient(348deg, #6a2723, red)", WE_GRAD_ANGLE, 348, 0, 2);
-    check("linear-gradient(1536deg, rgb(163, 205, 104) 36.2%, rgb(163, 167, 199), rgb(14, 181, 23))", WE_GRAD_ANGLE, 96, 0, 3);
-    check("linear-gradient(1265deg, #71d00b, blue 94.7%, navy, #50e314)", WE_GRAD_ANGLE, 185, 0, 4);
-    check("linear-gradient(2519deg, #3c1, #307)", WE_GRAD_ANGLE, 359, 0, 2);
-    check("linear-gradient(-2409grad, teal 71.9%, #c21670, #c6dd78, rgb(126, 223, 22))", WE_GRAD_ANGLE, 352, 0, 4);
-    check("linear-gradient(94deg, #317, rgb(120, 202, 34))", WE_GRAD_ANGLE, 94, 0, 2);
-    check("linear-gradient(-3316deg, red, rgb(202, 19, 107), rgb(254, 68, 247))", WE_GRAD_ANGLE, 284, 0, 3);
-    check("linear-gradient(1611.9deg, orange, #739)", WE_GRAD_ANGLE, 172, 0, 2);
+    check("linear-gradient(348deg, #6a2723, red)", WE_GRAD_ANGLE, 34800, 0, 2);
+    check("linear-gradient(1536deg, rgb(163, 205, 104) 36.2%, rgb(163, 167, 199), rgb(14, 181, 23))", WE_GRAD_ANGLE, 9600, 0, 3);
+    check("linear-gradient(1265deg, #71d00b, blue 94.7%, navy, #50e314)", WE_GRAD_ANGLE, 18500, 0, 4);
+    check("linear-gradient(2519deg, #3c1, #307)", WE_GRAD_ANGLE, 35900, 0, 2);
+    check("linear-gradient(-2409grad, teal 71.9%, #c21670, #c6dd78, rgb(126, 223, 22))", WE_GRAD_ANGLE, 35190, 0, 4);
+    check("linear-gradient(94deg, #317, rgb(120, 202, 34))", WE_GRAD_ANGLE, 9400, 0, 2);
+    check("linear-gradient(-3316deg, red, rgb(202, 19, 107), rgb(254, 68, 247))", WE_GRAD_ANGLE, 28400, 0, 3);
+    check("linear-gradient(1611.9deg, orange, #739)", WE_GRAD_ANGLE, 17190, 0, 2);
 }
 
 static void test_l94_accept_22(void) {
-    check("linear-gradient(5329deg, #911, rgb(130, 78, 0) 76.1%)", WE_GRAD_ANGLE, 289, 0, 2);
-    check("linear-gradient(3409deg, red, gray, #cff249)", WE_GRAD_ANGLE, 169, 0, 3);
-    check("linear-gradient(0.23turn, rgb(146, 79, 122), blue, #439b1f 98.1%)", WE_GRAD_ANGLE, 83, 0, 3);
-    check("linear-gradient(-2937deg, blue, rgb(249, 121, 215), lime, #dc1)", WE_GRAD_ANGLE, 303, 0, 4);
-    check("linear-gradient(-2295.7deg, black, rgb(49, 75, 212))", WE_GRAD_ANGLE, 224, 0, 2);
+    check("linear-gradient(5328.51deg, #911, rgb(130, 78, 0) 76.1%)", WE_GRAD_ANGLE, 28851, 0, 2);
+    check("linear-gradient(3409deg, red, gray, #cff249)", WE_GRAD_ANGLE, 16900, 0, 3);
+    check("linear-gradient(0.23turn, rgb(146, 79, 122), blue, #439b1f 98.1%)", WE_GRAD_ANGLE, 8280, 0, 3);
+    check("linear-gradient(-2937deg, blue, rgb(249, 121, 215), lime, #dc1)", WE_GRAD_ANGLE, 30300, 0, 4);
+    check("linear-gradient(-2295.7deg, black, rgb(49, 75, 212))", WE_GRAD_ANGLE, 22430, 0, 2);
     check("linear-gradient(-5turn, #179, orange)", WE_GRAD_TOP, 0, 0, 2);
-    check("linear-gradient(3479.6832deg, navy, #2f1a73)", WE_GRAD_ANGLE, 240, 0, 2);
-    check("linear-gradient(3074.49deg, rgb(203, 29, 248) 85.6%, orange, navy 18.1%, blue 33.1%)", WE_GRAD_ANGLE, 194, 0, 4);
+    check("linear-gradient(3479.6832deg, navy, #2f1a73)", WE_GRAD_ANGLE, 23968, 0, 2);
+    check("linear-gradient(3074.49deg, rgb(203, 29, 248) 85.6%, orange, navy 18.1%, blue 33.1%)", WE_GRAD_ANGLE, 19449, 0, 4);
 }
 
 static void test_l94_accept_23(void) {
-    check("linear-gradient(4.22turn, white 25.4%, rgb(25, 198, 141) 56.9%, #024, gray)", WE_GRAD_ANGLE, 79, 0, 4);
-    check("linear-gradient(985deg, #9a572b, navy 27.2%, #41e 20.5%)", WE_GRAD_ANGLE, 265, 0, 3);
-    check("linear-gradient(3303deg, gray 58.1%, lime)", WE_GRAD_ANGLE, 63, 0, 2);
-    check("linear-gradient(1066.63grad, rgb(187, 68, 202), rgb(84, 52, 68), blue)", WE_GRAD_ANGLE, 240, 0, 3);
-    check("linear-gradient(-4.86turn, #fa2, rgb(200, 144, 243))", WE_GRAD_ANGLE, 50, 0, 2);
-    check("linear-gradient(1785deg, rgb(210, 79, 79), blue 13.8%)", WE_GRAD_ANGLE, 345, 0, 2);
+    check("linear-gradient(4.22turn, white 25.4%, rgb(25, 198, 141) 56.9%, #024, gray)", WE_GRAD_ANGLE, 7920, 0, 4);
+    check("linear-gradient(985deg, #9a572b, navy 27.2%, #41e 20.5%)", WE_GRAD_ANGLE, 26500, 0, 3);
+    check("linear-gradient(3302.78deg, gray 58.1%, lime)", WE_GRAD_ANGLE, 6278, 0, 2);
+    check("linear-gradient(1066.63grad, rgb(187, 68, 202), rgb(84, 52, 68), blue)", WE_GRAD_ANGLE, 23997, 0, 3);
+    check("linear-gradient(-4.86turn, #fa2, rgb(200, 144, 243))", WE_GRAD_ANGLE, 5040, 0, 2);
+    check("linear-gradient(1785deg, rgb(210, 79, 79), blue 13.8%)", WE_GRAD_ANGLE, 34500, 0, 2);
     check("linear-gradient(3.50turn, #77e, rgb(209, 143, 185), rgb(28, 113, 18))", WE_GRAD_BOTTOM, 0, 0, 3);
-    check("linear-gradient(613deg, rgb(236, 217, 137) 70.7%, rgb(194, 62, 137))", WE_GRAD_ANGLE, 253, 0, 2);
+    check("linear-gradient(613deg, rgb(236, 217, 137) 70.7%, rgb(194, 62, 137))", WE_GRAD_ANGLE, 25300, 0, 2);
 }
 
 static void test_l94_accept_24(void) {
-    check("linear-gradient(871deg, navy, teal)", WE_GRAD_ANGLE, 151, 0, 2);
-    check("linear-gradient(516deg, #312, gray, #175ed5, orange)", WE_GRAD_ANGLE, 156, 0, 4);
-    check("linear-gradient(-1112grad, rgb(148, 152, 191) 19.6%, rgb(68, 86, 232))", WE_GRAD_ANGLE, 79, 0, 2);
+    check("linear-gradient(870.75deg, navy, teal)", WE_GRAD_ANGLE, 15075, 0, 2);
+    check("linear-gradient(515.66deg, #312, gray, #175ed5, orange)", WE_GRAD_ANGLE, 15566, 0, 4);
+    check("linear-gradient(-1112grad, rgb(148, 152, 191) 19.6%, rgb(68, 86, 232))", WE_GRAD_ANGLE, 7920, 0, 2);
     check("linear-gradient(0deg, rgb(19, 165, 38) 96.3%, navy 50%, #b06694)", WE_GRAD_TOP, 0, 0, 3);
     check("linear-gradient(to right bottom, #11fbbe, rgb(68, 251, 216), navy)", WE_GRAD_ANGLE, 0, 3, 3);
-    check("linear-gradient(-1591deg, #0c0 51.4%, lime)", WE_GRAD_ANGLE, 209, 0, 2);
+    check("linear-gradient(-1591deg, #0c0 51.4%, lime)", WE_GRAD_ANGLE, 20900, 0, 2);
     check("linear-gradient(0turn, rgb(122, 172, 255), rgb(161, 18, 196), gray, white)", WE_GRAD_TOP, 0, 0, 4);
-    check("linear-gradient(47deg, rgb(135, 217, 26) 47.4%, lime, red, rgb(107, 255, 181) 43.5%)", WE_GRAD_ANGLE, 47, 0, 4);
+    check("linear-gradient(46.9deg, rgb(135, 217, 26) 47.4%, lime, red, rgb(107, 255, 181) 43.5%)", WE_GRAD_ANGLE, 4690, 0, 4);
 }
 
 static void test_l94_accept_25(void) {
-    check("linear-gradient(64deg, #220433, black)", WE_GRAD_ANGLE, 64, 0, 2);
-    check("linear-gradient(115deg, rgb(40, 34, 54), #719, #8f3, #934)", WE_GRAD_ANGLE, 115, 0, 4);
-    check("linear-gradient(-2771deg, rgb(71, 116, 58), #ca8437, lime)", WE_GRAD_ANGLE, 109, 0, 3);
-    check("linear-gradient(-2324deg, rgb(159, 129, 162), #659, #ad2de1, #11d95e)", WE_GRAD_ANGLE, 196, 0, 4);
+    check("linear-gradient(63.64deg, #220433, black)", WE_GRAD_ANGLE, 6364, 0, 2);
+    check("linear-gradient(114.59deg, rgb(40, 34, 54), #719, #8f3, #934)", WE_GRAD_ANGLE, 11459, 0, 4);
+    check("linear-gradient(-2771deg, rgb(71, 116, 58), #ca8437, lime)", WE_GRAD_ANGLE, 10900, 0, 3);
+    check("linear-gradient(-2324deg, rgb(159, 129, 162), #659, #ad2de1, #11d95e)", WE_GRAD_ANGLE, 19600, 0, 4);
     check("linear-gradient(to top right, #38b485, rgb(225, 102, 245), #6c7)", WE_GRAD_ANGLE, 0, 1, 3);
-    check("linear-gradient(55deg, #6f9, gray)", WE_GRAD_ANGLE, 55, 0, 2);
-    check("linear-gradient(44deg, rgb(112, 144, 27), #91b, #500528, #3ba)", WE_GRAD_ANGLE, 44, 0, 4);
-    check("linear-gradient(1516deg, rgb(48, 94, 59), rgb(162, 3, 102), white 98.2%, gray)", WE_GRAD_ANGLE, 76, 0, 4);
+    check("linear-gradient(55.5deg, #6f9, gray)", WE_GRAD_ANGLE, 5550, 0, 2);
+    check("linear-gradient(44.23deg, rgb(112, 144, 27), #91b, #500528, #3ba)", WE_GRAD_ANGLE, 4423, 0, 4);
+    check("linear-gradient(1516deg, rgb(48, 94, 59), rgb(162, 3, 102), white 98.2%, gray)", WE_GRAD_ANGLE, 7600, 0, 4);
 }
 
 static void test_l94_accept_26(void) {
-    check("linear-gradient(189grad, #cb5, #1b25c2 19.8%)", WE_GRAD_ANGLE, 170, 0, 2);
-    check("linear-gradient(-337deg, rgb(9, 190, 226), rgb(167, 147, 62), #db6)", WE_GRAD_ANGLE, 23, 0, 3);
-    check("linear-gradient(952.66deg, #db843c 31.5%, rgb(148, 201, 127), black, #ee9)", WE_GRAD_ANGLE, 233, 0, 4);
-    check("linear-gradient(6.9turn, #a5d, rgb(166, 48, 43), rgb(127, 178, 10))", WE_GRAD_ANGLE, 324, 0, 3);
-    check("linear-gradient(529.695deg, orange, #a3602f)", WE_GRAD_ANGLE, 170, 0, 2);
-    check("linear-gradient(172deg, #b93 44.6%, rgb(0, 234, 245), rgb(200, 195, 241))", WE_GRAD_ANGLE, 172, 0, 3);
-    check("linear-gradient(142deg, #d6f 74.4%, #bdde56, rgb(78, 42, 79), #20470f)", WE_GRAD_ANGLE, 142, 0, 4);
-    check("linear-gradient(2910.31deg, rgb(214, 135, 83), red, rgb(220, 78, 124) 25.8%, rgb(184, 180, 16) 45.4%)", WE_GRAD_ANGLE, 30, 0, 4);
+    check("linear-gradient(189grad, #cb5, #1b25c2 19.8%)", WE_GRAD_ANGLE, 17010, 0, 2);
+    check("linear-gradient(-337deg, rgb(9, 190, 226), rgb(167, 147, 62), #db6)", WE_GRAD_ANGLE, 2300, 0, 3);
+    check("linear-gradient(952.66deg, #db843c 31.5%, rgb(148, 201, 127), black, #ee9)", WE_GRAD_ANGLE, 23266, 0, 4);
+    check("linear-gradient(6.9turn, #a5d, rgb(166, 48, 43), rgb(127, 178, 10))", WE_GRAD_ANGLE, 32400, 0, 3);
+    check("linear-gradient(529.695deg, orange, #a3602f)", WE_GRAD_ANGLE, 16970, 0, 2);
+    check("linear-gradient(171.89deg, #b93 44.6%, rgb(0, 234, 245), rgb(200, 195, 241))", WE_GRAD_ANGLE, 17189, 0, 3);
+    check("linear-gradient(142deg, #d6f 74.4%, #bdde56, rgb(78, 42, 79), #20470f)", WE_GRAD_ANGLE, 14200, 0, 4);
+    check("linear-gradient(2910.31deg, rgb(214, 135, 83), red, rgb(220, 78, 124) 25.8%, rgb(184, 180, 16) 45.4%)", WE_GRAD_ANGLE, 3031, 0, 4);
 }
 
 static void test_l94_accept_27(void) {
-    check("linear-gradient(1734deg, #d88b39, blue, white 92.5%)", WE_GRAD_ANGLE, 294, 0, 3);
-    check("linear-gradient(13deg, rgb(120, 126, 207) 61.4%, #5325ee 8.1%)", WE_GRAD_ANGLE, 13, 0, 2);
-    check("linear-gradient(-3915.05grad, red, rgb(61, 78, 180), rgb(227, 213, 110))", WE_GRAD_ANGLE, 76, 0, 3);
+    check("linear-gradient(1733.83deg, #d88b39, blue, white 92.5%)", WE_GRAD_ANGLE, 29383, 0, 3);
+    check("linear-gradient(12.61deg, rgb(120, 126, 207) 61.4%, #5325ee 8.1%)", WE_GRAD_ANGLE, 1261, 0, 2);
+    check("linear-gradient(-3915.05grad, red, rgb(61, 78, 180), rgb(227, 213, 110))", WE_GRAD_ANGLE, 7645, 0, 3);
     check("linear-gradient(to bottom right, #2cd, rgb(220, 183, 175))", WE_GRAD_ANGLE, 0, 3, 2);
     check("linear-gradient(to top right, rgb(36, 0, 198), #2f5d4a 23.7%)", WE_GRAD_ANGLE, 0, 1, 2);
     check("linear-gradient(to left bottom, rgb(162, 170, 95), red, #e68, black)", WE_GRAD_ANGLE, 0, 4, 4);
-    check("linear-gradient(896deg, black 2.5%, white, #d5f, rgb(68, 146, 61))", WE_GRAD_ANGLE, 176, 0, 4);
-    check("linear-gradient(3399deg, teal, rgb(223, 172, 242))", WE_GRAD_ANGLE, 159, 0, 2);
+    check("linear-gradient(896deg, black 2.5%, white, #d5f, rgb(68, 146, 61))", WE_GRAD_ANGLE, 17600, 0, 4);
+    check("linear-gradient(3399deg, teal, rgb(223, 172, 242))", WE_GRAD_ANGLE, 15900, 0, 2);
 }
 
 static void test_l94_accept_28(void) {
     check("linear-gradient(3turn, rgb(102, 179, 108) 75.7%, rgb(235, 171, 157) 80.7%)", WE_GRAD_TOP, 0, 0, 2);
-    check("linear-gradient(931.477deg, #5aa939, #4d7fb1, #d54378)", WE_GRAD_ANGLE, 211, 0, 3);
+    check("linear-gradient(931.477deg, #5aa939, #4d7fb1, #d54378)", WE_GRAD_ANGLE, 21148, 0, 3);
     check("linear-gradient(to right top, #14f800, rgb(129, 138, 141), rgb(105, 173, 3))", WE_GRAD_ANGLE, 0, 1, 3);
-    check("linear-gradient(17deg, black, #cc461a, black)", WE_GRAD_ANGLE, 17, 0, 3);
-    check("linear-gradient(272deg, gray 94.2%, teal)", WE_GRAD_ANGLE, 272, 0, 2);
-    check("linear-gradient(-3227deg, rgb(49, 243, 76), #b395e8 51.8%, teal 87.9%, rgb(134, 64, 227))", WE_GRAD_ANGLE, 13, 0, 4);
-    check("linear-gradient(344deg, blue, lime 37.4%, red)", WE_GRAD_ANGLE, 344, 0, 3);
-    check("linear-gradient(115deg, rgb(103, 158, 208), #aaa, #a15, rgb(161, 173, 186))", WE_GRAD_ANGLE, 115, 0, 4);
+    check("linear-gradient(16.9deg, black, #cc461a, black)", WE_GRAD_ANGLE, 1690, 0, 3);
+    check("linear-gradient(271.63deg, gray 94.2%, teal)", WE_GRAD_ANGLE, 27163, 0, 2);
+    check("linear-gradient(-3227deg, rgb(49, 243, 76), #b395e8 51.8%, teal 87.9%, rgb(134, 64, 227))", WE_GRAD_ANGLE, 1300, 0, 4);
+    check("linear-gradient(343.77deg, blue, lime 37.4%, red)", WE_GRAD_ANGLE, 34377, 0, 3);
+    check("linear-gradient(114.59deg, rgb(103, 158, 208), #aaa, #a15, rgb(161, 173, 186))", WE_GRAD_ANGLE, 11459, 0, 4);
 }
 
 static void test_l94_accept_29(void) {
     check("linear-gradient(to bottom left, #c8701c, gray)", WE_GRAD_ANGLE, 0, 4, 2);
-    check("linear-gradient(3276deg, teal 82.7%, #c31, #bd4, #04b)", WE_GRAD_ANGLE, 36, 0, 4);
-    check("linear-gradient(-17deg, #85c, blue, lime)", WE_GRAD_ANGLE, 343, 0, 3);
-    check("linear-gradient(1823deg, #8d8, #772)", WE_GRAD_ANGLE, 23, 0, 2);
+    check("linear-gradient(3276deg, teal 82.7%, #c31, #bd4, #04b)", WE_GRAD_ANGLE, 3600, 0, 4);
+    check("linear-gradient(-17.19deg, #85c, blue, lime)", WE_GRAD_ANGLE, 34281, 0, 3);
+    check("linear-gradient(1823deg, #8d8, #772)", WE_GRAD_ANGLE, 2300, 0, 2);
     check("linear-gradient(to top left, #86961d, #182, #a81)", WE_GRAD_ANGLE, 0, 2, 3);
-    check("linear-gradient(51deg, rgb(133, 168, 112), #78e)", WE_GRAD_ANGLE, 51, 0, 2);
-    check("linear-gradient(-1382deg, rgb(174, 128, 79), #b16, gray)", WE_GRAD_ANGLE, 58, 0, 3);
-    check("linear-gradient(2046deg, rgb(119, 140, 203), #0f6f8a)", WE_GRAD_ANGLE, 246, 0, 2);
+    check("linear-gradient(50.79deg, rgb(133, 168, 112), #78e)", WE_GRAD_ANGLE, 5079, 0, 2);
+    check("linear-gradient(-1382deg, rgb(174, 128, 79), #b16, gray)", WE_GRAD_ANGLE, 5800, 0, 3);
+    check("linear-gradient(2046deg, rgb(119, 140, 203), #0f6f8a)", WE_GRAD_ANGLE, 24600, 0, 2);
 }
 
 static void test_l94_accept_30(void) {
-    check("linear-gradient(2400.1grad, gray, gray 19.7%)", WE_GRAD_TOP, 0, 0, 2);
-    check("linear-gradient(-2532.2deg, rgb(2, 103, 229), #46d)", WE_GRAD_ANGLE, 348, 0, 2);
-    check("linear-gradient(5088deg, blue, #4aa 61.1%)", WE_GRAD_ANGLE, 48, 0, 2);
-    check("linear-gradient(1.81turn, rgb(35, 32, 55), red, teal)", WE_GRAD_ANGLE, 292, 0, 3);
-    check("linear-gradient(-2974deg, black, rgb(52, 36, 7), white, navy)", WE_GRAD_ANGLE, 266, 0, 4);
-    check("linear-gradient(27deg, teal 24.8%, navy)", WE_GRAD_ANGLE, 27, 0, 2);
-    check("linear-gradient(115deg, black, rgb(216, 27, 132) 80.8%)", WE_GRAD_ANGLE, 115, 0, 2);
-    check("linear-gradient(2641deg, rgb(213, 158, 55), #c29)", WE_GRAD_ANGLE, 121, 0, 2);
+    check("linear-gradient(2400.1grad, gray, gray 19.7%)", WE_GRAD_ANGLE, 9, 0, 2);
+    check("linear-gradient(-2532.2deg, rgb(2, 103, 229), #46d)", WE_GRAD_ANGLE, 34780, 0, 2);
+    check("linear-gradient(5088.44deg, blue, #4aa 61.1%)", WE_GRAD_ANGLE, 4844, 0, 2);
+    check("linear-gradient(1.81turn, rgb(35, 32, 55), red, teal)", WE_GRAD_ANGLE, 29160, 0, 3);
+    check("linear-gradient(-2974deg, black, rgb(52, 36, 7), white, navy)", WE_GRAD_ANGLE, 26600, 0, 4);
+    check("linear-gradient(26.64deg, teal 24.8%, navy)", WE_GRAD_ANGLE, 2664, 0, 2);
+    check("linear-gradient(114.59deg, black, rgb(216, 27, 132) 80.8%)", WE_GRAD_ANGLE, 11459, 0, 2);
+    check("linear-gradient(2641deg, rgb(213, 158, 55), #c29)", WE_GRAD_ANGLE, 12100, 0, 2);
 }
 
 static void test_l94_accept_31(void) {
     check("linear-gradient(to top right, rgb(206, 146, 216), rgb(61, 61, 182), #8b5)", WE_GRAD_ANGLE, 0, 1, 3);
-    check("linear-gradient(-5.82turn, #f45, navy)", WE_GRAD_ANGLE, 65, 0, 2);
-    check("linear-gradient(522deg, rgb(68, 51, 8), #b20)", WE_GRAD_ANGLE, 162, 0, 2);
-    check("linear-gradient(2788deg, blue, lime 15.8%)", WE_GRAD_ANGLE, 268, 0, 2);
-    check("linear-gradient(-930deg, rgb(172, 145, 81) 33.2%, lime, rgb(31, 159, 9))", WE_GRAD_ANGLE, 150, 0, 3);
-    check("linear-gradient(-20deg, #57035b 91%, rgb(33, 234, 83), #5e9, black)", WE_GRAD_ANGLE, 340, 0, 4);
-    check("linear-gradient(2450deg, #06acb5 70.9%, rgb(84, 86, 193), #8d01db, #7995cb)", WE_GRAD_ANGLE, 290, 0, 4);
-    check("linear-gradient(2539deg, white 19%, red)", WE_GRAD_ANGLE, 19, 0, 2);
+    check("linear-gradient(-5.82turn, #f45, navy)", WE_GRAD_ANGLE, 6480, 0, 2);
+    check("linear-gradient(521.64deg, rgb(68, 51, 8), #b20)", WE_GRAD_ANGLE, 16164, 0, 2);
+    check("linear-gradient(2788deg, blue, lime 15.8%)", WE_GRAD_ANGLE, 26800, 0, 2);
+    check("linear-gradient(-929.91deg, rgb(172, 145, 81) 33.2%, lime, rgb(31, 159, 9))", WE_GRAD_ANGLE, 15009, 0, 3);
+    check("linear-gradient(-20.34deg, #57035b 91%, rgb(33, 234, 83), #5e9, black)", WE_GRAD_ANGLE, 33966, 0, 4);
+    check("linear-gradient(2450.15deg, #06acb5 70.9%, rgb(84, 86, 193), #8d01db, #7995cb)", WE_GRAD_ANGLE, 29015, 0, 4);
+    check("linear-gradient(2539deg, white 19%, red)", WE_GRAD_ANGLE, 1900, 0, 2);
 }
 
 static void test_l94_accept_32(void) {
     check("linear-gradient(to bottom right, #83e 70.6%, rgb(60, 65, 116) 67.1%, #c6a2d1)", WE_GRAD_ANGLE, 0, 3, 3);
     check("linear-gradient(-0turn, #179, red)", WE_GRAD_TOP, 0, 0, 2);
-    check("linear-gradient(2482.4609deg, blue, rgb(28, 154, 191), #7bf 30.1%, rgb(80, 212, 31))", WE_GRAD_ANGLE, 322, 0, 4);
-    check("linear-gradient(2664deg, rgb(110, 149, 185) 55.8%, #dee9a1 18.6%, gray, teal)", WE_GRAD_ANGLE, 144, 0, 4);
-    check("linear-gradient(-3974deg, rgb(27, 128, 107), rgb(229, 43, 217), rgb(76, 53, 77))", WE_GRAD_ANGLE, 346, 0, 3);
-    check("linear-gradient(856deg, rgb(38, 18, 37), #fe9 53.3%)", WE_GRAD_ANGLE, 136, 0, 2);
-    check("linear-gradient(5380deg, rgb(103, 168, 170) 97.8%, lime)", WE_GRAD_ANGLE, 340, 0, 2);
-    check("linear-gradient(830.85deg, gray, teal, navy)", WE_GRAD_ANGLE, 111, 0, 3);
+    check("linear-gradient(2482.4609deg, blue, rgb(28, 154, 191), #7bf 30.1%, rgb(80, 212, 31))", WE_GRAD_ANGLE, 32246, 0, 4);
+    check("linear-gradient(2664deg, rgb(110, 149, 185) 55.8%, #dee9a1 18.6%, gray, teal)", WE_GRAD_ANGLE, 14400, 0, 4);
+    check("linear-gradient(-3973.57deg, rgb(27, 128, 107), rgb(229, 43, 217), rgb(76, 53, 77))", WE_GRAD_ANGLE, 34643, 0, 3);
+    check("linear-gradient(856deg, rgb(38, 18, 37), #fe9 53.3%)", WE_GRAD_ANGLE, 13600, 0, 2);
+    check("linear-gradient(5380.07deg, rgb(103, 168, 170) 97.8%, lime)", WE_GRAD_ANGLE, 34007, 0, 2);
+    check("linear-gradient(830.85deg, gray, teal, navy)", WE_GRAD_ANGLE, 11085, 0, 3);
 }
 
 static void test_l94_accept_33(void) {
-    check("linear-gradient(7.9turn, #145f2a, rgb(103, 33, 10), #e61, blue)", WE_GRAD_ANGLE, 324, 0, 4);
+    check("linear-gradient(7.9turn, #145f2a, rgb(103, 33, 10), #e61, blue)", WE_GRAD_ANGLE, 32400, 0, 4);
     check("linear-gradient(to top right, lime 5.8%, rgb(217, 50, 46))", WE_GRAD_ANGLE, 0, 1, 2);
-    check("linear-gradient(1849.1grad, #1df393, black, lime, rgb(133, 14, 240) 78.4%)", WE_GRAD_ANGLE, 224, 0, 4);
+    check("linear-gradient(1849.1grad, #1df393, black, lime, rgb(133, 14, 240) 78.4%)", WE_GRAD_ANGLE, 22419, 0, 4);
     check("linear-gradient(to left top, gray, rgb(222, 251, 105), rgb(17, 192, 108) 33.2%)", WE_GRAD_ANGLE, 0, 2, 3);
-    check("linear-gradient(-2295deg, #7c7, rgb(218, 93, 79), teal, rgb(82, 146, 24))", WE_GRAD_ANGLE, 225, 0, 4);
-    check("linear-gradient(2145deg, rgb(125, 250, 189), red, rgb(35, 237, 145))", WE_GRAD_ANGLE, 345, 0, 3);
-    check("linear-gradient(2521.5deg, rgb(102, 51, 98), rgb(99, 179, 15))", WE_GRAD_ANGLE, 2, 0, 2);
-    check("linear-gradient(33deg, rgb(133, 214, 93), rgb(190, 148, 126) 77.8%, black, rgb(65, 191, 83))", WE_GRAD_ANGLE, 33, 0, 4);
+    check("linear-gradient(-2295deg, #7c7, rgb(218, 93, 79), teal, rgb(82, 146, 24))", WE_GRAD_ANGLE, 22500, 0, 4);
+    check("linear-gradient(2145deg, rgb(125, 250, 189), red, rgb(35, 237, 145))", WE_GRAD_ANGLE, 34500, 0, 3);
+    check("linear-gradient(2521.5deg, rgb(102, 51, 98), rgb(99, 179, 15))", WE_GRAD_ANGLE, 150, 0, 2);
+    check("linear-gradient(33.28deg, rgb(133, 214, 93), rgb(190, 148, 126) 77.8%, black, rgb(65, 191, 83))", WE_GRAD_ANGLE, 3328, 0, 4);
 }
 
 static void test_l94_accept_34(void) {
     check("linear-gradient(6turn, #124, #d55)", WE_GRAD_TOP, 0, 0, 2);
-    check("linear-gradient(-2462deg, rgb(33, 91, 225) 15.1%, teal 99.4%)", WE_GRAD_ANGLE, 58, 0, 2);
+    check("linear-gradient(-2462deg, rgb(33, 91, 225) 15.1%, teal 99.4%)", WE_GRAD_ANGLE, 5800, 0, 2);
     check("linear-gradient(to right top, lime 18.8%, rgb(9, 246, 116), gray 85.5%)", WE_GRAD_ANGLE, 0, 1, 3);
-    check("linear-gradient(-975.6grad, black, #ce7, #727, red)", WE_GRAD_ANGLE, 202, 0, 4);
+    check("linear-gradient(-975.6grad, black, #ce7, #727, red)", WE_GRAD_ANGLE, 20196, 0, 4);
     check("linear-gradient(to top left, #7df, rgb(54, 53, 182), #ffa04b, rgb(196, 40, 148))", WE_GRAD_ANGLE, 0, 2, 4);
-    check("linear-gradient(2233.638deg, gray, gray, rgb(139, 168, 97), rgb(35, 238, 232) 95.3%)", WE_GRAD_ANGLE, 74, 0, 4);
-    check("linear-gradient(413deg, lime, teal, #da1, rgb(63, 127, 180))", WE_GRAD_ANGLE, 53, 0, 4);
-    check("linear-gradient(-3182grad, lime, #839)", WE_GRAD_ANGLE, 16, 0, 2);
+    check("linear-gradient(2233.638deg, gray, gray, rgb(139, 168, 97), rgb(35, 238, 232) 95.3%)", WE_GRAD_ANGLE, 7364, 0, 4);
+    check("linear-gradient(412.53deg, lime, teal, #da1, rgb(63, 127, 180))", WE_GRAD_ANGLE, 5253, 0, 4);
+    check("linear-gradient(-3182grad, lime, #839)", WE_GRAD_ANGLE, 1620, 0, 2);
 }
 
 static void test_l94_accept_35(void) {
-    check("linear-gradient(2329deg, teal, blue, rgb(138, 3, 251), #67d)", WE_GRAD_ANGLE, 169, 0, 4);
-    check("linear-gradient(-1824.1grad, black, rgb(39, 193, 54))", WE_GRAD_ANGLE, 158, 0, 2);
+    check("linear-gradient(2329deg, teal, blue, rgb(138, 3, 251), #67d)", WE_GRAD_ANGLE, 16900, 0, 4);
+    check("linear-gradient(-1824.1grad, black, rgb(39, 193, 54))", WE_GRAD_ANGLE, 15831, 0, 2);
     check("linear-gradient(to top right, rgb(250, 148, 31), teal 91.8%, rgb(118, 121, 81), rgb(249, 209, 213))", WE_GRAD_ANGLE, 0, 1, 4);
-    check("linear-gradient(1410.898deg, #627, rgb(70, 149, 128) 43.1%)", WE_GRAD_ANGLE, 331, 0, 2);
-    check("linear-gradient(-2554deg, rgb(146, 130, 182), black 20.1%)", WE_GRAD_ANGLE, 326, 0, 2);
+    check("linear-gradient(1410.898deg, #627, rgb(70, 149, 128) 43.1%)", WE_GRAD_ANGLE, 33090, 0, 2);
+    check("linear-gradient(-2554.27deg, rgb(146, 130, 182), black 20.1%)", WE_GRAD_ANGLE, 32573, 0, 2);
     check("linear-gradient(to bottom right, rgb(129, 227, 164) 62.3%, #703f5f, blue, #6eb 97.7%)", WE_GRAD_ANGLE, 0, 3, 4);
     check("linear-gradient(to bottom left, red, #c12 93.8%)", WE_GRAD_ANGLE, 0, 4, 2);
-    check("linear-gradient(70deg, lime, #04e501)", WE_GRAD_ANGLE, 70, 0, 2);
+    check("linear-gradient(69.56deg, lime, #04e501)", WE_GRAD_ANGLE, 6956, 0, 2);
 }
 
 static void test_l94_accept_36(void) {
-    check("linear-gradient(979.91deg, orange 23%, white)", WE_GRAD_ANGLE, 260, 0, 2);
-    check("linear-gradient(4734deg, lime, rgb(78, 187, 0) 76.9%, rgb(100, 135, 29))", WE_GRAD_ANGLE, 54, 0, 3);
-    check("linear-gradient(-24grad, #d58, blue)", WE_GRAD_ANGLE, 338, 0, 2);
+    check("linear-gradient(979.91deg, orange 23%, white)", WE_GRAD_ANGLE, 25991, 0, 2);
+    check("linear-gradient(4733.77deg, lime, rgb(78, 187, 0) 76.9%, rgb(100, 135, 29))", WE_GRAD_ANGLE, 5377, 0, 3);
+    check("linear-gradient(-24grad, #d58, blue)", WE_GRAD_ANGLE, 33840, 0, 2);
     check("linear-gradient(to top left, rgb(186, 73, 157), #6d4)", WE_GRAD_ANGLE, 0, 2, 2);
-    check("linear-gradient(178deg, rgb(215, 67, 1), #04a, navy, rgb(189, 224, 130))", WE_GRAD_ANGLE, 178, 0, 4);
-    check("linear-gradient(41deg, lime, rgb(73, 218, 123) 68.7%)", WE_GRAD_ANGLE, 41, 0, 2);
-    check("linear-gradient(338grad, #1997c9, #34f, rgb(213, 19, 7))", WE_GRAD_ANGLE, 304, 0, 3);
-    check("linear-gradient(2746deg, #e0a, rgb(218, 251, 104) 93.3%, #568 2.3%)", WE_GRAD_ANGLE, 226, 0, 3);
+    check("linear-gradient(178deg, rgb(215, 67, 1), #04a, navy, rgb(189, 224, 130))", WE_GRAD_ANGLE, 17800, 0, 4);
+    check("linear-gradient(41deg, lime, rgb(73, 218, 123) 68.7%)", WE_GRAD_ANGLE, 4100, 0, 2);
+    check("linear-gradient(338grad, #1997c9, #34f, rgb(213, 19, 7))", WE_GRAD_ANGLE, 30420, 0, 3);
+    check("linear-gradient(2746deg, #e0a, rgb(218, 251, 104) 93.3%, #568 2.3%)", WE_GRAD_ANGLE, 22600, 0, 3);
 }
 
 static void test_l94_accept_37(void) {
-    check("linear-gradient(3.38turn, rgb(35, 227, 21) 36.7%, white 94.1%, #8de656, rgb(3, 187, 0) 40.5%)", WE_GRAD_ANGLE, 137, 0, 4);
-    check("linear-gradient(-9.4turn, #c6c, #6e1433 31.1%)", WE_GRAD_ANGLE, 216, 0, 2);
-    check("linear-gradient(2512deg, orange, #1b1)", WE_GRAD_ANGLE, 352, 0, 2);
-    check("linear-gradient(353.9deg, #6e7, red)", WE_GRAD_ANGLE, 354, 0, 2);
-    check("linear-gradient(38deg, #596, lime, rgb(100, 57, 200) 11%, rgb(36, 13, 93))", WE_GRAD_ANGLE, 38, 0, 4);
-    check("linear-gradient(1409deg, rgb(108, 20, 111), #711, #fce094)", WE_GRAD_ANGLE, 329, 0, 3);
-    check("linear-gradient(3085deg, white 20.4%, #5bf, blue)", WE_GRAD_ANGLE, 205, 0, 3);
-    check("linear-gradient(2573deg, white, white)", WE_GRAD_ANGLE, 53, 0, 2);
+    check("linear-gradient(3.38turn, rgb(35, 227, 21) 36.7%, white 94.1%, #8de656, rgb(3, 187, 0) 40.5%)", WE_GRAD_ANGLE, 13680, 0, 4);
+    check("linear-gradient(-9.4turn, #c6c, #6e1433 31.1%)", WE_GRAD_ANGLE, 21600, 0, 2);
+    check("linear-gradient(2512deg, orange, #1b1)", WE_GRAD_ANGLE, 35200, 0, 2);
+    check("linear-gradient(353.9deg, #6e7, red)", WE_GRAD_ANGLE, 35390, 0, 2);
+    check("linear-gradient(37.62deg, #596, lime, rgb(100, 57, 200) 11%, rgb(36, 13, 93))", WE_GRAD_ANGLE, 3762, 0, 4);
+    check("linear-gradient(1408.79deg, rgb(108, 20, 111), #711, #fce094)", WE_GRAD_ANGLE, 32879, 0, 3);
+    check("linear-gradient(3085deg, white 20.4%, #5bf, blue)", WE_GRAD_ANGLE, 20500, 0, 3);
+    check("linear-gradient(2573deg, white, white)", WE_GRAD_ANGLE, 5300, 0, 2);
 }
 
 static void test_l94_accept_38(void) {
-    check("linear-gradient(1971deg, rgb(226, 218, 191), #b86)", WE_GRAD_ANGLE, 171, 0, 2);
-    check("linear-gradient(3522deg, black, red, rgb(108, 137, 109) 27.8%, gray 5.4%)", WE_GRAD_ANGLE, 282, 0, 4);
-    check("linear-gradient(4.2turn, rgb(132, 129, 67), rgb(12, 189, 113) 99.8%)", WE_GRAD_ANGLE, 72, 0, 2);
-    check("linear-gradient(1358deg, blue, lime, #959)", WE_GRAD_ANGLE, 278, 0, 3);
-    check("linear-gradient(3292deg, lime 21.3%, rgb(243, 47, 33) 22.2%, #261)", WE_GRAD_ANGLE, 52, 0, 3);
-    check("linear-gradient(2023.4740deg, #a2dfb6, #8f003d, #d1781f)", WE_GRAD_ANGLE, 223, 0, 3);
-    check("linear-gradient(-3312deg, rgb(136, 66, 229), lime)", WE_GRAD_ANGLE, 288, 0, 2);
-    check("linear-gradient(584grad, gray, #408791 80.6%)", WE_GRAD_ANGLE, 166, 0, 2);
+    check("linear-gradient(1971deg, rgb(226, 218, 191), #b86)", WE_GRAD_ANGLE, 17100, 0, 2);
+    check("linear-gradient(3522deg, black, red, rgb(108, 137, 109) 27.8%, gray 5.4%)", WE_GRAD_ANGLE, 28200, 0, 4);
+    check("linear-gradient(4.2turn, rgb(132, 129, 67), rgb(12, 189, 113) 99.8%)", WE_GRAD_ANGLE, 7200, 0, 2);
+    check("linear-gradient(1358deg, blue, lime, #959)", WE_GRAD_ANGLE, 27800, 0, 3);
+    check("linear-gradient(3292deg, lime 21.3%, rgb(243, 47, 33) 22.2%, #261)", WE_GRAD_ANGLE, 5200, 0, 3);
+    check("linear-gradient(2023.4740deg, #a2dfb6, #8f003d, #d1781f)", WE_GRAD_ANGLE, 22347, 0, 3);
+    check("linear-gradient(-3312.33deg, rgb(136, 66, 229), lime)", WE_GRAD_ANGLE, 28767, 0, 2);
+    check("linear-gradient(584grad, gray, #408791 80.6%)", WE_GRAD_ANGLE, 16560, 0, 2);
 }
 
 static void test_l94_accept_39(void) {
-    check("linear-gradient(1636deg, red, rgb(135, 69, 191), lime, rgb(114, 223, 112))", WE_GRAD_ANGLE, 196, 0, 4);
-    check("linear-gradient(2846deg, rgb(7, 149, 243), #426 14.1%)", WE_GRAD_ANGLE, 326, 0, 2);
+    check("linear-gradient(1636deg, red, rgb(135, 69, 191), lime, rgb(114, 223, 112))", WE_GRAD_ANGLE, 19600, 0, 4);
+    check("linear-gradient(2846deg, rgb(7, 149, 243), #426 14.1%)", WE_GRAD_ANGLE, 32600, 0, 2);
     check("linear-gradient(10turn, #757d2e 5.1%, blue)", WE_GRAD_TOP, 0, 0, 2);
-    check("linear-gradient(3524deg, #ac1, rgb(54, 169, 192))", WE_GRAD_ANGLE, 284, 0, 2);
-    check("linear-gradient(5119deg, rgb(164, 8, 56), lime)", WE_GRAD_ANGLE, 79, 0, 2);
-    check("linear-gradient(4.08turn, black, rgb(200, 238, 239), rgb(76, 234, 40), rgb(64, 188, 56) 0.3%)", WE_GRAD_ANGLE, 29, 0, 4);
-    check("linear-gradient(887deg, rgb(141, 160, 251) 12.9%, rgb(220, 96, 196) 14.6%, #fc7)", WE_GRAD_ANGLE, 167, 0, 3);
+    check("linear-gradient(3524deg, #ac1, rgb(54, 169, 192))", WE_GRAD_ANGLE, 28400, 0, 2);
+    check("linear-gradient(5119.38deg, rgb(164, 8, 56), lime)", WE_GRAD_ANGLE, 7938, 0, 2);
+    check("linear-gradient(4.08turn, black, rgb(200, 238, 239), rgb(76, 234, 40), rgb(64, 188, 56) 0.3%)", WE_GRAD_ANGLE, 2880, 0, 4);
+    check("linear-gradient(887deg, rgb(141, 160, 251) 12.9%, rgb(220, 96, 196) 14.6%, #fc7)", WE_GRAD_ANGLE, 16700, 0, 3);
     check("linear-gradient(to bottom right, teal, black)", WE_GRAD_ANGLE, 0, 3, 2);
 }
 
 static void test_l94_accept_40(void) {
-    check("linear-gradient(2871.59grad, white 86.1%, navy)", WE_GRAD_ANGLE, 64, 0, 2);
-    check("linear-gradient(172deg, #afd221, rgb(118, 126, 149))", WE_GRAD_ANGLE, 172, 0, 2);
-    check("linear-gradient(998.6deg, rgb(240, 149, 230) 51.8%, gray 26.6%)", WE_GRAD_ANGLE, 279, 0, 2);
-    check("linear-gradient(-2222deg, red 66.1%, orange)", WE_GRAD_ANGLE, 298, 0, 2);
-    check("linear-gradient(55.35deg, rgb(142, 87, 169), black)", WE_GRAD_ANGLE, 55, 0, 2);
-    check("linear-gradient(1802deg, rgb(35, 53, 97) 7.2%, red 80.8%)", WE_GRAD_ANGLE, 2, 0, 2);
-    check("linear-gradient(-2140grad, rgb(8, 125, 190), #a56, #1b7)", WE_GRAD_ANGLE, 234, 0, 3);
-    check("linear-gradient(2235deg, gray 39.9%, rgb(70, 18, 224))", WE_GRAD_ANGLE, 75, 0, 2);
+    check("linear-gradient(2871.59grad, white 86.1%, navy)", WE_GRAD_ANGLE, 6443, 0, 2);
+    check("linear-gradient(171.89deg, #afd221, rgb(118, 126, 149))", WE_GRAD_ANGLE, 17189, 0, 2);
+    check("linear-gradient(998.6deg, rgb(240, 149, 230) 51.8%, gray 26.6%)", WE_GRAD_ANGLE, 27860, 0, 2);
+    check("linear-gradient(-2222deg, red 66.1%, orange)", WE_GRAD_ANGLE, 29800, 0, 2);
+    check("linear-gradient(55.35deg, rgb(142, 87, 169), black)", WE_GRAD_ANGLE, 5535, 0, 2);
+    check("linear-gradient(1802deg, rgb(35, 53, 97) 7.2%, red 80.8%)", WE_GRAD_ANGLE, 200, 0, 2);
+    check("linear-gradient(-2140grad, rgb(8, 125, 190), #a56, #1b7)", WE_GRAD_ANGLE, 23400, 0, 3);
+    check("linear-gradient(2235deg, gray 39.9%, rgb(70, 18, 224))", WE_GRAD_ANGLE, 7500, 0, 2);
 }
 
 static void test_l94_accept_41(void) {
-    check("linear-gradient(-3309deg, red 42.1%, black)", WE_GRAD_ANGLE, 291, 0, 2);
-    check("linear-gradient(2651.7grad, blue 3%, rgb(22, 86, 17), #4b5)", WE_GRAD_ANGLE, 227, 0, 3);
+    check("linear-gradient(-3309deg, red 42.1%, black)", WE_GRAD_ANGLE, 29100, 0, 2);
+    check("linear-gradient(2651.7grad, blue 3%, rgb(22, 86, 17), #4b5)", WE_GRAD_ANGLE, 22653, 0, 3);
     check("linear-gradient(to right top, rgb(90, 44, 8), rgb(242, 204, 132))", WE_GRAD_ANGLE, 0, 1, 2);
-    check("linear-gradient(11deg, rgb(37, 136, 54), rgb(150, 67, 241), orange, rgb(34, 155, 133))", WE_GRAD_ANGLE, 11, 0, 4);
-    check("linear-gradient(468.49grad, red, red, rgb(154, 109, 87), black)", WE_GRAD_ANGLE, 62, 0, 4);
-    check("linear-gradient(3970.22grad, orange, #b09aad, rgb(240, 174, 122))", WE_GRAD_ANGLE, 333, 0, 3);
-    check("linear-gradient(-395deg, #bb6, #100 22.7%)", WE_GRAD_ANGLE, 325, 0, 2);
-    check("linear-gradient(-2185deg, gray, rgb(34, 74, 105), navy, rgb(212, 117, 186) 57.8%)", WE_GRAD_ANGLE, 335, 0, 4);
+    check("linear-gradient(11.4deg, rgb(37, 136, 54), rgb(150, 67, 241), orange, rgb(34, 155, 133))", WE_GRAD_ANGLE, 1140, 0, 4);
+    check("linear-gradient(468.49grad, red, red, rgb(154, 109, 87), black)", WE_GRAD_ANGLE, 6164, 0, 4);
+    check("linear-gradient(3970.22grad, orange, #b09aad, rgb(240, 174, 122))", WE_GRAD_ANGLE, 33320, 0, 3);
+    check("linear-gradient(-395.34deg, #bb6, #100 22.7%)", WE_GRAD_ANGLE, 32466, 0, 2);
+    check("linear-gradient(-2185deg, gray, rgb(34, 74, 105), navy, rgb(212, 117, 186) 57.8%)", WE_GRAD_ANGLE, 33500, 0, 4);
 }
 
 static void test_l94_accept_42(void) {
-    check("linear-gradient(-1227grad, #d04, #989, #1a3861, #569ab7)", WE_GRAD_ANGLE, 336, 0, 4);
+    check("linear-gradient(-1227grad, #d04, #989, #1a3861, #569ab7)", WE_GRAD_ANGLE, 33570, 0, 4);
     check("linear-gradient(0turn, navy 81.8%, rgb(246, 100, 147), #214026)", WE_GRAD_TOP, 0, 0, 3);
-    check("linear-gradient(-3157deg, navy 44.6%, #836806 67.6%)", WE_GRAD_ANGLE, 83, 0, 2);
-    check("linear-gradient(-2637deg, navy, gray)", WE_GRAD_ANGLE, 243, 0, 2);
-    check("linear-gradient(5623deg, rgb(195, 25, 88), #c50)", WE_GRAD_ANGLE, 223, 0, 2);
+    check("linear-gradient(-3157deg, navy 44.6%, #836806 67.6%)", WE_GRAD_ANGLE, 8300, 0, 2);
+    check("linear-gradient(-2637.27deg, navy, gray)", WE_GRAD_ANGLE, 24273, 0, 2);
+    check("linear-gradient(5623.23deg, rgb(195, 25, 88), #c50)", WE_GRAD_ANGLE, 22323, 0, 2);
     check("linear-gradient(to bottom right, orange 66.9%, rgb(50, 100, 100), lime 34.3%, red)", WE_GRAD_ANGLE, 0, 3, 4);
-    check("linear-gradient(-2573deg, rgb(65, 127, 252), #b93d25)", WE_GRAD_ANGLE, 307, 0, 2);
+    check("linear-gradient(-2573deg, rgb(65, 127, 252), #b93d25)", WE_GRAD_ANGLE, 30700, 0, 2);
     check("linear-gradient(to bottom left, rgb(162, 108, 65), lime)", WE_GRAD_ANGLE, 0, 4, 2);
 }
 
 static void test_l94_accept_43(void) {
-    check("linear-gradient(3660.9grad, white, rgb(33, 45, 118))", WE_GRAD_ANGLE, 55, 0, 2);
-    check("linear-gradient(886.8256deg, #5065d9, #cbd)", WE_GRAD_ANGLE, 167, 0, 2);
-    check("linear-gradient(2050.5grad, rgb(239, 35, 250), #955c83 60.9%, gray, gray)", WE_GRAD_ANGLE, 45, 0, 4);
-    check("linear-gradient(-932.25grad, rgb(161, 199, 176), rgb(202, 7, 220), rgb(109, 176, 49))", WE_GRAD_ANGLE, 241, 0, 3);
-    check("linear-gradient(58deg, #2af039, #ddafa1 28.6%)", WE_GRAD_ANGLE, 58, 0, 2);
-    check("linear-gradient(-3074deg, #142 19%, #9ccee1, #20abe2, rgb(142, 154, 10))", WE_GRAD_ANGLE, 166, 0, 4);
-    check("linear-gradient(2932deg, #eaf, rgb(125, 252, 188), rgb(237, 98, 72))", WE_GRAD_ANGLE, 52, 0, 3);
+    check("linear-gradient(3660.9grad, white, rgb(33, 45, 118))", WE_GRAD_ANGLE, 5481, 0, 2);
+    check("linear-gradient(886.8256deg, #5065d9, #cbd)", WE_GRAD_ANGLE, 16683, 0, 2);
+    check("linear-gradient(2050.5grad, rgb(239, 35, 250), #955c83 60.9%, gray, gray)", WE_GRAD_ANGLE, 4545, 0, 4);
+    check("linear-gradient(-932.25grad, rgb(161, 199, 176), rgb(202, 7, 220), rgb(109, 176, 49))", WE_GRAD_ANGLE, 24097, 0, 3);
+    check("linear-gradient(58.44deg, #2af039, #ddafa1 28.6%)", WE_GRAD_ANGLE, 5844, 0, 2);
+    check("linear-gradient(-3074deg, #142 19%, #9ccee1, #20abe2, rgb(142, 154, 10))", WE_GRAD_ANGLE, 16600, 0, 4);
+    check("linear-gradient(2932deg, #eaf, rgb(125, 252, 188), rgb(237, 98, 72))", WE_GRAD_ANGLE, 5200, 0, 3);
     check("linear-gradient(0deg, teal, white)", WE_GRAD_TOP, 0, 0, 2);
 }
 
 static void test_l94_accept_44(void) {
-    check("linear-gradient(76deg, blue 85.8%, rgb(83, 98, 34), red, #80e)", WE_GRAD_ANGLE, 76, 0, 4);
-    check("linear-gradient(547deg, #2b0985, rgb(181, 223, 194), teal, rgb(98, 71, 157))", WE_GRAD_ANGLE, 187, 0, 4);
-    check("linear-gradient(590.21deg, rgb(43, 205, 45), rgb(22, 18, 157), gray 67%)", WE_GRAD_ANGLE, 230, 0, 3);
-    check("linear-gradient(792deg, gray, navy)", WE_GRAD_ANGLE, 72, 0, 2);
-    check("linear-gradient(401.8grad, #64a188, #2945e9)", WE_GRAD_ANGLE, 2, 0, 2);
-    check("linear-gradient(739.7392deg, #975b46, #18d, gray)", WE_GRAD_ANGLE, 20, 0, 3);
-    check("linear-gradient(-2096deg, #b8ec92 11.3%, rgb(186, 220, 218), rgb(95, 166, 133), gray 66.2%)", WE_GRAD_ANGLE, 64, 0, 4);
-    check("linear-gradient(3562deg, #4331c7, #9d8c92)", WE_GRAD_ANGLE, 322, 0, 2);
+    check("linear-gradient(76.2deg, blue 85.8%, rgb(83, 98, 34), red, #80e)", WE_GRAD_ANGLE, 7620, 0, 4);
+    check("linear-gradient(546.95deg, #2b0985, rgb(181, 223, 194), teal, rgb(98, 71, 157))", WE_GRAD_ANGLE, 18695, 0, 4);
+    check("linear-gradient(590.21deg, rgb(43, 205, 45), rgb(22, 18, 157), gray 67%)", WE_GRAD_ANGLE, 23021, 0, 3);
+    check("linear-gradient(792deg, gray, navy)", WE_GRAD_ANGLE, 7200, 0, 2);
+    check("linear-gradient(401.8grad, #64a188, #2945e9)", WE_GRAD_ANGLE, 162, 0, 2);
+    check("linear-gradient(739.7392deg, #975b46, #18d, gray)", WE_GRAD_ANGLE, 1974, 0, 3);
+    check("linear-gradient(-2096deg, #b8ec92 11.3%, rgb(186, 220, 218), rgb(95, 166, 133), gray 66.2%)", WE_GRAD_ANGLE, 6400, 0, 4);
+    check("linear-gradient(3562deg, #4331c7, #9d8c92)", WE_GRAD_ANGLE, 32200, 0, 2);
 }
 
 static void test_l94_accept_45(void) {
-    check("linear-gradient(-542deg, #ecb, gray 63%)", WE_GRAD_ANGLE, 178, 0, 2);
-    check("linear-gradient(-2016deg, rgb(33, 99, 165), teal, #f8fa7d, #cbe 90.4%)", WE_GRAD_ANGLE, 144, 0, 4);
-    check("linear-gradient(76deg, red, rgb(237, 238, 141), #44f7da, rgb(17, 24, 179) 0.2%)", WE_GRAD_ANGLE, 76, 0, 4);
-    check("linear-gradient(1345deg, #21e, rgb(119, 232, 202))", WE_GRAD_ANGLE, 265, 0, 2);
-    check("linear-gradient(-1.35turn, #21d06e 91.1%, rgb(96, 97, 218))", WE_GRAD_ANGLE, 234, 0, 2);
-    check("linear-gradient(3126deg, orange, #b6f)", WE_GRAD_ANGLE, 246, 0, 2);
-    check("linear-gradient(1371deg, #64bcd0, rgb(168, 0, 16), #552)", WE_GRAD_ANGLE, 291, 0, 3);
-    check("linear-gradient(416.539deg, #b19 86.2%, #d3720b, #029)", WE_GRAD_ANGLE, 57, 0, 3);
+    check("linear-gradient(-542.16deg, #ecb, gray 63%)", WE_GRAD_ANGLE, 17784, 0, 2);
+    check("linear-gradient(-2016deg, rgb(33, 99, 165), teal, #f8fa7d, #cbe 90.4%)", WE_GRAD_ANGLE, 14400, 0, 4);
+    check("linear-gradient(75.63deg, red, rgb(237, 238, 141), #44f7da, rgb(17, 24, 179) 0.2%)", WE_GRAD_ANGLE, 7563, 0, 4);
+    check("linear-gradient(1345deg, #21e, rgb(119, 232, 202))", WE_GRAD_ANGLE, 26500, 0, 2);
+    check("linear-gradient(-1.35turn, #21d06e 91.1%, rgb(96, 97, 218))", WE_GRAD_ANGLE, 23400, 0, 2);
+    check("linear-gradient(3125.96deg, orange, #b6f)", WE_GRAD_ANGLE, 24596, 0, 2);
+    check("linear-gradient(1371deg, #64bcd0, rgb(168, 0, 16), #552)", WE_GRAD_ANGLE, 29100, 0, 3);
+    check("linear-gradient(416.539deg, #b19 86.2%, #d3720b, #029)", WE_GRAD_ANGLE, 5654, 0, 3);
 }
 
 static void test_l94_accept_46(void) {
-    check("linear-gradient(348deg, lime, gray)", WE_GRAD_ANGLE, 348, 0, 2);
-    check("linear-gradient(-1212.1804deg, #924c55, rgb(9, 31, 117), teal)", WE_GRAD_ANGLE, 228, 0, 3);
-    check("linear-gradient(-2312.8deg, rgb(102, 75, 219) 49.4%, rgb(230, 34, 120))", WE_GRAD_ANGLE, 207, 0, 2);
-    check("linear-gradient(1621deg, #250, black)", WE_GRAD_ANGLE, 181, 0, 2);
-    check("linear-gradient(-47deg, rgb(10, 117, 240) 97.8%, #3c8 11%, rgb(20, 12, 237) 37.9%)", WE_GRAD_ANGLE, 313, 0, 3);
+    check("linear-gradient(347.84deg, lime, gray)", WE_GRAD_ANGLE, 34784, 0, 2);
+    check("linear-gradient(-1212.1804deg, #924c55, rgb(9, 31, 117), teal)", WE_GRAD_ANGLE, 22782, 0, 3);
+    check("linear-gradient(-2312.8deg, rgb(102, 75, 219) 49.4%, rgb(230, 34, 120))", WE_GRAD_ANGLE, 20720, 0, 2);
+    check("linear-gradient(1621.47deg, #250, black)", WE_GRAD_ANGLE, 18147, 0, 2);
+    check("linear-gradient(-47deg, rgb(10, 117, 240) 97.8%, #3c8 11%, rgb(20, 12, 237) 37.9%)", WE_GRAD_ANGLE, 31300, 0, 3);
     check("linear-gradient(to bottom left, #ccf 58%, black, #fc2327, navy)", WE_GRAD_ANGLE, 0, 4, 4);
-    check("linear-gradient(-57deg, rgb(239, 56, 99) 35.7%, white)", WE_GRAD_ANGLE, 303, 0, 2);
+    check("linear-gradient(-57.3deg, rgb(239, 56, 99) 35.7%, white)", WE_GRAD_ANGLE, 30270, 0, 2);
     check("linear-gradient(-5turn, rgb(103, 59, 49) 90.2%, gray 61.1%, rgb(105, 34, 65))", WE_GRAD_TOP, 0, 0, 3);
 }
 
 static void test_l94_accept_47(void) {
-    check("linear-gradient(-1761deg, rgb(80, 177, 155), lime)", WE_GRAD_ANGLE, 39, 0, 2);
-    check("linear-gradient(-3.17turn, black, #096f9c)", WE_GRAD_ANGLE, 299, 0, 2);
-    check("linear-gradient(2393deg, #c51, lime, rgb(13, 215, 158), gray)", WE_GRAD_ANGLE, 233, 0, 4);
-    check("linear-gradient(553deg, red 41.5%, navy, orange)", WE_GRAD_ANGLE, 193, 0, 3);
-    check("linear-gradient(3092deg, gray, rgb(122, 43, 196) 41.1%)", WE_GRAD_ANGLE, 212, 0, 2);
-    check("linear-gradient(1447.1grad, rgb(214, 14, 221), rgb(187, 196, 166))", WE_GRAD_ANGLE, 222, 0, 2);
+    check("linear-gradient(-1761deg, rgb(80, 177, 155), lime)", WE_GRAD_ANGLE, 3900, 0, 2);
+    check("linear-gradient(-3.17turn, black, #096f9c)", WE_GRAD_ANGLE, 29880, 0, 2);
+    check("linear-gradient(2393deg, #c51, lime, rgb(13, 215, 158), gray)", WE_GRAD_ANGLE, 23300, 0, 4);
+    check("linear-gradient(553deg, red 41.5%, navy, orange)", WE_GRAD_ANGLE, 19300, 0, 3);
+    check("linear-gradient(3092deg, gray, rgb(122, 43, 196) 41.1%)", WE_GRAD_ANGLE, 21200, 0, 2);
+    check("linear-gradient(1447.1grad, rgb(214, 14, 221), rgb(187, 196, 166))", WE_GRAD_ANGLE, 22239, 0, 2);
     check("linear-gradient(to bottom left, red, rgb(136, 12, 103), #e22 71.2%, #fe4)", WE_GRAD_ANGLE, 0, 4, 4);
-    check("linear-gradient(3864.8grad, black, #f60 76.7%, #7da 76.6%, #adabef)", WE_GRAD_ANGLE, 238, 0, 4);
+    check("linear-gradient(3864.8grad, black, #f60 76.7%, #7da 76.6%, #adabef)", WE_GRAD_ANGLE, 23832, 0, 4);
 }
 
 static void test_l94_accept_48(void) {
-    check("linear-gradient(5.22turn, teal, white 36.2%)", WE_GRAD_ANGLE, 79, 0, 2);
+    check("linear-gradient(5.22turn, teal, white 36.2%)", WE_GRAD_ANGLE, 7920, 0, 2);
     check("linear-gradient(to right top, #a5b54c, #4f5, rgb(155, 186, 226) 90%, gray)", WE_GRAD_ANGLE, 0, 1, 4);
     check("linear-gradient(800grad, rgb(232, 51, 135) 70.1%, #a74 90.7%)", WE_GRAD_TOP, 0, 0, 2);
-    check("linear-gradient(3368deg, #113, gray)", WE_GRAD_ANGLE, 128, 0, 2);
-    check("linear-gradient(2068deg, navy, rgb(199, 110, 198), navy 91.5%, #b1c)", WE_GRAD_ANGLE, 268, 0, 4);
-    check("linear-gradient(3514.85deg, rgb(47, 210, 56) 15.5%, black 63.8%)", WE_GRAD_ANGLE, 275, 0, 2);
+    check("linear-gradient(3368deg, #113, gray)", WE_GRAD_ANGLE, 12800, 0, 2);
+    check("linear-gradient(2068deg, navy, rgb(199, 110, 198), navy 91.5%, #b1c)", WE_GRAD_ANGLE, 26800, 0, 4);
+    check("linear-gradient(3514.85deg, rgb(47, 210, 56) 15.5%, black 63.8%)", WE_GRAD_ANGLE, 27485, 0, 2);
     check("linear-gradient(to bottom left, rgb(221, 61, 97), teal)", WE_GRAD_ANGLE, 0, 4, 2);
     check("linear-gradient(2.75turn, #bf1, orange)", WE_GRAD_LEFT, 0, 0, 2);
 }
 
 static void test_l94_accept_49(void) {
-    check("linear-gradient(5094deg, rgb(74, 55, 75), #161)", WE_GRAD_ANGLE, 54, 0, 2);
-    check("linear-gradient(1362.4deg, black, white 18.1%, #f47ec8)", WE_GRAD_ANGLE, 282, 0, 3);
-    check("linear-gradient(-56deg, red, #21e)", WE_GRAD_ANGLE, 304, 0, 2);
+    check("linear-gradient(5093.59deg, rgb(74, 55, 75), #161)", WE_GRAD_ANGLE, 5359, 0, 2);
+    check("linear-gradient(1362.4deg, black, white 18.1%, #f47ec8)", WE_GRAD_ANGLE, 28240, 0, 3);
+    check("linear-gradient(-56.11deg, red, #21e)", WE_GRAD_ANGLE, 30389, 0, 2);
     check("linear-gradient(to top left, #be0, orange)", WE_GRAD_ANGLE, 0, 2, 2);
-    check("conic-gradient(from 225deg at 122px 97px, lime 94.9%, black 119deg, #355 293deg, blue)", WE_GRAD_CONIC, 225, 0, 4);
-    check("conic-gradient(from 311deg at 98% 68%, #854e87 259deg, white, lime 87.4%)", WE_GRAD_CONIC, 311, 0, 3);
-    check("conic-gradient(from 874deg, #c29106, white 7.9%)", WE_GRAD_CONIC, 154, 0, 2);
-    check("conic-gradient(from -173deg at 89px 74px, rgb(14, 33, 80) 105deg, teal)", WE_GRAD_CONIC, 187, 0, 2);
+    check("conic-gradient(from 225deg at 122px 97px, lime 94.9%, black 119deg, #355 293deg, blue)", WE_GRAD_CONIC, 22500, 0, 4);
+    check("conic-gradient(from 311deg at 98% 68%, #854e87 259deg, white, lime 87.4%)", WE_GRAD_CONIC, 31100, 0, 3);
+    check("conic-gradient(from -5467.97deg, #260, rgb(119, 65, 233), rgb(222, 241, 127) 140deg, red 352deg)", WE_GRAD_CONIC, 29203, 0, 4);
+    check("conic-gradient(from 874deg, #c29106, white 7.9%)", WE_GRAD_CONIC, 15400, 0, 2);
 }
 
 static void test_l94_accept_50(void) {
+    check("conic-gradient(from -173deg at 89px 74px, rgb(14, 33, 80) 105deg, teal)", WE_GRAD_CONIC, 18700, 0, 2);
     check("conic-gradient(at left 10px, rgb(190, 54, 142), #921)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at left 10px, orange, #214309)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 2429.50grad, white 3.3%, #1ea 79deg)", WE_GRAD_CONIC, 27, 0, 2);
+    check("conic-gradient(from 2429.50grad, white 3.3%, #1ea 79deg)", WE_GRAD_CONIC, 2655, 0, 2);
+    check("conic-gradient(from 4751.37deg, #2934d6, rgb(228, 141, 118) 316deg, #9881f5)", WE_GRAD_CONIC, 7137, 0, 3);
     check("conic-gradient(#7ed912, rgb(137, 24, 73), rgb(121, 194, 118), rgb(44, 24, 65) 20.9%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 135px 94px, lime 346deg, rgb(38, 252, 218))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 3501.4033deg, teal, rgb(33, 156, 84), black 5deg)", WE_GRAD_CONIC, 261, 0, 3);
-    check("conic-gradient(from 292deg at 52px 28%, orange 37.5%, rgb(225, 113, 213))", WE_GRAD_CONIC, 292, 0, 2);
-    check("conic-gradient(red 40.3%, orange, rgb(196, 15, 41), gray)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from 3501.4033deg, teal, rgb(33, 156, 84), black 5deg)", WE_GRAD_CONIC, 26140, 0, 3);
 }
 
 static void test_l94_accept_51(void) {
-    check("conic-gradient(from -52deg at 37% 42%, rgb(223, 146, 54), red, rgb(151, 184, 160), rgb(154, 117, 88))", WE_GRAD_CONIC, 308, 0, 4);
+    check("conic-gradient(from 292deg at 52px 28%, orange 37.5%, rgb(225, 113, 213))", WE_GRAD_CONIC, 29200, 0, 2);
+    check("conic-gradient(red 40.3%, orange, rgb(196, 15, 41), gray)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from -52deg at 37% 42%, rgb(223, 146, 54), red, rgb(151, 184, 160), rgb(154, 117, 88))", WE_GRAD_CONIC, 30800, 0, 4);
     check("conic-gradient(white 49.7%, #6cd627 96.7%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 97% 70%, #5bc 305deg, #a7b)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 354.09deg, rgb(178, 117, 90) 124deg, #be0)", WE_GRAD_CONIC, 35409, 0, 2);
     check("conic-gradient(at 25% 3%, #f3f 57.8%, black 87.3%, #739 11.8%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at 144px 85px, rgb(168, 62, 211), navy)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(rgb(249, 113, 88) 19.2%, #6f3fda)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 0 0, white 239deg, #dd1)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 189px 85px, black 73.7%, lime 64deg, black, #800)", WE_GRAD_CONIC, 0, 0, 4);
 }
 
 static void test_l94_accept_52(void) {
+    check("conic-gradient(rgb(249, 113, 88) 19.2%, #6f3fda)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 0 0, white 239deg, #dd1)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 189px 85px, black 73.7%, lime 64deg, black, #800)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(#4e0c32, black 219deg, blue)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at right bottom, black, #f96 173deg, #d26, rgb(120, 93, 75))", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 313deg at center center, gray, #8b4)", WE_GRAD_CONIC, 313, 0, 2);
+    check("conic-gradient(from 313deg at center center, gray, #8b4)", WE_GRAD_CONIC, 31300, 0, 2);
     check("conic-gradient(at 25px 54px, white, #897, #f36618)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from -176deg at 86% 1%, #fbd092, black 275deg)", WE_GRAD_CONIC, 184, 0, 2);
-    check("conic-gradient(at 26% 23%, rgb(1, 189, 149) 99%, white, #a4cd63)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 2083deg, rgb(227, 227, 79), #d87e0b, rgb(220, 67, 71))", WE_GRAD_CONIC, 283, 0, 3);
-    check("conic-gradient(at 31px 32%, gray 169deg, rgb(151, 25, 164), black 312deg, #bd4 33%)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from -176deg at 86% 1%, #fbd092, black 275deg)", WE_GRAD_CONIC, 18400, 0, 2);
 }
 
 static void test_l94_accept_53(void) {
+    check("conic-gradient(at 26% 23%, rgb(1, 189, 149) 99%, white, #a4cd63)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 2083deg, rgb(227, 227, 79), #d87e0b, rgb(220, 67, 71))", WE_GRAD_CONIC, 28300, 0, 3);
+    check("conic-gradient(at 31px 32%, gray 169deg, rgb(151, 25, 164), black 312deg, #bd4 33%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 162px 89px, #653, #9b9)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 194deg at 91px 1px, #8be 11.2%, rgb(22, 64, 30), rgb(118, 175, 64) 226deg)", WE_GRAD_CONIC, 194, 0, 3);
-    check("conic-gradient(from -1643.35grad, teal 304deg, #f2a, orange 88.7%, teal)", WE_GRAD_CONIC, 321, 0, 4);
-    check("conic-gradient(from 1814.837deg, lime, #85043a)", WE_GRAD_CONIC, 15, 0, 2);
-    check("conic-gradient(from 932deg, rgb(168, 48, 248) 60.1%, navy)", WE_GRAD_CONIC, 212, 0, 2);
-    check("conic-gradient(from -267deg at 82px 63px, #99e367, rgb(171, 58, 32))", WE_GRAD_CONIC, 93, 0, 2);
-    check("conic-gradient(from 3014deg, lime, #5e2, navy)", WE_GRAD_CONIC, 134, 0, 3);
-    check("conic-gradient(from -75deg at left bottom, #123, #1f1f7a 83deg, #6cd 24.8%)", WE_GRAD_CONIC, 285, 0, 3);
+    check("conic-gradient(from 194deg at 91px 1px, #8be 11.2%, rgb(22, 64, 30), rgb(118, 175, 64) 226deg)", WE_GRAD_CONIC, 19400, 0, 3);
+    check("conic-gradient(from -1643.35grad, teal 304deg, #f2a, orange 88.7%, teal)", WE_GRAD_CONIC, 32098, 0, 4);
+    check("conic-gradient(from 1814.837deg, lime, #85043a)", WE_GRAD_CONIC, 1484, 0, 2);
+    check("conic-gradient(from 932deg, rgb(168, 48, 248) 60.1%, navy)", WE_GRAD_CONIC, 21200, 0, 2);
 }
 
 static void test_l94_accept_54(void) {
+    check("conic-gradient(from -267deg at 82px 63px, #99e367, rgb(171, 58, 32))", WE_GRAD_CONIC, 9300, 0, 2);
+    check("conic-gradient(from 3014deg, lime, #5e2, navy)", WE_GRAD_CONIC, 13400, 0, 3);
+    check("conic-gradient(from -75deg at left bottom, #123, #1f1f7a 83deg, #6cd 24.8%)", WE_GRAD_CONIC, 28500, 0, 3);
     check("conic-gradient(at 42% 48%, rgb(216, 237, 35), white)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at center, black 43.2%, blue)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at center, #f09f56, #691eb4 82deg, rgb(194, 252, 216), rgb(156, 116, 60) 2.3%)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from -256deg at 141px 74px, #66d7db, rgb(161, 177, 179) 37.9%, gray 35%)", WE_GRAD_CONIC, 104, 0, 3);
+    check("conic-gradient(from -256deg at 141px 74px, #66d7db, rgb(161, 177, 179) 37.9%, gray 35%)", WE_GRAD_CONIC, 10400, 0, 3);
     check("conic-gradient(black, blue)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 15% 10px, #422, gray, #e48)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(#6f0, gray)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(rgb(161, 138, 88), rgb(163, 229, 89) 0.8%)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
 static void test_l94_accept_55(void) {
+    check("conic-gradient(at 15% 10px, #422, gray, #e48)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(#6f0, gray)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(rgb(161, 138, 88), rgb(163, 229, 89) 0.8%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(teal 62.3%, teal, rgb(3, 145, 156), rgb(177, 45, 201))", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at left top, #4738d8, rgb(126, 84, 201))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 24% 39px, red, rgb(73, 169, 104), rgb(165, 180, 81) 41%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(#e68d0b, orange 180deg, rgb(86, 41, 68), lime)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 25px 77px, white, lime, rgb(89, 19, 25))", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(rgb(154, 109, 87) 87.6%, rgb(238, 238, 115))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 124px 17px, rgb(42, 45, 51) 39.3%, white, navy)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(#10a 27.1%, white 104deg, rgb(164, 26, 184))", WE_GRAD_CONIC, 0, 0, 3);
 }
 
 static void test_l94_accept_56(void) {
-    check("conic-gradient(from -119deg at 100% 80%, teal 297deg, rgb(47, 244, 67) 21.5%)", WE_GRAD_CONIC, 241, 0, 2);
+    check("conic-gradient(rgb(154, 109, 87) 87.6%, rgb(238, 238, 115))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 124px 17px, rgb(42, 45, 51) 39.3%, white, navy)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(#10a 27.1%, white 104deg, rgb(164, 26, 184))", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from -119deg at 100% 80%, teal 297deg, rgb(47, 244, 67) 21.5%)", WE_GRAD_CONIC, 24100, 0, 2);
     check("conic-gradient(at 11px 58%, #7bf, lime)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at left center, black, rgb(140, 251, 231), rgb(201, 2, 33))", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(rgb(111, 239, 71), orange 193deg, rgb(43, 63, 111))", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 1770.0888deg, rgb(87, 160, 222), rgb(216, 32, 98))", WE_GRAD_CONIC, 330, 0, 2);
-    check("conic-gradient(from 1932deg, rgb(18, 143, 212), white, rgb(2, 222, 216) 325deg)", WE_GRAD_CONIC, 132, 0, 3);
-    check("conic-gradient(at 91px 54px, rgb(30, 116, 65) 95.5%, rgb(241, 13, 144) 67.9%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 0 0, #66a 0.4%, rgb(209, 12, 196) 91.3%, #52c283 94deg)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 1770.0888deg, rgb(87, 160, 222), rgb(216, 32, 98))", WE_GRAD_CONIC, 33009, 0, 2);
 }
 
 static void test_l94_accept_57(void) {
-    check("conic-gradient(from -63deg at 31px 90px, blue, #863 8.1%)", WE_GRAD_CONIC, 297, 0, 2);
+    check("conic-gradient(from 1932deg, rgb(18, 143, 212), white, rgb(2, 222, 216) 325deg)", WE_GRAD_CONIC, 13200, 0, 3);
+    check("conic-gradient(at 91px 54px, rgb(30, 116, 65) 95.5%, rgb(241, 13, 144) 67.9%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 0 0, #66a 0.4%, rgb(209, 12, 196) 91.3%, #52c283 94deg)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from -63deg at 31px 90px, blue, #863 8.1%)", WE_GRAD_CONIC, 29700, 0, 2);
     check("conic-gradient(at 192px 105px, rgb(183, 182, 252) 36.3%, #f90 212deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -1723deg, #2df 90.5%, navy)", WE_GRAD_CONIC, 77, 0, 2);
+    check("conic-gradient(from -1723deg, #2df 90.5%, navy)", WE_GRAD_CONIC, 7700, 0, 2);
     check("conic-gradient(#a37f70 250deg, #37ac51 64.6%, rgb(182, 110, 199) 90deg)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from -3776.68grad, #a2b0d1 69.2%, rgb(66, 251, 248) 69.7%, rgb(153, 145, 171), black)", WE_GRAD_CONIC, 201, 0, 4);
-    check("conic-gradient(at 152px 76px, white 197deg, rgb(107, 201, 177) 23.1%, #946 15.7%)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(blue, #217421 249deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 84% 10px, red 21.6%, rgb(29, 129, 55) 129deg, black 23.3%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from -3776.68grad, #a2b0d1 69.2%, rgb(66, 251, 248) 69.7%, rgb(153, 145, 171), black)", WE_GRAD_CONIC, 20099, 0, 4);
 }
 
 static void test_l94_accept_58(void) {
+    check("conic-gradient(at 152px 76px, white 197deg, rgb(107, 201, 177) 23.1%, #946 15.7%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(blue, #217421 249deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 84% 10px, red 21.6%, rgb(29, 129, 55) 129deg, black 23.3%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at left center, rgb(6, 190, 212), #8b3 44.9%, rgb(114, 251, 6), rgb(105, 31, 174))", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 80% 90%, #f04, red, rgb(231, 35, 83) 266deg, black 62.8%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 0% 79%, gray 74.4%, rgb(249, 197, 254))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 108px 65px, #f3a8fc, rgb(216, 41, 155))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 140px 109px, #e26927, #a45 318deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 18px 52%, lime, #d8c, #c8a 57.2%)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(navy, rgb(134, 49, 68) 32.4%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 256deg at 6% 0%, rgb(48, 57, 47) 72.4%, rgb(222, 126, 253))", WE_GRAD_CONIC, 256, 0, 2);
 }
 
 static void test_l94_accept_59(void) {
+    check("conic-gradient(at 18px 52%, lime, #d8c, #c8a 57.2%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(navy, rgb(134, 49, 68) 32.4%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 256deg at 6% 0%, rgb(48, 57, 47) 72.4%, rgb(222, 126, 253))", WE_GRAD_CONIC, 25600, 0, 2);
     check("conic-gradient(at 19px 65px, rgb(90, 146, 76) 33deg, rgb(60, 25, 135))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 9% 57%, rgb(220, 173, 94), #3c1608, lime, #98920d)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(rgb(113, 241, 72), white 29.9%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 6% 67%, rgb(115, 255, 222), rgb(62, 143, 38) 37.8%, #8ab)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 3233.870deg, orange 67%, #d74, navy, rgb(30, 1, 209) 86.9%)", WE_GRAD_CONIC, 354, 0, 4);
-    check("conic-gradient(rgb(205, 52, 239), rgb(140, 158, 48))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(rgb(200, 238, 143) 95.7%, rgb(130, 68, 73), rgb(21, 222, 188))", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 8turn, #6014af 18deg, red 39deg, #e902e8, #627)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from 3233.870deg, orange 67%, #d74, navy, rgb(30, 1, 209) 86.9%)", WE_GRAD_CONIC, 35387, 0, 4);
 }
 
 static void test_l94_accept_60(void) {
+    check("conic-gradient(rgb(205, 52, 239), rgb(140, 158, 48))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(rgb(200, 238, 143) 95.7%, rgb(130, 68, 73), rgb(21, 222, 188))", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 8turn, #6014af 18deg, red 39deg, #e902e8, #627)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 50px 26%, red 46.5%, orange, teal, rgb(69, 70, 95))", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at center, rgb(211, 214, 139) 16.2%, orange, #882, rgb(144, 53, 166))", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 99% 83%, #dd8c80, #7b80af)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 33grad, #262 267deg, orange, rgb(47, 14, 114) 80deg, #81c)", WE_GRAD_CONIC, 30, 0, 4);
+    check("conic-gradient(from 33grad, #262 267deg, orange, rgb(47, 14, 114) 80deg, #81c)", WE_GRAD_CONIC, 2970, 0, 4);
     check("conic-gradient(white 1deg, rgb(148, 227, 130) 93.8%, blue 87.6%)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(at 29px 69px, #ed7bc5 15.6%, #8c51a0, #f842f6)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(at 83% 49px, rgb(135, 45, 167), red 75.9%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -207.27grad, rgb(63, 41, 175), teal 226deg)", WE_GRAD_CONIC, 173, 0, 2);
 }
 
 static void test_l94_accept_61(void) {
+    check("conic-gradient(at 29px 69px, #ed7bc5 15.6%, #8c51a0, #f842f6)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(at 83% 49px, rgb(135, 45, 167), red 75.9%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from -207.27grad, rgb(63, 41, 175), teal 226deg)", WE_GRAD_CONIC, 17346, 0, 2);
     check("conic-gradient(at 30%, rgb(231, 87, 193), rgb(7, 190, 138) 89.5%, lime)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from -2930deg, orange 334deg, lime)", WE_GRAD_CONIC, 310, 0, 2);
-    check("conic-gradient(from 679.7deg, rgb(82, 123, 214), black)", WE_GRAD_CONIC, 320, 0, 2);
+    check("conic-gradient(from -2930deg, orange 334deg, lime)", WE_GRAD_CONIC, 31000, 0, 2);
+    check("conic-gradient(from 679.7deg, rgb(82, 123, 214), black)", WE_GRAD_CONIC, 31970, 0, 2);
     check("conic-gradient(at 196px 65px, gray, rgb(201, 183, 87), #126642 38.2%, #9832c3 8deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from -318deg at 22% 16px, #844, #298)", WE_GRAD_CONIC, 42, 0, 2);
-    check("conic-gradient(at 57% 54%, rgb(221, 152, 232) 232deg, blue, #78f8cd 40%, black 76.5%)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at 0 0, gray 33.7%, rgb(182, 158, 192), rgb(22, 226, 234), rgb(93, 40, 36) 250deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 1turn, #211 69%, teal 151deg, rgb(104, 129, 16), #b89124)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from -318deg at 22% 16px, #844, #298)", WE_GRAD_CONIC, 4200, 0, 2);
 }
 
 static void test_l94_accept_62(void) {
+    check("conic-gradient(at 57% 54%, rgb(221, 152, 232) 232deg, blue, #78f8cd 40%, black 76.5%)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 0 0, gray 33.7%, rgb(182, 158, 192), rgb(22, 226, 234), rgb(93, 40, 36) 250deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from 1turn, #211 69%, teal 151deg, rgb(104, 129, 16), #b89124)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from 4182.59deg, #504, #b3e295)", WE_GRAD_CONIC, 22259, 0, 2);
     check("conic-gradient(at 118px 89px, navy, rgb(237, 42, 75) 212deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 124px 97px, red 44.8%, red 60%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(#c7a00a 238deg, white 107deg, rgb(152, 68, 94), rgb(234, 5, 182) 305deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 47px 95%, rgb(85, 108, 246) 41.7%, teal 81.2%, teal 20.2%, rgb(254, 233, 54) 0deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 9.28turn, rgb(164, 64, 35), #7b0, rgb(193, 141, 12))", WE_GRAD_CONIC, 101, 0, 3);
-    check("conic-gradient(#d1c8ca 58deg, #542 20.9%, rgb(36, 147, 234) 59.7%)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from -320deg at left top, orange, rgb(35, 35, 227) 31deg, #0ac 143deg, black)", WE_GRAD_CONIC, 40, 0, 4);
-    check("conic-gradient(white, rgb(107, 172, 204) 237deg, #f91, rgb(120, 161, 160) 272deg)", WE_GRAD_CONIC, 0, 0, 4);
 }
 
 static void test_l94_accept_63(void) {
+    check("conic-gradient(from 9.28turn, rgb(164, 64, 35), #7b0, rgb(193, 141, 12))", WE_GRAD_CONIC, 10080, 0, 3);
+    check("conic-gradient(from 127.77deg, rgb(85, 139, 232) 322deg, red 48.4%, blue, #89c21c)", WE_GRAD_CONIC, 12777, 0, 4);
+    check("conic-gradient(#d1c8ca 58deg, #542 20.9%, rgb(36, 147, 234) 59.7%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from -320deg at left top, orange, rgb(35, 35, 227) 31deg, #0ac 143deg, black)", WE_GRAD_CONIC, 4000, 0, 4);
+    check("conic-gradient(white, rgb(107, 172, 204) 237deg, #f91, rgb(120, 161, 160) 272deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(#70e, rgb(101, 25, 205), #c44533, rgb(113, 12, 182))", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 85deg at center bottom, rgb(4, 99, 28) 83%, #2c4, gray 77.5%)", WE_GRAD_CONIC, 85, 0, 3);
-    check("conic-gradient(from 135deg at 41px 60%, rgb(191, 24, 15), navy 39%)", WE_GRAD_CONIC, 135, 0, 2);
-    check("conic-gradient(from 235.5grad, teal 45.4%, #661, rgb(35, 50, 193) 18deg, rgb(9, 173, 234))", WE_GRAD_CONIC, 212, 0, 4);
-    check("conic-gradient(at 137px 103px, orange, rgb(130, 93, 151), #819892 30.8%, #5b7 78.8%)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(rgb(193, 120, 160), rgb(81, 214, 42) 5.4%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 16% 0%, #255c0a, rgb(11, 25, 228))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -130deg at 38% 87%, rgb(238, 163, 87), navy 84.6%, rgb(152, 206, 124), black 48.4%)", WE_GRAD_CONIC, 230, 0, 4);
+    check("conic-gradient(from 85deg at center bottom, rgb(4, 99, 28) 83%, #2c4, gray 77.5%)", WE_GRAD_CONIC, 8500, 0, 3);
+    check("conic-gradient(from 135deg at 41px 60%, rgb(191, 24, 15), navy 39%)", WE_GRAD_CONIC, 13500, 0, 2);
 }
 
 static void test_l94_accept_64(void) {
+    check("conic-gradient(from 235.5grad, teal 45.4%, #661, rgb(35, 50, 193) 18deg, rgb(9, 173, 234))", WE_GRAD_CONIC, 21195, 0, 4);
+    check("conic-gradient(at 137px 103px, orange, rgb(130, 93, 151), #819892 30.8%, #5b7 78.8%)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(rgb(193, 120, 160), rgb(81, 214, 42) 5.4%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 16% 0%, #255c0a, rgb(11, 25, 228))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from -130deg at 38% 87%, rgb(238, 163, 87), navy 84.6%, rgb(152, 206, 124), black 48.4%)", WE_GRAD_CONIC, 23000, 0, 4);
     check("conic-gradient(rgb(210, 0, 198) 219deg, white, #673, rgb(47, 169, 155) 60.7%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 6px 77px, white, #3cf)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(rgb(187, 73, 117), #7d0d39, rgb(184, 205, 160), #e16458)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 1733deg, #0b2 99%, rgb(205, 78, 7))", WE_GRAD_CONIC, 293, 0, 2);
+}
+
+static void test_l94_accept_65(void) {
+    check("conic-gradient(from 1733deg, #0b2 99%, rgb(205, 78, 7))", WE_GRAD_CONIC, 29300, 0, 2);
     check("conic-gradient(at 0 0, #068 28deg, teal 37.4%, gray, rgb(187, 147, 65))", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(#170, red 214deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 56% 98%, blue 294deg, navy, white, #277)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 12px, rgb(5, 135, 131) 93.3%, white)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 3057deg, #6b7d75, rgb(167, 190, 57) 33%, rgb(26, 225, 216), rgb(10, 120, 233) 90deg)", WE_GRAD_CONIC, 17700, 0, 4);
+    check("conic-gradient(from 806.15deg, blue, orange 138deg, rgb(231, 70, 44), #6549f8)", WE_GRAD_CONIC, 8615, 0, 4);
+    check("conic-gradient(at right bottom, lime, rgb(234, 47, 60))", WE_GRAD_CONIC, 0, 0, 2);
 }
 
-static void test_l94_accept_65(void) {
-    check("conic-gradient(from 3057deg, #6b7d75, rgb(167, 190, 57) 33%, rgb(26, 225, 216), rgb(10, 120, 233) 90deg)", WE_GRAD_CONIC, 177, 0, 4);
-    check("conic-gradient(at right bottom, lime, rgb(234, 47, 60))", WE_GRAD_CONIC, 0, 0, 2);
+static void test_l94_accept_66(void) {
     check("conic-gradient(red, rgb(151, 182, 108) 187deg, teal, rgb(14, 12, 70) 349deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 31px 61%, #64c, #14c4cf)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at top, teal 346deg, #aaf 134deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at top, rgb(172, 109, 194), navy, navy, rgb(25, 195, 91))", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 41px 68%, rgb(56, 177, 200), #5fd 0.8%, rgb(13, 226, 180), rgb(246, 198, 4))", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from 515.66deg, #895b1d, rgb(210, 134, 249), #1bec5a 35.7%, #fe4 56.7%)", WE_GRAD_CONIC, 15566, 0, 4);
     check("conic-gradient(at left, rgb(91, 113, 8) 68.3%, #46d1c2)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 20% 2px, #14d521, white 225deg)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
-static void test_l94_accept_66(void) {
-    check("conic-gradient(at 20% 2px, #14d521, white 225deg)", WE_GRAD_CONIC, 0, 0, 2);
+static void test_l94_accept_67(void) {
     check("conic-gradient(#51c2bf 133deg, #d89 38.3%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(rgb(113, 174, 255), rgb(90, 62, 139), red 209deg, orange 49deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(#e964d0, #a06 18deg, #14f594)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at 42px 37%, rgb(214, 208, 92) 49deg, #c47, blue, lime)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 68% 2%, blue, orange, rgb(111, 67, 124) 37.1%)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from -120deg at 19% 87%, rgb(213, 4, 80), lime, rgb(130, 208, 61) 168deg)", WE_GRAD_CONIC, 240, 0, 3);
+    check("conic-gradient(from -120deg at 19% 87%, rgb(213, 4, 80), lime, rgb(130, 208, 61) 168deg)", WE_GRAD_CONIC, 24000, 0, 3);
     check("conic-gradient(at 72% 3px, #126f8e, white, #b8c 11.3%, rgb(210, 206, 236))", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at left bottom, black, lime)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
-static void test_l94_accept_67(void) {
-    check("conic-gradient(at left bottom, black, lime)", WE_GRAD_CONIC, 0, 0, 2);
+static void test_l94_accept_68(void) {
     check("conic-gradient(#445 313deg, #82e 56.6%, #59332e 19.4%, #5e0 217deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(white 64.8%, red 29.1%, rgb(62, 114, 231), teal)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 3.78deg, orange, #a677ee, navy 329deg, teal 88deg)", WE_GRAD_CONIC, 4, 0, 4);
+    check("conic-gradient(from 3.78deg, orange, #a677ee, navy 329deg, teal 88deg)", WE_GRAD_CONIC, 378, 0, 4);
     check("conic-gradient(at left top, #3dc51f 9.5%, lime, rgb(101, 90, 233) 89%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at 47% 34px, red 162deg, navy)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at right bottom, #3a0b33, #9c78a9, red, #d06df3)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at left top, rgb(246, 49, 104) 149deg, orange 45.2%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at center top, #3761cd, rgb(252, 135, 195) 38deg)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
-static void test_l94_accept_68(void) {
-    check("conic-gradient(at center top, #3761cd, rgb(252, 135, 195) 38deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 644deg, rgb(31, 147, 57) 94.1%, blue 231deg)", WE_GRAD_CONIC, 284, 0, 2);
+static void test_l94_accept_69(void) {
+    check("conic-gradient(from 644deg, rgb(31, 147, 57) 94.1%, blue 231deg)", WE_GRAD_CONIC, 28400, 0, 2);
     check("conic-gradient(at 100% 56px, red 48.4%, #e50416, lime 249deg, #ffa 30.9%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at left bottom, rgb(176, 66, 7) 33deg, rgb(104, 239, 23), rgb(199, 189, 24) 37deg, red)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at 66% 90%, black, #abc 0.2%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 38px 22%, rgb(85, 220, 40), red 85.8%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 11.46deg, #5a0 190deg, #731cc5 53.5%, gray)", WE_GRAD_CONIC, 1146, 0, 3);
     check("conic-gradient(at 192px 19px, gray, navy)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 88% 51px, #e19730, orange)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
-static void test_l94_accept_69(void) {
-    check("conic-gradient(from 3528deg, rgb(41, 211, 111) 47.1%, rgb(215, 182, 41))", WE_GRAD_CONIC, 288, 0, 2);
+static void test_l94_accept_70(void) {
+    check("conic-gradient(from 3528deg, rgb(41, 211, 111) 47.1%, rgb(215, 182, 41))", WE_GRAD_CONIC, 28800, 0, 2);
     check("conic-gradient(rgb(215, 188, 240) 48.6%, #69ee22, #30d 340deg, gray)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 0.4turn, rgb(227, 100, 123) 97.4%, rgb(217, 26, 137))", WE_GRAD_CONIC, 144, 0, 2);
+    check("conic-gradient(from 0.4turn, rgb(227, 100, 123) 97.4%, rgb(217, 26, 137))", WE_GRAD_CONIC, 14400, 0, 2);
     check("conic-gradient(at 30%, #62a, rgb(108, 15, 251) 7%, rgb(239, 164, 159), rgb(182, 109, 182) 30.8%)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from -2234.54deg, black 0.4%, rgb(100, 86, 194) 58.6%, #0bd)", WE_GRAD_CONIC, 28546, 0, 3);
+    check("conic-gradient(from 1604.28deg, #4830fc, #714d4a, white 125deg)", WE_GRAD_CONIC, 16428, 0, 3);
     check("conic-gradient(at top, lime 48.8%, black 120deg, lime 63.7%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at left, teal, blue)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -337deg at 121px 81px, red, #247)", WE_GRAD_CONIC, 23, 0, 2);
-    check("conic-gradient(at 44px 8%, rgb(66, 111, 192), #9af)", WE_GRAD_CONIC, 0, 0, 2);
-}
-
-static void test_l94_accept_70(void) {
-    check("conic-gradient(from 2363deg, rgb(117, 253, 251) 58.1%, #688, rgb(178, 238, 34) 180deg, red)", WE_GRAD_CONIC, 203, 0, 4);
-    check("conic-gradient(at 28px 5%, #03b 207deg, #a06, orange 30.3%, gray 291deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(rgb(40, 31, 47) 263deg, rgb(97, 209, 128))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 40px 69%, rgb(211, 240, 17), #c4b 221deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 12px, rgb(72, 179, 20), rgb(38, 19, 30) 161deg, rgb(240, 142, 252) 277deg)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 155deg at 40px 62%, #ea4af9, rgb(48, 155, 128) 307deg)", WE_GRAD_CONIC, 155, 0, 2);
-    check("conic-gradient(from -2560deg, gray, rgb(250, 219, 124) 217deg, teal 57deg, #534)", WE_GRAD_CONIC, 320, 0, 4);
-    check("conic-gradient(red, white 0deg)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
 static void test_l94_accept_71(void) {
+    check("conic-gradient(from 0deg, #91c 111deg, rgb(240, 151, 194), red)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from -337deg at 121px 81px, red, #247)", WE_GRAD_CONIC, 2300, 0, 2);
+    check("conic-gradient(from 515.66deg, #fbba01 67deg, navy 10deg)", WE_GRAD_CONIC, 15566, 0, 2);
+    check("conic-gradient(at 44px 8%, rgb(66, 111, 192), #9af)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 2363deg, rgb(117, 253, 251) 58.1%, #688, rgb(178, 238, 34) 180deg, red)", WE_GRAD_CONIC, 20300, 0, 4);
+    check("conic-gradient(at 28px 5%, #03b 207deg, #a06, orange 30.3%, gray 291deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(rgb(40, 31, 47) 263deg, rgb(97, 209, 128))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 40px 69%, rgb(211, 240, 17), #c4b 221deg)", WE_GRAD_CONIC, 0, 0, 2);
+}
+
+static void test_l94_accept_72(void) {
+    check("conic-gradient(at 12px, rgb(72, 179, 20), rgb(38, 19, 30) 161deg, rgb(240, 142, 252) 277deg)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 155deg at 40px 62%, #ea4af9, rgb(48, 155, 128) 307deg)", WE_GRAD_CONIC, 15500, 0, 2);
+    check("conic-gradient(from -2560deg, gray, rgb(250, 219, 124) 217deg, teal 57deg, #534)", WE_GRAD_CONIC, 32000, 0, 4);
+    check("conic-gradient(red, white 0deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at left 10px, rgb(137, 143, 155), #82e 69deg, #800)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(rgb(131, 29, 15), rgb(109, 35, 180) 290deg, rgb(28, 193, 217), #8a5634 348deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from 870.71grad, rgb(45, 253, 28) 9.9%, rgb(86, 198, 199), rgb(216, 29, 102) 351deg)", WE_GRAD_CONIC, 64, 0, 3);
+    check("conic-gradient(from 870.71grad, rgb(45, 253, 28) 9.9%, rgb(86, 198, 199), rgb(216, 29, 102) 351deg)", WE_GRAD_CONIC, 6364, 0, 3);
+    check("conic-gradient(from -5649.36deg, #3f0113 1deg, rgb(46, 51, 117), #835fab)", WE_GRAD_CONIC, 11064, 0, 3);
+}
+
+static void test_l94_accept_73(void) {
+    check("conic-gradient(from 5714.7deg, rgb(65, 117, 245) 5.1%, rgb(110, 86, 231) 43.8%)", WE_GRAD_CONIC, 31470, 0, 2);
     check("conic-gradient(at 51% 20%, #f3fe50 333deg, rgb(104, 243, 83))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 1% 0%, rgb(250, 73, 52), white, #eacfed, rgb(130, 94, 249) 10.8%)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(rgb(167, 230, 165) 51.4%, gray 57.5%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at center bottom, orange, teal 16.2%, rgb(74, 129, 184) 49deg)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at 0 0, #0c173f, #f9e01b 169deg, #64c 14.7%, #d98 267deg)", WE_GRAD_CONIC, 0, 0, 4);
-}
-
-static void test_l94_accept_72(void) {
     check("conic-gradient(at 199px 79px, rgb(252, 176, 153) 53.2%, #af6 31%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -272deg at right center, red, rgb(169, 211, 211))", WE_GRAD_CONIC, 88, 0, 2);
-    check("conic-gradient(from -223deg at 2% 82%, blue, rgb(149, 21, 219))", WE_GRAD_CONIC, 137, 0, 2);
-    check("conic-gradient(from 2610grad, rgb(235, 187, 152), rgb(150, 84, 202), rgb(161, 250, 202))", WE_GRAD_CONIC, 189, 0, 3);
-    check("conic-gradient(from 131deg at right center, lime 51.6%, rgb(113, 25, 145) 61.3%, #381 162deg, #fa0 163deg)", WE_GRAD_CONIC, 131, 0, 4);
-    check("conic-gradient(at 101px 27px, navy, #846)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -2553.62grad, red 357deg, blue)", WE_GRAD_CONIC, 222, 0, 2);
-    check("conic-gradient(at top, #e88148, rgb(60, 50, 222) 86.4%, white 75deg, #573 323deg)", WE_GRAD_CONIC, 0, 0, 4);
-}
-
-static void test_l94_accept_73(void) {
-    check("conic-gradient(from -137deg at 103px 23px, rgb(220, 60, 110), #f70)", WE_GRAD_CONIC, 223, 0, 2);
-    check("conic-gradient(at 76% 21%, rgb(10, 142, 181), #067f99 13deg, rgb(21, 242, 82), #165241)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at center, lime 70.8%, #83d 216deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -212deg at right top, #758 196deg, rgb(100, 93, 44), #a013ce)", WE_GRAD_CONIC, 148, 0, 3);
-    check("conic-gradient(at 93px 108px, #d3d, #a1abbc)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -218deg at 32% 58%, red, rgb(44, 219, 146) 55.5%, rgb(18, 42, 15) 41.9%, #833cea 31.9%)", WE_GRAD_CONIC, 142, 0, 4);
-    check("conic-gradient(at center, rgb(235, 43, 208), rgb(52, 20, 212))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from -2075deg, #f3f, #18b603)", WE_GRAD_CONIC, 85, 0, 2);
+    check("conic-gradient(from -272deg at right center, red, rgb(169, 211, 211))", WE_GRAD_CONIC, 8800, 0, 2);
 }
 
 static void test_l94_accept_74(void) {
-    check("conic-gradient(at 34px 89%, #b0f707 84.7%, orange, rgb(231, 89, 195) 67.7%)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 197deg at right top, teal 234deg, white)", WE_GRAD_CONIC, 197, 0, 2);
-    check("conic-gradient(rgb(91, 30, 15), teal 24.6%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at top, white 20.1%, black)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 2004deg, #937 24.1%, #4ca4bf, gray)", WE_GRAD_CONIC, 204, 0, 3);
-    check("conic-gradient(from 354deg, #c19ffc 11%, rgb(223, 90, 72))", WE_GRAD_CONIC, 354, 0, 2);
-    check("conic-gradient(from -320deg at 2% 56%, #1ea3a7, #c0e)", WE_GRAD_CONIC, 40, 0, 2);
-    check("conic-gradient(from -217deg at right top, rgb(195, 54, 97), black, navy)", WE_GRAD_CONIC, 143, 0, 3);
+    check("conic-gradient(from -223deg at 2% 82%, blue, rgb(149, 21, 219))", WE_GRAD_CONIC, 13700, 0, 2);
+    check("conic-gradient(from 2610grad, rgb(235, 187, 152), rgb(150, 84, 202), rgb(161, 250, 202))", WE_GRAD_CONIC, 18900, 0, 3);
+    check("conic-gradient(from 131deg at right center, lime 51.6%, rgb(113, 25, 145) 61.3%, #381 162deg, #fa0 163deg)", WE_GRAD_CONIC, 13100, 0, 4);
+    check("conic-gradient(at 101px 27px, navy, #846)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from -2553.62grad, red 357deg, blue)", WE_GRAD_CONIC, 22174, 0, 2);
+    check("conic-gradient(at top, #e88148, rgb(60, 50, 222) 86.4%, white 75deg, #573 323deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from -137deg at 103px 23px, rgb(220, 60, 110), #f70)", WE_GRAD_CONIC, 22300, 0, 2);
+    check("conic-gradient(at 76% 21%, rgb(10, 142, 181), #067f99 13deg, rgb(21, 242, 82), #165241)", WE_GRAD_CONIC, 0, 0, 4);
 }
 
 static void test_l94_accept_75(void) {
-    check("conic-gradient(rgb(4, 99, 200) 86.1%, #d10 247deg)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 1560.9grad, #76e1db, #e3302d, #8dfd37 22.5%)", WE_GRAD_CONIC, 325, 0, 3);
-    check("conic-gradient(at left, #8726b3 20deg, #4df295)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(lime 41.3%, #bf5 89.1%)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 46deg at center bottom, orange 77deg, #cfe7ea)", WE_GRAD_CONIC, 46, 0, 2);
-    check("conic-gradient(at 12px, gray 275deg, #0fb)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 48% 43px, #c445d3, rgb(231, 72, 150), blue 32.5%, rgb(182, 95, 30))", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from -0.87turn, gray, #af3 73.9%, blue)", WE_GRAD_CONIC, 47, 0, 3);
+    check("conic-gradient(at center, lime 70.8%, #83d 216deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from -212deg at right top, #758 196deg, rgb(100, 93, 44), #a013ce)", WE_GRAD_CONIC, 14800, 0, 3);
+    check("conic-gradient(at 93px 108px, #d3d, #a1abbc)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from -218deg at 32% 58%, red, rgb(44, 219, 146) 55.5%, rgb(18, 42, 15) 41.9%, #833cea 31.9%)", WE_GRAD_CONIC, 14200, 0, 4);
+    check("conic-gradient(at center, rgb(235, 43, 208), rgb(52, 20, 212))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from -2075deg, #f3f, #18b603)", WE_GRAD_CONIC, 8500, 0, 2);
+    check("conic-gradient(at 34px 89%, #b0f707 84.7%, orange, rgb(231, 89, 195) 67.7%)", WE_GRAD_CONIC, 0, 0, 3);
+    check("conic-gradient(from 197deg at right top, teal 234deg, white)", WE_GRAD_CONIC, 19700, 0, 2);
 }
 
 static void test_l94_accept_76(void) {
-    check("conic-gradient(from -231deg at 95% 42%, rgb(98, 35, 69) 78%, rgb(31, 127, 143) 69.4%)", WE_GRAD_CONIC, 129, 0, 2);
-    check("conic-gradient(at 90% 42%, blue 63.7%, black 20.9%, white, #908ce8 208deg)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at 12px, #dd2055 285deg, blue 315deg, rgb(250, 82, 30) 353deg, #7b7b0c 77.7%)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at 38px 9px, white, black)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(from 101deg at 64px 70px, #c8c, rgb(45, 176, 69))", WE_GRAD_CONIC, 101, 0, 2);
-    check("conic-gradient(at 84px 106px, #e97a15, #f73)", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at 86% 58px, orange 183deg, rgb(72, 194, 31) 340deg, #e39 316deg, #badc01)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at 88% 51%, rgb(0, 170, 151), #b09 234deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(rgb(91, 30, 15), teal 24.6%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at top, white 20.1%, black)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 2004deg, #937 24.1%, #4ca4bf, gray)", WE_GRAD_CONIC, 20400, 0, 3);
+    check("conic-gradient(from 354deg, #c19ffc 11%, rgb(223, 90, 72))", WE_GRAD_CONIC, 35400, 0, 2);
+    check("conic-gradient(from -320deg at 2% 56%, #1ea3a7, #c0e)", WE_GRAD_CONIC, 4000, 0, 2);
+    check("conic-gradient(from -217deg at right top, rgb(195, 54, 97), black, navy)", WE_GRAD_CONIC, 14300, 0, 3);
+    check("conic-gradient(rgb(4, 99, 200) 86.1%, #d10 247deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 1560.9grad, #76e1db, #e3302d, #8dfd37 22.5%)", WE_GRAD_CONIC, 32481, 0, 3);
 }
 
 static void test_l94_accept_77(void) {
+    check("conic-gradient(at left, #8726b3 20deg, #4df295)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(lime 41.3%, #bf5 89.1%)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 46deg at center bottom, orange 77deg, #cfe7ea)", WE_GRAD_CONIC, 4600, 0, 2);
+    check("conic-gradient(at 12px, gray 275deg, #0fb)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 48% 43px, #c445d3, rgb(231, 72, 150), blue 32.5%, rgb(182, 95, 30))", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from -0.87turn, gray, #af3 73.9%, blue)", WE_GRAD_CONIC, 4680, 0, 3);
+    check("conic-gradient(from -231deg at 95% 42%, rgb(98, 35, 69) 78%, rgb(31, 127, 143) 69.4%)", WE_GRAD_CONIC, 12900, 0, 2);
+    check("conic-gradient(at 90% 42%, blue 63.7%, black 20.9%, white, #908ce8 208deg)", WE_GRAD_CONIC, 0, 0, 4);
+}
+
+static void test_l94_accept_78(void) {
+    check("conic-gradient(at 12px, #dd2055 285deg, blue 315deg, rgb(250, 82, 30) 353deg, #7b7b0c 77.7%)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 38px 9px, white, black)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 101deg at 64px 70px, #c8c, rgb(45, 176, 69))", WE_GRAD_CONIC, 10100, 0, 2);
+    check("conic-gradient(at 84px 106px, #e97a15, #f73)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at 86% 58px, orange 183deg, rgb(72, 194, 31) 340deg, #e39 316deg, #badc01)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(at 88% 51%, rgb(0, 170, 151), #b09 234deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 26% 24px, rgb(120, 73, 183), #1b685d 136deg, #f6e)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at center center, #c4e, #679aac 28deg)", WE_GRAD_CONIC, 0, 0, 2);
+}
+
+static void test_l94_accept_79(void) {
     check("conic-gradient(at 74px 52px, rgb(36, 25, 201) 10.4%, gray)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 12px, #d54 189deg, rgb(180, 17, 242) 76.6%, #79be6e 5.2%, navy 186deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(#304, #193883, #de55fe)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(#8bef13, orange)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(gray 25.6%, rgb(182, 13, 218))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 0deg, navy 65.4%, #e7d06a 304deg, #ddc)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(orange, gray, rgb(155, 137, 95), red 232deg)", WE_GRAD_CONIC, 0, 0, 4);
+    check("conic-gradient(from 3318.57deg, #3d1f69, rgb(202, 127, 90) 57%)", WE_GRAD_CONIC, 7857, 0, 2);
 }
 
-static void test_l94_accept_78(void) {
+static void test_l94_accept_80(void) {
     check("conic-gradient(navy 36.5%, rgb(17, 217, 79) 20.3%, #e13)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at 100% 71%, rgb(35, 110, 180), rgb(225, 15, 103))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 10% 22px, rgb(169, 140, 10), #30ee73 89.8%, #720172 53.5%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at left, rgb(33, 125, 45) 30.9%, rgb(233, 106, 80) 60.9%)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(rgb(1, 62, 175), #ddb5fa, rgb(211, 202, 4) 87.6%, #a61813)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(orange, white 356deg, rgb(41, 139, 229) 1%)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 93deg at 33px 95%, rgb(234, 75, 94), gray 176deg)", WE_GRAD_CONIC, 93, 0, 2);
-    check("conic-gradient(from 89deg at 51% 57px, #89f, rgb(17, 80, 14) 61deg)", WE_GRAD_CONIC, 89, 0, 2);
+    check("conic-gradient(from 93deg at 33px 95%, rgb(234, 75, 94), gray 176deg)", WE_GRAD_CONIC, 9300, 0, 2);
+    check("conic-gradient(from 89deg at 51% 57px, #89f, rgb(17, 80, 14) 61deg)", WE_GRAD_CONIC, 8900, 0, 2);
 }
 
-static void test_l94_accept_79(void) {
+static void test_l94_accept_81(void) {
     check("conic-gradient(at 25% 31%, #974ed9, gray 26.4%, rgb(223, 162, 76), gray)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(from -306deg at 50% 92%, #84e, rgb(57, 12, 57) 23.7%, rgb(136, 242, 94))", WE_GRAD_CONIC, 54, 0, 3);
-    check("conic-gradient(from -2403deg, rgb(235, 13, 146), black, #5b3 18.6%, rgb(197, 244, 243) 71%)", WE_GRAD_CONIC, 117, 0, 4);
+    check("conic-gradient(from -306deg at 50% 92%, #84e, rgb(57, 12, 57) 23.7%, rgb(136, 242, 94))", WE_GRAD_CONIC, 5400, 0, 3);
+    check("conic-gradient(from -2403deg, rgb(235, 13, 146), black, #5b3 18.6%, rgb(197, 244, 243) 71%)", WE_GRAD_CONIC, 11700, 0, 4);
     check("conic-gradient(at 84% 23px, rgb(199, 81, 71), rgb(240, 133, 142))", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 178px 79px, #41e 257deg, rgb(20, 93, 129), #af7cbf 195deg, rgb(169, 40, 10) 105deg)", WE_GRAD_CONIC, 0, 0, 4);
     check("conic-gradient(at left, lime 61.1%, rgb(50, 178, 17), lime 96.9%)", WE_GRAD_CONIC, 0, 0, 3);
@@ -916,35 +938,46 @@ static void test_l94_accept_79(void) {
     check("conic-gradient(rgb(42, 96, 76), #ddaa42 95%)", WE_GRAD_CONIC, 0, 0, 2);
 }
 
-static void test_l94_accept_80(void) {
+static void test_l94_accept_82(void) {
     check("conic-gradient(rgb(42, 232, 67), #440 210deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 30%, #58f, rgb(46, 125, 50))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 516.81deg, rgb(218, 194, 52), #234 74.3%)", WE_GRAD_CONIC, 15681, 0, 2);
     check("conic-gradient(at center top, #a5b978, gray, #0dc 17.2%)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(at 140px 73px, rgb(112, 153, 88), #d42fdf 100%, #a3aef1)", WE_GRAD_CONIC, 0, 0, 3);
-    check("conic-gradient(from 3767.98grad, teal 150deg, #04c, #f93 39.4%)", WE_GRAD_CONIC, 151, 0, 3);
+    check("conic-gradient(from 3767.98grad, teal 150deg, #04c, #f93 39.4%)", WE_GRAD_CONIC, 15118, 0, 3);
     check("conic-gradient(at 30%, rgb(30, 119, 36), black 342deg, rgb(150, 107, 120) 192deg, teal 18.9%)", WE_GRAD_CONIC, 0, 0, 4);
-    check("conic-gradient(at top, #066, rgb(194, 88, 15))", WE_GRAD_CONIC, 0, 0, 2);
-    check("conic-gradient(at left center, rgb(217, 174, 222) 47.2%, rgb(7, 41, 24) 339deg)", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(from 251.84deg, gray, red 237deg)", WE_GRAD_CONIC, 25184, 0, 2);
 }
 
-static void test_l94_accept_81(void) {
+static void test_l94_accept_83(void) {
+    check("conic-gradient(from 49.96deg, rgb(63, 217, 197), #7af, blue 69.2%)", WE_GRAD_CONIC, 4996, 0, 3);
+    check("conic-gradient(at top, #066, rgb(194, 88, 15))", WE_GRAD_CONIC, 0, 0, 2);
+    check("conic-gradient(at left center, rgb(217, 174, 222) 47.2%, rgb(7, 41, 24) 339deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at 22px 56%, #af3, lime)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at right bottom, #6b28d5 190deg, rgb(157, 51, 222), blue)", WE_GRAD_CONIC, 0, 0, 3);
     check("conic-gradient(red 360deg, blue 0deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(red 99deg, blue)", WE_GRAD_CONIC, 0, 0, 2);
     check("linear-gradient(3600deg, red, blue)", WE_GRAD_TOP, 0, 0, 2);
+}
+
+static void test_l94_accept_84(void) {
     check("linear-gradient(-3600deg, red, blue)", WE_GRAD_TOP, 0, 0, 2);
     check("linear-gradient(10turn, red, blue)", WE_GRAD_TOP, 0, 0, 2);
     check("linear-gradient(4000grad, red, blue)", WE_GRAD_TOP, 0, 0, 2);
+    check("linear-gradient(5729.57deg, red, blue)", WE_GRAD_ANGLE, 32957, 0, 2);
+    check("linear-gradient(-5729.57deg, red, blue)", WE_GRAD_ANGLE, 3043, 0, 2);
+    check("linear-gradient(0.5deg, red, blue)", WE_GRAD_ANGLE, 50, 0, 2);
+    check("linear-gradient(0.5deg, red, blue)", WE_GRAD_ANGLE, 50, 0, 2);
+    check("linear-gradient(-0.5deg, red, blue)", WE_GRAD_ANGLE, 35950, 0, 2);
 }
 
-static void test_l94_accept_82(void) {
-    check("linear-gradient(5730deg, red, blue)", WE_GRAD_ANGLE, 330, 0, 2);
-    check("linear-gradient(-5730deg, red, blue)", WE_GRAD_ANGLE, 30, 0, 2);
+static void test_l94_accept_85(void) {
+    check("linear-gradient(0.01deg, red, blue)", WE_GRAD_ANGLE, 1, 0, 2);
     check("linear-gradient(0deg, red, blue)", WE_GRAD_TOP, 0, 0, 2);
-    check("linear-gradient(1deg, red, blue)", WE_GRAD_ANGLE, 1, 0, 2);
-    check("linear-gradient(-1deg, red, blue)", WE_GRAD_ANGLE, 359, 0, 2);
     check("linear-gradient(to left top, red, blue)", WE_GRAD_ANGLE, 0, 2, 2);
+    check("conic-gradient(from 57.3deg, red, blue)", WE_GRAD_CONIC, 5730, 0, 2);
+    check("conic-gradient(from -57.3deg at 10px 0, red, blue)", WE_GRAD_CONIC, 30270, 0, 2);
+    check("conic-gradient(red 45.5deg, blue 359.99deg)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(from -3600deg at 0 0, red, blue)", WE_GRAD_CONIC, 0, 0, 2);
     check("conic-gradient(at left, red, blue)", WE_GRAD_CONIC, 0, 0, 2);
 }
@@ -1034,6 +1067,9 @@ int main(void) {
     RUN_TEST(test_l94_accept_80);
     RUN_TEST(test_l94_accept_81);
     RUN_TEST(test_l94_accept_82);
+    RUN_TEST(test_l94_accept_83);
+    RUN_TEST(test_l94_accept_84);
+    RUN_TEST(test_l94_accept_85);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

@@ -295,9 +295,10 @@ static uint64_t bdiv64(uint64_t n, uint64_t d) {
 }
 
 /* Lot 92, Lot 94: radians, at most two integer digits and four decimals,
- * as whole degrees (x * 180 / pi rounded half away from zero; the engine's
- * own factor 57.3 is not used). 1 and *deg set, -1 any other radian
- * value, 0 when s is not one. */
+ * as degrees (x * 180 / pi rounded half away from zero; the engine's own
+ * factor 57.3 is not used); Lot 96: in 1/100 degree (Lot 94: whole
+ * degrees). 1 and *deg set, -1 any other radian value, 0 when s is not
+ * one. */
 #define WF_DEG_PER_RAD 5729577951ULL  /* degrees per 1e-4 rad, in 1e-12 */
 static int rad_degrees(const char *s, int n, int *deg) {
     int i = 0, neg = 0, v = 0, d = 0, fd = 0;
@@ -317,10 +318,27 @@ static int rad_degrees(const char *s, int n, int *deg) {
         if (!fd) return -1;
     }
     if (i != n || !(d + fd)) return -1;
-    /* v is in 1e-4 rad; degrees = v * 0.005729577951 (1e-12 units) */
-    *deg = (int)bdiv64((uint64_t)v * WF_DEG_PER_RAD + 500000000000ULL, 1000000000000ULL);
+    /* v is in 1e-4 rad; 1/100 degrees = v * 0.5729577951 (1e-10 units) */
+    *deg = (int)bdiv64((uint64_t)v * WF_DEG_PER_RAD + 5000000000ULL, 10000000000ULL);
     if (neg) *deg = -*deg;
     return 1;
+}
+
+/* Lot 96: c hundredths of a degree as "[-]D[.d[d]]deg" */
+static void bo_centi(bo_t *o, int c) {
+    char t[16];
+    int n = 0, v = c < 0 ? -c : c, p = 1000000, f = v % 100;
+    if (c < 0) t[n++] = '-';
+    v /= 100;
+    while (p > 1 && v < p) p /= 10;
+    for (; p; p /= 10) t[n++] = (char)('0' + v / p % 10);
+    if (f) {
+        t[n++] = '.';
+        t[n++] = (char)('0' + f / 10);
+        if (f % 10) t[n++] = (char)('0' + f % 10);
+    }
+    bo_s(o, t, n);
+    bo_s(o, "deg", 3);
 }
 
 /* Lot 94: any angle the engine's tf_angle reads exactly: 1 an angle, 0
@@ -358,15 +376,21 @@ static int to_sides(const char *s, int a, int b) {
 }
 
 /* Lot 94: the conic first argument, "from ANGLE", "at POSITION" or both
- * in that order: 1 it is one, 0 it is not, -1 not valid. A radian "from"
- * is not taken (the reader writes radians only as a linear angle). */
-static int conic_shape(const char *s, int a, int b) {
+ * in that order: 1 it is one, 0 it is not, -1 not valid. Lot 96: a radian
+ * "from" is taken and *rad set (1/100 degree in *centi; written as
+ * degrees by the caller). */
+static int conic_shape(const char *s, int a, int b, int *rad, int *centi) {
     int wa[8], wb[8], c = bsplit(s, a, b, ' ', 0, wa, wb, 8), k = 0;
     char t[40];
     bo_t o;
+    *rad = 0;
     if (c < 1) return -1;
     if (bis(s + wa[0], wb[0] - wa[0], "from")) {
-        if (c < 2 || angle(s + wa[1], wb[1] - wa[1]) != 1) return -1;
+        int g;
+        if (c < 2) return -1;
+        g = rad_degrees(s + wa[1], wb[1] - wa[1], centi);
+        if (g > 0) *rad = 1;
+        else if (g < 0 || angle(s + wa[1], wb[1] - wa[1]) != 1) return -1;
         k = 2;
         if (c == 2) return 1;
     }
@@ -377,29 +401,39 @@ static int conic_shape(const char *s, int a, int b) {
 }
 
 /* "colour [N%]" with N 0..100 and at most one decimal; Lot 94: a conic
- * stop may also be "colour Ndeg" with N a whole number 0..360 */
-static int stop_ok(const char *s, int a, int b, int conic) {
+ * stop may also be "colour Ndeg" with N 0..360 (Lot 96: at most two
+ * decimals; Lot 94: whole). *pos: the engine's position in 1/10000 (N%:
+ * N * 100; Ndeg: 1/100 degrees * 5 / 18 rounded half up), -1 none. */
+static int stop_ok(const char *s, int a, int b, int conic, int *pos) {
     int wa[3], wb[3], c = bsplit(s, a, b, ' ', 0, wa, wb, 3);
+    *pos = -1;
     if (c < 1 || c > 2 || !wf_cssbg_color(s + wa[0], wb[0] - wa[0])) return 0;
     if (c == 2 && conic && wb[1] - wa[1] > 3 && bis(s + wb[1] - 3, 3, "deg")) {
-        int i = wa[1], v = 0;
-        for (; i < wb[1] - 3; i++) {
-            if (s[i] < '0' || s[i] > '9' || i - wa[1] >= 3) return 0;
-            v = v * 10 + (s[i] - '0');
+        int i = wa[1], v = 0, d = 0, f = 0, fd = 0, e = wb[1] - 3;
+        for (; i < e && s[i] >= '0' && s[i] <= '9'; i++) { if (++d > 3) return 0; v = v * 10 + (s[i] - '0'); }
+        if (!d) return 0;
+        if (i < e && s[i] == '.') {
+            for (i++; i < e && s[i] >= '0' && s[i] <= '9'; i++) { if (++fd > 2) return 0; f = f * 10 + (s[i] - '0'); }
+            if (!fd) return 0;
+            if (fd == 1) f *= 10;
         }
-        return v <= 360;
+        if (i != e || v * 100 + f > 36000) return 0;
+        *pos = ((v * 100 + f) * 5 + 9) / 18;
+        return 1;
     }
     if (c == 2) {
-        int i = wa[1], v = 0, d = 0;
+        int i = wa[1], v = 0, d = 0, t = 0;
         while (i < wb[1] && s[i] >= '0' && s[i] <= '9') { v = v * 10 + (s[i] - '0'); if (v > 100) return 0; i++; d++; }
         if (!d) return 0;
         if (i < wb[1] && s[i] == '.') {
             i++;
             if (i >= wb[1] || s[i] < '0' || s[i] > '9') return 0;
             if (v == 100 && s[i] != '0') return 0;
+            t = s[i] - '0';
             i++;
         }
         if (i + 1 != wb[1] || s[i] != '%') return 0;
+        *pos = (v * 10 + t) * 10;
     }
     return 1;
 }
@@ -456,11 +490,14 @@ static int radial_shape(const char *s, int a, int b) {
 }
 
 int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
-    int a = 0, b = n, ia[6], ib[6], c, k, first = 0, radial, conic, rad = 0, degrees = 0, pl = 16;
+    int a = 0, b = n, ia[6], ib[6], c, k, first = 0, radial, conic, rad = 0, degrees = 0, pl = 16, repeat = 0;
+    int p0 = 0, top = 0, pos;
     bo_t o;
     bo_init(&o, out, cap);
     if (!v) return 0;
     btrim(v, &a, &b);
+    /* Lot 96: repeating-linear/radial/conic-gradient( */
+    if (bpre(v + a, b - a, "repeating-")) { repeat = 1; a += 10; }
     radial = bpre(v + a, b - a, "radial-gradient(");
     conic = bpre(v + a, b - a, "conic-gradient(");
     if (conic) pl = 15;
@@ -469,7 +506,7 @@ int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
     c = bsplit(v, a + pl, b - 1, ',', 0, ia, ib, 6);
     if (c < 2) return 0;
     if (conic) {
-        int r = conic_shape(v, ia[0], ib[0]);
+        int r = conic_shape(v, ia[0], ib[0], &rad, &degrees);
         if (r < 0) return 0;
         first = r;
     } else if (radial) {
@@ -490,19 +527,29 @@ int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
         }
     }
     if (c - first < 2 || c - first > 4) return 0;
-    for (k = first; k < c; k++) if (!stop_ok(v, ia[k], ib[k], conic)) return 0;
+    for (k = first; k < c; k++) {
+        if (!stop_ok(v, ia[k], ib[k], conic, &pos)) return 0;
+        /* Lot 96: the engine repeats the first to the last stop and
+         * refuses a period of 0: the last stop is at least every earlier
+         * one (the default 100% when it has none) */
+        if (k == first) p0 = top = pos < 0 ? 0 : pos;
+        else if (pos > top || (k == c - 1 && pos < 0 && 10000 > top)) top = pos < 0 ? 10000 : pos;
+    }
+    if (repeat && top <= p0) return 0;
+    if (repeat) bo_s(&o, "repeating-", 10);
     bo_s(&o, conic ? "conic-gradient(" : radial ? "radial-gradient(" : "linear-gradient(", pl);
     for (k = 0; k < c; k++) {
         if (k) bo_s(&o, ", ", 2);
-        if (k == 0 && rad) {
-            /* Lot 92: a radian angle is written as its whole degrees */
-            char deg[8];
-            int dn = 0, dv = degrees < 0 ? -degrees : degrees, p = 1000;
-            if (degrees < 0) deg[dn++] = '-';
-            while (p > 1 && dv < p) p /= 10;
-            for (; p; p /= 10) deg[dn++] = (char)('0' + dv / p % 10);
-            bo_s(&o, deg, dn);
-            bo_s(&o, "deg", 3);
+        if (k == 0 && rad && conic) {
+            /* Lot 96: a radian "from" is written as degrees */
+            int wa[8], wb[8], w = bsplit(v, ia[0], ib[0], ' ', 0, wa, wb, 8);
+            bo_s(&o, "from ", 5);
+            bo_centi(&o, degrees);
+            if (w > 2) { bo_c(&o, ' '); bo_collapse(&o, v, wa[2], ib[0]); }
+        } else if (k == 0 && rad) {
+            /* Lot 92: a radian angle is written as degrees (Lot 96: to
+             * 1/100 degree, Lot 92: whole degrees) */
+            bo_centi(&o, degrees);
         } else bo_collapse(&o, v, ia[k], ib[k]);
     }
     bo_c(&o, ')');
@@ -583,8 +630,12 @@ enum { W_IMG = 1, W_REP, W_POS, W_SLASH, W_ATT, W_BOX, W_COL };
 static int wclass(const char *s, int a, int b) {
     int l = b - a;
     if (l == 1 && s[a] == '/') return W_SLASH;
-    if (bis(s + a, l, "none") || bpre(s + a, l, "url(") || bpre(s + a, l, "linear-gradient(") ||
-        bpre(s + a, l, "radial-gradient(") || bpre(s + a, l, "conic-gradient(")) return W_IMG;
+    {
+        int r = bpre(s + a, l, "repeating-") ? 10 : 0;   /* Lot 96 */
+        if (bpre(s + a + r, l - r, "linear-gradient(") || bpre(s + a + r, l - r, "radial-gradient(") ||
+            bpre(s + a + r, l - r, "conic-gradient(")) return W_IMG;
+    }
+    if (bis(s + a, l, "none") || bpre(s + a, l, "url(")) return W_IMG;
     if (rword(s + a, l)) return W_REP;
     if (pword(s + a, l)) return W_POS;
     if (bis(s + a, l, "scroll") || bis(s + a, l, "fixed") || bis(s + a, l, "local")) return W_ATT;
