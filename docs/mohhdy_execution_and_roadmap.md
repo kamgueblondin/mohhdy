@@ -7,6 +7,19 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 98 (14 November 2026, base bec0eba, PR 255 head)
+
+US-031 partial, phase3_complete=false. The reader reads the animation and
+transition longhands (cascaded one by one with the shorthands, lists
+coordinated), animation-composition (add and accumulate put keyframe
+values on the value below, per animation or per keyframe), @keyframes
+inside @scope, interpolates hsl() colours in sRGB (Lot 97 switched them
+at 50%) and takes ex as 5/16 em and ch as 1/2 em from the 8x8 font the
+engine draws (Lot 97: half an em). A QEMU page (`make qemu-lot98`, CI job
+lot98-reader-longhands) checks the reader at two clock values.
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097
+stay simule. See docs/lot98_plan.md.
+
 ### Lot 97 (14 November 2026, base aa74fac, PR 254 merged)
 
 US-031 partial, phase3_complete=false. The reader computes em, rem, ex
