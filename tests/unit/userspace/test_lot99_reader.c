@@ -439,8 +439,9 @@ static void test_l99_hsl_paint(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff\"", style_of("o"));
     prep("#o { color: hsl(1rad 100% 50%) !important } #o { color: blue }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#fff400\"", style_of("o"));
+    /* Lot 100: a translucent colour is painted with its alpha */
     prep("#o { color: blue } #o { color: hsl(0.5turn 100% 50% / 0.5) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff80\"", style_of("o"));
     prep("#o { color: blue } #o { color: hsl(0.5turn 100% 50%) x }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("o"));
     prep("#o { color: blue } #o { color: hsl(0.5turns 100% 50%) }", 0);
@@ -450,7 +451,7 @@ static void test_l99_hsl_paint(void) {
     prep("#o { background: url(x.png) hsl(60 100% 50%) }", 0);
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#ffff00;background-image:url(x.png)"));
     prep("#o { background-color: blue } #o { background: hsl(60 100% 50% / 0.5) }", 0);
-    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#ffff0080"));
     /* the colour word of the shorthand stays under 32 bytes (Lot 90) */
     prep("#o { background-color: blue } #o { background: hsla(60deg 100.000% 50.000% / 1) }", 0);
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));

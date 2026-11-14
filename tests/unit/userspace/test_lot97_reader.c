@@ -421,18 +421,21 @@ static void test_l97_rgb_color(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("o"));
     prep("#o { color: rgb(1, 2, 3) !important } #o { color: blue }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#010203\"", style_of("o"));
+    /* Lot 100: the reader colour is the full CSS Color 4 rgb(): any
+     * number of digits, clamped channels, an alpha (written as
+     * #rrggbbaa below 1) and the space syntax */
     prep("#o { color: blue } #o { color: rgb(00255, 0, 0) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("o"));
     prep("#o { color: blue } #o { color: rgb(256, 0, 0) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("o"));
     prep("#o { color: blue } #o { color: rgba(1, 2, 3, 0) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#01020300\"", style_of("o"));
     prep("#o { color: blue } #o { color: rgb(1, 2, 3, 1) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#010203\"", style_of("o"));
     prep("#o { color: blue } #o { color: rgb(1, 2) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("o"));
     prep("#o { color: blue } #o { color: rgb(1 2 3) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#010203\"", style_of("o"));
     prep("#o { color: blue } #o { color: rgb(1, 2, 3) x }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("o"));
     prep("#o { color: blue } #o { color: rgbx1, 2, 3) }", 0);
