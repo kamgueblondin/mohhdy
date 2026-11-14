@@ -1027,13 +1027,20 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
         rr[k] = rank > 0 ? rank : 1;
         return;
     }
-    if (r->kind == WF_SITE_K_ANIM || r->kind == WF_SITE_K_TRANS) {
-        /* Lot 97: the strongest animation (transition) list wins */
-        uint8_t *v = r->kind == WF_SITE_K_ANIM ? &nd->anim : &nd->trans;
-        int *rr = r->kind == WF_SITE_K_ANIM ? &nd->anim_rank : &nd->trans_rank;
-        if (rank < *rr) return;
-        *v = r->lidx;
-        *rr = rank > 0 ? rank : 1;
+    if (r->kind == WF_SITE_K_ANIM || r->kind == WF_SITE_K_TRANS ||
+        (r->kind >= WF_SITE_K_LONG0 && r->kind < WF_SITE_K_LONG0 + WF_SITE_ALONGS)) {
+        /* Lot 97: the strongest animation (transition) list wins. Lot 98:
+         * per longhand; a shorthand sets its longhands (animation all but
+         * animation-composition) */
+        int lo = r->kind - WF_SITE_K_LONG0, hi = lo + 1, sh = 0, q;
+        if (r->kind == WF_SITE_K_ANIM) { lo = 0; hi = WF_CSSANIM_L_COMPOSITION; sh = 1; }
+        else if (r->kind == WF_SITE_K_TRANS) { lo = WF_CSSANIM_LONGS; hi = WF_SITE_ALONGS; sh = 1; }
+        for (q = lo; q < hi; q++) {
+            if (rank < nd->alrank[q]) continue;
+            nd->al[q] = r->lidx;
+            nd->alsh[q] = (uint8_t)sh;
+            nd->alrank[q] = rank;
+        }
         return;
     }
     if (r->revert && r->kind >= 1 && r->kind <= WF_SITE_K_MAX) {
@@ -2089,13 +2096,39 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             if (i < n && body[i] == ';') i++;
             continue;
         }
+        {
+            /* Lot 98: the longhands, kept as written like the shorthands */
+            static const char *const lnames[WF_SITE_ALONGS] = {
+                "animation-name", "animation-duration", "animation-timing-function", "animation-delay",
+                "animation-iteration-count", "animation-direction", "animation-fill-mode", "animation-play-state",
+                "animation-composition", "transition-property", "transition-duration", "transition-timing-function",
+                "transition-delay", "transition-behavior"};
+            static wf_cssanim_t la[WF_CSSANIM_MAX];
+            static wf_csstrans_t lt[WF_CSSANIM_MAX];
+            int q, c;
+            for (q = 0; q < WF_SITE_ALONGS && !eq(prop, lnames[q]); q++) {}
+            if (q < WF_SITE_ALONGS) {
+                if (eq(val, "initial") || eq(val, "unset")) {
+                    (void)long_proto(d, WF_SITE_K_LONG0 + q, val, 0, proto);
+                    return 1;
+                }
+                c = q < WF_CSSANIM_LONGS ? wf_cssanim_long(q, val, la, WF_CSSANIM_MAX) :
+                                           wf_csstrans_long(q - WF_CSSANIM_LONGS, val, lt, WF_CSSANIM_MAX);
+                if (c > 0 && long_proto(d, WF_SITE_K_LONG0 + q, val, 1, proto)) return 1;
+                if (i < n && body[i] == ';') i++;
+                continue;
+            }
+        }
         if (eq(prop, "animation") || eq(prop, "transition")) {
             /* Lot 97: the list is checked here and kept as written (lower
-             * case); none, initial and unset give no list */
+             * case); initial and unset give no list. Lot 98: none is kept
+             * as a list (animation-name none animates nothing; the
+             * transition-property none stays under a later
+             * transition-duration) */
             static wf_cssanim_t al[WF_CSSANIM_MAX];
             static wf_csstrans_t tl[WF_CSSANIM_MAX];
             int an = eq(prop, "animation"), kind = an ? WF_SITE_K_ANIM : WF_SITE_K_TRANS, c;
-            if (eq(val, "none") || eq(val, "initial") || eq(val, "unset")) {
+            if (eq(val, "initial") || eq(val, "unset")) {
                 (void)long_proto(d, kind, val, 0, proto);
                 return 1;
             }
@@ -2836,7 +2869,7 @@ static void take_kf(wf_site_t *d, const char *pre, int pn, int at, int bn) {
 
 /* Pass 0: @property at the top level and in applying @media, @supports
  * and @layer blocks, before any custom property is read */
-static void scan_props(wf_site_t *d, const char *s, int n, int depth) {
+static void scan_props(wf_site_t *d, const char *s, int n, int depth, int scoped) {
     int i = 0;
     while (i < n) {
         i = skip_noise(s, n, i);
@@ -2848,8 +2881,9 @@ static void scan_props(wf_site_t *d, const char *s, int n, int depth) {
             if (i < n && s[i] == '{') {
                 int body = i + 1, after = skip_block(s, n, i), blen = after - 1 - body;
                 if (blen < 0) blen = 0;
-                if (at_is(s, n, prelude, "property")) take_prop(d, s + prelude + 9, i - prelude - 9, s + body, blen);
-                else if (at_is(s, n, prelude, "keyframes"))
+                if (at_is(s, n, prelude, "property")) {
+                    if (!scoped) take_prop(d, s + prelude + 9, i - prelude - 9, s + body, blen);
+                } else if (at_is(s, n, prelude, "keyframes"))
                     take_kf(d, s + prelude + 10, i - prelude - 10, (int)(s + body - d->css), blen);
                 else if (depth < 4 && blen > 0 &&
                          ((prelude + 6 <= n && lc(s[prelude + 1]) == 'm' && lc(s[prelude + 2]) == 'e' &&
@@ -2857,7 +2891,10 @@ static void scan_props(wf_site_t *d, const char *s, int n, int depth) {
                           (prelude + 9 <= n && lc(s[prelude + 1]) == 's' && lc(s[prelude + 2]) == 'u' &&
                            wf_site_supports(s + prelude + 9, body - 1 - prelude - 9)) ||
                           at_is(s, n, prelude, "layer")))
-                    scan_props(d, s + body, blen, depth + 1);
+                    scan_props(d, s + body, blen, depth + 1, scoped);
+                else if (depth < 4 && blen > 0 && at_is(s, n, prelude, "scope"))
+                    /* Lot 98: @keyframes in @scope (not @property) */
+                    scan_props(d, s + body, blen, depth + 1, 1);
                 i = after;
             }
             continue;
@@ -3803,6 +3840,7 @@ typedef struct {
     int n;
     int off[WF_SITE_FRAMES + 2];
     int has_ease[WF_SITE_FRAMES + 2];
+    int comp[WF_SITE_FRAMES + 2];           /* Lot 98: the keyframe's animation-composition, -1 none */
     wf_cssease_t ease[WF_SITE_FRAMES + 2];
     char val[WF_SITE_FRAMES + 2][WF_CSSPROP_VAL];
 } kf_frames_t;
@@ -3833,7 +3871,7 @@ static void kf_collect(const wf_site_t *d, const wf_site_kf_t *kf, int k, const 
     int n = kf->n, i = 0;
     f->n = 0;
     while (i < n) {
-        int sel, brace, body, after, offs[WF_SITE_FRAMES], noff = 0, ok = 1, j, has_e = 0, has_v = 0;
+        int sel, brace, body, after, offs[WF_SITE_FRAMES], noff = 0, ok = 1, j, has_e = 0, has_v = 0, comp = -1;
         wf_cssease_t e;
         static char v[WF_CSSPROP_VAL];
         i = skip_noise(s, n, i);
@@ -3878,14 +3916,16 @@ static void kf_collect(const wf_site_t *d, const wf_site_kf_t *kf, int k, const 
                     slower(prop, (int)sizeof(prop), s + a, b - a);
                     if (eq(prop, d->vname[k])) {
                         if (kf_take(p, s + colon + 1, semi - colon - 1, fc, v, (int)sizeof(v))) has_v = 1;
-                    } else if (eq(prop, "animation-timing-function")) {
+                    } else if (eq(prop, "animation-timing-function") || eq(prop, "animation-composition")) {
                         char ev[64];
                         int x = colon + 1, y = semi;
+                        static wf_cssanim_t one;
                         while (x < y && is_sp(s[x])) x++;
                         while (y > x && is_sp(s[y - 1])) y--;
                         if (y - x < (int)sizeof(ev)) {
                             slower(ev, (int)sizeof(ev), s + x, y - x);
-                            if (wf_cssease_parse(ev, slen(ev), &e)) has_e = 1;
+                            if (prop[10] == 't') { if (wf_cssease_parse(ev, slen(ev), &e)) has_e = 1; }
+                            else if (wf_cssanim_long(WF_CSSANIM_L_COMPOSITION, ev, &one, 1) == 1) comp = one.comp;
                         }
                     }
                 }
@@ -3902,6 +3942,7 @@ static void kf_collect(const wf_site_t *d, const wf_site_kf_t *kf, int k, const 
                     for (m = f->n; m > at; m--) {
                         f->off[m] = f->off[m - 1];
                         f->has_ease[m] = f->has_ease[m - 1];
+                        f->comp[m] = f->comp[m - 1];
                         f->ease[m] = f->ease[m - 1];
                         scopy(f->val[m], WF_CSSPROP_VAL, f->val[m - 1], slen(f->val[m - 1]));
                     }
@@ -3910,6 +3951,7 @@ static void kf_collect(const wf_site_t *d, const wf_site_kf_t *kf, int k, const 
                 }
                 f->off[m] = offs[j];
                 f->has_ease[m] = has_e;
+                f->comp[m] = comp;
                 if (has_e) f->ease[m] = e;
                 scopy(f->val[m], WF_CSSPROP_VAL, v, slen(v));
             }
@@ -3921,13 +3963,22 @@ static void kf_collect(const wf_site_t *d, const wf_site_kf_t *kf, int k, const 
 /* the value of animation a (keyframes kf) for name k at the reader clock,
  * under the value below: 1 and out, 0 when it gives none */
 static int anim_value(const wf_site_t *d, const wf_cssanim_t *a, const wf_site_kf_t *kf, int k, const wf_cssprop_t *p,
-                      const wf_cssprop_fctx_t *fc, const char *under, char *out, int cap) {
+                      const wf_cssprop_fctx_t *fc, const char *under, char *out, int cap, int *composed) {
     static kf_frames_t f;
+    static char sum[WF_CSSPROP_VAL];
     int prog, before, j, x, m;
     const wf_cssease_t *e;
     if (!wf_cssanim_progress(a, d->anim_ms, &prog, &before)) return 0;
     kf_collect(d, kf, k, p, fc, &f);
     if (!f.n) return 0;
+    /* Lot 98: add and accumulate put each keyframe value on the value
+     * below (the frames filled in below stay that value) */
+    for (j = 0; j < f.n; j++)
+        if ((f.comp[j] >= 0 ? f.comp[j] : a->comp) != WF_CSSANIM_REPLACE &&
+            wf_cssprop_add(p, under, f.val[j], sum, (int)sizeof(sum)) == 2) {
+            scopy(f.val[j], WF_CSSPROP_VAL, sum, slen(sum));
+            *composed = 1;
+        }
     if (f.off[0] > 0) {
         for (m = f.n; m > 0; m--) {
             f.off[m] = f.off[m - 1]; f.has_ease[m] = f.has_ease[m - 1]; f.ease[m] = f.ease[m - 1];
@@ -3956,6 +4007,21 @@ static const wf_site_kf_t *kf_find(const wf_site_t *d, const char *name) {
     return 0;
 }
 
+/* Lot 98: the coordinated animation (anim 1, into out) or transition
+ * (anim 0) lists of an element from its longhand slots */
+static int node_lists(const wf_site_t *d, const wf_site_node_t *nd, int anim, void *out) {
+    const char *v[WF_CSSANIM_LONGS];
+    unsigned char sh[WF_CSSANIM_LONGS];
+    int base = anim ? 0 : WF_CSSANIM_LONGS, n = anim ? WF_CSSANIM_LONGS : WF_CSSTRANS_LONGS, q;
+    for (q = 0; q < n; q++) {
+        int e = nd->al[base + q];
+        v[q] = e ? d->lpool[e - 1] : 0;      /* e comes from long_intern */
+        sh[q] = nd->alsh[base + q];
+    }
+    return anim ? wf_cssanim_coord(v, sh, (wf_cssanim_t *)out, WF_CSSANIM_MAX) :
+                  wf_csstrans_coord(v, sh, (wf_csstrans_t *)out, WF_CSSANIM_MAX);
+}
+
 /* floor(10000 e / dur) for 0 <= e < dur <= 1e8, by shift and subtract
  * (no 64-bit division helper in the freestanding guest) */
 static int site_frac(int e, int dur) {
@@ -3978,8 +4044,8 @@ static int trans_value(wf_site_t *d, const wf_site_node_t *nd, int k, const wf_c
     const wf_csstrans_t *t = 0;
     int c, j, sb = nd->sbind[k];
     long long e;
-    if (!nd->trans || nd->trans > d->nlongs || !sb || sb > d->nevars) return 0;
-    c = wf_csstrans_parse(d->lpool[nd->trans - 1], tl, WF_CSSANIM_MAX);
+    if (!sb || sb > d->nevars) return 0;
+    c = node_lists(d, nd, 0, tl);
     for (j = 0; j < c; j++) if (eq(tl[j].prop, "all") || eq(tl[j].prop, d->vname[k])) t = &tl[j];
     if (!t) return 0;     /* dur + delay <= 0 ends at once below (e >= dur) */
     if (!kf_take(p, d->evar[sb - 1].value, slen(d->evar[sb - 1].value), fc, start, (int)sizeof(start))) return 0;
@@ -4007,10 +4073,10 @@ static int anim_pass(wf_site_t *d) {
         int par = nd->parent, na = 0, j;
         wf_cssprop_fctx_t fc;
         fc.vw = d->vw; fc.vh = d->vh; fc.em = d->fs[i]; fc.rem = d->root_fs;
-        if (nd->anim && nd->anim <= d->nlongs) na = wf_cssanim_parse(d->lpool[nd->anim - 1], al, WF_CSSANIM_MAX);
+        na = node_lists(d, nd, 1, al);
         for (k = 0; k < d->nvnames; k++) {
             const wf_cssprop_t *p = kprop(d, k);
-            int b, animated = 0, e;
+            int b, animated = 0, e, composed = 0;
             if (!p) continue;
             if (!(g_vexp[i] & (1u << k)) && p->inherits && par >= 0 && par < i) nd->vbind[k] = d->node[par].vbind[k];
             b = nd->vbind[k];
@@ -4027,11 +4093,12 @@ static int anim_pass(wf_site_t *d) {
             if (nd->vrank[k] < (1 << 30))
                 for (j = 0; j < na; j++) {
                     const wf_site_kf_t *kf = kf_find(d, al[j].name);
-                    if (kf && anim_value(d, &al[j], kf, k, p, &fc, cur, val, (int)sizeof(val))) {
+                    if (kf && anim_value(d, &al[j], kf, k, p, &fc, cur, val, (int)sizeof(val), &composed)) {
                         scopy(cur, WF_CSSPROP_VAL, val, slen(val));
                         animated = 1;
                     }
                 }
+            if (composed) d->prop_composed++;
             if (animated) d->prop_animated++;
             else if (trans_value(d, nd, k, p, &fc, cur, val, (int)sizeof(val))) {
                 scopy(cur, WF_CSSPROP_VAL, val, slen(val));
@@ -4045,11 +4112,12 @@ static int anim_pass(wf_site_t *d) {
 }
 
 int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
-    int n = 0, i, lists = 0;
+    int n = 0, i, k, lists = 0;
     if (!out || cap <= 0) return 0;
     out[0] = 0;
     if (!d) return 0;
-    for (i = 0; i < d->nnodes; i++) if (d->node[i].anim || d->node[i].trans) lists = 1;
+    for (i = 0; i < d->nnodes; i++)
+        for (k = 0; k < WF_SITE_ALONGS; k++) if (d->node[i].al[k]) lists = 1;
     if (!d->nkf && !d->dropped_kf && !lists && !d->prop_font) return 0;
     n = app(out, cap, n, "keyframes ");
     n = app_u(out, cap, n, (unsigned)d->nkf);
@@ -4065,6 +4133,10 @@ int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
     if (d->dropped_kf) {
         n = app(out, cap, n, " dropped ");
         n = app_u(out, cap, n, (unsigned)d->dropped_kf);
+    }
+    if (d->prop_composed) {
+        n = app(out, cap, n, " composed ");
+        n = app_u(out, cap, n, (unsigned)d->prop_composed);
     }
     return n;
 }
@@ -4103,7 +4175,7 @@ int wf_site_apply(wf_site_t *d) {
     for (i = 0; i < d->nnodes; i++) vnames_in(d, d->node[i].style, slen(d->node[i].style));
     if (d->css_n) {
         /* Lot 90: registrations before any custom property is read */
-        scan_props(d, d->css, d->css_n, 0);
+        scan_props(d, d->css, d->css_n, 0, 0);
         scan_sheet(d, d->css, d->css_n, 0);
         resolve_sheet_vars(d);
         parse_sheet(d, d->css, d->css_n, 2);

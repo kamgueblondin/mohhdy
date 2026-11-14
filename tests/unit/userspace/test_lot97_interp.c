@@ -18,7 +18,7 @@ static const char *ip(const char *syn, const char *a, const char *b, int t, int 
 static void test_l97_interp_0(void) {
     TEST_ASSERT_EQUAL_STRING("463.1deg", ip("'<angle> | <time>'", "463.1deg", "463.1deg", 0, 2));
     TEST_ASSERT_EQUAL_STRING("309.5092deg", ip("'<angle>'", "322.97deg", "296.043deg", 4999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(215 217 253 / 32%)", ip("'<color>'", "rgb(215 217 253 / 32%)", "hsl(120, 50%, 50%)", 2249, 1));
+    TEST_ASSERT_EQUAL_STRING("rgba(143, 205, 163, 0.4729)", ip("'<color>'", "rgb(215 217 253 / 32%)", "hsl(120, 50%, 50%)", 2249, 2));
     TEST_ASSERT_EQUAL_STRING("1.4865%", ip("'<percentage>'", "-38.567%", "41.54%", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("705.55", ip("'<length-percentage>+ | <number>'", "440", "971.1", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("beta", ip("'<angle> | <custom-ident>'", "beta", "alpha", 4999, 1));
@@ -278,7 +278,7 @@ static void test_l97_interp_19(void) {
 static void test_l97_interp_20(void) {
     TEST_ASSERT_EQUAL_STRING("currentcolor", ip("'<color>'", "#e16", "currentcolor", 10000, 2));
     TEST_ASSERT_EQUAL_STRING("-267", ip("'<integer>+'", "-269 27", "-267", 5000, 1));
-    TEST_ASSERT_EQUAL_STRING("hsl(120, 50%, 50%)", ip("'<color>'", "#8b0a68eb", "hsl(120, 50%, 50%)", 5000, 1));
+    TEST_ASSERT_EQUAL_STRING("rgba(100, 104, 83, 0.9608)", ip("'<color>'", "#8b0a68eb", "hsl(120, 50%, 50%)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("9.7525s", ip("'<time>'", "4.59s", "14.915s", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("-129", ip("'<integer>'", "-331", "74", 4999, 2));
     TEST_ASSERT_EQUAL_STRING("-362.85", ip("'<number>'", "-492", "-233.6483", 4999, 2));
@@ -295,7 +295,7 @@ static void test_l97_interp_21(void) {
     TEST_ASSERT_EQUAL_STRING("-462.8793", ip("'<number>#'", "-822.015", "-103.6", 4999, 2));
     TEST_ASSERT_EQUAL_STRING("alpha", ip("'<custom-ident>'", "alpha", "alpha", 10000, 2));
     TEST_ASSERT_EQUAL_STRING("-82.6%, 148.3%, -11%", ip("'<percentage>#'", "-81.6%, 148.3%, -11%", "-82.6%, 148.3%, -11%", 10000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(229 285 218 / 57%), #33f9, hsl(120, 50%, 50%)", ip("'<color>#'", "rgb(229 185 218 / 57%), #33f9, hsl(120, 50%, 50%)", "rgb(229 285 218 / 57%), #33f9, hsl(120, 50%, 50%)", 5000, 1));
+    TEST_ASSERT_EQUAL_STRING("rgba(229, 220, 218, 0.57), rgba(51, 51, 255, 0.6), rgb(64, 191, 64)", ip("'<color>#'", "rgb(229 185 218 / 57%), #33f9, hsl(120, 50%, 50%)", "rgb(229 285 218 / 57%), #33f9, hsl(120, 50%, 50%)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("31.86%", ip("'<percentage>+'", "-66.326% 108%", "31.86%", 8274, 1));
     TEST_ASSERT_EQUAL_STRING("calc(-88.4% + 171.6px)", ip("'<length-percentage>+'", "calc(-88.4% + 171.6px)", "calc(-88.4% + 271.6px)", 0, 2));
     TEST_ASSERT_EQUAL_STRING("17.8976s", ip("'<time>'", "17.9s", "17.973s", -325, 2));
@@ -476,7 +476,7 @@ static void test_l97_interp_35(void) {
     TEST_ASSERT_EQUAL_STRING("0px", ip("'<length>'", "0px", "0px", 4999, 2));
     TEST_ASSERT_EQUAL_STRING("24", ip("'<integer>'", "-144", "219", 4628, 2));
     TEST_ASSERT_EQUAL_STRING("beta", ip("'<custom-ident>'", "beta", "beta", 8512, 1));
-    TEST_ASSERT_EQUAL_STRING("rgb(7, 11, 252)", ip("'<color>'", "rgb(7, 11, 252)", "hsl(120, 50%, 50%)", 3708, 1));
+    TEST_ASSERT_EQUAL_STRING("rgb(28, 78, 182)", ip("'<color>'", "rgb(7, 11, 252)", "hsl(120, 50%, 50%)", 3708, 2));
     TEST_ASSERT_EQUAL_STRING("-31", ip("'<integer>'", "-370", "307", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("-424.6109deg 149.7deg 352.84deg", ip("'<angle>+'", "-416.7159deg 149.7deg 352.84deg", "-426.7159deg 149.7deg 352.84deg", 7895, 2));
     TEST_ASSERT_EQUAL_STRING("gamma", ip("'<custom-ident>'", "gamma", "beta", 3523, 1));

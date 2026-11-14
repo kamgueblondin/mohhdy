@@ -1277,6 +1277,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 98: one boot of make qemu-lot98 (about 40 s locally)
+  lot98-reader-longhands:
+    name: QEMU animation longhands, composition, hsl and font metrics (Lot 98)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 97 boot
+        run: make qemu-lot98
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot98-reader-longhands-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 97: one boot of make qemu-lot97 (about 1 min locally)
   lot97-reader-engine:
     name: QEMU animated registered properties, font units and average gradients (Lot 97)
