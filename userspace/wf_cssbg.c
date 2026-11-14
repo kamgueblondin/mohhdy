@@ -390,7 +390,7 @@ static int conic_shape(const char *s, int a, int b, int *rad, int *centi) {
         if (c < 2) return -1;
         g = rad_degrees(s + wa[1], wb[1] - wa[1], centi);
         if (g > 0) *rad = 1;
-        else if (g < 0 || angle(s + wa[1], wb[1] - wa[1]) != 1) return -1;
+        else if (angle(s + wa[1], wb[1] - wa[1]) != 1) return -1;   /* a bad radian is not an angle() either */
         k = 2;
         if (c == 2) return 1;
     }
@@ -533,7 +533,7 @@ int wf_cssbg_gradient(const char *v, int n, char *out, int cap) {
          * refuses a period of 0: the last stop is at least every earlier
          * one (the default 100% when it has none) */
         if (k == first) p0 = top = pos < 0 ? 0 : pos;
-        else if (pos > top || (k == c - 1 && pos < 0 && 10000 > top)) top = pos < 0 ? 10000 : pos;
+        else if (pos > top || (k == c - 1 && pos < 0)) top = pos < 0 ? 10000 : pos;
     }
     if (repeat && top <= p0) return 0;
     if (repeat) bo_s(&o, "repeating-", 10);

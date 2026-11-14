@@ -3274,8 +3274,9 @@ static int tf_scale(const char *v, int len, int16_t *out) {
     return 0;
 }
 
-/* An angle in whole degrees, rounded half away from zero. */
-static int tf_angle(const char *v, int len, int *degrees) {
+/* Lot 96: an angle in 1/1000 degree (turn, grad, rad = 57.3deg, deg or
+ * a bare 0); -1 when it is not one or past 2e9 thousandths. */
+static int tf_angle_milli(const char *v, int len, int *out) {
     static const struct { const char *unit; int16_t num, den; } units[] = {
         {"turn", 360, 1}, {"grad", 9, 10}, {"rad", 573, 10}, {"deg", 1, 1}, {0, 0, 0}};
     int milli, percent, k, u = -1;
@@ -3289,6 +3290,14 @@ static int tf_angle(const char *v, int len, int *degrees) {
         if (milli > 2000000000 / units[u].num || milli < -2000000000 / units[u].num) return -1;
         milli = milli * units[u].num / units[u].den;
     }
+    *out = milli;
+    return 0;
+}
+
+/* An angle in whole degrees, rounded half away from zero. */
+static int tf_angle(const char *v, int len, int *degrees) {
+    int milli;
+    if (tf_angle_milli(v, len, &milli)) return -1;
     *degrees = (milli >= 0 ? milli + 500 : milli - 500) / 1000;
     return 0;
 }
@@ -3298,19 +3307,8 @@ static int tf_angle(const char *v, int len, int *degrees) {
  * grad 9/10, rad 57.3, truncated toward zero), rounded half away from
  * zero to 1/100 degree. */
 static int tf_angle_c(const char *v, int len, int *centi) {
-    static const struct { const char *unit; int16_t num, den; } units[] = {
-        {"turn", 360, 1}, {"grad", 9, 10}, {"rad", 573, 10}, {"deg", 1, 1}, {0, 0, 0}};
-    int milli, percent, k, u = -1;
-    for (k = 0; units[k].unit && u < 0; k++) {
-        int ul = w_len(units[k].unit);
-        if (len > ul && w_ieq_n(v + len - ul, ul, units[k].unit)) { u = k; len -= ul; }
-    }
-    if (u < 0 && !(len == 1 && v[0] == '0')) return -1;
-    if (v[len - 1] < '0' || v[len - 1] > '9' || color_number(v, len, &milli, &percent) || percent) return -1;
-    if (u >= 0) {
-        if (milli > 2000000000 / units[u].num || milli < -2000000000 / units[u].num) return -1;
-        milli = milli * units[u].num / units[u].den;
-    }
+    int milli;
+    if (tf_angle_milli(v, len, &milli)) return -1;
     *centi = (milli >= 0 ? milli + 5 : milli - 5) / 10;
     return 0;
 }
@@ -7903,7 +7901,7 @@ static int grad_far(int v) { return v > WE_GRAD_OFFSET_MAX || v < -WE_GRAD_OFFSE
  * last stop: pos0 + (p - pos0) modulo the period (0 <= result < period) */
 static int grad_repeat_p(const we_node_t *n, int p) {
     int p0 = n->grad_pos[0], period = n->grad_pos[n->grad_count - 1] - p0, r;
-    if (!n->grad_repeat || period <= 0) return p;
+    if (!n->grad_repeat) return p;              /* parse_gradient refuses a period of 0 */
     r = (p - p0) % period;
     if (r < 0) r += period;
     return p0 + r;
@@ -8008,8 +8006,9 @@ static void cells_fill(we_doc_t *d, int idx, int slot, int count, const int *o, 
     if (rows > WE_GRAD_CELLS) rows = WE_GRAD_CELLS;
     cols = WE_GRAD_CELLS / rows;
     if (cols > aw) cols = aw;
-    if (n->grad_repeat && n->grad_dir == WE_GRAD_ANGLE && !n->grad_corner && angle % 9000 == 0) {
-        /* Lot 96: a repeating gradient along an axis: the 32 cells in
+    if (n->grad_dir == WE_GRAD_ANGLE && !n->grad_corner && angle % 9000 == 0) {
+        /* Lot 96: only a repeating gradient keeps a quarter turn as an
+         * angle (no corner): along an axis, the 32 cells in
          * one column (top, bottom) or one row (left, right) */
         if (angle % 18000 == 0) { cols = 1; rows = ah < WE_GRAD_CELLS ? ah : WE_GRAD_CELLS; }
         else { rows = 1; cols = aw < WE_GRAD_CELLS ? aw : WE_GRAD_CELLS; }
@@ -8898,7 +8897,7 @@ static void vertical_style(we_doc_t *d, int i, int rl, int forward) {
          * physical width: refused (lot 95) */
         n->grad_dir = 0;
         diag(d, "conic refused in vertical flow", i);
-    } else if (n->grad_dir == WE_GRAD_RADIAL && n->grad_repeat && rl && forward) {
+    } else if (n->grad_dir == WE_GRAD_RADIAL && n->grad_repeat && rl) {
         /* Lot 96: repeating radial cells are rotated with the box, their
          * rl centre needs the physical width as the conic one: refused
          * (vertical-lr transposes them and keeps them) */

@@ -58,6 +58,15 @@ static void test_repeating(void) {
     TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-linear-gradient(red 50%, lime 40%, blue 0%)"));
     TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-conic-gradient(red 36deg, blue 10%)"));
     TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(red 36deg, blue 10.1%)", grad("repeating-conic-gradient(red 36deg, blue 10.1%)"));
+    /* stop positions: 10.5deg is 292/10000 of a turn (2.9% is 290),
+     * 0.35deg 10/10000 (rounded), 0.34deg 9/10000; 10.5% is 1050 */
+    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-conic-gradient(red 10.5deg, blue 2.9%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(red 10.5deg, blue 3%)", grad("repeating-conic-gradient(red 10.5deg, blue 3%)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-conic-gradient(red 0.35deg, blue 0.1%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-conic-gradient(red 0.34deg, blue 0.1%)", grad("repeating-conic-gradient(red 0.34deg, blue 0.1%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red 10%, blue 10.5%)", grad("repeating-linear-gradient(red 10%, blue 10.5%)"));
+    TEST_ASSERT_EQUAL_STRING("REFUSED", grad("repeating-linear-gradient(red, blue 0%)"));
+    TEST_ASSERT_EQUAL_STRING("repeating-linear-gradient(red, blue 0.1%)", grad("repeating-linear-gradient(red, blue 0.1%)"));
     /* a gradient that does not repeat keeps a period of 0 */
     TEST_ASSERT_EQUAL_STRING("linear-gradient(red 10%, blue 10%)", grad("linear-gradient(red 10%, blue 10%)"));
     /* the name */

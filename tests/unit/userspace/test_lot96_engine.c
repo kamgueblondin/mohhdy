@@ -169,16 +169,21 @@ static void test_repeat_parse(void) {
             "repeating-linear-gradient(red 50%, blue 50%)", "repeating-linear-gradient(red 100%, blue)",
             "repeating-conic-gradient(red 90deg, blue 25%)", "repeating-radial-gradient(red 60%, lime 50%, blue 20%)",
             "repeating-linear-gradient(red)", "repeating-gradient(red, blue)", "repeating-linear-gradient(red, blue",
-            "repeating-repeating-linear-gradient(red, blue)" };
+            "repeating-repeating-linear-gradient(red, blue)", "repeating-conic-gradient(red 0.35deg, blue 0.1%)",
+            "repeating-linear-gradient(red, blue 0%)" };
         char body[256];
         int k;
-        for (k = 0; k < 8; k++) {
+        for (k = 0; k < 10; k++) {
             snprintf(body, sizeof(body), "<div id=a style='width:4px;height:4px;background:linear-gradient(red, blue);background-image:%s'></div>", bad[k]);
             render(body);
             TEST_ASSERT_EQUAL(0, node("a")->grad_repeat);
             TEST_ASSERT_EQUAL(WE_GRAD_BOTTOM, node("a")->grad_dir);
         }
     }
+    /* 0.34deg is at 9/10000 of the turn, 0.35deg at 10/10000 (rounded) */
+    render("<div id=a style='background:repeating-conic-gradient(red 0.34deg, blue 0.1%)'></div>");
+    TEST_ASSERT_EQUAL(1, node("a")->grad_repeat);
+    TEST_ASSERT_EQUAL(9, node("a")->grad_pos[0]);
     /* repeating-radial-gradient(red 60%, lime 70%, blue 70.1%): taken */
     render("<div id=a style='background:repeating-radial-gradient(red 60%, lime 70%, blue 70.1%)'></div>");
     TEST_ASSERT_EQUAL(1, node("a")->grad_repeat);
@@ -207,6 +212,25 @@ static void test_guards(void) {
     TEST_ASSERT(rects() > 0);
     render("<div style='width:20px;height:1639px;background:repeating-radial-gradient(circle 10px at 0 1000%, red, blue 10%)'></div>");
     TEST_ASSERT_EQUAL(1, diag_count("repeating gradient too large"));
+    /* 800% of 1024px is 8192: past 8191 */
+    render("<div style='width:1024px;height:20px;background:repeating-radial-gradient(800% 10%, red, blue 10%)'></div>");
+    TEST_ASSERT_EQUAL(1, diag_count("repeating gradient too large"));
+    /* the centre far left of a wide box: only the right edge passes
+     * (at -750% of 2000px: 2 * 2000 + 30000 > 32767, at -700% 32000) */
+    render("<div style='width:2000px;height:20px;background:repeating-radial-gradient(circle 10px at -750% 0, red, blue 10%)'></div>");
+    TEST_ASSERT_EQUAL(1, diag_count("repeating gradient too large"));
+    render("<div style='width:2000px;height:20px;background:repeating-radial-gradient(circle 10px at -700% 0, red, blue 10%)'></div>");
+    TEST_ASSERT_EQUAL(0, diag_count("repeating gradient too large"));
+    TEST_ASSERT(rects() > 0);
+    render("<div style='width:20px;height:2000px;background:repeating-radial-gradient(circle 10px at 0 -750%, red, blue 10%)'></div>");
+    TEST_ASSERT_EQUAL(1, diag_count("repeating gradient too large"));
+    render("<div style='width:20px;height:2000px;background:repeating-radial-gradient(circle 10px at 0 -700%, red, blue 10%)'></div>");
+    TEST_ASSERT_EQUAL(0, diag_count("repeating gradient too large"));
+    /* an angle past 2e9 thousandths of a degree: refused (5556turn), 5555turn taken */
+    render("<div id=a style='background:linear-gradient(red, blue);background-image:linear-gradient(5556turn, red, blue)'></div>"
+           "<div id=b style='background:linear-gradient(5555turn, red, blue)'></div>");
+    TEST_ASSERT_EQUAL(WE_GRAD_BOTTOM, node("a")->grad_dir);
+    TEST_ASSERT_EQUAL(WE_GRAD_TOP, node("b")->grad_dir);    /* 5555turn is a whole number of turns */
     /* a radial gradient that does not repeat keeps its rings at any size */
     render("<div style='width:820px;height:20px;background:radial-gradient(1000% 10%, red, blue 10%)'></div>");
     TEST_ASSERT_EQUAL(0, diag_count("repeating gradient too large"));
