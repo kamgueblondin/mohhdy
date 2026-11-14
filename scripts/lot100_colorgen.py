@@ -25,6 +25,7 @@ Run: python3 scripts/lot100_colorgen.py
 """
 import os
 import random
+from fractions import Fraction as F
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -333,7 +334,15 @@ def paint_case(rng):
     while not css_ok(v):
         v = any_colour(rng)
     k = rng.randrange(7)
+    # Lot 101: currentcolor is black here (no element sets a colour); in
+    # color, currentcolor alone is inherit (nothing to inherit: no colour)
+    L.CUR = L.BLACK
     t = L.paint_text(v.lower().strip(L.SP))
+    if v.lower().strip(L.SP) == "currentcolor" and k in (0, 3, 5, 6):
+        t = ""
+    if k in (0, 3) and t == "":
+        css = "#o { color: blue } #o { color: %s }" % v if k == 0 else "#o { color: %s !important } #o { color: blue }" % v
+        return css, ["TEST_ASSERT_EQUAL_STRING(\"\", style_of(\"o\"));"]
     if k == 0:
         css = "#o { color: blue } #o { color: %s }" % v
         return css, ["TEST_ASSERT_EQUAL_STRING(%s, style_of(\"o\"));" % cstr(' style="color:%s"' % (t or "#0000ff"))]
@@ -362,6 +371,8 @@ def paint_case(rng):
         w = any_colour(rng, True)
         while not css_ok(w):
             w = any_colour(rng, True)
+        if t:
+            L.CUR = cur_of(t)
         tw = L.paint_text(w.lower())
         css = "#o { color: %s; background-color: %s }" % (v, w)
         parts = (["color:" + t] if t else []) + (["background-color:" + tw] if tw else [])
@@ -397,6 +408,7 @@ def write_paint():
     cases = []
     while len(cases) < 420:
         css, lines = paint_case(rng)
+        L.CUR = None
         if not lines:
             continue
         cases.append(["prep(%s, 0);" % cstr(css)] + lines)
@@ -445,7 +457,12 @@ def keyframes(rng, name):
         blocks.append("%s { %s }" % (G98.offset_sel(rng, o), "; ".join(decls)))
         for p, v in vals.items():
             raw = v.strip().lower()
-            if "!" in raw or "var(" in raw or len(raw) >= 128 or not A.colour_match(raw):
+            # Lot 101: currentcolor is a colour in keyframes (resolved when
+            # the frames are used)
+            L.CUR, cur = L.BLACK, L.CUR
+            ok = A.colour_match(raw)
+            L.CUR = cur
+            if "!" in raw or "var(" in raw or len(raw) >= 128 or not ok:
                 continue
             frames[p].append((o, raw, fe, fc))
     return "@keyframes %s { %s }" % (name, " ".join(blocks)), frames
@@ -509,6 +526,7 @@ def anim_case(rng):
     body += ["%s: %s" % d for d in adecls + tdecls]
     css = "%s #o { %s }" % (" ".join(rules), "; ".join(body))
     out, n_anim, n_trans, n_comp = [], 0, 0, 0
+    L.CUR = L.BLACK     # Lot 101: currentcolor in color is the parent's colour (black)
     for p in PROPS:
         town = L.paint_text(own[p].lower()) if p in own else None
         if town is not None:
@@ -536,8 +554,18 @@ def anim_case(rng):
                         final = t
         if final:
             out.append("%s:%s" % (p, final))
+        if p == "color":
+            # Lot 101: in background-color, currentcolor is the final colour
+            L.CUR = cur_of(final) if final else L.BLACK
+    L.CUR = None
     style = ' style="%s"' % ";".join(out) if out else ""
     return css, ms, style, n_anim, n_trans, n_comp
+
+
+def cur_of(text):
+    """(channels, alpha) of a painted colour text, for currentcolor"""
+    rgb, a = L.reader(text)
+    return [((rgb >> (16 - 8 * q)) & 255) * S for q in range(3)], L.rhalf(F(a * S, 255))
 
 
 def write_anim():

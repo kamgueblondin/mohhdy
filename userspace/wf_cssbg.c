@@ -740,17 +740,16 @@ int wf_cssbg_shorthand(const char *v, wf_cssbg_t *out) {
                 if (box >= 2) return 0;
                 bx[box++] = box_code(v + wa[k], wb[k] - wa[k]);
             } else {
-                int l = wb[k] - wa[k];
-                unsigned int rgb;
-                int alpha, i;
+                int l = wb[k] - wa[k], i;
                 /* Lot 99: an opaque hsl() too (the reader paints it);
                  * Lot 100: any colour the reader paints (names, hwb(),
-                 * color-mix(), translucent ones). The colour is the whole
+                 * color-mix(), translucent ones; Lot 101: lab(), color() and
+                 * the ones with currentcolor). The colour is the whole
                  * word: wf_cssprop_color stops at a '!' or ';', so a word
                  * with one is not a colour */
                 for (i = 0; i < l; i++)
                     if (v[wa[k] + i] == '!' || v[wa[k] + i] == ';') return 0;
-                if (!last_layer || col || !(wf_cssbg_color(v + wa[k], l) || wf_cssprop_color(v + wa[k], l, &rgb, &alpha)) ||
+                if (!last_layer || col || !(wf_cssbg_color(v + wa[k], l) || wf_cssprop_color_cur(v + wa[k], l)) ||
                     l >= (int)sizeof(out->color))
                     return 0;
                 col = 1;

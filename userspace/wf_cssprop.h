@@ -284,11 +284,23 @@ int wf_cssprop_rgb24(const char *v, int n, unsigned int *rgb);
  * case): a hex colour (3, 4, 6 or 8 digits), one of the
  * 148 named colours of CSS Color 4, transparent, rgb(), rgba(), hsl(),
  * hsla(), hwb() or color-mix(in srgb, ...) (four color-mix() levels at
- * most, the outer one included), with
+ * most, the outer one included), Lot 101: lab(), lch(), oklab(), oklch()
+ * and color() (CSS Color 4, clipped to sRGB), with
  * the conversions wf_cssprop_interp uses. 1, *rgb (0xRRGGBB) and *alpha
  * (0..255, both rounded half away from zero), else 0. currentcolor is
- * not taken (it has no value of its own). */
+ * not taken (it has no value of its own) unless wf_cssprop_set_current
+ * gave it one (Lot 101). */
 int wf_cssprop_color(const char *v, int n, unsigned int *rgb, int *alpha);
+/* Lot 101: while on is 1, currentcolor (alone or inside color-mix()) is
+ * the colour rgb (0xRRGGBB) with alpha 0..255 for wf_cssprop_color and the
+ * <color> interpolation; with on 0 it has no value (as before). The
+ * reader sets it per element and property while it resolves its own
+ * colours (wf_sitecss.c) and clears it after. */
+void wf_cssprop_set_current(int on, unsigned int rgb, int alpha);
+/* Lot 101: 1 when v[0..n) is a colour wf_cssprop_color takes once
+ * currentcolor has a value (whatever it is), else 0; the current colour
+ * is left as it was */
+int wf_cssprop_color_cur(const char *v, int n);
 
 /* An easing function (CSS Easing 1): linear, ease, ease-in, ease-out,
  * ease-in-out, cubic-bezier(x1, y1, x2, y2) (x in 0..1, y in -100..100,
@@ -405,4 +417,37 @@ int wf_csstrans_coord(const char *const *v, const unsigned char *sh, wf_csstrans
  * progress is 10000 of the last iteration; a fractional count ends at
  * its fraction. */
 int wf_cssanim_progress(const wf_cssanim_t *a, int ms, int *p, int *before);
+
+/* Lot 101 (CSS Scroll-driven Animations 1): the local time of animation
+ * a on a scroll timeline at progress prog (0..10000): the start delay and
+ * the active duration share the timeline, so ms = prog * (delay +
+ * duration * count) / 10000, rounded down. 0 (and ms 0) when the count
+ * is infinite or that sum is not in 1..WF_CSSANIM_MS_MAX ms (the
+ * animation has no effect then) or prog is outside 0..10000. */
+int wf_cssanim_scroll_ms(const wf_cssanim_t *a, int prog, int *ms);
+
+/* Lot 101: scroll-timeline-name and view-timeline-name ([none |
+ * <dashed-ident>]#, WF_CSSTL_NAMES), scroll-timeline-axis and
+ * view-timeline-axis ([block | inline | x | y]#, WF_CSSTL_AXES) and the
+ * shorthands scroll-timeline and view-timeline ([<name> <axis>?]#,
+ * WF_CSSTL_SHORT; view-timeline-inset is not taken). A name of none is
+ * kept as an empty name (it names no timeline); a name is shorter than
+ * WF_CSSPROP_NAME bytes. */
+enum { WF_CSSTL_BLOCK = 0, WF_CSSTL_INLINE = 1, WF_CSSTL_X = 2, WF_CSSTL_Y = 3 };
+enum { WF_CSSTL_NAMES = 0, WF_CSSTL_AXES = 1, WF_CSSTL_SHORT = 2 };
+typedef struct {
+    char name[WF_CSSPROP_NAME];
+    unsigned char axis;           /* WF_CSSTL_* (block for a names list) */
+} wf_csstl_t;
+/* the list v (lower case, trimmed) of kind which: the number of items
+ * written to out (at most max and WF_CSSANIM_MAX), -1 when the list is
+ * not valid or longer (out may then be partly written) */
+int wf_csstl_parse(int which, const char *v, wf_csstl_t *out, int max);
+/* the timelines of a names list and an axes list (0 for none: block),
+ * coordinated as the animation longhands are (the names give the count,
+ * the axes repeat): their number, 0 when names is 0 or not valid */
+int wf_csstl_coord(const char *names, const char *axes, wf_csstl_t *out, int max);
+/* the n names (axes 0) or axes (axes 1) of t as a list ("--a, none",
+ * "block, x"): its length, 0 (and "") when it does not fit cap */
+int wf_csstl_text(const wf_csstl_t *t, int n, int axes, char *out, int cap);
 #endif

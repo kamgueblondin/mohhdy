@@ -246,12 +246,20 @@ def mix(v, depth):
 
 
 # ------------------------------------------------------------- any colour
+# Lot 101: the colour currentcolor stands for while the reader resolves
+# its own colours ((channels, alpha) or None: no value, as in Lot 100)
+CUR = None
+BLACK = ([0, 0, 0], S)
+
+
 def rgba(v, depth=0):
     """channels in 1/10000 of 0..255 and alpha in 1/10000, or None (Lot
     97's rgba with every name, hwb() and color-mix())"""
     v = v.lower()
     if v == "transparent":
         return [0, 0, 0], 0
+    if v == "currentcolor":
+        return CUR      # Lot 101: the colour set for it, else none
     if v in NAMED:
         return [c * S for c in NAMED[v]], S
     if v.startswith("#"):
@@ -266,7 +274,10 @@ def rgba(v, depth=0):
         return hwb(v)
     if v.startswith("color-mix("):
         return mix(v, depth)
-    return None
+    # Lot 101: lab(), lch(), oklab(), oklch() and color()
+    import lot101_colormodel as L101
+    r = L101.rgba(v)
+    return None if r is NotImplemented else r
 
 
 def colour_match(v):
@@ -276,6 +287,10 @@ def colour_match(v):
         return True
     lv = v.lower()
     if (len(v) > 4 and lv.startswith("hwb(")) or (len(v) > 10 and lv.startswith("color-mix(")):
+        return rgba(v) is not None
+    # Lot 101: lab(), lch(), oklab(), oklch() and color() by their conversion
+    import lot101_colormodel as L101
+    if L101.is_space_fn(v):
         return rgba(v) is not None
     return A.colour_match97(v)
 

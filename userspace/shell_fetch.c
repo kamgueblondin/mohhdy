@@ -753,10 +753,29 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
         scat(out, cap, "\n");
         return 0;
     }
+    if (a[0] == 's' && a[1] == 'c' && a[2] == 'r' && a[3] == 'o' && a[4] == 'l' && a[5] == 'l' && (a[6] == 0 || a[6] == ' ')) {
+        /* Lot 101: "web-css scroll N": the reader scroll position in
+         * percent of the root scroll range (0..100) for the scroll
+         * timelines of the next page */
+        const char *t = a + 6;
+        int v = 0, dg = 0;
+        while (*t == ' ') t++;
+        while (*t >= '0' && *t <= '9' && dg < 4) { v = v * 10 + (*t - '0'); t++; dg++; }
+        while (*t == ' ') t++;
+        if (!dg || *t || v > 100) {
+            scat(out, cap, "usage: web-css scroll <0..100>\n");
+            return -1;
+        }
+        wf_html_set_cssscroll(v * 100);
+        scat(out, cap, "web-css scroll ");
+        scat_int(out, cap, v);
+        scat(out, cap, "%\n");
+        return 0;
+    }
     if (wf_html_sitecss_report(out, cap) <= 0) scat(out, cap, "css none\n");
     {
         /* Lot 88: the @scope summary of the page */
-        char sc[96];   /* Lot 90: 96 (the css-props line is up to 80) */
+        char sc[128];  /* Lot 90: 96 (the css-props line is up to 80); Lot 101: 128 (css-anim scroll) */
         if (wf_html_sitecss_scope(sc, (int)sizeof(sc)) > 0) {
             scat(out, cap, "css-scope ");
             scat(out, cap, sc);

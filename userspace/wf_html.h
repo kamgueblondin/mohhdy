@@ -74,6 +74,8 @@ int wf_html_sitecss_props(char *out, int cap);
  * last page (0 when it has none), and the reader clock for the next one */
 int wf_html_sitecss_anim(char *out, int cap);
 void wf_html_set_csstime(int ms);
+/* Lot 101: the reader scroll position, 0..10000 (wf_site_set_scroll) */
+void wf_html_set_cssscroll(int pm);
 /* Plain text of a page for the console (tags removed, blocks on new
  * lines). Lot 71: every character reference decoded and the text written
  * as UTF-8 (the console decodes UTF-8), Latin-1 pages converted. */

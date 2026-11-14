@@ -228,9 +228,14 @@ enum {
     /* Lot 98: the longhands, slot = kind - WF_SITE_K_LONG0: the
      * animation-* (WF_CSSANIM_L_*; Lot 99: ten, animation-timeline last)
      * then the five transition-* (WF_CSSANIM_LONGS + WF_CSSTRANS_L_*) */
-    WF_SITE_K_LONG0 = 29
+    WF_SITE_K_LONG0 = 29,
+    /* Lot 101: scroll-timeline-name, scroll-timeline-axis,
+     * view-timeline-name and view-timeline-axis (slot = kind -
+     * WF_SITE_K_TL0), lists in lpool like the animation longhands */
+    WF_SITE_K_TL0 = 44
 };
 #define WF_SITE_ALONGS 15           /* Lot 98: WF_CSSANIM_LONGS + WF_CSSTRANS_LONGS slots per element (Lot 99: 15) */
+#define WF_SITE_TLS 4               /* Lot 101: the timeline longhand slots */
 /* Lot 89: a compound that names the scoping root */
 enum {
     WF_SITE_SREF_NONE = 0,
@@ -321,6 +326,15 @@ typedef struct {
     uint32_t scolor, sbg;
     uint8_t scolor_set, sbg_set;
     int scolor_rank, sbg_rank;
+    /* Lot 101: a colour that names currentcolor: the lpool index + 1 of
+     * its text (0 none) for color, background-color and their starting
+     * values, resolved once the cascade is done; color_inh: color is the
+     * parent's final colour (inherit, unset or currentcolor) */
+    uint8_t color_cur, bg_cur, scolor_cur, sbg_cur, color_inh;
+    /* Lot 101: per timeline slot (WF_SITE_K_TL0), the list of the winning
+     * declaration (lpool index + 1, 0 the initial value) and its rank */
+    uint8_t tl[WF_SITE_TLS];
+    int tlrank[WF_SITE_TLS];
 } wf_site_node_t;
 
 typedef struct {
@@ -473,6 +487,9 @@ typedef struct {
     int prop_composed;            /* Lot 98: animated values with a keyframe added to the value below */
     int anim_idle;                /* Lot 99: element animations without a timeline */
     int col_animated;             /* Lot 100: animated color and background-color values */
+    int cur_resolved;             /* Lot 101: colours resolved with currentcolor */
+    int anim_scroll;              /* Lot 101: element animations on an active scroll timeline */
+    int scroll_pm;                /* Lot 101: the reader scroll position, 0..10000 of the range */
     int col_transitioned;         /* Lot 100: ... transitioned */
 } wf_site_t;
 
@@ -532,6 +549,9 @@ const wf_cssprop_t *wf_site_prop(const wf_site_t *d, const char *name);
 /* Lot 97: the reader clock (ms since the document start, 0..1e8) used by
  * the next prepares (animations and transitions); 0 by default. */
 void wf_site_set_time(int ms);
+/* Lot 101: the reader scroll position for the scroll timelines of the
+ * pages applied after it: 0..10000 of the root scroll range (clamped) */
+void wf_site_set_scroll(int pm);
 /* Lot 97: "keyframes K animated A transitioned T font F at Nms" (and
  * " dropped D" when @keyframes were over the table; Lot 98: " composed C"
  * when C animated values added a keyframe to the value below); length, 0
