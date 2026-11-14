@@ -153,6 +153,13 @@ COLOUR_NAMES = set(NAMED_LIST := ["black", "white", "red", "green", "blue", "yel
 
 
 def colour_match(v):
+    """Lot 100, converted: every CSS Color 4 name, hwb() and color-mix() by
+    scripts/lot100_colormodel.py, which takes the rest from colour_match97"""
+    import lot100_colormodel
+    return lot100_colormodel.colour_match(v)
+
+
+def colour_match97(v):
     """a <color> value as the registration matches it: a hex colour (3, 4,
     6 or 8 digits), a name, or rgb(), rgba(), hsl(), hsla() with only
     digits, '.', '%', ',', '/', spaces, signs and the letters of deg
@@ -437,6 +444,13 @@ NAMED = {"black": (0, 0, 0), "white": (255, 255, 255), "red": (255, 0, 0), "gree
 
 
 def rgba(v):
+    """Lot 100, converted: every CSS Color 4 name, hwb() and color-mix() by
+    scripts/lot100_colormodel.py (hex and rgb() from rgba97)"""
+    import lot100_colormodel
+    return lot100_colormodel.rgba(v)
+
+
+def rgba97(v):
     """channels in 1/10000 of 0..255 and alpha in 1/10000, or None"""
     if v == "transparent":
         return [0, 0, 0], 0

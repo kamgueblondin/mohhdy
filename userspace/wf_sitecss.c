@@ -499,71 +499,16 @@ static int ident(const char *s, int n, int i, char *out, int cap) {
     return i;
 }
 
-static int hexdig(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
-
+/* a colour as the reader keeps it: 0xRRGGBB with 255 - alpha in the top
+ * byte (0 opaque, as the engine reads colours since Lot 62). Lot 100: any
+ * colour wf_cssprop_color takes (Lot 97: #rgb, #rrggbb, rgb() with
+ * integers, eight names; Lot 99: opaque hsl()) */
 static int parse_color(const char *s, int n, uint32_t *out) {
-    int i = 0;
-    while (i < n && is_sp(s[i])) i++;
-    if (i < n && s[i] == '#') {
-        int k = 0, v[8];
-        i++;
-        while (i < n && k < 8 && hexdig(s[i]) >= 0) v[k++] = hexdig(s[i++]);
-        if (k == 3) {
-            *out = (uint32_t)((v[0] * 17 << 16) | (v[1] * 17 << 8) | (v[2] * 17));
-            return 1;
-        }
-        if (k == 6) {
-            *out = (uint32_t)((v[0] << 20) | (v[1] << 16) | (v[2] << 12) | (v[3] << 8) | (v[4] << 4) | v[5]);
-            return 1;
-        }
-        return 0;
-    }
-    {
-        /* Lot 99: an opaque hsl() or hsla() */
-        unsigned int c;
-        if (wf_cssprop_rgb24(s + i, n - i, &c)) { *out = (uint32_t)c; return 1; }
-    }
-    if (n - i >= 4 && lc(s[i]) == 'r' && lc(s[i + 1]) == 'g' && lc(s[i + 2]) == 'b') {
-        /* Lot 97: rgb(R, G, B) with integers 0..255, the form an animated
-         * opaque <color> computes to (rgba() too with an alpha of 1) */
-        int c[4], k = 0, a = 0;
-        i += 3;
-        if (i < n && lc(s[i]) == 'a') { a = 1; i++; }
-        if (i >= n || s[i] != '(') return 0;
-        i++;
-        while (k < 3 + a) {
-            int v = 0, dg = 0;
-            while (i < n && is_sp(s[i])) i++;
-            while (i < n && s[i] >= '0' && s[i] <= '9' && dg < 4) { v = v * 10 + s[i] - '0'; i++; dg++; }
-            if (!dg || v > 255) return 0;
-            c[k++] = v;
-            while (i < n && is_sp(s[i])) i++;
-            if (k < 3 + a) { if (i >= n || s[i] != ',') return 0; i++; }
-        }
-        if (a && c[3] != 1) return 0;
-        if (i >= n || s[i] != ')') return 0;
-        i++;
-        while (i < n && is_sp(s[i])) i++;
-        if (i < n && s[i] != ';' && s[i] != '!') return 0;
-        *out = (uint32_t)((c[0] << 16) | (c[1] << 8) | c[2]);
-        return 1;
-    }
-    {
-        char name[16];
-        int k = 0;
-        static const char *const nm[] = { "black", "white", "red", "green", "blue", "gray", "grey", "navy", 0 };
-        static const uint32_t cv[] = { 0x000000u, 0xfffffeu, 0xff0000u, 0x008000u, 0x0000ffu, 0x808080u, 0x808080u, 0x000080u };
-        while (i < n && k < 15 && !is_sp(s[i]) && s[i] != ';' && s[i] != '!') name[k++] = lc(s[i++]);
-        name[k] = 0;
-        /* white is 0xfffffe so a stored 0 is still "unset" only via color_set */
-        for (k = 0; nm[k]; k++) if (eq(name, nm[k])) { *out = cv[k] == 0xfffffeu ? 0xffffffu : cv[k]; return 1; }
-    }
-    return 0;
+    unsigned int c;
+    int a;
+    if (!wf_cssprop_color(s, n, &c, &a)) return 0;
+    *out = (uint32_t)c | ((uint32_t)(255 - a) << 24);
+    return 1;
 }
 
 static int nth_match(const wf_site_part_t *pt, int index) {
@@ -1032,6 +977,17 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
         rr[k] = rank > 0 ? rank : 1;
         return;
     }
+    if (r->starting) {
+        /* Lot 100: a starting colour (add_rule keeps no other kind);
+         * transparent is a colour with alpha 0 here */
+        int bg = r->kind == WF_SITE_K_BG;
+        int *rr = bg ? &nd->sbg_rank : &nd->scolor_rank;
+        if (rank < *rr) return;
+        *(bg ? &nd->sbg : &nd->scolor) = bg && r->val != 2 ? 0xff000000u : r->color;
+        *(bg ? &nd->sbg_set : &nd->scolor_set) = 1;
+        *rr = rank;
+        return;
+    }
     if (r->kind == WF_SITE_K_ANIM || r->kind == WF_SITE_K_TRANS ||
         (r->kind >= WF_SITE_K_LONG0 && r->kind < WF_SITE_K_LONG0 + WF_SITE_ALONGS)) {
         /* Lot 97: the strongest animation (transition) list wins. Lot 98:
@@ -1125,6 +1081,7 @@ static void all_kind(const wf_site_rule_t *r, int kind, wf_site_rule_t *out) {
     out->scope_rel = r->scope_rel;
     out->tok[0] = 0;
     out->lidx = 0;
+    out->starting = 0;      /* Lot 100: add_rule keeps no starting all */
     if (kw == 1 || (kw == 3 && !kind_inherits(kind))) { initial_value(kind, out); return; }
     out->kind = (uint8_t)kind;
     out->val = 0;
@@ -1201,12 +1158,14 @@ static int app_box(char *o, int cap, int n, const uint8_t side[4]) {
     return n;
 }
 
+/* "#rrggbb", Lot 100: "#rrggbbaa" when the colour is not opaque */
 static int app_hex(char *o, int cap, int n, uint32_t c) {
-    char t[8];
-    int i;
+    char t[10];
+    int i, k = 6;
     const char *h = "0123456789abcdef";
     for (i = 5; i >= 0; i--) { t[5 - i] = h[(c >> (i * 4)) & 15]; }
-    t[6] = 0;
+    if (c >> 24) { t[6] = h[(255 - (c >> 24)) >> 4]; t[7] = h[(255 - (c >> 24)) & 15]; k = 8; }
+    t[k] = 0;
     n = app(o, cap, n, "#");
     return app(o, cap, n, t);
 }
@@ -1452,8 +1411,11 @@ static int add_rule(wf_site_t *d, const wf_site_rule_t *src) {
     wf_site_rule_t *r;
     int p, b;
     /* Lot 97: an @starting-style rule only gives starting values of
-     * custom properties; its other declarations are left out */
-    if (src->starting && src->kind != WF_SITE_K_VAR) return 0;
+     * custom properties; its other declarations are left out. Lot 100:
+     * and of color and background-color (a colour, initial or transparent;
+     * the other CSS-wide keywords are left out) */
+    if (src->starting && src->kind != WF_SITE_K_VAR &&
+        ((src->kind != 4 && src->kind != WF_SITE_K_BG) || src->revert)) return 0;
     if (d->nrules >= WF_SITE_RULES) { d->dropped_rules++; return -1; }
     r = &d->rule[d->nrules];
     clear(r, (int)sizeof(*r));
@@ -3869,9 +3831,9 @@ static int kf_take(const wf_cssprop_t *p, const char *s, int n, const wf_cssprop
     return 1;
 }
 
-/* the frames of name k (registration p) in kf: sorted by offset, one per
- * offset (the later block wins) */
-static void kf_collect(const wf_site_t *d, const wf_site_kf_t *kf, int k, const wf_cssprop_t *p,
+/* the frames of property name (registration p) in kf: sorted by offset,
+ * one per offset (the later block wins) */
+static void kf_collect(const wf_site_t *d, const wf_site_kf_t *kf, const char *name, const wf_cssprop_t *p,
                        const wf_cssprop_fctx_t *fc, kf_frames_t *f) {
     const char *s = d->css + kf->at;
     int n = kf->n, i = 0;
@@ -3920,7 +3882,7 @@ static void kf_collect(const wf_site_t *d, const wf_site_kf_t *kf, int k, const 
                 while (b > a && is_sp(s[b - 1])) b--;
                 if (b - a < (int)sizeof(prop)) {
                     slower(prop, (int)sizeof(prop), s + a, b - a);
-                    if (eq(prop, d->vname[k])) {
+                    if (eq(prop, name)) {
                         if (kf_take(p, s + colon + 1, semi - colon - 1, fc, v, (int)sizeof(v))) has_v = 1;
                     } else if (eq(prop, "animation-timing-function") || eq(prop, "animation-composition")) {
                         char ev[64];
@@ -3978,17 +3940,17 @@ static int kf_compose(const wf_cssprop_t *p, int c, const char *under, const cha
     return 1;
 }
 
-/* the value of animation a (keyframes kf) for name k at the reader clock,
+/* the value of animation a (keyframes kf) for property name at the reader clock,
  * under the value below (base: the element's own value): 1 and out, 0
  * when it gives none */
-static int anim_value(const wf_site_t *d, const wf_cssanim_t *a, const wf_site_kf_t *kf, int k, const wf_cssprop_t *p,
+static int anim_value(const wf_site_t *d, const wf_cssanim_t *a, const wf_site_kf_t *kf, const char *name, const wf_cssprop_t *p,
                       const wf_cssprop_fctx_t *fc, const char *base, const char *under, char *out, int cap,
                       int *composed) {
     static kf_frames_t f;
     int prog, before, j, x, m;
     const wf_cssease_t *e;
     if (!wf_cssanim_progress(a, d->anim_ms, &prog, &before)) return 0;
-    kf_collect(d, kf, k, p, fc, &f);
+    kf_collect(d, kf, name, p, fc, &f);
     if (!f.n) return 0;
     /* Lot 98: add and accumulate put each keyframe value on the value
      * below */
@@ -4059,26 +4021,41 @@ static int site_frac(int e, int dur) {
     return q;
 }
 
+/* Lot 100 (Lot 97 in trans_value): transition t from start to end at
+ * the reader clock: 1 and out while it runs (or waits in its delay) */
+static int trans_run(const wf_site_t *d, const wf_csstrans_t *t, const wf_cssprop_t *p, const char *start, const char *end,
+                     char *out, int cap) {
+    long long e;
+    if (eq(start, end)) return 0;
+    if (wf_cssprop_interp(p, start, end, 5000, out, cap) == 1 && !t->discrete) return 0;
+    e = (long long)d->anim_ms - t->delay;
+    if (e >= t->dur) return 0;     /* dur + delay <= 0 ends at once */
+    if (e < 0) { scopy(out, cap, start, slen(start)); return 1; }
+    return wf_cssprop_interp(p, start, end, wf_cssease_at(&t->ease, site_frac((int)e, t->dur), 0), out, cap) > 0;
+}
+
+/* the transition of node nd for property name (the last one that names
+ * it or all), 0 */
+static const wf_csstrans_t *trans_of(const wf_site_t *d, const wf_site_node_t *nd, const char *name) {
+    static wf_csstrans_t tl[WF_CSSANIM_MAX];
+    const wf_csstrans_t *t = 0;
+    int c = node_lists(d, nd, 0, tl), j;
+    for (j = 0; j < c; j++) if (eq(tl[j].prop, "all") || eq(tl[j].prop, name)) t = &tl[j];
+    return t;
+}
+
 /* the value of the transitions of node nd for name k: 1 and out while a
  * transition runs (or waits in its delay), 0 otherwise */
 static int trans_value(wf_site_t *d, const wf_site_node_t *nd, int k, const wf_cssprop_t *p, const wf_cssprop_fctx_t *fc,
                        const char *end, char *out, int cap) {
-    static wf_csstrans_t tl[WF_CSSANIM_MAX];
     static char start[WF_CSSPROP_VAL];
-    const wf_csstrans_t *t = 0;
-    int c, j, sb = nd->sbind[k];
-    long long e;
+    const wf_csstrans_t *t;
+    int sb = nd->sbind[k];
     if (!sb || sb > d->nevars) return 0;
-    c = node_lists(d, nd, 0, tl);
-    for (j = 0; j < c; j++) if (eq(tl[j].prop, "all") || eq(tl[j].prop, d->vname[k])) t = &tl[j];
-    if (!t) return 0;     /* dur + delay <= 0 ends at once below (e >= dur) */
+    t = trans_of(d, nd, d->vname[k]);
+    if (!t) return 0;
     if (!kf_take(p, d->evar[sb - 1].value, slen(d->evar[sb - 1].value), fc, start, (int)sizeof(start))) return 0;
-    if (eq(start, end)) return 0;
-    if (wf_cssprop_interp(p, start, end, 5000, out, cap) == 1 && !t->discrete) return 0;
-    e = (long long)d->anim_ms - t->delay;
-    if (e >= t->dur) return 0;
-    if (e < 0) { scopy(out, cap, start, slen(start)); return 1; }
-    return wf_cssprop_interp(p, start, end, wf_cssease_at(&t->ease, site_frac((int)e, t->dur), 0), out, cap) > 0;
+    return trans_run(d, t, p, start, end, out, cap);
 }
 
 /* After the first cascade: the registered values of each element (in
@@ -4121,7 +4098,7 @@ static int anim_pass(wf_site_t *d) {
             if (nd->vrank[k] < (1 << 30))
                 for (j = 0; j < na; j++) {
                     const wf_site_kf_t *kf = al[j].timeline == WF_CSSANIM_TL_AUTO ? kf_find(d, al[j].name) : 0;
-                    if (kf && anim_value(d, &al[j], kf, k, p, &fc, base, cur, val, (int)sizeof(val), &composed)) {
+                    if (kf && anim_value(d, &al[j], kf, d->vname[k], p, &fc, base, cur, val, (int)sizeof(val), &composed)) {
                         scopy(cur, WF_CSSPROP_VAL, val, slen(val));
                         animated = 1;
                     }
@@ -4137,6 +4114,76 @@ static int anim_pass(wf_site_t *d) {
         }
     }
     return changed;
+}
+
+/* ---- Lot 100: animated and transitioned color and background-color ----
+ * The reader's own two colour properties animate as a registered <color>
+ * would (premultiplied sRGB, the same compositions): keyframes that set
+ * color or background-color, and transitions from the colours of
+ * @starting-style rules. The value below the animations is the
+ * element's own colour, else (color) the final colour of the nearest
+ * ancestor that has one, black at the top (the reader does not know the
+ * engine's own defaults, a link's blue for one), and transparent for a
+ * background. An !important own declaration keeps its value. */
+static const wf_cssprop_t *col_prop(void) {
+    static wf_cssprop_t p;
+    clear(&p, (int)sizeof(p));
+    p.syntax = (unsigned char)wf_cssprop_syntax_parse("'<color>'", 9, &p);
+    return &p;
+}
+
+/* colour c (as parse_color keeps it) as "#rrggbb" or "#rrggbbaa" */
+static void col_text(uint32_t c, char *out, int cap) {
+    app_hex(out, cap, 0, c);
+}
+
+static void col_pass(wf_site_t *d) {
+    static wf_cssanim_t al[WF_CSSANIM_MAX];
+    static char base[WF_CSSPROP_VAL], cur[WF_CSSPROP_VAL], val[WF_CSSPROP_VAL];
+    const wf_cssprop_t *p = col_prop();
+    int i, w, j, na;
+    for (i = 0; i < d->nnodes; i++) {
+        wf_site_node_t *nd = &d->node[i];
+        wf_cssprop_fctx_t fc;
+        fc.vw = d->vw; fc.vh = d->vh; fc.em = d->fs[i]; fc.rem = d->root_fs;
+        na = node_lists(d, nd, 1, al);
+        for (w = 0; w < 2; w++) {
+            const char *name = w ? "background-color" : "color";
+            uint32_t *slot = w ? &nd->bg : &nd->color, c;
+            uint8_t *set = w ? &nd->bg_set : &nd->color_set;
+            int rank = w ? nd->bg_rank : nd->color_rank, animated = 0, composed = 0, q = nd->parent;
+            const wf_csstrans_t *t;
+            if (*set) col_text(*slot, base, (int)sizeof(base));
+            else if (w) scopy(base, WF_CSSPROP_VAL, "transparent", 11);
+            else {
+                /* parents come first: their colour is final */
+                while (q >= 0 && !d->node[q].color_set) q = d->node[q].parent;
+                if (q >= 0) col_text(d->node[q].color, base, (int)sizeof(base));
+                else scopy(base, WF_CSSPROP_VAL, "#000000", 7);
+            }
+            scopy(cur, WF_CSSPROP_VAL, base, slen(base));
+            if (rank < (1 << 30))
+                for (j = 0; j < na; j++) {
+                    const wf_site_kf_t *kf = al[j].timeline == WF_CSSANIM_TL_AUTO ? kf_find(d, al[j].name) : 0;
+                    if (kf && anim_value(d, &al[j], kf, name, p, &fc, base, cur, val, (int)sizeof(val), &composed)) {
+                        scopy(cur, WF_CSSPROP_VAL, val, slen(val));
+                        animated = 1;
+                    }
+                }
+            if (composed) d->prop_composed++;
+            if (animated) d->col_animated++;
+            else {
+                uint32_t sc = w ? nd->sbg : nd->scolor;
+                if (!(w ? nd->sbg_set : nd->scolor_set) || !(t = trans_of(d, nd, name))) continue;
+                col_text(sc, val, (int)sizeof(val));
+                scopy(base, WF_CSSPROP_VAL, val, slen(val));
+                if (!trans_run(d, t, p, base, cur, val, (int)sizeof(val))) continue;
+                scopy(cur, WF_CSSPROP_VAL, val, slen(val));
+                d->col_transitioned++;
+            }
+            if (parse_color(cur, slen(cur), &c)) { *slot = c; *set = 1; }
+        }
+    }
 }
 
 int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
@@ -4169,6 +4216,12 @@ int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
     if (d->anim_idle) {
         n = app(out, cap, n, " idle ");
         n = app_u(out, cap, n, (unsigned)d->anim_idle);
+    }
+    if (d->col_animated || d->col_transitioned) {
+        n = app(out, cap, n, " color ");
+        n = app_u(out, cap, n, (unsigned)d->col_animated);
+        n = app(out, cap, n, " ");
+        n = app_u(out, cap, n, (unsigned)d->col_transitioned);
     }
     return n;
 }
@@ -4244,6 +4297,7 @@ int wf_site_apply(wf_site_t *d) {
         cascade_props(d);
         d->recascades = 1;
     }
+    col_pass(d);
     d->ready = 1;
     return 0;
 }

@@ -97,6 +97,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       generated 0% and 100% keyframes composed with add,
                       animation-timeline: none (idle), an hsl() value of a
                       registered colour read through var()
+  /lot100/color.html  Lot 100: hwb(), color-mix() with a translucent result,
+                      a CSS Color 4 name, a name in the background
+                      shorthand, a keyframes colour and an @starting-style
+                      colour transition
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -521,6 +525,30 @@ LOT99_PAGES = {
 }
 
 
+# Lot 100: reader page (tests/scripts/test_qemu_lot100.py); the guest sets
+# the reader clock first (web-css time N)
+LOT100_PAGES = {
+    "/lot100/color.html": (
+        "<!doctype html><html><head><title>Lot 100 colours</title><style>"
+        "@keyframes k100 { to { color: blue } }\n"
+        "#c100 { color: hwb(120 30% 20%) }\n"
+        "#m100 { background-color: color-mix(in srgb, red 20%, blue 20%) }\n"
+        "#n100 { color: RebeccaPurple }\n"
+        "#g100 { background: darkorange }\n"
+        "#k100 { color: red; animation: k100 1000ms linear }\n"
+        "#t100 { color: lime; transition: color 1s linear }\n"
+        "@starting-style { #t100 { color: red } }\n"
+        "</style></head><body><h1>Colours 100</h1>"
+        "<div id=\"c100\"><p>ckeep100</p></div>"
+        "<div id=\"m100\"><p>mkeep100</p></div>"
+        "<div id=\"n100\"><p>nkeep100</p></div>"
+        "<div id=\"g100\"><p>gkeep100</p></div>"
+        "<div id=\"k100\"><p>kkeep100</p></div>"
+        "<div id=\"t100\"><p>tkeep100</p></div>"
+        "<p>fin100</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -725,6 +753,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT99_PAGES:
             self._send(200, LOT99_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT100_PAGES:
+            self._send(200, LOT100_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
