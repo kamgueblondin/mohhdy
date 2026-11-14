@@ -89,6 +89,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       registered length in em inherited as a length, an
                       !important value kept, @starting-style without a
                       custom property, a dropped @keyframes name
+  /lot98/anim.html    Lot 98: animation and transition longhands, @keyframes
+                      inside @scope, animation-composition: add, a
+                      transition between hsl() colours, ex and ch from the
+                      engine font
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -462,6 +466,31 @@ LOT97_PAGES = {
 }
 
 
+# Lot 98: reader page (tests/scripts/test_qemu_lot98.py); the guest sets
+# the reader clock first (web-css time N)
+LOT98_PAGES = {
+    "/lot98/anim.html": (
+        "<!doctype html><html><head><title>Lot 98 longhands</title><style>"
+        "@property --c98 { syntax: '<color>'; inherits: true; initial-value: black }\n"
+        "@property --w98 { syntax: '<length>'; inherits: true; initial-value: 0px }\n"
+        "@property --t98 { syntax: '<color>'; inherits: false; initial-value: black }\n"
+        "@scope (#a98) { @keyframes k98 { from { --c98: rgb(0, 0, 0) } to { --c98: rgb(200, 100, 0) } } }\n"
+        "@scope (#a98) { @property --x98 { syntax: '<length>'; inherits: false; initial-value: 0px } }\n"
+        "#a98 { color: var(--c98); animation-name: k98; animation-duration: 1000ms; animation-timing-function: linear }\n"
+        "#b98 { --c98: rgb(0, 0, 100); color: var(--c98); animation: k98 1000ms linear; animation-composition: add }\n"
+        "#h98 { --t98: hsl(240, 100%, 50%); background-color: var(--t98); transition-property: --t98;"
+        " transition-duration: 1000ms; transition-timing-function: linear }\n"
+        "@starting-style { #h98 { --t98: hsl(0 100% 50%) } }\n"
+        "#f98 { font-size: 16px; --w98: calc(2ex + 1ch) } #f98 span { font-size: var(--w98) }\n"
+        "</style></head><body><h1>Longhands 98</h1>"
+        "<div id=\"a98\"><p>akeep98</p></div>"
+        "<div id=\"b98\"><p>bkeep98</p></div>"
+        "<div id=\"h98\"><p>hkeep98</p></div>"
+        "<div id=\"f98\"><p>fkeep98 <span id=\"sp98\">spkeep98</span></p></div>"
+        "<p>fin98</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -660,6 +689,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT97_PAGES:
             self._send(200, LOT97_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT98_PAGES:
+            self._send(200, LOT98_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
