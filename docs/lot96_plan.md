@@ -51,9 +51,9 @@ test, page and server page, the CI job, docs).
     - test_lot95_props.c: "repeating-conic-gradient(from 1deg, red, (blue))" no longer matches <image> (the stop "(blue)" is refused by the background reader), and a new assertion checks that the same value with "blue" matches; two values with a quote inside a gradient no longer match.
     - tests/scripts/test_qemu_lot92.py: #radbad92 expects 57.3deg (was 57deg).
 7. Removed while writing the mutations, since no result could change: the repeat test of the axis grid (only a repeating gradient keeps a quarter turn as an angle without a corner), the period check of grad_repeat_p (the parser refuses a period of 0), the back-pass test of the rl refusal (the first pass already cleared the gradient), the "g < 0" test of a conic "from" (a bad radian is not an angle() either) and the "10000 > top" test of the reader period (no stop is past 100%) and the percentage test of the angle reader (a value ending in a digit is never a percentage; it came with the unit table of tf_angle). tf_angle and tf_angle_c now share tf_angle_milli (no duplicate unit table).
-8. Mutations: see mutations.txt and the Gates section.
+8. Mutations: 92 applied / 92 killed / 0 survived counted: 91 host mutations of rows A to D (run on the tree of 3c664eb, logs/mut1.txt) and one QEMU mutation (grad_frac stored as 0: make qemu-lot96 failed on the #frac96 cell colours). The run applied 92 host mutations; M96-w-tf-percent survived because the percentage test of the angle reader could not change a result; the test was removed (point 7) and the mutation is not counted.
 9. CI: one new job, lot96-engine (make qemu-lot96, no guest clock option, timeout 15 minutes; about 40 s locally). The coverage job keeps the 25 minutes of fc0fdc9.
-10. ASan: see Gates.
+10. ASan: base and head fail the same 5 suites, no new failure (see Gates).
 11. Size: about 9900 added lines before the docs, inside the 8000 to 10000 target; transitions/animations and em/rem/ex/ch were therefore not started (Not done 2 and 3).
 
 ## Not done (first gaps for lot 97)
@@ -75,4 +75,56 @@ QEMU: tests/scripts/test_qemu_lot96.py, `make qemu-lot96` (one boot at 1x): /web
 
 ## Gates on the box
 
-(filled in by the gate commit)
+Run on 284ee43 (the code of this lot; the later commit changes docs only) on 14 November 2026 (UTC+4), gate starts 07:14:14 to 10:06:29 (qemu-lot72, stopped at 10:09), one QEMU guest at a time (scripts in /workspace/run/lot96: gates.sh). Every gate that ran passed; none was rerun. On the user's request GitHub CI is the full gate: gates.sh was stopped at 10:09 during qemu-lot72 (its process group killed, no QEMU left; qemu-lot72 gave no result), so qemu-lot72, qemu-lot71, qemu-web-layout and qemu-production were not run locally and are left to GitHub CI. tree-clean was run alone after the stop (10:10, pass).
+
+| Gate | Result | Time |
+|------|--------|------|
+| make-all | pass | 1 s |
+| test-all | pass | 744 s |
+| roadmap-check | pass | 0 s |
+| font-check | pass | 1 s |
+| secrets | pass | 6 s |
+| strict-image | pass | 1 s |
+| qemu-lot96 | pass | 40 s |
+| qemu-lot95 | pass | 32 s |
+| qemu-lot94 | pass | 40 s |
+| qemu-lot93 | pass | 31 s |
+| qemu-lot92 | pass | 60 s |
+| qemu-lot91 | pass | 896 s |
+| qemu-lot90 | pass | 846 s |
+| qemu-gui-text-scale | pass | 166 s |
+| qemu-gui-parity | pass | 417 s |
+| qemu-lot89 | pass | 686 s |
+| qemu-p2p | pass | 1002 s |
+| qemu-p2p-mesh | pass | 499 s |
+| qemu-p2p-phase5 | pass | 204 s |
+| qemu-net-wire | pass | 83 s |
+| qemu-lot67-web | pass | 1016 s |
+| qemu-lot88-desk | pass | 639 s |
+| qemu-lot88-tv | pass | 450 s |
+| qemu-lot87 | pass | 208 s |
+| qemu-lot86 | pass | 591 s |
+| qemu-lot85 | pass | 152 s |
+| qemu-lot84 | pass | 145 s |
+| qemu-lot83 | pass | 107 s |
+| qemu-lot82 | pass | 97 s |
+| qemu-lot81 | pass | 117 s |
+| qemu-lot80 | pass | 97 s |
+| qemu-lot79 | pass | 302 s |
+| qemu-lot78 | pass | 40 s |
+| qemu-lot77 | pass | 24 s |
+| qemu-lot76 | pass | 21 s |
+| qemu-lot75 | pass | 90 s |
+| qemu-lot74 | pass | 96 s |
+| qemu-lot73 | pass | 388 s |
+| qemu-lot72 | not run (stopped; left to GitHub CI) | - |
+| qemu-lot71 | not run (left to GitHub CI) | - |
+| qemu-web-layout | not run (left to GitHub CI) | - |
+| qemu-production | not run (left to GitHub CI) | - |
+| tree-clean | pass | 0 s |
+
+make test-all: 22009 tests, 22009 passed, 0 failed (Lot 95 head: 21520).
+
+ASan and UBSan (TEST_CC="gcc -fsanitize=address,undefined -fno-sanitize-recover=all", make test-all on git archive copies of each tree): base fc0fdc9 21435 tests, 5 failed (test_gpt2_infer, test_pmm, test_vfs_service, test_lot87_web, test_webrt), 754 s; head 284ee43 21924 tests, 5 failed (the same five), 1508 s. All Lot 96 suites and the converted suites pass under ASan; no new failure. The ASan runs overlapped the mutation run and the first gates.
+
+Mutations: 92 applied / 92 killed / 0 survived counted (91 host, 1 QEMU); one more host mutation (M96-w-tf-percent) survived because its check could not change a result, the check was removed and the mutation is not counted (mutations.txt).
