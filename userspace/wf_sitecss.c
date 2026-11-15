@@ -56,6 +56,9 @@ void wf_site_set_time(int ms) { g_anim_ms = ms < 0 ? 0 : ms > WF_CSSANIM_MS_MAX 
 /* Lot 101: the reader scroll position (0..10000 of the root scroll range) */
 static int g_scroll_pm;
 void wf_site_set_scroll(int pm) { g_scroll_pm = pm < 0 ? 0 : pm > 10000 ? 10000 : pm; }
+/* Lot 104: the layout geometry of the next prepares (not copied) */
+static const wf_geom_t *g_geom;
+void wf_site_set_geom(const wf_geom_t *g) { g_geom = g; }
 
 static int vname_index(const wf_site_t *d, const char *name) {
     int k;
@@ -2098,29 +2101,36 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
         {
             /* Lot 101: the scroll and view timeline names and axes, kept
              * as written; a shorthand gives its two lists */
-            static const char *const tn[7] = {
+            static const char *const tn[8] = {
                 "scroll-timeline-name", "scroll-timeline-axis", "view-timeline-name", "view-timeline-axis",
-                "scroll-timeline", "view-timeline", "timeline-scope"};
+                "scroll-timeline", "view-timeline", "timeline-scope", "view-timeline-inset"};
             static wf_csstl_t tt[WF_CSSANIM_MAX];
-            static char tx[2][WF_SITE_LONG];
+            static char tx[3][WF_SITE_LONG];
             int q, c, kind;
-            for (q = 0; q < 7 && !eq(prop, tn[q]); q++) {}
-            if (q < 7) {
+            for (q = 0; q < 8 && !eq(prop, tn[q]); q++) {}
+            if (q < 8) {
                 int ini = eq(val, "initial") || eq(val, "unset");
-                /* Lot 102: timeline-scope is slot 4 */
-                kind = WF_SITE_K_TL0 + (q == 6 ? 4 : q < 4 ? q : (q - 4) * 2);
-                if (q < 4 || q == 6) {
+                /* Lot 102: timeline-scope is slot 4; Lot 104:
+                 * view-timeline-inset slot 5 */
+                kind = WF_SITE_K_TL0 + (q == 6 ? 4 : q == 7 ? 5 : q < 4 ? q : (q - 4) * 2);
+                if (q < 4 || q >= 6) {
                     if (ini) { (void)long_proto(d, kind, val, 0, proto); return 1; }
-                    c = wf_csstl_parse(q == 6 ? WF_CSSTL_SCOPE : q & 1 ? WF_CSSTL_AXES : WF_CSSTL_NAMES, val, tt,
-                                       WF_CSSANIM_MAX);
+                    c = wf_csstl_parse(q == 6 ? WF_CSSTL_SCOPE : q == 7 ? WF_CSSTL_INSETS : q & 1 ? WF_CSSTL_AXES : WF_CSSTL_NAMES,
+                                       val, tt, WF_CSSANIM_MAX);
                     if (c > 0 && long_proto(d, kind, val, 1, proto)) return 1;
                 } else {
-                    c = ini ? 1 : wf_csstl_parse(WF_CSSTL_SHORT, val, tt, WF_CSSANIM_MAX);
+                    /* Lot 104: the view-timeline shorthand takes the insets
+                     * too and sets view-timeline-inset */
+                    int v = q == 5;
+                    c = ini ? 1 : wf_csstl_parse(v ? WF_CSSTL_VSHORT : WF_CSSTL_SHORT, val, tt, WF_CSSANIM_MAX);
                     if (c > 0 && (ini || (wf_csstl_text(tt, c, 0, tx[0], WF_SITE_LONG) &&
-                                          wf_csstl_text(tt, c, 1, tx[1], WF_SITE_LONG)))) {
+                                          wf_csstl_text(tt, c, 1, tx[1], WF_SITE_LONG) &&
+                                          (!v || wf_csstl_text(tt, c, 2, tx[2], WF_SITE_LONG))))) {
                         g_more[0] = *proto;
-                        if (long_proto(d, kind, tx[0], !ini, proto) && long_proto(d, kind + 1, tx[1], !ini, &g_more[0])) {
-                            g_nmore = 1;
+                        g_more[1] = *proto;
+                        if (long_proto(d, kind, tx[0], !ini, proto) && long_proto(d, kind + 1, tx[1], !ini, &g_more[0]) &&
+                            (!v || long_proto(d, WF_SITE_K_TL0 + 5, tx[2], !ini, &g_more[1]))) {
+                            g_nmore = v ? 2 : 1;
                             return 1;
                         }
                     }
@@ -4051,18 +4061,21 @@ static int kf_compose(const wf_cssprop_t *p, int c, const char *under, const cha
 
 /* Lot 102: node j defines the timeline name (its scroll-timeline-name or
  * view-timeline-name list has it): 1 for a scroll timeline (checked
- * first), 2 for a view timeline, with its axis; 0 */
-static int tl_defines(const wf_site_t *d, int j, const char *name, int *axis) {
+ * first), 2 for a view timeline, with its axis (Lot 104: and, for a view
+ * timeline, its insets from view-timeline-inset) in *t; 0 */
+static int tl_defines(const wf_site_t *d, int j, const char *name, wf_csstl_t *t) {
     static wf_csstl_t tl[WF_CSSANIM_MAX];
     const wf_site_node_t *nd = &d->node[j];
     int s, n, k;
     for (s = 0; s < 2; s++) {
-        int e = nd->tl[2 * s], x = nd->tl[2 * s + 1];
+        /* the insets: view-timeline-inset (a scroll timeline does not
+         * read them) */
+        int e = nd->tl[2 * s], x = nd->tl[2 * s + 1], in = nd->tl[5];
         if (!e) continue;
-        n = wf_csstl_coord(d->lpool[e - 1], x ? d->lpool[x - 1] : 0, tl, WF_CSSANIM_MAX);
+        n = wf_csstl_coord_ex(d->lpool[e - 1], x ? d->lpool[x - 1] : 0, in ? d->lpool[in - 1] : 0, tl, WF_CSSANIM_MAX);
         for (k = n - 1; k >= 0 && !eq(tl[k].name, name); k--) {}
         if (k < 0) continue;
-        *axis = tl[k].axis;
+        *t = tl[k];
         return s + 1;
     }
     return 0;
@@ -4078,7 +4091,8 @@ static int tl_scope(const wf_site_t *d, int j, const char *name) {
  * timeline-scope): it lists the name, or it is all and a descendant that
  * no element in between scopes defines the name */
 static int tl_scoped_at(const wf_site_t *d, int q, const char *name) {
-    int s = tl_scope(d, q, name), j, e, ax;
+    static wf_csstl_t ax;
+    int s = tl_scope(d, q, name), j, e;
     if (s != 2) return s;
     for (j = 0; j < d->nnodes; j++) {
         if (!tl_defines(d, j, name, &ax)) continue;     /* j == q: e never reaches q */
@@ -4103,9 +4117,47 @@ static int tl_scoped_at(const wf_site_t *d, int q, const char *name) {
  * (the reader has no other scroll container); self, the root element
  * only; view() has no effect. 0: no effect (none, a name no element has,
  * a view timeline: the reader has no layout, an inline or x axis,
- * another scroller) */
-static int anim_clock(const wf_site_t *d, int i, const wf_cssanim_t *a, int *ms) {
-    int q, s, ax;
+ * another scroller). Lot 104: with the layout geometry (wf_site_set_geom)
+ * a view timeline runs (3, view_clock), and a scroll timeline with a
+ * length edge runs on the root scroll range (scroll_clock) */
+/* Lot 104: a scroll timeline at the reader scroll position; with a length
+ * edge on the root scroll range of the geometry (vertical, > 0) */
+static int scroll_clock(wf_site_t *d, const wf_cssanim_t *a, int *ms) {
+    long long r;
+    if (!a->rsl && !a->rel) return wf_cssanim_range_ms(a, d->scroll_pm, ms) ? 2 : 0;
+    d->geom_root = 1;
+    if (!g_geom) return 0;
+    r = (long long)g_geom->rg_y * 1000000;      /* 0: no effect (wf_cssanim_scroll_px_ms) */
+    return wf_cssanim_scroll_px_ms(a, r, (long long)d->scroll_pm * g_geom->rg_y * 100, ms) ? 2 : 0;
+}
+
+/* Lot 104: animation a on the view timeline of subject q (axis, insets
+ * ik and iv): the box of q along the axis from the root scroller, the
+ * root scrolled along y at the reader scroll position (x at 0): 3, 0 when
+ * q has no box, another scroller, or the time gives no effect */
+static int view_clock(wf_site_t *d, int q, int axis, const unsigned char *ik, const int *iv, const wf_cssanim_t *a,
+                      int *ms) {
+    const wf_geom_box_t *b;
+    wf_cssview_t v;
+    int useb, vert;
+    d->node[q].geo = 1;
+    if (!g_geom || !g_geom->box[q].ok || !g_geom->box[q].root) return 0;
+    b = &g_geom->box[q];
+    /* the block axis, or the inline one; which one is vertical */
+    useb = axis == WF_CSSTL_BLOCK || (axis == WF_CSSTL_Y && b->bvert) || (axis == WF_CSSTL_X && !b->bvert);
+    vert = useb ? b->bvert : !b->bvert;
+    v.start = (long long)(useb ? b->b_off : b->i_off) * 1000000;
+    v.size = (long long)(useb ? b->b_size : b->i_size) * 1000000;
+    v.view = (long long)(useb ? b->vp_b : b->vp_i) * 1000000;
+    v.range = (long long)(useb ? b->rg_b : b->rg_i) * 1000000;
+    v.pos = vert ? (long long)d->scroll_pm * (useb ? b->rg_b : b->rg_i) * 100 : 0;
+    v.ik[0] = ik[0]; v.ik[1] = ik[1]; v.iv[0] = iv[0]; v.iv[1] = iv[1];
+    return wf_cssanim_view_ms(a, &v, ms) ? 3 : 0;
+}
+
+static int anim_clock(wf_site_t *d, int i, const wf_cssanim_t *a, int *ms) {
+    static wf_csstl_t t;
+    int q, s;
     int root = d->node[i].parent < 0 && eq(d->node[i].tag, "html");
     *ms = d->anim_ms;
     if (a->timeline == WF_CSSANIM_TL_AUTO) return 1;
@@ -4113,16 +4165,19 @@ static int anim_clock(const wf_site_t *d, int i, const wf_cssanim_t *a, int *ms)
         if ((a->tlsrc == WF_CSSANIM_SC_SELF && !root) || (a->tlsrc == WF_CSSANIM_SC_NEAREST && d->node[i].parent < 0) ||
             (a->tlaxis != WF_CSSTL_BLOCK && a->tlaxis != WF_CSSTL_Y))
             return 0;
-        return wf_cssanim_range_ms(a, d->scroll_pm, ms) ? 2 : 0;
+        return scroll_clock(d, a, ms);
     }
+    /* Lot 104: view(), the element itself is the subject */
+    if (a->timeline == WF_CSSANIM_TL_VIEW) return view_clock(d, i, a->tlaxis, a->vik, a->viv, a, ms);
     if (a->timeline != WF_CSSANIM_TL_NAMED) return 0;
     for (q = i; q >= 0; q = d->node[q].parent) {
         const wf_site_node_t *nd = &d->node[q];
-        s = tl_defines(d, q, a->tlname, &ax);
+        s = tl_defines(d, q, a->tlname, &t);
+        if (s == 2) return view_clock(d, q, t.axis, t.ik, t.iv, a, ms);
         if (s) {
-            if (s == 2 || nd->parent >= 0 || !eq(nd->tag, "html") || (ax != WF_CSSTL_BLOCK && ax != WF_CSSTL_Y))
+            if (nd->parent >= 0 || !eq(nd->tag, "html") || (t.axis != WF_CSSTL_BLOCK && t.axis != WF_CSSTL_Y))
                 return 0;
-            return wf_cssanim_range_ms(a, d->scroll_pm, ms) ? 2 : 0;
+            return scroll_clock(d, a, ms);
         }
         if (tl_scoped_at(d, q, a->tlname)) return 0;
     }
@@ -4263,7 +4318,7 @@ static int anim_pass(wf_site_t *d) {
         na = node_lists(d, nd, 1, al);
         /* Lot 99: an animation without a timeline (none, or a name no
          * timeline has here) has no effect */
-        for (j = 0; j < na; j++) if (!anim_clock(d, i, &al[j], &ms[j]) && kf_find(d, al[j].name)) d->anim_idle++;
+        for (j = 0; j < na; j++) if (kf_find(d, al[j].name) && !anim_clock(d, i, &al[j], &ms[j])) d->anim_idle++;
         for (k = 0; k < d->nvnames; k++) {
             const wf_cssprop_t *p = kprop(d, k);
             int b, animated = 0, e, composed = 0;
@@ -4283,7 +4338,8 @@ static int anim_pass(wf_site_t *d) {
             scopy(base, WF_CSSPROP_VAL, cur, slen(cur));
             if (nd->vrank[k] < (1 << 30))
                 for (j = 0; j < na; j++) {
-                    const wf_site_kf_t *kf = anim_clock(d, i, &al[j], &ms[j]) ? kf_find(d, al[j].name) : 0;
+                    const wf_site_kf_t *kf = kf_find(d, al[j].name);
+                    if (kf && !anim_clock(d, i, &al[j], &ms[j])) kf = 0;
                     if (kf && anim_value(d, &al[j], kf, d->vname[k], p, &fc, base, cur, val, (int)sizeof(val), &composed, ms[j])) {
                         scopy(cur, WF_CSSPROP_VAL, val, slen(val));
                         animated = 1;
@@ -4370,7 +4426,11 @@ static void col_pass(wf_site_t *d) {
         fc.vw = d->vw; fc.vh = d->vh; fc.em = d->fs[i]; fc.rem = d->root_fs;
         na = node_lists(d, nd, 1, al);
         /* Lot 101: the animations a scroll timeline drives */
-        for (j = 0; j < na; j++) if (anim_clock(d, i, &al[j], &ms[j]) == 2 && kf_find(d, al[j].name)) d->anim_scroll++;
+        for (j = 0; j < na; j++) {
+            int c = kf_find(d, al[j].name) ? anim_clock(d, i, &al[j], &ms[j]) : 0;
+            if (c == 2) d->anim_scroll++;
+            if (c == 3) d->anim_view++;     /* Lot 104 */
+        }
         for (w = 0; w < 2; w++) {
             const char *name = w ? "background-color" : "color";
             uint32_t *slot = w ? &nd->bg : &nd->color, c;
@@ -4390,7 +4450,8 @@ static void col_pass(wf_site_t *d) {
             scopy(cur, WF_CSSPROP_VAL, base, slen(base));
             if (rank < (1 << 30))
                 for (j = 0; j < na; j++) {
-                    const wf_site_kf_t *kf = anim_clock(d, i, &al[j], &ms[j]) ? kf_find(d, al[j].name) : 0;
+                    const wf_site_kf_t *kf = kf_find(d, al[j].name);
+                    if (kf && !anim_clock(d, i, &al[j], &ms[j])) kf = 0;
                     if (kf && anim_value(d, &al[j], kf, name, p, &fc, base, cur, val, (int)sizeof(val), &composed, ms[j])) {
                         scopy(cur, WF_CSSPROP_VAL, val, slen(val));
                         animated = 1;
@@ -4458,6 +4519,15 @@ int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
         n = app_u(out, cap, n, (unsigned)d->col_animated);
         n = app(out, cap, n, " ");
         n = app_u(out, cap, n, (unsigned)d->col_transitioned);
+    }
+    if (d->anim_view || d->geom_need || d->geom_used) {
+        /* Lot 104 */
+        n = app(out, cap, n, " view ");
+        n = app_u(out, cap, n, (unsigned)d->anim_view);
+        n = app(out, cap, n, " need ");
+        n = app_u(out, cap, n, (unsigned)d->geom_need);
+        n = app(out, cap, n, " geom ");
+        n = app_u(out, cap, n, (unsigned)d->geom_used);
     }
     return n;
 }
@@ -4536,6 +4606,20 @@ int wf_site_apply(wf_site_t *d) {
     }
     cur_pass(d);
     col_pass(d);
+    /* Lot 104: the elements whose geometry the animations asked for, and
+     * the boxes of the geometry they read */
+    d->geom_need = d->geom_root;
+    d->geom_used = 0;
+    for (i = 0; i < d->nnodes; i++) {
+        if (!d->node[i].geo) continue;
+        d->geom_need++;
+        if (g_geom && g_geom->box[i].ok) d->geom_used++;
+    }
     d->ready = 1;
     return 0;
+}
+
+int wf_site_geom_subject(const wf_site_t *d, int offset) {
+    const wf_site_node_t *nd = node_by_start(d, offset);
+    return nd && nd->geo ? (int)(nd - d->node) : -1;
 }

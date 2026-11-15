@@ -26,6 +26,7 @@
 #define MOHHDY_WEBENG_H
 #include <stdint.h>
 #include "os_syscalls.h"
+#include "wf_geom.h"            /* Lot 104 */
 
 /* Lot 71: WE_POOL raised for text heavy pages. Long pages are cut into
  * sections of at most 120 nodes by wf_section (the reader view), so the
@@ -688,6 +689,18 @@ int we_render(we_doc_t* d, const char* html, int len, int viewport_w);
 void we_set_media(we_doc_t *d, int w, int h);
 /* US-045 */
 int we_find_id(const we_doc_t* d, const char* id);
+/* Lot 104: the layout geometry of element node for the reader (wf_geom.h):
+ * its border box along the block and inline axes of its nearest
+ * scroller (the root element's writing mode for the root; vertical-rl
+ * block offsets from the right edge) from that scroller's content start,
+ * with its scrollport, scroll offset and range. 0 and g->ok 1, -1 (g->ok 0) for a text node, a node without
+ * a box (display:none) or out of range. Read only. */
+int we_geom(const we_doc_t *d, int node, wf_geom_box_t *g);
+/* Lot 104: every element whose id is prefix followed by a reader index
+ * (no leading zero, under WF_GEOM_MAX) into g->box[index] (the first one
+ * wins), the root scrollport and range into g; g is cleared first.
+ * Returns the boxes filled. */
+int we_geom_feed(const we_doc_t *d, const char *prefix, wf_geom_t *g);
 typedef void (*we_out_fn)(void* ctx, const char* s);
 void we_dump_dom(const we_doc_t* d, we_out_fn out, void* ctx);
 void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx);

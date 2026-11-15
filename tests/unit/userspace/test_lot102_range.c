@@ -31,7 +31,8 @@ static int rl(int end, const char *v) {
 }
 
 static const char *rf(int j, int end) {
-    snprintf(g_t, sizeof(g_t), "%d %d", end ? g_a[j].re : g_a[j].rs, end ? g_a[j].rep : g_a[j].rsp);
+    snprintf(g_t, sizeof(g_t), "%d %d%s", end ? g_a[j].re : g_a[j].rs, end ? g_a[j].rep : g_a[j].rsp,
+             (end ? g_a[j].rel : g_a[j].rsl) ? " px" : "");
     return g_t;
 }
 
@@ -43,7 +44,8 @@ static int rs(const char *v) {
 }
 
 static const char *rboth(int j) {
-    snprintf(g_t, sizeof(g_t), "%d %d %d %d", g_a[j].rs, g_a[j].rsp, g_a[j].re, g_a[j].rep);
+    snprintf(g_t, sizeof(g_t), "%d %d%s %d %d%s", g_a[j].rs, g_a[j].rsp, g_a[j].rsl ? " px" : "", g_a[j].re,
+             g_a[j].rep, g_a[j].rel ? " px" : "");
     return g_t;
 }
 
@@ -78,8 +80,8 @@ static const char *af(int k) {
     const wf_cssanim_t *a = &g_a[k];
     char t[64];
     snprintf(t, sizeof(t), "%s", tlv(a));
-    snprintf(b, sizeof(b), "%s %d %d %s %d %d %d %d", a->name[0] ? a->name : "-", a->dur, a->iters, t, a->rs,
-             a->rsp, a->re, a->rep);
+    snprintf(b, sizeof(b), "%s %d %d %s %d %d%s %d %d%s", a->name[0] ? a->name : "-", a->dur, a->iters, t, a->rs,
+             a->rsp, a->rsl ? " px" : "", a->re, a->rep, a->rel ? " px" : "");
     return b;
 }
 
@@ -452,7 +454,9 @@ static void test_l102_range_12(void) {
     TEST_ASSERT_EQUAL_STRING("1 0", rf(0, 1));
     TEST_ASSERT_EQUAL(1, rl(0, "exit"));
     TEST_ASSERT_EQUAL_STRING("5 0", rf(0, 0));
-    TEST_ASSERT_EQUAL(-1, rl(0, "entry 10px, 130%"));
+    TEST_ASSERT_EQUAL(2, rl(0, "entry 10px, 130%"));
+    TEST_ASSERT_EQUAL_STRING("4 100000 px", rf(0, 0));
+    TEST_ASSERT_EQUAL_STRING("1 1300000", rf(1, 0));
     TEST_ASSERT_EQUAL(-1, rl(0, "cover -16.8% , 4% , 0% , 10px , exit-crossing"));
     TEST_ASSERT_EQUAL(1, rl(0, "entry-crossing"));
     TEST_ASSERT_EQUAL_STRING("6 0", rf(0, 0));
@@ -635,7 +639,10 @@ static void test_l102_range_17(void) {
 }
 
 static void test_l102_range_18(void) {
-    TEST_ASSERT_EQUAL(-1, rl(1, "entry 10% , entry 10px , 150%"));
+    TEST_ASSERT_EQUAL(3, rl(1, "entry 10% , entry 10px , 150%"));
+    TEST_ASSERT_EQUAL_STRING("4 100000", rf(0, 1));
+    TEST_ASSERT_EQUAL_STRING("4 100000 px", rf(1, 1));
+    TEST_ASSERT_EQUAL_STRING("1 1500000", rf(2, 1));
     TEST_ASSERT_EQUAL(2, rl(0, "exit 14.6%, entry 16.71%"));
     TEST_ASSERT_EQUAL_STRING("5 146000", rf(0, 0));
     TEST_ASSERT_EQUAL_STRING("4 167100", rf(1, 0));
@@ -812,7 +819,10 @@ static void test_l102_range_23(void) {
     TEST_ASSERT_EQUAL_STRING("4 100000", rf(3, 0));
     TEST_ASSERT_EQUAL(1, rl(1, "contain 33.33%"));
     TEST_ASSERT_EQUAL_STRING("3 333300", rf(0, 1));
-    TEST_ASSERT_EQUAL(-1, rl(0, "entry 68.7% , 10px , entry 10%"));
+    TEST_ASSERT_EQUAL(3, rl(0, "entry 68.7% , 10px , entry 10%"));
+    TEST_ASSERT_EQUAL_STRING("4 687000", rf(0, 0));
+    TEST_ASSERT_EQUAL_STRING("1 100000 px", rf(1, 0));
+    TEST_ASSERT_EQUAL_STRING("4 100000", rf(2, 0));
     TEST_ASSERT_EQUAL(1, rl(1, "150%"));
     TEST_ASSERT_EQUAL_STRING("1 1500000", rf(0, 1));
     TEST_ASSERT_EQUAL(1, rl(1, "entry 49%"));
@@ -837,7 +847,8 @@ static void test_l102_range_23(void) {
 }
 
 static void test_l102_range_24(void) {
-    TEST_ASSERT_EQUAL(-1, rl(0, "10px"));
+    TEST_ASSERT_EQUAL(1, rl(0, "10px"));
+    TEST_ASSERT_EQUAL_STRING("1 100000 px", rf(0, 0));
     TEST_ASSERT_EQUAL(3, rl(0, "-17%, exit, -10%"));
     TEST_ASSERT_EQUAL_STRING("1 -170000", rf(0, 0));
     TEST_ASSERT_EQUAL_STRING("5 0", rf(1, 0));
@@ -993,7 +1004,10 @@ static void test_l102_range_28(void) {
     TEST_ASSERT_EQUAL_STRING("1 333100 0 0", rboth(0));
     TEST_ASSERT_EQUAL_STRING("0 ", rtx(0, 1));
     TEST_ASSERT_EQUAL_STRING("0 ", rtx(1, 4));
-    TEST_ASSERT_EQUAL(-1, rs("entry 10px"));
+    TEST_ASSERT_EQUAL(1, rs("entry 10px"));
+    TEST_ASSERT_EQUAL_STRING("4 100000 px 4 1000000", rboth(0));
+    TEST_ASSERT_EQUAL_STRING("10 entry 10px", rtx(0, 24));
+    TEST_ASSERT_EQUAL_STRING("10 entry 100%", rtx(1, 24));
     TEST_ASSERT_EQUAL(3, rs("exit-crossing,34.6% exit 1%,exit-crossing 71%"));
     TEST_ASSERT_EQUAL_STRING("7 0 7 1000000", rboth(0));
     TEST_ASSERT_EQUAL_STRING("1 346000 5 10000", rboth(1));
@@ -1007,7 +1021,10 @@ static void test_l102_range_28(void) {
     TEST_ASSERT_EQUAL_STRING("4 0 3 333300", rboth(3));
     TEST_ASSERT_EQUAL_STRING("43 normal, exit-crossing 128.2%, 25%, entry 0%", rtx(0, 128));
     TEST_ASSERT_EQUAL_STRING("48 normal, exit-crossing 100%, -10%, contain 33.33%", rtx(1, 128));
-    TEST_ASSERT_EQUAL(-1, rs("entry 10px scroll 13.16%"));
+    TEST_ASSERT_EQUAL(1, rs("entry 10px scroll 13.16%"));
+    TEST_ASSERT_EQUAL_STRING("4 100000 px 8 131600", rboth(0));
+    TEST_ASSERT_EQUAL_STRING("10 entry 10px", rtx(0, 12));
+    TEST_ASSERT_EQUAL_STRING("13 scroll 13.16%", rtx(1, 128));
 }
 
 static void test_l102_range_29(void) {
@@ -1268,7 +1285,12 @@ static void test_l102_range_33(void) {
     TEST_ASSERT_EQUAL_STRING("3 -20000 5 1000000", rboth(0));
     TEST_ASSERT_EQUAL_STRING("0 ", rtx(0, 4));
     TEST_ASSERT_EQUAL_STRING("0 ", rtx(1, 1));
-    TEST_ASSERT_EQUAL(-1, rs("10px exit-crossing, cover 0% contain 33.33%, exit 90% cover 119.57%"));
+    TEST_ASSERT_EQUAL(3, rs("10px exit-crossing, cover 0% contain 33.33%, exit 90% cover 119.57%"));
+    TEST_ASSERT_EQUAL_STRING("1 100000 px 7 1000000", rboth(0));
+    TEST_ASSERT_EQUAL_STRING("2 0 3 333300", rboth(1));
+    TEST_ASSERT_EQUAL_STRING("5 900000 2 1195700", rboth(2));
+    TEST_ASSERT_EQUAL_STRING("0 ", rtx(0, 1));
+    TEST_ASSERT_EQUAL_STRING("49 exit-crossing 100%, contain 33.33%, cover 119.57%", rtx(1, 128));
     TEST_ASSERT_EQUAL(3, rs("scroll,entry -5% 62%,-33%"));
     TEST_ASSERT_EQUAL_STRING("8 0 8 1000000", rboth(0));
     TEST_ASSERT_EQUAL_STRING("4 -50000 1 620000", rboth(1));
@@ -1419,7 +1441,11 @@ static void test_l102_range_36(void) {
     TEST_ASSERT_EQUAL_STRING("5 12.5%", rtx(0, 24));
     TEST_ASSERT_EQUAL_STRING("6 normal", rtx(1, 128));
     TEST_ASSERT_EQUAL(-1, rs("calc(10%) exit 90% , 138.9% entry -3.8%"));
-    TEST_ASSERT_EQUAL(-1, rs("entry 10px -34.5%,34.28%"));
+    TEST_ASSERT_EQUAL(2, rs("entry 10px -34.5%,34.28%"));
+    TEST_ASSERT_EQUAL_STRING("4 100000 px 1 -345000", rboth(0));
+    TEST_ASSERT_EQUAL_STRING("1 342800 0 0", rboth(1));
+    TEST_ASSERT_EQUAL_STRING("18 entry 10px, 34.28%", rtx(0, 64));
+    TEST_ASSERT_EQUAL_STRING("14 -34.5%, normal", rtx(1, 24));
     TEST_ASSERT_EQUAL(1, rs("12.5%"));
     TEST_ASSERT_EQUAL_STRING("1 125000 0 0", rboth(0));
     TEST_ASSERT_EQUAL_STRING("5 12.5%", rtx(0, 8));
@@ -1711,7 +1737,11 @@ static void test_l102_range_41(void) {
     TEST_ASSERT_EQUAL_STRING("4 0 4 1000000", rboth(2));
     TEST_ASSERT_EQUAL_STRING("28 25%, entry -15.13%, entry 0%", rtx(0, 128));
     TEST_ASSERT_EQUAL_STRING("0 ", rtx(1, 8));
-    TEST_ASSERT_EQUAL(-1, rs("entry 10px exit 90%, 25% 12.5%"));
+    TEST_ASSERT_EQUAL(2, rs("entry 10px exit 90%, 25% 12.5%"));
+    TEST_ASSERT_EQUAL_STRING("4 100000 px 5 900000", rboth(0));
+    TEST_ASSERT_EQUAL_STRING("1 250000 1 125000", rboth(1));
+    TEST_ASSERT_EQUAL_STRING("0 ", rtx(0, 1));
+    TEST_ASSERT_EQUAL_STRING("15 exit 90%, 12.5%", rtx(1, 128));
     TEST_ASSERT_EQUAL(4, rs("exit-crossing 116.69% scroll 20.6%,cover -13.86%,exit 96.2% cover 0%,0"));
     TEST_ASSERT_EQUAL_STRING("7 1166900 8 206000", rboth(0));
     TEST_ASSERT_EQUAL_STRING("2 -138600 2 1000000", rboth(1));
@@ -1834,7 +1864,12 @@ static void test_l102_range_43(void) {
     TEST_ASSERT_EQUAL_STRING("7 50000 0 0", rboth(0));
     TEST_ASSERT_EQUAL_STRING("16 exit-crossing 5%", rtx(0, 24));
     TEST_ASSERT_EQUAL_STRING("0 ", rtx(1, 4));
-    TEST_ASSERT_EQUAL(-1, rs("129.16% , 40% , 10px contain"));
+    TEST_ASSERT_EQUAL(3, rs("129.16% , 40% , 10px contain"));
+    TEST_ASSERT_EQUAL_STRING("1 1291600 0 0", rboth(0));
+    TEST_ASSERT_EQUAL_STRING("1 400000 0 0", rboth(1));
+    TEST_ASSERT_EQUAL_STRING("1 100000 px 3 1000000", rboth(2));
+    TEST_ASSERT_EQUAL_STRING("18 129.16%, 40%, 10px", rtx(0, 64));
+    TEST_ASSERT_EQUAL_STRING("0 ", rtx(1, 4));
     TEST_ASSERT_EQUAL(4, rs("scroll 37% -10%, scroll 6.45% scroll 92.3%, entry 86%, entry 10%"));
     TEST_ASSERT_EQUAL_STRING("8 370000 1 -100000", rboth(0));
     TEST_ASSERT_EQUAL_STRING("8 64500 8 923000", rboth(1));
@@ -1875,7 +1910,12 @@ static void test_l102_range_44(void) {
     TEST_ASSERT_EQUAL_STRING("2 284400 4 670400", rboth(0));
     TEST_ASSERT_EQUAL_STRING("12 cover 28.44%", rtx(0, 24));
     TEST_ASSERT_EQUAL_STRING("12 entry 67.04%", rtx(1, 64));
-    TEST_ASSERT_EQUAL(-1, rs("10px,100% 72.59%,55.27% exit 95%"));
+    TEST_ASSERT_EQUAL(3, rs("10px,100% 72.59%,55.27% exit 95%"));
+    TEST_ASSERT_EQUAL_STRING("1 100000 px 0 0", rboth(0));
+    TEST_ASSERT_EQUAL_STRING("1 1000000 1 725900", rboth(1));
+    TEST_ASSERT_EQUAL_STRING("1 552700 5 950000", rboth(2));
+    TEST_ASSERT_EQUAL_STRING("0 ", rtx(0, 12));
+    TEST_ASSERT_EQUAL_STRING("0 ", rtx(1, 12));
     TEST_ASSERT_EQUAL(4, rs("50% exit 88%,79% -31.98%,entry-crossing 47% entry 10%,124.4% entry-crossing 60.8%"));
     TEST_ASSERT_EQUAL_STRING("1 500000 5 880000", rboth(0));
     TEST_ASSERT_EQUAL_STRING("1 790000 1 -319800", rboth(1));
@@ -2247,7 +2287,7 @@ static void test_l102_range_61(void) {
         static const char *const v[12] = {"--n", "0 _x forwards 12.786s, -2 _x alternate-reverse 10.4s cubic-bezier(0.727, 1.497, 0.9487, 2), normal 16330ms cubic-bezier(0.4,0.247,0.388,0) paused _x", "1px, steps(8143, end), step-start", 0, "2.5", 0, 0, "0 _x forwards 12.786s, -2 _x alternate-reverse 10.4s cubic-bezier(0.727, 1.497, 0.9487, 2), normal 16330ms cubic-bezier(0.4,0.247,0.388,0) paused _x", "add", "0 _x forwards 12.786s, -2 _x alternate-reverse 10.4s cubic-bezier(0.727, 1.497, 0.9487, 2), normal 16330ms cubic-bezier(0.4,0.247,0.388,0) paused _x", 0, "112%,10px,contain 33.33%"};
         static const unsigned char sh[12] = {0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
-        TEST_ASSERT_EQUAL_STRING("--n 0 25000 0 - - 0 0 0 0", af(0));
+        TEST_ASSERT_EQUAL_STRING("--n 0 25000 0 - - 0 0 1 1120000", af(0));
     }
     {
         static const char *const v[12] = {"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, none, q, --n", 0, 0, "1224ms", 0, 0, "backwards,backwards,backwards,none", "paused", "replace,replace,accumulate", "scroll(y)", "0%, exit-crossing 17%, entry-crossing", "74.25%"};
@@ -2398,7 +2438,7 @@ static void test_l102_range_63(void) {
         static const char *const v[12] = {0, "598ms,19s,3170ms,576ms", "ease-in , ease-in-out", "0ms, 15.1272s, 0s", 0, "alternate-reverse", "none, both, forwards, backwards", "7747ms 0s k both, both 3284ms steps(5658, jump-end) 19742ms none, reverse 0.25 ease 7813ms backwards -973ms", 0, 0, 0, "entry 10px, exit-crossing"};
         static const unsigned char sh[12] = {0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
-        TEST_ASSERT_EQUAL_STRING("- 598 10000 0 - - 0 0 0 0", af(0));
+        TEST_ASSERT_EQUAL_STRING("- 598 10000 0 - - 0 0 4 100000 px", af(0));
     }
     {
         static const char *const v[12] = {0, 0, "cubic-bezier(0.494 , 2.5 , 0.207 , -1.4)", "0ms, -992ms, 7.9304s, 0s", "0.0001 , 2.5 , 2.5", "alternate, reverse, normal, reverse", 0, 0, "add, replace, accumulate, add", 0, 0, "entry-crossing, entry-crossing, 0, normal"};
@@ -2416,7 +2456,7 @@ static void test_l102_range_63(void) {
         static const char *const v[12] = {0, 0, 0, "0s", 0, "paused 19002ms steps(5347, jump-none) paused 2.5, steps(1, jump-end) 4337ms 2 3538ms none _x reverse, linear 0.25 k paused", "paused 19002ms steps(5347, jump-none) paused 2.5, steps(1, jump-end) 4337ms 2 3538ms none _x reverse, linear 0.25 k paused", "paused,running,add replace,running,paused", 0, "paused 19002ms steps(5347, jump-none) paused 2.5, steps(1, jump-end) 4337ms 2 3538ms none _x reverse, linear 0.25 k paused", "normal , 50%", "exit-crossing 42.9%, entry 10px"};
         static const unsigned char sh[12] = {0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
-        TEST_ASSERT_EQUAL_STRING("- 0 10000 0 - - 0 0 0 0", af(0));
+        TEST_ASSERT_EQUAL_STRING("- 0 10000 0 - - 0 0 7 429000", af(0));
     }
     {
         static const char *const v[12] = {0, "auto , auto , 17.222s , 0ms", 0, "0s, 0s", 0, "normal", 0, "running", 0, 0, 0, "entry -5%"};
@@ -2535,7 +2575,7 @@ static void test_l102_range_65(void) {
         static const char *const v[12] = {"fade-in", "auto , 13.1s", "cubic-bezier(0,1,0.28,-1), step-end", 0, "0 fade-in 0s forwards -4246ms, 6.5s -1688ms ease cubic-bezier(0.2 , 0.97 , 0.3 , 0.57) running", "reverse, alternate, alternate", "none", "0 fade-in 0s forwards -4246ms, 6.5s -1688ms ease cubic-bezier(0.2 , 0.97 , 0.3 , 0.57) running", "replace, accumulate, accumulate", 0, "entry 10px,scroll 49%,-45%", "0 fade-in 0s forwards -4246ms, 6.5s -1688ms ease cubic-bezier(0.2 , 0.97 , 0.3 , 0.57) running"};
         static const unsigned char sh[12] = {0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1};
         TEST_ASSERT_EQUAL(1, acoord(v, sh));
-        TEST_ASSERT_EQUAL_STRING("fade-in 0 10000 0 - - 0 0 0 0", af(0));
+        TEST_ASSERT_EQUAL_STRING("fade-in 0 10000 0 - - 4 100000 px 0 0", af(0));
     }
     {
         static const char *const v[12] = {"slide, _x", "8156ms", "-1.63s reverse 0.25 ease 8.8s", "3525ms", 0, "normal , alternate-reverse", "backwards,backwards,backwards,forwards", "", "replace, replace", "scroll(nearest)", "exit-crossing 57.38%", "-26%, cover, exit-crossing 87%, 90.3%"};

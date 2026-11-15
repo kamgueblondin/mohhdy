@@ -40,7 +40,9 @@ Timelines
   normal or a percentage). The animation shorthand resets both. On a
   scroll timeline a range name stands for normal (0% start, 100% end);
   the local time is (delay + duration * count) (100 pm - S) / (E - S),
-  floored, within -2e8..2e8; E <= S gives no effect.
+  floored, within -2e8..2e8; E <= S gives no effect. Lot 104 (converted):
+  an absolute length may stand for the percentage; range_ms gives no
+  effect for it (the scroll range comes from the layout, lot104_model).
 * timeline-scope: none | all | <dashed-ident># (at most 4). Looking for a
   named timeline from an element up: an element defining the name decides
   (Lot 101); else an element whose timeline-scope lists the name, or is
@@ -249,9 +251,22 @@ def inset_tok(t):
     return q.k in ("L", "P")
 
 
+def inset_val(t):
+    """Lot 104: an inset token as ("auto", 0), ("len", 1/10000 px) or
+    ("pct", 1/10000 %), or None"""
+    if not inset_tok(t):
+        return None
+    if t == "auto":
+        return ("auto", 0)
+    q = P.leaf(t, None)
+    return ("pct" if q.k == "P" else "len", q.v)
+
+
 def anon_tl(w):
-    """("scroll", scroller, axis) or ("view", axis) for scroll() or view(),
-    None when invalid, NotImplemented for another token"""
+    """("scroll", scroller, axis) or ("view", axis, insets) for scroll() or
+    view(), None when invalid, NotImplemented for another token. Lot 104
+    (converted): the insets of view(), (start, end) as inset_val, auto
+    when left out, one inset is both"""
     if len(w) >= 8 and w.startswith("scroll("):
         view, inner = False, w[7:-1]
     elif len(w) >= 6 and w.startswith("view("):
@@ -265,6 +280,7 @@ def anon_tl(w):
         return None
     src = axis = None
     inset, closed = 0, False
+    ins = []
     for t in toks:
         if t in AXES and axis is None:
             axis, closed = t, inset > 0
@@ -276,9 +292,11 @@ def anon_tl(w):
             continue
         if closed or inset >= 2 or not inset_tok(t):
             return None
+        ins.append(inset_val(t))
         inset += 1
     if view:
-        return ("view", axis or "block")
+        ins = ins or [("auto", 0)]
+        return ("view", axis or "block", (ins[0], ins[-1]))
     return ("scroll", src or "nearest", axis or "block")
 
 
@@ -289,9 +307,20 @@ def range_pct(t):
     return r[0] if r[1] or r[0] == 0 else None
 
 
+def range_len(t):
+    """Lot 104: an absolute length (1/10000 px, +-100000px), or None"""
+    if not t or t == "auto" or len(t) >= 32:
+        return None
+    q = P.leaf(t, None)
+    if q is None or not q.ok or q.k != "L":
+        return None
+    return q.v
+
+
 def range_edge(toks, i, end):
     """(edge, next index) or None; edge: ("normal", 0), ("pct", p) or
-    (range name, p)"""
+    (range name, p). Lot 104 (converted): a length l for the percentage,
+    ("pct", l, "px") or (range name, l, "px")"""
     if i >= len(toks):
         return None
     t = toks[i]
@@ -300,10 +329,15 @@ def range_edge(toks, i, end):
     p = range_pct(t)
     if p is not None:
         return ("pct", p), i + 1
+    p = range_len(t)
+    if p is not None:
+        return ("pct", p, "px"), i + 1
     if t not in RANGES:
         return None
     if i + 1 < len(toks) and range_pct(toks[i + 1]) is not None:
         return (t, range_pct(toks[i + 1])), i + 2
+    if i + 1 < len(toks) and range_len(toks[i + 1]) is not None:
+        return (t, range_len(toks[i + 1]), "px"), i + 2
     return (t, 100 * S if end else 0), i + 1
 
 
@@ -352,7 +386,7 @@ def range_short(v):
 def edge_text(e):
     if e[0] == "normal":
         return "normal"
-    t = P.fmt(e[1], "%")
+    t = P.fmt(e[1], "px" if len(e) > 2 else "%")
     return t if e[0] == "pct" else e[0] + " " + t
 
 
@@ -367,6 +401,8 @@ def range_ms(a, pm):
     if L101.scroll_ms(a, pm) is None:
         return None
     rs, re_ = a.get("rs", ("normal", 0)), a.get("re", ("normal", 0))
+    if len(rs) > 2 or len(re_) > 2:
+        return None     # Lot 104: a length needs the scroll range (the layout geometry)
     st = rs[1] if rs[0] == "pct" else 0
     en = re_[1] if re_[0] == "pct" else 100 * S
     if en <= st:

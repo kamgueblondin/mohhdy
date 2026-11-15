@@ -294,6 +294,11 @@ def range_list(rng, short, good):
     return rng.choice([", ", ",", " , "]).join(items)
 
 
+def px(e):
+    """Lot 104: " px" after a length edge"""
+    return " px" if len(e) > 2 else ""
+
+
 def ecode(e):
     return 0 if e[0] == "normal" else 1 if e[0] == "pct" else 2 + M.RANGES.index(e[0])
 
@@ -319,6 +324,7 @@ def tl_code(v):
 def write_range():
     import lot99_animmodel as M99
     rng = random.Random(10202)
+    rlen = random.Random(10402)
     cases = []
     # animation-timeline with scroll() and view()
     while len(cases) < 140:
@@ -343,7 +349,8 @@ def write_range():
         got = M.range_long(v, end)
         lines = ["TEST_ASSERT_EQUAL(%d, rl(%d, %s));" % (-1 if got is None else len(got), int(end), cstr(v))]
         for j, e in enumerate(got or []):
-            lines.append("TEST_ASSERT_EQUAL_STRING(%s, rf(%d, %d));" % (cstr("%d %d" % (ecode(e), e[1])), j, int(end)))
+            lines.append("TEST_ASSERT_EQUAL_STRING(%s, rf(%d, %d));" % (cstr("%d %d%s" % (ecode(e), e[1], px(e))), j,
+                                                                           int(end)))
         cases.append(lines)
     # the shorthand and its texts
     while len(cases) < 540:
@@ -352,10 +359,13 @@ def write_range():
         lines = ["TEST_ASSERT_EQUAL(%d, rs(%s));" % (-1 if got is None else len(got), cstr(v))]
         for j, (st, en) in enumerate(got or []):
             lines.append("TEST_ASSERT_EQUAL_STRING(%s, rboth(%d));" % (
-                cstr("%d %d %d %d" % (ecode(st), st[1], ecode(en), en[1])), j))
+                cstr("%d %d%s %d %d%s" % (ecode(st), st[1], px(st), ecode(en), en[1], px(en))), j))
         if got:
+            # Lot 104: a length edge (newly valid) draws its caps from its
+            # own stream, so the other cases keep theirs
+            crng = rlen if any(len(e) > 2 for x in got for e in x) else rng
             for end in (0, 1):
-                cap = rng.choice([128, 128, 64, 24, 12, 8, 4, 1])
+                cap = crng.choice([128, 128, 64, 24, 12, 8, 4, 1])
                 text = M.range_text([x[end] for x in got])
                 exp = "%d %s" % (len(text), text) if len(text) < cap else "0 "
                 lines.append("TEST_ASSERT_EQUAL_STRING(%s, rtx(%d, %d));" % (cstr(exp), end, cap))
@@ -403,9 +413,9 @@ def write_range():
                  "    static const unsigned char sh[12] = {%s};" % shs,
                  "    TEST_ASSERT_EQUAL(%d, acoord(v, sh));" % len(got)]
         for j, x in enumerate(got):
-            lines.append("    TEST_ASSERT_EQUAL_STRING(%s, af(%d));" % (cstr("%s %d %d %s %d %d %d %d" % (
-                x["name"] or "-", x["dur"], x["iters"], tl_code(x["timeline"]), ecode(x["rs"]), x["rs"][1],
-                ecode(x["re"]), x["re"][1])), j))
+            lines.append("    TEST_ASSERT_EQUAL_STRING(%s, af(%d));" % (cstr("%s %d %d %s %d %d%s %d %d%s" % (
+                x["name"] or "-", x["dur"], x["iters"], tl_code(x["timeline"]), ecode(x["rs"]), x["rs"][1], px(x["rs"]),
+                ecode(x["re"]), x["re"][1], px(x["re"]))), j))
         lines.append("}")
         cases.append(lines)
     o = [HEADER % "Lot 102: scroll(), view() and animation-range in the animation longhands"] + [
@@ -430,7 +440,8 @@ def write_range():
         "    return n;",
         "}", "",
         "static const char *rf(int j, int end) {",
-        "    snprintf(g_t, sizeof(g_t), \"%d %d\", end ? g_a[j].re : g_a[j].rs, end ? g_a[j].rep : g_a[j].rsp);",
+        "    snprintf(g_t, sizeof(g_t), \"%d %d%s\", end ? g_a[j].re : g_a[j].rs, end ? g_a[j].rep : g_a[j].rsp,",
+        "             (end ? g_a[j].rel : g_a[j].rsl) ? \" px\" : \"\");",
         "    return g_t;",
         "}", "",
         "static int g_n;",
@@ -440,7 +451,8 @@ def write_range():
         "    return g_n;",
         "}", "",
         "static const char *rboth(int j) {",
-        "    snprintf(g_t, sizeof(g_t), \"%d %d %d %d\", g_a[j].rs, g_a[j].rsp, g_a[j].re, g_a[j].rep);",
+        "    snprintf(g_t, sizeof(g_t), \"%d %d%s %d %d%s\", g_a[j].rs, g_a[j].rsp, g_a[j].rsl ? \" px\" : \"\", g_a[j].re,",
+        "             g_a[j].rep, g_a[j].rel ? \" px\" : \"\");",
         "    return g_t;",
         "}", "",
         "static const char *rtx(int end, int cap) {",
@@ -471,8 +483,8 @@ def write_range():
         "    const wf_cssanim_t *a = &g_a[k];",
         "    char t[64];",
         "    snprintf(t, sizeof(t), \"%s\", tlv(a));",
-        "    snprintf(b, sizeof(b), \"%s %d %d %s %d %d %d %d\", a->name[0] ? a->name : \"-\", a->dur, a->iters, t, a->rs,",
-        "             a->rsp, a->re, a->rep);",
+        "    snprintf(b, sizeof(b), \"%s %d %d %s %d %d%s %d %d%s\", a->name[0] ? a->name : \"-\", a->dur, a->iters, t, a->rs,",
+        "             a->rsp, a->rsl ? \" px\" : \"\", a->re, a->rep, a->rel ? \" px\" : \"\");",
         "    return b;",
         "}", ""]
     names = chunks(o, "test_l102_range", cases, 12)

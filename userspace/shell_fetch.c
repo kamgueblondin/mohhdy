@@ -22,6 +22,7 @@
 #include "wf_csslink.h"
 #include "wf_compat.h"
 #include "wf_sitecss.h"
+#include "webeng.h"   /* Lot 104: we_geom_feed */
 
 extern const fsops_io_t shell_fs_io;
 #include "../include/os_syscalls.h"
@@ -236,7 +237,13 @@ int shell_fetch_line(const char* line) {
 static int g_css_on;
 /* Lot 87: external stylesheets of the presented page */
 static char g_extcss[WF_SITE_CSS];
+static int g_extcss_n;    /* Lot 104: its length, for the geometry pass */
 static wf_cssl_stats_t g_css_st;
+/* Lot 104: the layout geometry handed back to the reader (shell_page_geom)
+ * and 1 while the presented page waits for it */
+static wf_geom_t g_geom;
+static int g_geom_pending;
+static wf_url_t g_geom_base;
 static int g_css_ran;
 static char g_load_dir[96];
 /* Lot 87: script wall / block page reading of the presented page */
@@ -315,6 +322,9 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
     if (g_blocks_n <= 0)
         g_blocks_n = wf_blocks_text((const char *)g_body, g_res.body_len, g_blocks, (int)sizeof(g_blocks), 0);
     if (wf_url_parse(g_res.url, &base) != 0) return -1;
+    /* Lot 104: a new page starts without geometry */
+    g_geom_pending = 0;
+    wf_html_set_cssgeom(0);
     if (is_html(&g_res, g_body, g_res.body_len)) {
         wf_html_set_charset(wf_charset_header(g_res.content_type, ctlen(g_res.content_type)));
         wf_html_set_images(g_img_on);
@@ -324,12 +334,18 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
             int en = wf_csslink_collect((const char *)g_body, g_res.body_len, g_res.url, 640, 480, sheet_get, 0,
                                         g_extcss, (int)sizeof(g_extcss), &g_css_st);
             wf_html_set_extcss(en > 0 ? g_extcss : 0, en > 0 ? en : 0);
+            g_extcss_n = en > 0 ? en : 0;
             g_css_ran = 1;
             /* the sheets use their own buffers; keep the body terminated */
             g_body[g_res.body_len] = 0;
         }
+        wf_html_set_geommarks(use_css);   /* Lot 104 */
         g_full_n = wf_html_reduce_ex((const char*)g_body, g_res.body_len, &base, g_full, (int)sizeof(g_full), &st,
                                      PAGE_NODE_BUDGET, &g_forms);
+        wf_html_set_geommarks(0);
+        /* Lot 104: view timelines wait for the layout (shell_page_geom) */
+        g_geom_pending = use_css && wf_html_sitecss_geom_need() > 0;
+        g_geom_base = base;
         wf_html_set_sitecss(0);
         wf_html_set_extcss(0, 0);
         wf_compat_scan_ex((const char *)g_body, g_res.body_len, g_res.status, &g_compat);
@@ -408,6 +424,40 @@ int shell_fetch_page(const char* url, char* src, int src_max, char* final_url, i
 }
 
 int shell_page_sections(void) { return g_page_ok ? g_sec.n : 0; }
+
+/* Lot 104: after the first layout of the presented page (doc, a
+ * we_doc_t), the boxes of its view timeline subjects (id="wgN") go back
+ * to the reader, which reduces the page again; section 0 of it (with its
+ * images, already fetched) in src. The marks and the layout inputs are the
+ * same (the reader passes colours only for them), so the layout is too.
+ * Length, 0 when the page did not wait for its geometry. */
+int shell_page_geom(const void *doc, char *src, int src_max) {
+    wf_html_stats_t st;
+    int n;
+    if (!g_geom_pending || !doc || !src || src_max <= 0) return 0;
+    g_geom_pending = 0;
+    (void)we_geom_feed((const we_doc_t *)doc, "wg", &g_geom);
+    wf_html_set_cssgeom(&g_geom);
+    wf_html_set_sitecss(1);
+    wf_html_set_extcss(g_extcss_n > 0 ? g_extcss : 0, g_extcss_n);
+    wf_html_set_geommarks(1);
+    g_body[g_res.body_len] = 0;
+    g_full_n = wf_html_reduce_ex((const char*)g_body, g_res.body_len, &g_geom_base, g_full, (int)sizeof(g_full), &st,
+                                 PAGE_NODE_BUDGET, &g_forms);
+    wf_html_set_geommarks(0);
+    wf_html_set_sitecss(0);
+    wf_html_set_extcss(0, 0);
+    if (g_full_n <= 0 || wf_section_index(g_full, g_full_n, &g_sec) <= 0) { g_page_ok = 0; return 0; }
+    g_cur = 0;
+    n = wf_section_render(g_full, g_full_n, &g_sec, 0, &g_forms, src, src_max);
+    if (g_img_on && n > 0) {
+        /* the counters stay those of the first pass */
+        wf_webimg_stats_t keep = g_img_st;
+        n = with_images(src, n, src_max);
+        g_img_st = keep;
+    }
+    return n > 0 ? n : 0;
+}
 /* Lot 71: "web-find": section of the first match at or after from */
 int shell_page_find(const char* text, int from, int* count) {
     if (count) *count = 0;

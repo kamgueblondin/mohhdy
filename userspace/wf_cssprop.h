@@ -351,7 +351,9 @@ enum { WF_CSSANIM_TL_SCROLL = 3, WF_CSSANIM_TL_VIEW = 4 };
 enum { WF_CSSANIM_SC_NEAREST = 0, WF_CSSANIM_SC_ROOT = 1, WF_CSSANIM_SC_SELF = 2 };
 /* Lot 102: an edge of animation-range (rs, re): normal, a percentage of
  * the timeline (rsp, rep in 1/10000 %), or a timeline range name with its
- * percentage (cover .. scroll: WF_CSSANIM_R_COVER + index) */
+ * percentage (cover .. scroll: WF_CSSANIM_R_COVER + index). Lot 104: the
+ * percentage may be a length (rsl, rel), an offset from the start of the
+ * timeline or of the named range */
 enum {
     WF_CSSANIM_R_NORMAL = 0, WF_CSSANIM_R_PCT = 1, WF_CSSANIM_R_COVER = 2, WF_CSSANIM_R_CONTAIN, WF_CSSANIM_R_ENTRY,
     WF_CSSANIM_R_EXIT, WF_CSSANIM_R_ENTRY_CROSSING, WF_CSSANIM_R_EXIT_CROSSING, WF_CSSANIM_R_SCROLL
@@ -367,6 +369,12 @@ typedef struct {
     unsigned char tlsrc, tlaxis;  /* Lot 102: scroll() and view() */
     unsigned char rs, re;         /* Lot 102: animation-range edges, WF_CSSANIM_R_* */
     int rsp, rep;                 /* Lot 102: their percentages (1/10000 %) */
+    /* Lot 104: 1 when rsp (rsl) or rep (rel) is a length in 1/10000 px
+     * instead of a percentage; the insets of view() (start, end:
+     * WF_CSSTL_I_AUTO, _LEN in 1/10000 px or _PCT in 1/10000 %) */
+    unsigned char rsl, rel;
+    unsigned char vik[2];
+    int viv[2];
 } wf_cssanim_t;
 /* the comma separated list v (lower case, trimmed): the number of
  * animations written to out (at most max), -1 when the list is not valid
@@ -398,8 +406,9 @@ int wf_csstrans_parse(const char *v, wf_csstrans_t *out, int max);
  *   || [auto | <length-percentage>]{1,2}), defaults nearest and block),
  *   Lot 102: animation-range-start and animation-range-end (normal, a
  *   percentage, a unitless 0, or a timeline range name with an optional
- *   percentage: 0% for a start, 100% for an end; other lengths are not
- *   taken);
+ *   percentage: 0% for a start, 100% for an end; Lot 104: or an absolute
+ *   length, px, cm, mm, q, in, pt or pc, within +-100000px, in place of
+ *   the percentage; other lengths are not taken);
  *   transition-property (all, an identifier, or none alone),
  *   transition-duration (>= 0), transition-timing-function,
  *   transition-delay, transition-behavior (normal, allow-discrete).
@@ -421,8 +430,8 @@ int wf_cssanim_long(int which, const char *v, wf_cssanim_t *out, int max);
  * else normal): the start and end of each item written to out (the other
  * fields are left as they are), the count, -1 as wf_cssanim_long. And the
  * edges of n items as a longhand list (end 0: the starts, 1: the ends;
- * "normal", "12.5%", "entry 0%"): its length, 0 (and "") when it does not
- * fit cap */
+ * "normal", "12.5%", "entry 0%", Lot 104: "20px", "exit 1.5px", lengths
+ * in px): its length, 0 (and "") when it does not fit cap */
 int wf_cssanim_range(const char *v, wf_cssanim_t *out, int max);
 int wf_cssanim_range_text(const wf_cssanim_t *a, int n, int end, char *out, int cap);
 int wf_csstrans_long(int which, const char *v, wf_csstrans_t *out, int max);
@@ -464,18 +473,27 @@ int wf_cssanim_scroll_ms(const wf_cssanim_t *a, int prog, int *ms);
  * 100 give ms = (delay + duration * count) (P - S) / (E - S), rounded
  * down and kept within -2e8..2e8 (before S the animation is in its
  * before phase, after E in its after phase). 0 (and ms 0) as
- * wf_cssanim_scroll_ms, or when E <= S (an empty range: no effect) */
+ * wf_cssanim_scroll_ms, or when E <= S (an empty range: no effect).
+ * Lot 104: 0 (ms 0) when an edge is a length (rsl, rel): the scroll
+ * range comes from the layout (wf_cssanim_scroll_px_ms) */
 int wf_cssanim_range_ms(const wf_cssanim_t *a, int prog, int *ms);
 
 /* Lot 101: scroll-timeline-name and view-timeline-name ([none |
  * <dashed-ident>]#, WF_CSSTL_NAMES), scroll-timeline-axis and
  * view-timeline-axis ([block | inline | x | y]#, WF_CSSTL_AXES) and the
  * shorthands scroll-timeline and view-timeline ([<name> <axis>?]#,
- * WF_CSSTL_SHORT; view-timeline-inset is not taken). A name of none is
+ * WF_CSSTL_SHORT). A name of none is
  * kept as an empty name (it names no timeline); a name is shorter than
- * WF_CSSPROP_NAME bytes. */
+ * WF_CSSPROP_NAME bytes. Lot 104: view-timeline-inset ([[auto |
+ * <length-percentage>]{1,2}]#, WF_CSSTL_INSETS: auto, an absolute length
+ * within +-100000px, a percentage or a unitless 0; one value is both
+ * insets) and the view-timeline shorthand with insets ([<name>
+ * [<axis> || <inset>{1,2}]?]#, WF_CSSTL_VSHORT). */
 enum { WF_CSSTL_BLOCK = 0, WF_CSSTL_INLINE = 1, WF_CSSTL_X = 2, WF_CSSTL_Y = 3 };
-enum { WF_CSSTL_NAMES = 0, WF_CSSTL_AXES = 1, WF_CSSTL_SHORT = 2, WF_CSSTL_SCOPE = 3 };
+enum { WF_CSSTL_NAMES = 0, WF_CSSTL_AXES = 1, WF_CSSTL_SHORT = 2, WF_CSSTL_SCOPE = 3, WF_CSSTL_INSETS = 4,
+       WF_CSSTL_VSHORT = 5 };
+/* Lot 104: an inset kind (wf_csstl_t ik, wf_cssanim_t vik) */
+enum { WF_CSSTL_I_AUTO = 0, WF_CSSTL_I_LEN = 1, WF_CSSTL_I_PCT = 2 };
 /* Lot 102: timeline-scope (none | all | <dashed-ident>#, WF_CSSTL_SCOPE):
  * none and all are one item with an empty name, axis 0 for none and
  * WF_CSSTL_ALL for all */
@@ -483,6 +501,8 @@ enum { WF_CSSTL_NAMES = 0, WF_CSSTL_AXES = 1, WF_CSSTL_SHORT = 2, WF_CSSTL_SCOPE
 typedef struct {
     char name[WF_CSSPROP_NAME];
     unsigned char axis;           /* WF_CSSTL_* (block for a names list) */
+    unsigned char ik[2];          /* Lot 104: the start and end insets, WF_CSSTL_I_* */
+    int iv[2];                    /* Lot 104: 1/10000 px or 1/10000 % */
 } wf_csstl_t;
 /* the list v (lower case, trimmed) of kind which: the number of items
  * written to out (at most max and WF_CSSANIM_MAX), -1 when the list is
@@ -492,11 +512,52 @@ int wf_csstl_parse(int which, const char *v, wf_csstl_t *out, int max);
  * coordinated as the animation longhands are (the names give the count,
  * the axes repeat): their number, 0 when names is 0 or not valid */
 int wf_csstl_coord(const char *names, const char *axes, wf_csstl_t *out, int max);
+/* Lot 104: the same with an insets list (0: auto), coordinated as the
+ * axes */
+int wf_csstl_coord_ex(const char *names, const char *axes, const char *insets, wf_csstl_t *out, int max);
 /* the n names (axes 0) or axes (axes 1) of t as a list ("--a, none",
- * "block, x"): its length, 0 (and "") when it does not fit cap */
+ * "block, x"), Lot 104: or insets (axes 2: "auto", "10px 25%"; two equal
+ * insets are written once): its length, 0 (and "") when it does not fit
+ * cap */
 int wf_csstl_text(const wf_csstl_t *t, int n, int axes, char *out, int cap);
 /* Lot 102: how the timeline-scope value v covers the timeline name: 1
  * when it lists the name, 2 when it is all, 0 when it is none, does not
  * list it, or is not valid */
 int wf_csstl_scoped(const char *v, const char *name);
+
+/* ---- Lot 104: view progress timelines (CSS Scroll-driven Animations 1,
+ * section 3) from the layout geometry. Positions are scroll offsets
+ * along the timeline axis in 1/1000000 px. ---- */
+typedef struct {
+    long long start, size;        /* the subject's border box along the axis (from the scroller's content start) */
+    long long view;               /* the scrollport size along the axis */
+    long long range;              /* the scroll range (max scroll offset, >= 0) */
+    long long pos;                /* the current scroll offset */
+    unsigned char ik[2];          /* the insets (start, end), WF_CSSTL_I_* */
+    int iv[2];                    /* 1/10000 px or 1/10000 % of view */
+} wf_cssview_t;
+/* the scroll offsets *lo and *hi where the range range (WF_CSSANIM_R_COVER
+ * .. WF_CSSANIM_R_SCROLL) of the view timeline v starts and ends: with S
+ * the subject start, E its end, V the view, is and ie the insets (auto 0,
+ * a percentage of V), cover [S - V + ie, E - is], contain from
+ * E - V + ie and S - is (the smaller first), entry [cover start, contain
+ * start], exit [contain end, cover end], entry-crossing
+ * [S - V + ie, E - V + ie], exit-crossing [S - is, E - is], scroll
+ * [0, range]. 0 for another range */
+int wf_cssview_range(const wf_cssview_t *v, int range, long long *lo, long long *hi);
+/* the scroll offset of animation-range edge (kind, value, length) on the
+ * view timeline v (end 0: a start, 1: an end): normal is cover 0% (a
+ * start) or 100% (an end), a percentage alone or a length alone is taken
+ * on cover; a percentage p of a range [lo, hi] is
+ * lo + floor(p (hi - lo) / 1000000), a length l is lo + l. 1 and *out */
+int wf_cssview_edge(const wf_cssview_t *v, int kind, int val, int len, int end, long long *out);
+/* the local time of animation a on the view timeline v: with the range
+ * [St, En] of its edges and T = delay + duration x count,
+ * ms = floor(T (pos - St) / (En - St)), kept within -2e8..2e8 ms. 0 (and
+ * ms 0) when the count is infinite, T is not in 1..1e8 ms, or En <= St */
+int wf_cssanim_view_ms(const wf_cssanim_t *a, const wf_cssview_t *v, int *ms);
+/* Lot 104: a scroll timeline with a known scroll range (1/1000000 px, >
+ * 0) at scroll offset pos: the edges as on a view timeline whose cover
+ * range is [0, range] (range names count as normal), the same time. */
+int wf_cssanim_scroll_px_ms(const wf_cssanim_t *a, long long range, long long pos, int *ms);
 #endif

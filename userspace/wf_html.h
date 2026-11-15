@@ -6,6 +6,7 @@
  * a reader view, not a full browser (no JavaScript, no CSS from the site). */
 #ifndef WF_HTML_H
 #define WF_HTML_H
+#include "wf_geom.h"   /* Lot 104 */
 #include "wf_http.h"
 #include "wf_form.h"
 
@@ -76,6 +77,15 @@ int wf_html_sitecss_anim(char *out, int cap);
 void wf_html_set_csstime(int ms);
 /* Lot 101: the reader scroll position, 0..10000 (wf_site_set_scroll) */
 void wf_html_set_cssscroll(int pm);
+/* Lot 104: when on (off by default, so earlier callers keep the same
+ * bytes), the next reduce with sitecss on writes id="wgN" on the kept tag
+ * of each element a view timeline needs the box of (N its reader node);
+ * the layout geometry of those boxes (we_geom_feed with prefix "wg") for
+ * the next reduces, 0 clears (not copied); the number of elements the
+ * last page needed the geometry of (wf_site_t geom_need) */
+void wf_html_set_geommarks(int on);
+void wf_html_set_cssgeom(const wf_geom_t *g);
+int wf_html_sitecss_geom_need(void);
 /* Plain text of a page for the console (tags removed, blocks on new
  * lines). Lot 71: every character reference decoded and the text written
  * as UTF-8 (the console decodes UTF-8), Latin-1 pages converted. */

@@ -33,6 +33,10 @@ int shell_page_load(const char* path, const char* url, char* status, int st_max)
 int shell_page_preview(int field, char* out, int cap);
 int shell_page_fill_cmd(const char* line, char* out, int cap);
 int shell_page_css_cmd(const char* line, char* out, int cap);
+/* Lot 104: the layout geometry of the presented page back to the reader
+ * (doc a we_doc_t laid out from its section 0); section 0 reduced again
+ * in src, 0 when the page did not wait for it */
+int shell_page_geom(const void *doc, char *src, int src_max);
 /* Lot 72: images of the fetched page (wf_webimg): the atlas for the
  * compositor, slot sizes for the engine, on / off ("web-images") and the
  * counters of the last section. */

@@ -332,7 +332,7 @@ static void test_l101_tl_api(void) {
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_NAMES, "--a, --b", t, 1));
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_NAMES, "--a", t, 0));
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_NAMES, "--a,", t, 4));
-    TEST_ASSERT_EQUAL(-1, wf_csstl_parse(4, "--a", t, 4));     /* Lot 102, converted: 3 is WF_CSSTL_SCOPE */
+    TEST_ASSERT_EQUAL(-1, wf_csstl_parse(6, "--a", t, 4));     /* Lot 102, converted: 3 is WF_CSSTL_SCOPE; Lot 104, converted: 4 and 5 are WF_CSSTL_INSETS and WF_CSSTL_VSHORT */
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(-1, "--a", t, 4));
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(3, "block", t, 4));
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(-1, "block", t, 4));

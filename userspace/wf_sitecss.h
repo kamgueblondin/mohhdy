@@ -109,6 +109,7 @@
 #define WF_SITECSS_H
 #include <stdint.h>
 #include "wf_cssprop.h"
+#include "wf_geom.h"         /* Lot 104 */
 
 #define WF_SITE_NODES 192
 #define WF_SITE_RULES 128
@@ -233,11 +234,11 @@ enum {
     /* Lot 101: scroll-timeline-name, scroll-timeline-axis,
      * view-timeline-name and view-timeline-axis (slot = kind -
      * WF_SITE_K_TL0), lists in lpool like the animation longhands; Lot
-     * 102: timeline-scope */
+     * 102: timeline-scope; Lot 104: view-timeline-inset (slot 5) */
     WF_SITE_K_TL0 = 46        /* Lot 102: 46 (the animation-range longhands take 39 and 40) */
 };
 #define WF_SITE_ALONGS 17           /* Lot 98: WF_CSSANIM_LONGS + WF_CSSTRANS_LONGS slots per element (Lot 102: 17) */
-#define WF_SITE_TLS 5               /* Lot 101: the timeline longhand slots (Lot 102: timeline-scope, slot 4) */
+#define WF_SITE_TLS 6               /* Lot 101: the timeline longhand slots (Lot 102: timeline-scope, slot 4; Lot 104: view-timeline-inset, 5) */
 /* Lot 89: a compound that names the scoping root */
 enum {
     WF_SITE_SREF_NONE = 0,
@@ -337,6 +338,7 @@ typedef struct {
      * declaration (lpool index + 1, 0 the initial value) and its rank */
     uint8_t tl[WF_SITE_TLS];
     int tlrank[WF_SITE_TLS];
+    uint8_t geo;                  /* Lot 104: 1 when an animation needs its layout geometry (a view timeline subject) */
 } wf_site_node_t;
 
 typedef struct {
@@ -493,6 +495,10 @@ typedef struct {
     int anim_scroll;              /* Lot 101: element animations on an active scroll timeline */
     int scroll_pm;                /* Lot 101: the reader scroll position, 0..10000 of the range */
     int col_transitioned;         /* Lot 100: ... transitioned */
+    int anim_view;                /* Lot 104: element animations on an active view timeline */
+    int geom_need;                /* Lot 104: elements whose layout geometry the animations need (+1 for the root scroll range) */
+    int geom_root;                /* Lot 104: 1 when a scroll timeline with a length edge needs the root scroll range */
+    int geom_used;                /* Lot 104: layout boxes read (wf_site_set_geom) */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */
@@ -554,10 +560,31 @@ void wf_site_set_time(int ms);
 /* Lot 101: the reader scroll position for the scroll timelines of the
  * pages applied after it: 0..10000 of the root scroll range (clamped) */
 void wf_site_set_scroll(int pm);
+/* Lot 104: the layout geometry (wf_geom.h, from the engine:
+ * we_geom_feed) the next prepares read for view timelines and lengths in
+ * animation-range; 0 clears it (no geometry: they have no effect, as in
+ * Lot 102). The record is not copied: it outlives those prepares. View
+ * timelines: view(), or a view-timeline-name on the element or an
+ * ancestor, run when the subject (the element of view(), the element
+ * naming the timeline) has a box whose nearest scroller is the root,
+ * along the axis (block, inline, x, y; the reader scrolls the root along
+ * y only, by wf_site_set_scroll, x stays at 0) with the insets of view()
+ * or view-timeline-inset, and the animation-range edges on that view
+ * timeline (wf_cssanim_view_ms). A scroll timeline (Lot 101, 102) with a
+ * length edge runs on the root scroll range of the geometry (vertical,
+ * range > 0: wf_cssanim_scroll_px_ms). */
+void wf_site_set_geom(const wf_geom_t *g);
+/* Lot 104: the element index (wf_geom.h box index) of the start tag at
+ * offset when the animations of the last prepare need its geometry (a
+ * view timeline subject), else -1 */
+int wf_site_geom_subject(const wf_site_t *d, int offset);
 /* Lot 97: "keyframes K animated A transitioned T font F at Nms" (and
  * " dropped D" when @keyframes were over the table; Lot 98: " composed C"
- * when C animated values added a keyframe to the value below); length, 0
- * when the page had no keyframes, animation or transition list, or
+ * when C animated values added a keyframe to the value below; Lot 104:
+ * " view V need N geom G" when V animations ran on view timelines, N
+ * elements need their geometry (the root counted once for the scroll
+ * range of a length edge) or G of their boxes were read); length, 0 when
+ * the page had no keyframes, animation or transition list, or
  * font-relative value. */
 int wf_site_anim_text(const wf_site_t *d, char *out, int cap);
 #endif
