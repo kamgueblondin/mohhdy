@@ -2389,8 +2389,12 @@ static int cp_mix(const char *v, int n, cp_rgba_t *o, int depth) {
 /* Lot 106: the mix of x[0] and x[1] with weights p (1/10000 %, sum S
  * over 0) in mix space m with hue method hm: cp_mix after its parsing
  * (Lot 100 and Lot 103). A weight may be negative (an interpolation past
- * its ends, wf_cssprop_interp): the weighted alpha sum is then kept in
- * 0..S, as the sRGB interpolation keeps its alpha in 0..1 */
+ * its ends, wf_cssprop_interp): the premultiplied components are divided
+ * by the weighted alpha sum as it is (CSS Color 4 12.3), and the alpha is
+ * clamped to 0..1 afterwards; with a negative weight a component is
+ * kept within +-32 (an alpha sum near 0 far past the ends of an Oklab
+ * interpolation: no overflow, the gamut mapping takes such a colour to
+ * black, white or the gamut edge) */
 static int cp_mix_core(int m, int hm, cp_rgba_t *x, const long long *p, cp_rgba_t *o) {
     int k, mi[2];
     long long cv[2][3], an, sum = p[0] + p[1];
@@ -2427,8 +2431,9 @@ static int cp_mix_core(int m, int hm, cp_rgba_t *x, const long long *p, cp_rgba_
         } else if (m0) *q0 = *q1;
         else if (m1) *q1 = *q0;
     }
-    an = cp_clampll(x[0].a * p[0] + x[1].a * p[1], 0, sum * CP_S);
+    an = x[0].a * p[0] + x[1].a * p[1];
     for (k = 0; k < 3; k++) {
+        cp_w_t q, lim = cp_w(32 * CP_Q);
         if (k == cp_mixh[m]) {
             /* CSS Color 4 12.4: the hue method, then the weighted mean
              * (not reduced modulo 360: the conversions back take any
@@ -2441,10 +2446,15 @@ static int cp_mix_core(int m, int hm, cp_rgba_t *x, const long long *p, cp_rgba_
             cv[0][k] = cp_div(h0 * p[0] + h1 * p[1], sum, 0);
             continue;
         }
-        cv[0][k] = an ? (long long)cp_wdiv(cp_wadd(cp_wmul(cp_w(cv[0][k]), x[0].a * p[0]),
-                                                   cp_wmul(cp_w(cv[1][k]), x[1].a * p[1])), an, 0).lo : 0;
+        if (!an) { cv[0][k] = 0; continue; }
+        q = cp_wdiv(cp_wadd(cp_wmul(cp_w(cv[0][k]), x[0].a * p[0]), cp_wmul(cp_w(cv[1][k]), x[1].a * p[1])), an, 0);
+        if (p[0] < 0 || p[1] < 0) {     /* only past the ends (Oklab: wf_cssprop_interp) */
+            if (cp_wlt(lim, q)) q = lim;
+            else if (cp_wlt(q, cp_wneg(lim))) q = cp_wneg(lim);
+        }
+        cv[0][k] = (long long)q.lo;
     }
-    o->a = cp_div(an, sum >= 100 * CP_S ? sum : 100 * CP_S, 0);
+    o->a = cp_clampll(cp_div(an, sum >= 100 * CP_S ? sum : 100 * CP_S, 0), 0, CP_S);
     if (cp_mixs[m] == -2) {
         long long c1 = cp_clampll(cv[0][1], 0, 1000000), c2 = cp_clampll(cv[0][2], 0, 1000000);
         if (m == 11) cp_hsl_rgb(cv[0][0], c1, c2, o->c);

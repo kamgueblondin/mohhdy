@@ -19,11 +19,26 @@ Colour interpolation (keyframes and transitions, wf_cssprop_interp)
   components carried by analogous set, gamut-mapped to sRGB), each
   channel rounded half away from zero to 0..255, the alpha written in
   1/10000 as the sRGB path writes it. Past the ends (an easing that
-  overshoots) the weights are 100 - t and t as they are, the weighted
-  alpha sum kept in 0..100% (as the sRGB path keeps its alpha in 0..1).
+  overshoots) the weights are 100 - t and t as they are; the
+  premultiplied components are divided by the weighted alpha sum as it
+  is (CSS Color 4 12.3: un-premultiplied by the interpolated alpha), and
+  the alpha is then clamped to 0..1 (an alpha sum of 0 gives 0
+  components). Far past the ends the components can grow without bound
+  as the alpha sum nears 0: such a case (linear sRGB past 8) is unsure.
+  (The legacy sRGB path keeps its Lot 97 order: alpha clamped first.)
 * add and accumulate are unchanged: premultiplied sRGB, a missing
   component counting as 0 (CSS Color 4 4.4: none is 0 outside
   interpolation).
+
+View timelines (CSS Scroll-driven Animations 1, 3.1)
+* The root element (html) has no ancestor scroll container: a view
+  timeline whose subject it is (view() on it, or a view-timeline-name it
+  defines) is inactive, and asks for no geometry.
+* The body element (named body, a child of the root html element or at
+  the top) is a subject like any other, whose nearest scroll container
+  is the root (html and body are never box scrollers, Lot 105); its box
+  comes from the geometry's own body record (geom["body"]), not from the
+  boxes by element index. Everything else is the Lot 105 view clock.
 """
 from fractions import Fraction as F
 import os
@@ -75,9 +90,9 @@ def oklab_mix(x, y, p0, p1):
         elif m1:
             cv[1][k] = cv[0][k]
     a0, a1 = cv[0][3], cv[1][3]
-    an = min(max(a0 * p0 + a1 * p1, 0), tot * S)
+    an = a0 * p0 + a1 * p1
     out = [(cv[0][k] * a0 * p0 + cv[1][k] * a1 * p1) / an if an else 0.0 for k in range(3)]
-    alpha = M98.rhalf(F(an, max(tot, 100 * S)))
+    alpha = min(max(M98.rhalf(F(an, max(tot, 100 * S))), 0), S)
     lin = L103.to_lin(kind, out)
     if max(abs(v) for v in lin) > L103.BIG_MIX:
         raise Unsure("big")
@@ -138,3 +153,127 @@ def keep(fn, alts, a, b, t):
         if m is not None:
             return m, a, y, u
     raise AssertionError((a, b, t))
+
+
+# ------------------------------------------------------------- view timelines
+def is_body(nodes, q):
+    nd = nodes[q]
+    p = nd["parent"]
+    return nd["tag"] == "body" and (p < 0 or (nodes[p]["parent"] < 0 and nodes[p]["tag"] == "html"))
+
+
+def box_of(nodes, q, g):
+    """the geometry box of node q (the body record for the body), None"""
+    if not g:
+        return None
+    return g.get("body") if is_body(nodes, q) else g["box"].get(q)
+
+
+def view_clock(a, nodes, q, axis, ins, c):
+    import lot104_model as M4
+    import lot105_model as M5
+    U = M4.U
+    if nodes[q]["parent"] < 0 and nodes[q]["tag"] == "html":
+        return None
+    s = M5.scroller_of(nodes, q)
+    c.need.add(q)
+    if s >= 0:
+        c.scr.add(s)
+    if s >= 0 or c.gui:
+        c.live = True
+    b = box_of(nodes, q, c.geom)
+    if not b:
+        return None
+    if s < 0 and not b["root"]:
+        return None
+    if s >= 0 and (b["root"] or b.get("sm", 0) != s + 1):
+        return None
+    useb = axis == "block" or (axis == "y" and b["bvert"]) or (axis == "x" and not b["bvert"])
+    vert = b["bvert"] if useb else not b["bvert"]
+    p = "b" if useb else "i"
+    rg = b["rg_" + p]
+    if s >= 0 or c.gui:
+        pos = b.get("sc_" + p, 0) * U
+    else:
+        pos = c.pm * rg * 100 if vert else 0
+    v = {"start": b[p + "_off"] * U, "size": b[p + "_size"] * U, "view": b["vp_" + p] * U, "range": rg * U,
+         "pos": pos, "ins": ins}
+    t = M4.view_ms(a, v)
+    if t is None:
+        return None
+    return ("boxview" if s >= 0 else "view", t)
+
+
+def clock(a, nodes, i, ms, c):
+    """lot105_model.clock with this view_clock"""
+    import lot104_model as M4
+    import lot105_model as M5
+    tl = a.get("timeline", "auto")
+    if tl == "auto":
+        return ("auto", ms)
+    nd = nodes[i]
+    if isinstance(tl, tuple):
+        if tl[0] == "view":
+            return view_clock(a, nodes, i, tl[1], tl[2], c)
+        _, src, axis = tl
+        if axis not in ("block", "y"):
+            return None
+        if src == "self":
+            s = M5.scroll_src(nodes, i)
+        elif src == "nearest":
+            s = -2 if nd["parent"] < 0 else M5.scroller_of(nodes, i)
+        else:
+            s = -1
+        return None if s < -1 else M5.scroll_clock(a, s, c)
+    if tl == "none":
+        return None
+    q = i
+    while q >= 0:
+        d = M4.defines(nodes, q, tl)
+        if d:
+            if d[0] == 2:
+                return view_clock(a, nodes, q, d[1], d[2], c)
+            s = M5.scroll_src(nodes, q)
+            if s < -1 or d[1] not in ("block", "y"):
+                return None
+            return M5.scroll_clock(a, s, c)
+        if M4.scoped_at(nodes, q, tl):
+            return None
+        q = nodes[q]["parent"]
+    return None
+
+
+def stack(alts, anims, kfs, under, ms, nodes, i, c):
+    import lot98_animmodel as M98b
+    animated = composed = False
+    base = under
+    for a in anims:
+        if not a["name"] or a["name"] not in kfs:
+            continue
+        r = clock(a, nodes, i, ms, c)
+        if r is None:
+            continue
+        v, cp = M98b.anim_value(alts, a, kfs[a["name"]], under, r[1], base)
+        if v is not None:
+            under, animated = v, True
+            composed = composed or cp
+    return under, animated, composed
+
+
+def counts(anims, names, nodes, i, ms, c):
+    """(scroll, view, box, idle) as lot105_model.counts"""
+    sc = vw = bx = idle = 0
+    for a in anims:
+        if not a["name"] or a["name"] not in names:
+            continue
+        r = clock(a, nodes, i, ms, c)
+        if r is None:
+            idle += 1
+            continue
+        if r[0] in ("scroll", "box"):
+            sc += 1
+        if r[0] in ("view", "boxview"):
+            vw += 1
+        if r[0] in ("box", "boxview"):
+            bx += 1
+    return sc, vw, bx, idle
