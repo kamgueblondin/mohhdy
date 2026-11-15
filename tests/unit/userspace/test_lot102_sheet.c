@@ -141,7 +141,7 @@ static void test_l102_sheet_3(void) {
 
 static void test_l102_sheet_4(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: currentcolor; background-color: oklab(none 0.2048 none /120%) } 100% { color: violet; background-color: currentcolor } } html { timeline-scope: --t --u } #i { animation: j 500ms linear 500ms both, k 2s; animation-timeline: scroll(); animation-range: 97.9% exit,25%; animation-composition: accumulate } #q { scroll-timeline-name: --v, none; view-timeline: --v inline }", 500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#070000\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(2, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
@@ -200,46 +200,46 @@ static void test_l102_sheet_6(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: navajowhite; background-color: color-mix(in srgb, color-mix(in srgb, color( xyz -101 0.036 0.593) 0%, lab(none none none)), lch(60.73 0% 68/120%)) } } body { timeline-scope: --u } #i { color: powderblue; animation: j 2s linear 1s both, j 2s; animation-timeline: auto, view(block 10%); animation-range-start: contain 33.33%; animation-range-end: 50% , 115.28% , normal , scroll 116% } #q { scroll-timeline: --v y }", 500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b0e0e6\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: color-mix(in srgb, hsl(none, 10%, 20%), color-mix(in srgb, 25% lch(43.7% 26.61% 558.37/0), oklch(none 0 none))); background-color: hwb(none 19% none) } 50% { color: color-mix(in srgb, hsl(200grad -2 14.92), 100% color(xyz-d50 none none 1)) } to { background-color: red } } html { scroll-timeline-name: --t --u; scroll-timeline-name: --v } #i { color: color(xyz-d50 0.6059 none none); background-color: #1d8afe; animation: k 1000ms backwards, k 1s linear infinite alternate; animation-timeline: SCROLL(), view(block 10%); animation-range: 120.02% } #q { scroll-timeline-name: --u }", 500, 7362);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff003b;background-color:#1d8afe\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 100% { color: currentcolor } } html { scroll-timeline: --t inline } body { timeline-scope: auto } #i { background-color: hsl(3.1416rad, 14%, 15.7%); animation: k 1000ms linear, k 1000ms linear; animation-timeline: --t; animation-range-start: -10%, -4.6%; animation-range-end: 12.93%,123.4%,115.7%,0 }", 0, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#222e2e\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: #7c37 } 100% { color: color(xyz none 0 none); background-color: lch(none 103.5063 720deg) } } @keyframes j { 0% { color: color-mix(in srgb, hwb(none 55% 35), 97.9% hsl(269 none 60.42%)) } 75% { background-color: #ae7 } 100% { color: currentcolor } } html { scroll-timeline: --t } body { timeline-scope: --v } #o { timeline-scope: auto } #i { background-color: hsl(66.2grad, 19%, 99.4%, 100%); animation: k 2s linear, j 2s linear forwards; animation-timeline: auto; animation-range: entry-crossing 47.3%; animation-composition: replace }", 0, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9a9a9a;background-color:#fefefd\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hsla(none none 24%); background-color: hwb(none none none) } 33.33% { color: #19dedb } } html { scroll-timeline-name: --u; scroll-timeline-axis: y; timeline-scope: --t } #i { color: #9ea0f4; animation: k 500ms linear backwards, k 2s linear; animation-timeline: auto } #q { view-timeline: --v inline }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9ea0f4;background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_7(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: hwb(120 88.14% 35%) } } body { timeline-scope: --t } #i { color: oklch(none none 167); animation: k 1000ms linear; animation-timeline: none; animation-range-start: normal 10%, 19%, scroll 50%, scroll -14%, contain; animation-range-end: cover 0%, cover, scroll, exit-crossing 47.17% }", 0, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color(xyz none 0.992 none); background-color: hsla(0.9turn 5.44% 77% / 50%) } 33.33% { color: color(srgb-linear 0.2927 0.592 0/none) } } @keyframes j { 50% { color: currentcolor; background-color: currentcolor } to { color: hsl(128 33% 50 / 150%); background-color: color(prophoto-rgb 0.6093 none none /0.5) } } html { scroll-timeline: --u y, --t } body { view-timeline: --v inline; timeline-scope: auto } #i { background-color: hsl(0.96turn, 1.9%, 59%, 100%); scroll-timeline: --u y, none y; animation: j 1s -500ms, k 1000ms linear; animation-timeline: none, --u; animation-range: 60% 40% } #q { scroll-timeline: --u, --t; scroll-timeline: inherit }", 0, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#989495\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: oklab(0.418 0 0.4631/none) } 50% { color: color-mix(in srgb, rgb(77 75 220 / 0), lch(53.5611	35.7546	100grad)) } } html { scroll-timeline-name: --v, --u, none; scroll-timeline-axis: y } body { timeline-scope: --u, --t, --v } #o { timeline-scope: none } #i { background-color: darkgrey; animation: k 1000ms linear 250ms, k 1s linear both; animation-timeline: scroll(inline) } #q { scroll-timeline-name: --u; scroll-timeline: auto; view-timeline: --u block; view-timeline-axis: y }", 1500, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#a9a9a9\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: lch(none none none) } 33.33% { color: color(rec2020 none none 0 /1.5) } 50% { background-color: hsl(none 434.1662deg 7% 21%) } } html { scroll-timeline-name: --t; scroll-timeline-axis: inline } #o { timeline-scope: --t --u } #i { color: hsla(690.2grad, 16.25%, 73%, 0.9999); background-color: rgb(11 122 21 / 0.5); animation: k 1000ms alternate; animation-timeline: --t; animation-range-end: exit-crossing 82.1% , exit 41.46% , 126.12% }", 0, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b7afc5;background-color:#0b7a1580\"", style_of("i"));
+}
+
+static void test_l102_sheet_7(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: color-mix(in srgb, hsla(22 107.37% 0% / 100%) 100%, rgb(87 249 51 / -0.5) 9%) } } #i { color: rgb(87 125 169 / 120%); animation: j 1000ms linear; animation-timeline: scroll(nearest y), scroll(root); animation-range-start: 81.6%; animation-range-end: scroll 85.39%,contain,100%,contain 33.33%; animation-composition: add }", 1500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#577da9\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: hwb(-455.5 7.23% 118%) } } @keyframes j { 50% { color: currentcolor } } html { scroll-timeline-name: --t; scroll-timeline-axis: block, inline } body { scroll-timeline-name: --u; scroll-timeline-axis: inline; scroll-timeline-name: --t --u } #i { background-color: color(srgb 0 56% none/none); animation: k 2s linear alternate; animation-timeline: --t; animation-range: 147% scroll 116% , 63% scroll -19% , entry 10% } #q { scroll-timeline: --v y, --u }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#008f0000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: hsl(-673 90% 83.3% / 0.9999); background-color: lime } 25% { color: color-mix(in srgb, color(srgb-linear 0 none 0.412/none), rgb(150 50 91 / 1.5)); background-color: hsl(none 50% none) } 33.33% { color: color(srgb 0.88 0.1 0.196 /none); background-color: #b0bb9a89 } } html { scroll-timeline: --t } #i { background-color: lch(2.5e-2 none 90deg / 52%); animation: j 1000ms 3 alternate; animation-timeline: --u; animation-range: contain -33.7%, -9.88% 115% } #q { scroll-timeline-axis: y; scroll-timeline-name: --v }", 0, 2500);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: ghostwhite; background-color: hsl(-98.35grad, 40%, 48.2%, 0.5) } 75% { color: hsl(8.06rad 0% 99 / 1) } } html { scroll-timeline-name: --t } body { timeline-scope: all } #i { animation-range-start: entry-crossing 26% , 119%; animation-range-end: 25%,0,exit 90%; animation: j 1000ms linear, k 500ms 250ms; animation-timeline: SCROLL(); animation-range: -46.8% scroll 37%, contain 60% 23.56%, exit-crossing, cover 114.08% -38.5% } #q { scroll-timeline-name: --t; scroll-timeline-axis: y }", 0, 7500);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hwb(79 100% 99) } 50% { color: rgb(89 41 167 / 1.5) } 75% { color: currentcolor; background-color: currentcolor } } body { timeline-scope: --t } #i { animation: j 1s linear 1s; animation-timeline: scroll(x root); animation-range: entry }", 0, 9600);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
@@ -248,19 +248,34 @@ static void test_l102_sheet_7(void) {
 }
 
 static void test_l102_sheet_8(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: lch(90% -6.26% none) } } html { scroll-timeline-name: --u } body { timeline-scope: auto } #i { animation: k 1000ms backwards; animation-timeline: scroll(inline); animation-range: normal scroll }", 1500, 5000);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hwb(-197.43deg 66% 85.45% /1.5); background-color: hsla(460.5deg, 76%, 99%, 99.99%) } 33.33% { color: rgb(none 26.8 0 / 0.9); background-color: #c64 } } #i { color: lightpink; animation: k 1000ms; animation-timeline: scroll(x root); animation-range: scroll 37%, entry-crossing, entry-crossing 70%, contain entry -5% } #q { view-timeline: --v block }", 1500, 4179);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffb6c1\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: rgb(234 244 38 / 120%) } 100% { color: rgb(158 none none); background-color: currentcolor } } body { timeline-scope: auto } #i { background-color: color(a98-rgb none 0 none/none); animation: j 1000ms forwards; animation-timeline: scroll(self), scroll(nearest y); animation-range: cover 100%; animation-composition: replace } #q { scroll-timeline-name: --v; view-timeline: --v block; view-timeline-axis: y }", 500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000000\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: rgb(28 254 209 / 0.5); background-color: hwb(95 32.9% 37) } } body { timeline-scope: --u, --t, --v } #o { scroll-timeline: --v y, --t } #i { color: rgba(24 none none/91%); animation: k 500ms linear 2; animation-timeline: --t; animation-range: 50% cover 90%,exit-crossing 92.79%,normal,NORMAL 0 } #q { view-timeline: --t block }", 0, 9167);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#180000e8\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: lab(-3.42% -52.771 76.5 /none); background-color: hsl(-227 -8.93% none) } 75% { background-color: hwb(-1.42turn 71% 4.7%) } } @keyframes j { from { background-color: rgb(85 9 30 / 50%) } 33.33% { color: color(prophoto-rgb none 0.3 1) } 50% { background-color: color(srgb-linear 2.5e-2 none none /none) } } html { scroll-timeline: --t block, --u y, none block } #i { background-color: oklch(none 89.76% 0 -231.454deg); animation: k 500ms forwards; animation-timeline: auto; animation-range-start: cover 0%,11.53%,13.3%; animation-range-end: entry 10%; animation-composition: add }", 0, 2500);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: #be6 } } @keyframes j { 33.33% { color: hsla(-366deg 46.7% 86.9%) } 75% { color: transparent } } #o { timeline-scope: --t, --u } #i { background-color: lab(none -91.1 none); animation: j 1000ms linear both; animation-timeline: none; animation-range-start: cover 2%, 98%, 136%; animation-range-end: 0, entry 10%, 21% }", 1500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: hwb(84 87.58% 0%) } 100% { color: hwb(415.62 47 38 / none) } } @keyframes j { 50% { background-color: hsla(499.9deg 10.761% none) } 75% { color: currentcolor; background-color: oklab(none -0.0731 0.2843) } 100% { background-color: color(rec2020 none none none) } } html { timeline-scope: all } #i { background-color: rgb(64 230 63 / -0.5); animation: k 1s linear 0.5, k 500ms linear forwards alternate; animation-timeline: --v; animation-range: initial } #q { view-timeline: --u block }", 0, 8496);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#40e63f00\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+}
+
+static void test_l102_sheet_9(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color-mix(in srgb, 50% rgb(none 195.2 none), color(srgb-linear none none none)); background-color: currentcolor } 50% { color: #1a3; background-color: hwb(179 85% 92%) } 75% { background-color: color(srgb-linear 2.5e-2 none none /none) } } html { scroll-timeline-name: --u, none; view-timeline: --v } #o { timeline-scope: --u } #i { background-color: oklch(none 89.76% 0 -231.454deg); animation: k 500ms forwards; animation-timeline: auto; animation-range-start: cover 0%,11.53%,13.3%; animation-range-end: entry 10%; animation-composition: add }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(2, g_d.prop_composed);
@@ -272,9 +287,6 @@ static void test_l102_sheet_8(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_9(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: color(none rec2020 0.6505 0 0.8) } to { color: red; background-color: hwb(11 73% 0%) } } html { scroll-timeline: --t y, none; timeline-scope: --u, --t, --v } body { timeline-scope: --u } #i { color: #b17c4ec3; background-color: #f921ac; animation: k 1000ms linear -500ms 0.5; animation-timeline: scroll(); animation-range-start: exit 28.47%; animation-range-end: scroll }", 1500, 1800);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b17c4ec3;background-color:#f921ac\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -287,6 +299,9 @@ static void test_l102_sheet_9(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_10(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: red } 33.33% { color: hwb(124 75% 0.83%) } } @keyframes j { 33.33% { background-color: rgba(73 none none) } } html { scroll-timeline-name: --v, --t; scroll-timeline-axis: y, y; view-timeline-name: --v; view-timeline-axis: y } #o { timeline-scope: ALL } #i { background-color: hsl(none 179 0.013% 27.1%); animation: k 2s 2 both reverse; animation-timeline: auto; animation-range: 50% 50% } #q { view-timeline-name: --t; view-timeline-axis: y }", 1500, 6700);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b8f3bc;background-color:#ff0000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
@@ -299,9 +314,6 @@ static void test_l102_sheet_9(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_10(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: color(srgb-linear none none none); background-color: color-mix(in srgb, #e8cd, color(xyz-d50 43% 0.75 none)) } } html { scroll-timeline: --u, none x } #o { timeline-scope: --u, --t, --v } #i { color: hwb(240 62.1854% 58 /1.5); animation: j 500ms linear backwards, k 500ms linear 1s; animation-timeline: scroll(x root); animation-range: exit-crossing 27% entry 10%, entry -5% NORMAL, exit-crossing contain; animation-composition: replace }", 1500, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#848484\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -314,8 +326,11 @@ static void test_l102_sheet_10(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_11(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color(xyz-d50 0 none none) } 60% { color: color-mix(in srgb, oklch(73.49% none -0.9turn /0.7395), rgba(none none none /120%)); background-color: color(none xyz 0 0.388 0.329) } } html { scroll-timeline-name: --t } #i { color: color(xyz-d50 none 16.71% none); background-color: #3e8fee; animation: j 1000ms linear; animation-timeline: --t; animation-range: initial; animation-composition: replace }", 500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#009900;background-color:#3e8fee\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#007d45;background-color:#3e8fee\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
@@ -326,9 +341,6 @@ static void test_l102_sheet_10(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_11(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 100% { color: hwb(-669.7716 50% 99% /35%); background-color: rgb(255 none none) } } html { scroll-timeline-name: --t; timeline-scope: --t --u; scroll-timeline-axis: y } body { timeline-scope: auto } #o { timeline-scope: --t, --u } #i { color: lime; background-color: rgba(200.37 none none); animation-range: 0% 200%; animation: k 1s; animation-timeline: view(), scroll(root); animation-range: 12.5%,entry 83.31% scroll,scroll 80.33% }", 500, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff00;background-color:#c80000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -341,6 +353,9 @@ static void test_l102_sheet_11(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_12(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: color-mix(in srgb, hwb(103 19% none / none), #597 0%) } 50% { background-color: red } } @keyframes j { 25% { color: oklab(none none 0.2848) } } body { timeline-scope: --t --u } #o { timeline-scope: --t --u } #i { animation: j 2s linear infinite, k 2s both; animation-timeline: scroll(); animation-range: entry 96% 26.21%,12.5%,cover 36% }", 1500, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
@@ -353,56 +368,41 @@ static void test_l102_sheet_11(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_12(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: #d60bcf; background-color: oklch(none 1 0.0595 43) } 75% { color: color(none xyz 0 0.15 0.4606) } } html { scroll-timeline: --v, --t inline } body { timeline-scope: --u } #i { animation: k 1000ms linear 500ms; animation-timeline: scroll(x root); animation-range: exit contain 99.64%, 101% }", 0, 8867);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: oldlace; background-color: oklch(0.49 none none /1) } 25% { color: color(srgb none 29.51% -0.2293) } } #i { color: darkseagreen; animation: k 500ms linear forwards; animation-timeline: --t; animation-range: entry-crossing, entry entry-crossing 109.1%, 76.2% 50%, contain 50.3% }", 1500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8fbc8f\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: color(srgb none 0.409 none / 0.25) } } html { scroll-timeline-name: --t; scroll-timeline-axis: inline } #i { color: hsla(-4rad 35% 72.67% / 100%); animation: k 1000ms both, k 500ms linear; animation-timeline: view(); animation-range: 10% 90% }", 1500, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a1d2aa\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: color(prophoto-rgb 0.68 none 0.3718) } 60% { color: hwb(none 4 4/3%); background-color: color-mix(in srgb, hwb(none none 34%), color-mix(in srgb, oklch(1 0.2499 281), hsl(nonedeg 10% 10%))) } 75% { color: purple; background-color: orange } } html { scroll-timeline: --t y; view-timeline-name: --t } body { timeline-scope: none } #o { timeline-scope: auto } #i { animation: k 1000ms linear forwards, j 1000ms linear both; animation-timeline: scroll(self); animation-range: -42.11% 150% }", 1500, 10000);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_13(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: currentcolor; background-color: #70b92f } 60% { color: oklab(none none none) } } body { scroll-timeline-name: --u } #i { background-color: steelblue; animation: k 1000ms 500ms; animation-timeline: --t; animation-range-start: -17.34%,0,exit-crossing; animation-range-end: normal,exit-crossing }", 0, 3200);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#4682b4\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: red } 33.33% { color: lab(65% -26.96 none); background-color: rebeccapurple } 75% { background-color: currentcolor } } #i { animation: j 1000ms 1s; animation-timeline: scroll(inline); animation-range-end: 12.5% }", 0, 10000);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: color(rec2020 0 0.8 0.27 / none) } } body { timeline-scope: all } #i { animation: j 2s 250ms, j 1000ms linear forwards; animation-timeline: auto, --t; animation-range-start: entry-crossing,25% } #q { scroll-timeline-name: --t, --v; scroll-timeline-axis: inline }", 500, 3275);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: hwb(6.075rad 12.5% 50%); background-color: currentcolor } 75% { color: color-mix(in srgb, 25% hwb(none none none), rgb(143 78 40 / -0.5)) } } html { scroll-timeline: --t; view-timeline-axis: y; view-timeline: --v } body { scroll-timeline-name: --v, --t; scroll-timeline-axis: block; timeline-scope: auto } #o { timeline-scope: ALL } #i { animation: k 500ms linear 2 forwards; animation-timeline: --v; animation-range-end: scroll 50% }", 1500, 0);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color-mix(in srgb, color(xyz-d50 0.411 34% none) 0%, hwb(none 0 none / none)); background-color: black } 75% { color: currentcolor } } html { scroll-timeline-name: --t, --v; scroll-timeline-axis: inline } #i { scroll-timeline: --v; animation: j 2s, j 1000ms linear 250ms; animation-timeline: --v } #q { scroll-timeline-name: --v, --t }", 1500, 7500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_13(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: blue; background-color: lch(none 157.49% -212.68) } 75% { background-color: lch(none none -38deg) } to { color: rgba(44%, 90.1%, 38, 50%); background-color: rgb(184, 161, 235) } } @keyframes j { 0% { color: currentcolor; background-color: hwb(none 90% none /23%) } 25% { background-color: color(srgb 0.1182 none 0.409) } 33.33% { color: rgb(101 114 169 / 1.5); background-color: #c92 } } html { scroll-timeline-name: --t } body { view-timeline: --u inline; view-timeline-axis: y; timeline-scope: all } #o { scroll-timeline-name: --u; scroll-timeline-axis: x, block; view-timeline-name: --v; timeline-scope: --u } #i { color: hsl(0.25turn, 100%, 97%, 0.9999); animation: j 1000ms linear both, k 1s linear; animation-timeline: scroll(inline), --t; animation-range-start: 150%,25%; animation-range-end: exit-crossing 45.9% } #q { scroll-timeline: --u y, none }", 0, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f7fff0\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: color-mix(in srgb, lch(44.27  142%  4.1248rad), rgb(98% none none)) } 33.33% { color: #19a8bfc8 } 75% { color: currentcolor; background-color: deeppink } } html { scroll-timeline-name: --t } body { scroll-timeline: --u; view-timeline-name: --t; view-timeline-axis: y } #o { timeline-scope: --t --u } #i { color: rgb(283 -16 5); background-color: hsla(2.6turn, 100%, 43%, 2); animation: k 1000ms linear both; animation-timeline: --t, --t; animation-range: 60% 40% }", 500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0005;background-color:#0058db\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { to { color: rgb(none 194 157/3%); background-color: color-mix(in srgb, hwb(none none 34%), color-mix(in srgb, oklch(1 0.2499 281), hsl(nonedeg 10% 10%))) } } html { timeline-scope: none } #i { color: hsl(-1.3rad, 43.2591%, 101.68%, 50%); background-color: hwb(none none 6% / none); animation: k 1000ms linear infinite; animation-timeline: view(block 10%); animation-range-start: 99%, scroll, calc(10%); animation-range-end: scroll; animation-composition: replace } #q { scroll-timeline: --v y, --u }", 0, 900);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff80;background-color:#f0000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: currentcolor; background-color: color-mix(in srgb, rgb(237 none 140.78), color-mix(in srgb, peachpuff 35%, hsla(120, 50%, 50%, none))) } } html { scroll-timeline-name: --t } #i { animation: k 1s linear infinite, k 2s; animation-timeline: --t, --t; animation-composition: replace }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: oklch(none 107% 100% -5.43rad) } 60% { color: hsl(300 91% none); background-color: currentcolor } } @keyframes j { 75% { background-color: azure } } html { scroll-timeline-name: --t; scroll-timeline-axis: inline } #i { animation: k 500ms linear both; animation-timeline: view(block 10%); animation-range: 10% 90% }", 0, 10000);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
@@ -410,48 +410,69 @@ static void test_l102_sheet_13(void) {
 }
 
 static void test_l102_sheet_14(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: magenta } 50% { color: currentcolor } } @keyframes j { 0% { color: rgb(199 244 38 / 0.4956); background-color: hwb(149 none 81) } 33.33% { color: hwb(1 33 0%); background-color: color(none xyz-d65 0.759 0.6152 0.2083) } 75% { background-color: color-mix(in srgb, 23% hsl(-338.5387 15.6% 94.922 / 0), hwb(755.3deg 95 none)) } } html { scroll-timeline-name: --t, --u; scroll-timeline-axis: block, y } body { timeline-scope: all } #i { animation: k 1000ms linear; animation-timeline: scroll(nearest y) }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: #cee } 50% { color: hwb(81.2deg 74% 6/none) } 100% { background-color: lab(none none none / 0.3) } } html { scroll-timeline-name: --v; scroll-timeline-axis: inline, block } #i { color: hwb(100grad 100% 24.4%); animation: k 1000ms 500ms both; animation-timeline: --nobody; animation-range-start: scroll 16.25% , entry 10% , entry 36% , exit; animation-range-end: entry 0% }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#cdcdcd\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: color(none display-p3 0.481 0.86 0.8 /120%) } 75% { color: rgb(229 201 103 / 2%); background-color: oklab(none none none) } } body { scroll-timeline: --t; view-timeline-name: --v; timeline-scope: ALL } #i { animation: k 500ms linear both; animation-timeline: --t }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: color-mix(in srgb, hwb(66 30% none), white); background-color: currentcolor } 25% { color: pink; background-color: currentcolor } } #o { timeline-scope: --t --u } #i { animation: k 500ms both alternate, j 1s linear; animation-timeline: auto, scroll(self); animation-range: -50% 50% }", 500, 614);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(rec2020 none none none); background-color: lightgoldenrodyellow } 60% { color: hwb(144 44.6809% 100%/0.85); background-color: color(xyz-d50 0.296 none 62.31%) } to { color: color(srgb none none 0 / none); background-color: hsl(180 98.2% none /none) } } @keyframes j { 50% { color: currentcolor; background-color: lch(none none none /75%) } 75% { color: hsl(none none 31%); background-color: currentcolor } } html { scroll-timeline-name: --t } body { timeline-scope: --t } #i { color: blanchedalmond; background-color: #dc75c0; animation: k 1000ms linear both; animation-timeline: --nobody; animation-range: -20.6% 32.3%, 77%, exit-crossing } #q { scroll-timeline: --t }", 500, 10000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffebcd;background-color:#dc75c0\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: rgb(none none none / 0); background-color: lab(none none none /none) } } html { scroll-timeline: --t x } #i { color: hwb(336 0% 56.1%); background-color: rgb(96 241 69 / 68%); animation: j 1000ms linear 1s; animation-timeline: scroll(root); animation-range: Entry 20% -9.88%, entry-crossing, entry -10.6% } #q { view-timeline: --v block }", 500, 4099);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#70002d;background-color:#60f145ad\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: color(none xyz-d50 0.28 0.6267 0.9) } } html { scroll-timeline: --u; view-timeline-name: --v } #o { timeline-scope: auto } #i { animation-range: unset; animation: k 2s linear both; animation-timeline: scroll(nearest y); animation-range: 25%; animation-composition: accumulate }", 500, 10000);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: hsl(2rad, 89.6%, 86%) } 50% { background-color: currentcolor } 100% { background-color: rgba(47% -10 none) } } @keyframes j { 25% { background-color: hsla(0turn 100% 64% / 0.5) } 60% { color: currentcolor } } #i { background-color: hwb(235deg 96.5% 0%); animation: k 2s linear 3; animation-timeline: SCROLL(); animation-range: 25%,29.5% entry-crossing,scroll 94.01% 15.4%,-5.6% 134.1% }", 500, 5754);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#c6fbc2\"", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
 static void test_l102_sheet_15(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: lch(none none none) } 60% { color: hwb(117grad 50% 100%); background-color: currentcolor } 75% { color: color-mix(in srgb, hwb(60 none 46%), color(xyz-d50 none 0.9 none/none)); background-color: color(srgb none none none /none) } } html { scroll-timeline-name: --t; scroll-timeline-axis: inline } #i { animation: k 1000ms linear; animation-timeline: view(block 10%); animation-range: 135.1% exit-crossing -10%, 86% exit-crossing }", 0, 10000);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: blue } 33.33% { background-color: currentcolor } 75% { background-color: red } } html { scroll-timeline-name: --v; scroll-timeline-axis: x, block } #o { timeline-scope: --t --u } #i { animation: k 500ms linear -500ms; animation-timeline: scroll(root); animation-range: -38% contain 33.33%, cover 0% }", 1500, 8336);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: #a79d52; background-color: color-mix(in srgb , white , lightsalmon 29.3454%) } } @keyframes j { 50% { color: color(none srgb 0.4 0.58 0.2 /0.01); background-color: hwb(-0.5turn 76.81% 100%) } } html { scroll-timeline-name: --v } #i { color: hwb(none 61 1% /50%); animation: k 1s 500ms backwards; animation-timeline: --t; animation-range-start: entry entry , scroll 6.37%; animation-range-end: entry-crossing } #q { view-timeline: --t block }", 500, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#fc9c9c80\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: currentcolor; background-color: #f9e } } html { scroll-timeline: --t y; view-timeline: --u block } #i { background-color: lightgrey; animation: k 500ms 1s, k 1000ms linear; animation-timeline: scroll(inline), scroll(root) }", 500, 5208);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#fd9bed\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: rgb(none none 134 /1.5) } 75% { color: oklab(none 0 -0.3264 /none); background-color: lch(1.7% none none) } to { background-color: dimgray } } html { scroll-timeline: --t block, --v block } #o { timeline-scope: --u, --t, --v } #i { color: color(srgb none 0.0815 none); background-color: hsla(1rad 110% 0%); animation: k 1000ms linear reverse; animation-timeline: --v, view(block 10%); animation-range-start: normal }", 500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#001500;background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color(rec2020 none none 50%); background-color: rgb(213 194 62 / 46%) } 50% { color: #2ad904a4 } 75% { color: hwb(312 0% 0%) } } body { timeline-scope: --t, --u } #o { scroll-timeline-name: --u, none; timeline-scope: --u } #i { animation: k 1000ms linear -500ms 2; animation-timeline: scroll(root); animation-range-start: cover 0%; animation-composition: replace } #q { scroll-timeline: --v }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ac557ed2;background-color:#d5c23e3b\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: oklab(none none none / none) } } html { scroll-timeline: --t y } #o { timeline-scope: ALL } #i { animation: j 2s linear 500ms, j 2s linear 500ms; animation-timeline: --t, scroll(root block); animation-range-start: exit , 108.8% , exit 34.8% , entry , entry 10px; animation-range-end: 0% }", 0, 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_16(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: #f61e27c1; background-color: oklab(none 0.1 0.3775 0.1451) } 60% { color: hsla(38, 99.1%, 4.8%, 2) } } #i { animation: j 2s; animation-timeline: --t, scroll(self); animation-range-start: 137.95%; animation-composition: replace } #q { scroll-timeline: --t, --v y; scroll-timeline-name: unset }", 0, 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: rgb(271, 140, 90%) } } @keyframes j { 33.33% { color: hwb(0turn 50% 0%/59%) } 75% { background-color: color-mix(in srgb, color-mix(in srgb, hsl(-156.077grad 71% 90.9% / 100%), oklab(0.084 0 none)), hwb(312 0% 0%)) } } #o { timeline-scope: ALL } #i { view-timeline: --t block; scroll-timeline: --v y; view-timeline-axis: inline; animation: k 1000ms linear -500ms 2; animation-timeline: scroll(root); animation-range-start: cover 0%; animation-composition: replace }", 0, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d475bf\"", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
@@ -461,15 +482,15 @@ static void test_l102_sheet_15(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_16(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: hsla(180 0% 34% /-0.5); background-color: color-mix(in srgb, #b833bfdb, oklab(none 0.7966 -0.2250 0.1496)) } } @keyframes j { 25% { background-color: hwb(0rad 0% 101%) } 75% { background-color: hwb(78.596grad 13.2% 50%) } } html { scroll-timeline-name: --v, none } body { timeline-scope: --u, --t, --v } #i { animation: k 1000ms linear 1s alternate; animation-timeline: scroll(), auto; animation-range: 10% } #q { scroll-timeline: --v, --u; view-timeline-name: --t; view-timeline-axis: y }", 0, 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_17(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: lab(none -120.4 none /none); background-color: color(xyz-d50 none none none/none) } 25% { color: oklab(none none 0.4503); background-color: cornflowerblue } 60% { color: lch(none none 728.6grad); background-color: hwb(244.3127deg 0% 50%) } } html { scroll-timeline-name: --t, --v; scroll-timeline-axis: block, x } body { timeline-scope: --t; scroll-timeline-axis: y; scroll-timeline-name: --u } #i { animation: k 1s both; animation-timeline: scroll(self); animation-range: 60% 40% } #q { scroll-timeline: --t y; view-timeline: --u block }", 0, 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -483,20 +504,20 @@ static void test_l102_sheet_16(void) {
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: rgb(45 224.5 95% / -0.5); background-color: hsla(-530.028 28% 83.9372%) } } #i { color: color(rec2020 none 1.62 none); animation: k 1s linear; animation-timeline: scroll(inline) } #q { scroll-timeline-name: --u, --v; scroll-timeline-axis: block, y }", 500, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_17(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: hwb(0.54turn 100% 48.8%) } } html { scroll-timeline: --t inline } body { scroll-timeline-name: --t; scroll-timeline-axis: block, y } #i { color: hsl(none none 40% /none); animation: j 500ms -500ms reverse; animation-timeline: SCROLL(), view(); animation-range: unset; animation-composition: add }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#66666600\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_18(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: black } } #i { animation: k 2s linear, k 1000ms linear both; animation-timeline: scroll(nearest y), none }", 1500, 6838);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000006c\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
@@ -515,15 +536,15 @@ static void test_l102_sheet_17(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_18(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color-mix(in	srgb, rebeccapurple, 50% red) } } html { scroll-timeline-name: --t; view-timeline-name: --u } #o { scroll-timeline: --u; view-timeline-name: --u; timeline-scope: --t, --u } #i { color: hsl(-461.42 -7.57% 79.916% / 0.9999); animation-range-start: 50%,entry 19.5%,contain 33.33%; animation-range-end: ,; animation: j 1000ms linear; animation-timeline: auto; animation-range-start: 100%,normal,contain -1.81%; animation-range-end: 5,143.63%,scroll }", 0, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#cccccc\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_19(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: #5d91; background-color: hsl(none 43% none /none) } } html { scroll-timeline-name: --u } #o { timeline-scope: ALL } #i { background-color: rgb(90 189 74 / 73.8%); animation: k 500ms linear 2; animation-timeline: view(block 10%), scroll(); animation-range-start: entry, -42%; animation-range-end: 150% }", 500, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5abd4abc\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -542,15 +563,15 @@ static void test_l102_sheet_18(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_19(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: hsl(-0.7134turn 75 74.2% / 0.5) } } @keyframes j { 33.33% { color: lab(none -106.99 none / 120%) } 60% { background-color: hwb(-5.785rad 40.5% 100%) } } html { scroll-timeline-name: --t; scroll-timeline-axis: block, block } body { scroll-timeline-name: --v, --t; scroll-timeline-axis: y, x } #i { animation-range: contain -15.91% contain, exit-crossing 117.69%; animation: k 1000ms linear 250ms; animation-timeline: scroll(nearest y); animation-range: 150% , contain 14.5% NORMAL }", 1500, 2500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_20(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { to { color: darksalmon } } body { scroll-timeline-name: --u, --t; scroll-timeline-axis: y } #o { timeline-scope: --t, --u } #i { animation: k 1000ms 0.5 forwards; animation-timeline: scroll(nearest y); animation-range: 62.77% }", 0, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#32201a\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
@@ -569,17 +590,17 @@ static void test_l102_sheet_19(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_20(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hsla(710.3145grad 53.8% 59% / 99.99%); background-color: red } } @keyframes j { 60% { color: transparent; background-color: hsl(444.1659, 110.4%, 4%) } 75% { color: oklab(none 0.4768 none); background-color: hwb(none none none) } } html { scroll-timeline-name: --t; scroll-timeline-axis: y, y; scroll-timeline-name: --t --u; view-timeline: --u inline } #i { color: color(srgb-linear none 0.475 0.318); animation-range-start: Entry 20% , entry 39%; animation-range-end: entry 111%; animation: k 1000ms -500ms infinite both reverse; animation-timeline: view(); animation-range-start: exit; animation-range-end: entry 82.6% }", 500, 400);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00b799\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_21(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color(prophoto-rgb 29.69% none 0.3/none); background-color: currentcolor } 75% { background-color: rgb(none none -10) } } @keyframes j { from { background-color: currentcolor } } html { scroll-timeline-name: --t --u; scroll-timeline-name: --t } #i { color: rebeccapurple; background-color: black; animation: k 1000ms linear, k 1s both; animation-timeline: --t, scroll(inline); animation-range: contain 34% , cover 0% }", 0, 7197);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6e3383;background-color:#6e330a\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#69337f;background-color:#693309\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
@@ -596,15 +617,15 @@ static void test_l102_sheet_20(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_21(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: hwb(none none none /none) } 60% { color: currentcolor; background-color: color-mix(in srgb, hsla(181 100% none), color-mix(in srgb, 0% oklab(none 46% -0.4505 0.2544), dimgrey)) } } @keyframes j { 25% { color: color-mix(in  srgb, 100% hwb(6.2832rad 0% 35), red) } } #o { scroll-timeline: --v y, --t; timeline-scope: --t, --u } #i { animation: j 2s -500ms 0.5; animation-timeline: view(); animation-range: unset } #q { scroll-timeline: --t; view-timeline: --u block; view-timeline-axis: y }", 0, 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_22(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: rgb(183 none none); background-color: lab(none 98 -131.83 26.9383) } 75% { color: hsl(-593.439 50.1 0% / 50%) } } @keyframes j { 75% { color: color-mix(in srgb, hsl(none 329 5% 73.4%), color-mix(in srgb, oklch(0.5	0.1536	-1.81rad), hwb(91 77% none/none) 25%)) } } html { scroll-timeline-name: --t; scroll-timeline-axis: inline } body { timeline-scope: --t } #o { scroll-timeline: --u y, --t y, none; timeline-scope: ALL } #i { color: rgb(none 123 151.38 255 / 1); animation: k 1000ms linear alternate; animation-timeline: --t; animation-range: 10% 90% }", 1500, 2500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -623,15 +644,15 @@ static void test_l102_sheet_21(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_22(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: currentcolor; background-color: currentcolor } } html { scroll-timeline: --u; view-timeline: --u block } body { scroll-timeline: --u, --v; view-timeline-name: --u; view-timeline-axis: inline; timeline-scope: --t } #i { animation: k 1000ms linear 0.5, k 1000ms linear; animation-timeline: auto; animation-range: cover 24.6% NORMAL , -17.06% }", 500, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000bf\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_23(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: lab(none -0 -81.9 61%); background-color: rgb(57 254 187 / 1.5) } 50% { color: blue; background-color: rebeccapurple } } html { scroll-timeline-name: --u, none; scroll-timeline-axis: block, inline; view-timeline: --v block; view-timeline-axis: y } #o { timeline-scope: --t, --u } #i { animation: j 1s, k 1000ms; animation-timeline: scroll(root); animation-composition: accumulate }", 0, 10000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -639,7 +660,7 @@ static void test_l102_sheet_22(void) {
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: rgba(none none 300 / 1) } to { background-color: hwb(399deg 76% 6%) } } html { scroll-timeline: --u, --t } body { timeline-scope: --t, --u } #o { scroll-timeline: --v; scroll-timeline-name: unset } #i { color: color(xyz-d65 0.9215 none 73%); background-color: darkkhaki; animation: j 1000ms linear; animation-timeline: scroll(root), SCROLL(); animation-range-end: contain , cover 101.5% , exit-crossing; animation-composition: replace }", 0, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00ea;background-color:#bdb76b\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ac007d;background-color:#bdb76b\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
@@ -650,15 +671,15 @@ static void test_l102_sheet_22(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_23(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 100% { color: rgb(247 52 14 / 0) } } @keyframes j { 0% { color: color-mix(in srgb, 26.5% #d78baa, hsla(50 18% 22% / 0.5)) } } html { scroll-timeline: --t; view-timeline-name: --v } body { view-timeline-name: --u } #i { animation: k 1s linear both, k 1000ms linear; animation-timeline: auto, none; animation-range: 25% cover 86.76%, entry 10% }", 500, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_24(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: currentcolor; background-color: currentcolor } } #i { background-color: hwb(-208.1deg 100% 24.99% /88%); animation: k 1s linear; animation-timeline: none; animation-range-end: -36.6% , cover 0% , 0% , scroll 77% }", 0, 5000);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#cccccce0\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -677,15 +698,15 @@ static void test_l102_sheet_23(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_24(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: currentcolor } } #i { animation: k 1000ms linear -500ms both; animation-timeline: scroll(), --t; animation-range: -10% 25% }", 500, 700);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000084\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_25(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: currentcolor } 33.33% { color: hwb(-30.4 50% 0% /0); background-color: #506a19d8 } } @keyframes j { 60% { background-color: rgb(none none 85%/none) } } html { scroll-timeline: --u, none } #o { scroll-timeline: --u y; view-timeline: --u inline; view-timeline-axis: y; timeline-scope: --u } #i { color: color(srgb none 0.72 0.8/0.5); background-color: hsla(-4.24rad, 0%, 79.7%, 0.5); animation: k 2s 500ms both alternate; animation-timeline: scroll(inline); animation-range-start: entry-crossing 108%; animation-range-end: cover, scroll 53%; animation-composition: accumulate }", 500, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00b8cc80;background-color:#cbcbcb80\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -699,22 +720,22 @@ static void test_l102_sheet_24(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color(xyz-d50 0.8 0 0); background-color: hwb(451 none none) } } @keyframes j { 25% { background-color: oklch(none 0 none / none) } } html { scroll-timeline-name: --u; scroll-timeline-axis: y, block } #i { animation-range: initial; animation: j 1000ms both, k 500ms linear 250ms 2; animation-timeline: scroll() }", 1500, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ef0040;background-color:#7bff00ef\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5b0030;background-color:#7bff00ef\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_25(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: hwb(1turn 24% 0%) } } html { scroll-timeline-name: --u, --t } body { scroll-timeline-name: --t, --v } #o { timeline-scope: --u, --t, --v } #i { color: hsl(6.2832rad 91.5 8% / 50%); background-color: hwb(-71.47deg 44.8% 50%); animation: k 500ms linear, k 500ms linear; animation-timeline: none }", 500, 5000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#27020280;background-color:#7d7280\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+}
+
+static void test_l102_sheet_26(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: currentcolor; background-color: color(display-p3 -1 0.122 none /none) } 33.33% { background-color: hwb(-255.5grad 0% 49) } 75% { color: rgb(none 59 80% 82); background-color: color(none xyz-d50 -0.2 0.869 -1) } } @keyframes j { 50% { color: hwb(-4.93rad 79.26% 28.282% /1.5); background-color: hsla(9.7134rad 100% 32% / 0) } } html { scroll-timeline: --v block, --t } body { timeline-scope: all } #i { animation: k 2s linear; animation-timeline: --t; animation-range-end: NORMAL,exit 90%,5; animation-composition: replace }", 0, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00432500\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
@@ -731,15 +752,15 @@ static void test_l102_sheet_25(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_26(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: color(prophoto-rgb none 0.132 0.748 /50%) } 75% { background-color: rgb(240 171 105 / 1.5) } } html { scroll-timeline: --v, --t x } body { timeline-scope: --t, --u } #i { animation: k 1000ms linear -500ms backwards; animation-timeline: view(); animation-range: initial } #q { scroll-timeline: --v }", 0, 5000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_27(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color(prophoto-rgb none -0.5109 none / 61%); background-color: oklab(none none -0.4156) } } html { scroll-timeline: --t, --v; scroll-timeline: auto } body { timeline-scope: --t --u } #i { animation: j 1000ms linear -500ms; animation-timeline: SCROLL(); animation-range: 0% 200% }", 0, 5000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -758,15 +779,15 @@ static void test_l102_sheet_26(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_27(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: oklab(46.8% 48% 0.3488/none); background-color: color-mix(in srgb, 0% hsla(0turn 55.7% -19% / 150%), 58% color-mix(in srgb, #03bff9, #ef8ec2fa)) } 33.33% { color: rgba(83%, 46%, 268, 0.4622); background-color: rgb(199.02 none none) } 50% { color: hwb(30 88 none / 120%) } } @keyframes j { 50% { color: oklch(none 0.4358 none) } 60% { color: currentcolor } 100% { color: rgb(none 225 219.1); background-color: rgb(82% 120 162/none) } } html { scroll-timeline-name: --u, --v } body { timeline-scope: --v } #o { timeline-scope: all } #i { animation: k 500ms; animation-timeline: scroll(x root) }", 0, 8548);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_28(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: #15b; background-color: transparent } } html { scroll-timeline: --v, --t; timeline-scope: --v } #o { timeline-scope: ALL } #i { background-color: #9e9cd1; animation: j 1000ms linear; animation-timeline: scroll(self), none; animation-range: 0,95.6%,scroll 19.25% exit-crossing }", 0, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#9e9cd1\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -785,15 +806,15 @@ static void test_l102_sheet_27(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_28(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: currentcolor; background-color: rgb(none none none) } 75% { color: hwb(728.9grad 129% 100%) } } @keyframes j { 33.33% { background-color: hsl(-105.055, 23%, -13.04%, 0) } } html { scroll-timeline-name: --t } #o { scroll-timeline-name: --u; scroll-timeline-axis: y; view-timeline: --v } #i { background-color: black; animation: j 2s infinite; animation-timeline: scroll(root block); animation-range: NORMAL }", 500, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_29(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: black; background-color: hwb(92 63.075% 0%) } 75% { color: currentcolor; background-color: hsl(none none none) } } html { scroll-timeline-name: --t, --v; scroll-timeline-axis: y, y } #i { color: hwb(720deg 31.8% 61% / 1.5); animation: k 1000ms linear 1s both, j 2s linear 250ms backwards; animation-timeline: SCROLL(); animation-range-start: contain 33.33% , exit; animation-range-end: --x }", 1500, 2300);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#635151;background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
@@ -812,15 +833,15 @@ static void test_l102_sheet_28(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_29(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: hsl(none none 73.5% / 61%); background-color: color-mix(in srgb, hwb(none 87% none) 79%, hwb(2.635turn 0% 66 /0.79) 38.9%) } 33.33% { color: currentcolor; background-color: hsla(0.1turn, 1.4%, 39.24%, 150%) } 60% { color: limegreen } } html { scroll-timeline: --t block; view-timeline: --u block } #i { color: white; animation: j 1s linear 1s 3, k 500ms forwards alternate; animation-timeline: --t; animation-range: 60% 40% }", 1500, 2580);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_30(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: currentcolor } 60% { background-color: rgb(19% 52% 82%) } } @keyframes j { 50% { color: hwb(none none 86); background-color: hsla(261 72.46% 82% / 150%) } 75% { color: lavender; background-color: color-mix(in srgb, oklch(38% 0 1.48turn / 0), color-mix(in srgb, color(srgb none 0.8 -0), 50% oklab(-2.9% none none))) } } html { scroll-timeline: --t, --v block, none } #i { background-color: #bb8b; scroll-timeline: --v y; view-timeline-name: --v; animation-range: entry 10%, -22.7% contain 33.33%, contain 33.33% entry 10%, 12.5% 9.2%; animation: j 1s linear, k 1s; animation-timeline: --t }", 0, 3990);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#1c0000;background-color:#1f0302fd\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
@@ -839,17 +860,17 @@ static void test_l102_sheet_29(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_30(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: color(srgb 0 1 none /none) } } @keyframes j { 25% { color: #4b21f83f } 50% { color: hsl(-1.16turn 60% 27% / 0); background-color: hwb(-209.79 none none) } 60% { background-color: color(rec2020 -1 21.85% 0.7333 / none) } } html { scroll-timeline-name: --u, --t, none; scroll-timeline-axis: inline, inline } #o { view-timeline: --u inline; scroll-timeline-name: --u, --t; scroll-timeline-name: --t --u } #i { animation: j 1s linear backwards reverse, j 500ms linear backwards; animation-timeline: scroll(root); animation-range: 0% , 32.2% } #q { view-timeline-name: --u }", 500, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000042;background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_31(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: oklab(none none 0.4251); background-color: hwb(none -152.7788 44% 26%/87%) } 25% { color: color-mix(in srgb, rgb(none 0 0 / none / 1), lab(none -88.7 -61.73)) } } body { timeline-scope: all } #i { color: rgb(79 152 134 / 1); background-color: hwb(211 none 22%); scroll-timeline-name: --u, none; scroll-timeline-axis: y; animation: k 1000ms -500ms reverse, k 1000ms 500ms reverse; animation-timeline: scroll(root), view(block 10%); animation-range-end: entry 14% , 100%; animation-composition: add }", 1500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#82f2d4;background-color:#0060c7\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#82dad4;background-color:#0060c7\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(1, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
@@ -866,15 +887,15 @@ static void test_l102_sheet_30(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_31(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: #0ad095 } 33.33% { background-color: oklch(none none 233/1.5) } 60% { color: rgb(87 162 none) } } @keyframes j { 25% { color: currentcolor } 33.33% { background-color: hwb(74 none none) } } html { scroll-timeline: --t block; view-timeline-name: --u } #i { color: darkviolet; background-color: #810a; animation: j 2s linear 2, k 1s linear 250ms reverse; animation-timeline: auto } #q { scroll-timeline: --u y, --t; view-timeline-name: --u; view-timeline-axis: inline }", 1500, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#63008d;background-color:#a48200ca\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_32(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: transparent; background-color: color-mix(in srgb, hwb(none none none /37%), lab(none none 26 /none)) } 60% { background-color: lab(none none none) } 75% { color: hwb(-347grad 90.9% 0%); background-color: currentcolor } } @keyframes j { 60% { background-color: color(xyz 0.7969 0 none) } } html { scroll-timeline-name: --v, --t, none } body { timeline-scope: --u, --t, --v } #i { color: color(display-p3 none 0.225 0.78); background-color: black; animation: k 2s infinite, j 1000ms forwards; animation-timeline: view(); animation-range-start: scroll 50%; animation-range-end: cover , exit 90% , entry-crossing 9% } #q { scroll-timeline: --v }", 500, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#003bcf;background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -893,15 +914,15 @@ static void test_l102_sheet_31(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_32(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: currentcolor; background-color: hsla(none none none) } 50% { color: currentcolor; background-color: blue } 75% { background-color: color(none srgb-linear 0.6 11.64% 0.1) } } html { scroll-timeline: --t } body { timeline-scope: --t --u } #o { timeline-scope: --u, --t, --v } #i { color: rgb(none 22 none); animation: j 500ms linear alternate; animation-timeline: scroll(self), --u; animation-range-start: 25%, 65.6%, entry; animation-range-end: normal 10% } #q { scroll-timeline: --u y, --t y }", 0, 8532);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#001600\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_33(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: red; background-color: color(xyz-d50 none none -16.11% / none) } } html { scroll-timeline-name: --v } #i { color: oklch(none 0 0.1642 135.7deg /120%); background-color: red; animation: k 1s linear -500ms 2; animation-timeline: SCROLL(), scroll(); animation-range-start: 73.94%, entry, 12.5%, entry-crossing 63.59%; animation-range-end: cover, 0%, 150%; animation-composition: add }", 0, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff0000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -914,204 +935,222 @@ static void test_l102_sheet_32(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: rgba(239 none none) } } @keyframes j { 50% { background-color: hsl(12 20% 64% / 50%) } 75% { color: currentcolor } to { background-color: hsl(313.2, 50%, 127.5%) } } html { scroll-timeline: --t block } #i { color: ivory; animation: j 500ms linear infinite; animation-timeline: auto; animation-range: 0% 200% }", 0, 1057);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#fffff0;background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_33(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: hwb(537.845 none none); background-color: rebeccapurple } 75% { background-color: rgba(none none 47.99 /86%) } } html { scroll-timeline-name: --t; scroll-timeline-axis: block; view-timeline-name: --v } body { timeline-scope: none } #i { color: hsl(none none 1% / none); background-color: oklch(22.05% none none/none); animation: j 2s linear 500ms; animation-timeline: view() }", 0, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#03030300;background-color:#1b1b1b00\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: currentcolor; background-color: color-mix(in srgb, color-mix(in srgb, #ad37c3, color(none display-p3 0.67 0 1.017/0)), hsl(360 none none / none)) } 60% { color: lab(66.9 -114% none) } } html { scroll-timeline: --t y } body { timeline-scope: --u, --t, --v } #o { scroll-timeline-name: --t, --u, none } #i { background-color: hsl(none none none); animation: j 1000ms linear -500ms; animation-timeline: scroll(x root) }", 1500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: #b1c } } #o { timeline-scope: --t, --u } #i { color: hsla(0.1turn 60.9788% 41% / 100%); animation: k 1s linear; animation-timeline: scroll(x root); animation-range: 133.9% entry-crossing }", 0, 6538);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a87529\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: lime; background-color: currentcolor } } #i { color: rgb(46 98 168 / 2%); animation: j 500ms; animation-timeline: --t; animation-range: auto 147.22%,-31.6% }", 1500, 5000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#2e62a805\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: color(srgb 0.951 0.531 none /0.5) } 100% { background-color: hwb(-60deg 70% 38 /0) } } @keyframes j { 50% { color: hwb(none 34 82 / 27%) } 75% { color: maroon; background-color: color-mix(in srgb, color-mix(in srgb, white 100%, lab(60% -111% none / none)), rgb(none 69% 255 91%) 68%) } } html { scroll-timeline: --v y, --u y, none x } body { timeline-scope: all } #i { background-color: rgb(none none 196.63); animation: k 2s 3 forwards; animation-timeline: none; animation-range-start: exit-crossing 46%; animation-range-end: 120.59%, calc(10%); animation-composition: replace }", 1500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000c5\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: hwb(211 9% none); background-color: hwb(211 none none /0.5) } 75% { background-color: oklch(0.9 none -594.3439) } } body { timeline-scope: --t --u } #i { color: rgba(0 none 220 / none); background-color: blue; animation: k 1000ms; animation-timeline: scroll(), none; animation-range: 25% }", 500, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1787ffc8;background-color:#bccfe3dd\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
 static void test_l102_sheet_34(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: color-mix(in srgb, hsl(119 none none), hwb(466.1335deg 100 none)) } 25% { background-color: oklch(0.81 0.1378 0.5turn) } 100% { background-color: lch(42.86% none none/none) } } @keyframes j { 25% { background-color: hsla(1turn 2.5% 17%) } 33.33% { color: olive; background-color: currentcolor } } html { scroll-timeline-name: --t; scroll-timeline-axis: block; scroll-timeline-name: inherit } body { timeline-scope: none } #o { timeline-scope: auto } #i { animation: j 1000ms linear; animation-timeline: auto; animation-range: 0% 200%; animation-composition: add } #q { view-timeline-name: --t; view-timeline-axis: inline }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(2, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hwb(0turn 2% 0% /50%); background-color: currentcolor } } html { scroll-timeline: --u y; scroll-timeline-name: inherit } #i { background-color: lavenderblush; animation-range: 25%; animation: k 1s linear; animation-timeline: view(); animation-range: entry-crossing 60.5% cover 29% } #q { view-timeline-axis: inline; view-timeline: --u inline }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#fff0f5\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: hwb(88deg 100% 50% / 0) } 50% { color: rebeccapurple; background-color: #43845ff6 } } html { scroll-timeline-name: --u, none; scroll-timeline-axis: y, inline; view-timeline: --t block } #o { timeline-scope: --u, --t, --v } #i { animation: j 1000ms linear -500ms; animation-timeline: scroll(self); animation-range: 10% 90%; animation-composition: add } #q { scroll-timeline-name: --u }", 500, 10000);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: color-mix(in srgb, mediumblue, color-mix(in srgb, color(xyz-d65 0 none none/0), lch(59.6072  172.6387  357deg/0.5))) } } html { scroll-timeline-name: --u, --v; view-timeline-name: --u } #i { color: oklch(none 0.3732 none); animation: k 500ms linear both; animation-timeline: scroll(root); animation-composition: replace }", 500, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1f0000;background-color:#00000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color-mix(in srgb, oklch(none none none none), color(srgb none none none) 0%); background-color: rgb(207 235 131 / 36.1%) } } #i { animation: j 2s both, k 500ms linear; animation-timeline: SCROLL(); animation-range-start: scroll -17%,exit 72%,91%; animation-range-end: 88%,exit-crossing 64.86%,auto; animation-composition: replace } #q { view-timeline: --t inline; view-timeline-axis: y }", 0, 553);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#cfeb830a\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 100% { color: color-mix(in srgb, hsl(nonedeg 10% 10%) 100%, 73% hsl(none none 0%)) } } @keyframes j { 25% { color: currentcolor } 33.33% { color: currentcolor; background-color: rgb(45.6 58 92%) } } body { timeline-scope: --t } #i { color: rgba(6 none 24%/1.5); scroll-timeline: --u, --v; animation: k 1000ms, k 1s; animation-timeline: view(); animation-range: -50% 50% }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#06003d\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: lab(none 1e-1 66 -1.27%) } 60% { color: color-mix(in srgb, 100% hwb(-107.6106deg 50% 40.73%/-0.5), color(none srgb 0 -0 0.7)); background-color: hsl(none none none) } } html { scroll-timeline-name: --t } #o { timeline-scope: --v } #i { animation: k 1000ms linear 250ms both, k 500ms linear; animation-timeline: --t; animation-range: cover -14%; animation-composition: replace }", 1500, 5000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000d4\"", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: rgb(157 195 25 / 0.5); background-color: color-mix(in srgb, black, indianred) } 60% { color: red; background-color: oklab(0.4496 none 0.3367 /0.839) } } @keyframes j { 33.33% { color: currentcolor; background-color: midnightblue } 60% { background-color: rgba(none 24 none) } to { color: currentcolor; background-color: currentcolor } } body { timeline-scope: --t --u } #i { color: hwb(321.461deg 100% 50%); animation: j 1s linear 1s backwards; animation-timeline: --v; animation-range-start: 116.5%; animation-range-end: scroll 50% , 150% }", 0, 3886);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#aaaaaa\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_35(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hsla(218, 98%, 78.6%, 2) } 50% { color: currentcolor; background-color: hwb(90 none 63/none) } 60% { background-color: hsla(7.1321rad, 100%, 39.9%, 0.5) } } html { scroll-timeline-name: --t; scroll-timeline-axis: y } body { scroll-timeline-name: --v; scroll-timeline-axis: block } #i { animation: k 1000ms forwards, k 1000ms 250ms; animation-timeline: auto; animation-range-start: NORMAL,150%,exit,NORMAL; animation-range-end: -22%, -10%, -23%, exit-crossing -13.2% }", 500, 5000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8db3f4;background-color:#00000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: hwb(4.188deg 100% -12.2%/0); background-color: hsla(none 35.2% -12.7% /none) } } @keyframes j { from { background-color: lab(none none 75.63% /none) } 33.33% { color: color-mix(in srgb, color(xyz-d65 0.7 0.6 none), color(display-p3	0.447	0.5583	0.152)); background-color: #6bba } } html { scroll-timeline-name: --u, --t; timeline-scope: --u, --t, --v } body { timeline-scope: ALL } #i { color: #6a6c5a; animation: k 1000ms 250ms infinite; animation-timeline: scroll(); animation-range-start: -48.4% , contain 110% , exit-crossing , cover 56.64%; animation-range-end: entry 10% , 100% }", 1500, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6a6c5a\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: #dfea; background-color: rgb(none 102 239) } } html { scroll-timeline: --t y, --u; view-timeline-name: --t; view-timeline-axis: y } body { timeline-scope: --t, --u } #i { animation: k 2s linear 500ms reverse; animation-timeline: scroll(x root); animation-range: calc(10%) } #q { scroll-timeline: --t y, --v y; scroll-timeline: auto }", 0, 9600);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: hsla(-78.774deg 0% 23.4%); background-color: hsl(none 5.73% 0%) } 100% { background-color: color(prophoto-rgb none none 1.7806) } } html { scroll-timeline: --v x, none x; view-timeline-name: --v } body { timeline-scope: auto } #o { timeline-scope: --t --u } #i { color: color(srgb none 0.3 none /86%); background-color: hwb(-102.07 100% 16.6% / 120%); animation: k 2s 500ms; animation-timeline: scroll(nearest y) }", 0, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#294129f3;background-color:#000014\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_36(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: hsl(224 62.84% 50% / 50%) } 60% { background-color: color(display-p3 none 0.47 none) } 75% { color: hwb(none 80% 59%); background-color: currentcolor } } html { scroll-timeline-name: --t, --u; scroll-timeline-axis: block } body { timeline-scope: --u } #o { timeline-scope: all } #i { background-color: color(display-p3 0.626 0 0.108/none); animation: k 2s linear -500ms backwards; animation-timeline: scroll(x root), --t; animation-range-start: exit } #q { scroll-timeline: --u y, none }", 500, 5000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ad001400\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: hwb(0.29rad 11 15% /10%) } } html { scroll-timeline-name: --t; timeline-scope: --u } #i { animation: j 2s 3; animation-timeline: --nobody; animation-range-end: normal 10%,66% } #q { scroll-timeline-name: --v, none; scroll-timeline-axis: y; view-timeline-name: --t }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: hsl(none none none / -0.5) } } html { timeline-scope: --t, --u; scroll-timeline: initial; scroll-timeline: --t x } #i { animation: k 2s linear -500ms, k 1s 3 forwards alternate; animation-timeline: --t, --t; animation-range: 0% 200% } #q { scroll-timeline: --u y }", 500, 10000);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: orangered } } html { scroll-timeline: --u, --v x, none x; timeline-scope: none } body { timeline-scope: --t --u } #i { color: lab(79% 87% none); animation: k 2s 1s; animation-timeline: view(block 10%); animation-range: initial; animation-composition: add }", 0, 4000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffb1ce\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_37(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: hsl(180 none none / none) } 50% { color: color-mix(in srgb, oklab(none none -0.3802 / 0.47) 25%, lch(none 19 1e1 234)) } } html { scroll-timeline-name: --u, --t, none; scroll-timeline-axis: y, inline } body { timeline-scope: ALL } #i { animation: j 1000ms 250ms; animation-timeline: scroll(root block); animation-range: initial; animation-composition: add }", 0, 5000);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: rebeccapurple; background-color: color(a98-rgb none none 1.5254 / 0) } 75% { background-color: rgb(none 100% 300 13% /0.5) } 100% { color: honeydew; background-color: hwb(712.11grad 79.9% 84.2%/15%) } } html { scroll-timeline: --u inline, --t } #o { timeline-scope: --v } #i { animation-range: entry-crossing -18.1% scroll 118%,51% entry 35.07%; animation: k 1000ms; animation-timeline: --t, --u; animation-range-start: exit-crossing; animation-range-end: entry-crossing 87.7% , 50% , 0 , 70% }", 1500, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#663399;background-color:#3e7aff00\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: hsl(1.5708rad, 22%, 108.95%, 50%) } } html { scroll-timeline: --v; view-timeline: --u; view-timeline-axis: inline } body { timeline-scope: all } #i { background-color: rgb(17% 100% none); animation: k 1000ms linear 250ms; animation-timeline: scroll() }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#39ff11ef\"", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: color-mix(in srgb, color( srgb 0.15 0.03 33%/71.23%), color(a98-rgb 0 1.411 none)) } } @keyframes j { 25% { color: hsl(-387deg, 0%, 50%, 0.9999); background-color: #1a505aef } 60% { background-color: black } 75% { color: rgb(none none none); background-color: hwb(667 92 none/0.77) } } html { scroll-timeline-name: --u, --v; scroll-timeline-axis: block, inline; view-timeline-name: --v } body { timeline-scope: auto } #i { color: hsla(138 0% 56% / 2); animation: j 2s 500ms 3, j 2s linear; animation-timeline: --t; animation-range: normal }", 500, 10000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8f8f8f\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
 }
 
-static void test_l102_sheet_35(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color(srgb none none 0 / none) } 75% { color: color(srgb-linear 0.691 0.866 0.719 / none); background-color: color-mix(in  srgb, sienna, darkred 84%) } } @keyframes j { 25% { color: lab(none none none) } 33.33% { color: oklch(0.868 2.5e-2 none) } 75% { background-color: rgb(224 17 165 / 50%) } } html { scroll-timeline-name: --t; scroll-timeline-axis: inline } body { timeline-scope: --u } #i { color: blue; animation: k 2s 1s; animation-timeline: --t; animation-range: normal 0, 35.9% exit 90%, 150% 0% }", 1500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("i"));
+static void test_l102_sheet_38(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: lch(68.56% none 564 /none) } 50% { color: hsl(none 76.1% 84.2%/50%) } 60% { background-color: oklch(57% 0.4590 none / 1.5) } } @keyframes j { 50% { color: hsla(none 50% none/none); background-color: color-mix(in srgb, rgb(29.4% 59.99 92%), #361) } } html { scroll-timeline: --t block } #o { timeline-scope: --u, --t, --v } #i { color: hwb(39.66 24% 37%/49.06%); background-color: hsl(321.6grad 39% 56.587% / 2); animation-range: exit-crossing 15% , 110.1%; animation: k 1000ms 500ms; animation-timeline: scroll(nearest y); animation-range-start: 50%,0% }", 500, 3600);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a17f3d7d;background-color:#ac65bb\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: rgb(32 74 121 / 0.4415); background-color: color-mix(in srgb, oklch(none 0.0458 none), color(xyz-d50 none none none / none)) } } html { scroll-timeline-name: --t; view-timeline-name: --t; view-timeline-axis: y } body { timeline-scope: all } #o { timeline-scope: --t --u } #i { color: hwb(249 34% 0%); animation: k 2s linear infinite; animation-timeline: --t; animation-range-start: exit-crossing 99%,Entry 20%,142%; animation-range-end: 83% }", 500, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7057ff\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: lch(53.58 120.79% none/0.88); background-color: color-mix(in srgb, color-mix(in srgb, oklab(0.6 none none) 0%, black) 25%, color-mix(in srgb, lavenderblush, white)) } 33.33% { background-color: oklch(none none 2.5941turn/8.9%) } } html { scroll-timeline-name: --v, --t; scroll-timeline-axis: x, y } #i { animation: k 2s linear 2 backwards alternate; animation-timeline: scroll(nearest y); animation-range-start: 53.65%; animation-range-end: exit-crossing 22.99%; animation-composition: replace }", 500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#18000efc;background-color:#00000003\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: currentcolor; background-color: currentcolor } 75% { color: color(prophoto-rgb none 1.4144 0/none) } } html { scroll-timeline: --t x; timeline-scope: --u, --t, --v } #i { color: hsl(none none none); background-color: hwb(-374.6794grad 27% 8/48.7%); animation: k 1000ms linear; animation-timeline: auto, scroll(root block); animation-range: normal }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: hsla(none none none/none) } 75% { background-color: currentcolor } } @keyframes j { 25% { color: lab(none 69.5 129.9% -52.7% /0) } 50% { background-color: hsla(none 69% none / none) } 100% { color: lime; background-color: color-mix(in srgb, hsl(1turn, 82.3%, 8%, 99.99%), color(xyz-d50  0.5  0.9  -0.2)) } } body { timeline-scope: --t --u } #o { scroll-timeline: --u y } #i { background-color: hwb(569.049 13% none); scroll-timeline: --v, --t; animation: j 1000ms linear forwards; animation-timeline: --v } #q { scroll-timeline: --v, --t; view-timeline-name: --v }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#2194ff\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: hsl(626.976grad 50% 10% / 150%); background-color: color(a98-rgb none none 1.5254 / 0) } 25% { background-color: rgb(none 100% 300 13% /0.5) } } @keyframes j { 75% { color: #db8b; background-color: hwb(418.8478grad 100% 50% /-0.5) } to { color: rgb(37 38 154 / 120%); background-color: color(xyz none 0.91 none) } } html { scroll-timeline-name: --u, --t, none } body { timeline-scope: all } #i { background-color: hsla(0.25turn 35.2913% 69.9% / 0.9999); animation: k 2s; animation-timeline: scroll(self); animation-range-end: cover 112%,entry 43.28%,0% } #q { scroll-timeline-name: --v; scroll-timeline-axis: y; view-timeline-name: --v }", 0, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#b2cd97\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: hwb(none none none /none) } 33.33% { color: hsl(60.22grad 48% 125% / 100%); background-color: blue } 75% { color: hsl(558.473deg 32% 76 / 1) } } html { scroll-timeline-name: --t, --u } body { timeline-scope: --u, --t, --v } #i { animation: k 1000ms linear; animation-timeline: scroll(inline); animation-range: entry -5% 116%,NORMAL,-4% 0,cover -14.57% }", 0, 7500);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
 }
 
-static void test_l102_sheet_36(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { to { color: lightseagreen } } html { scroll-timeline-name: --v; timeline-scope: --t } #i { color: #febe37; scroll-timeline: --u y, none y; view-timeline: --v block; animation: k 1000ms backwards, j 1s linear; animation-timeline: none; animation-range-start: 25%; animation-range-end: entry-crossing 57.42% , exit 90%; animation-composition: accumulate } #q { view-timeline-name: --v }", 0, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#febe37\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: color-mix(in srgb, color(srgb 0 0.788 none), color(xyz-d65 0.8368 none 0 /none)); background-color: black } } @keyframes j { 0% { color: rgb(none none none / none) } 33.33% { background-color: rgb(137 25 71 / -0.5) } 60% { background-color: currentcolor } } html { scroll-timeline-name: --t, none; scroll-timeline-axis: y, y; timeline-scope: all } #i { background-color: hsl(-231.8689grad, 50%, 10.31%, 0.9999); animation: k 500ms linear; animation-timeline: none } #q { scroll-timeline: --t }", 1500, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0d271b\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { to { color: red; background-color: greenyellow } } @keyframes j { 25% { background-color: rgb(27 41 70 / 1.5) } } html { scroll-timeline-name: --t; scroll-timeline-axis: x, block } #o { timeline-scope: none } #i { animation: k 2s linear 1s, k 1000ms linear; animation-timeline: view(), SCROLL(); animation-range: 10% 90% }", 1500, 5600);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#930000;background-color:#adff2f93\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: hsla(391.577 none none) } } #i { animation: k 2s backwards; animation-timeline: scroll(nearest y); animation-range: normal exit }", 0, 10000);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_37(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: hsl(3.1416rad 87% 29 / 50%) } } @keyframes j { from { color: hsla(642.867grad 73% 100%) } 33.33% { color: color-mix(in srgb, color(rec2020 none none none) 25%, color(prophoto-rgb	0.4	0	0.5 /120%)) } 50% { color: color(none display-p3 0.8221 0.5 0.8351); background-color: color(rec2020 none 0.8077 0) } } body { scroll-timeline: --u y, --t, none } #i { background-color: black; animation: j 1000ms linear; animation-timeline: scroll(root); animation-range-end: entry-crossing 7.87% , cover 96.9% , auto; animation-composition: accumulate }", 500, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#710075;background-color:#00df00\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(2, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: chocolate; background-color: #f24 } } html { scroll-timeline: --u } body { timeline-scope: ALL } #i { color: hsl(-2turn 36% 50% / 100%); animation: j 1000ms linear forwards, k 2s linear backwards; animation-timeline: --v, --u }", 1500, 5100);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#cc6626;background-color:#ff2244d9\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: hwb(-118.92grad 15% 51% /1) } 100% { color: hsl(640.92deg 50% 52% / 0.9999); background-color: color(xyz-d65 0.2 none 0.475/50%) } } #i { animation: j 2s linear 1s reverse; animation-timeline: --t, --t; animation-range: initial }", 500, 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: hwb(none none 50 / 0.1) } 33.33% { background-color: palegoldenrod } } html { scroll-timeline-name: --t, --v } #o { timeline-scope: --t, --u } #i { animation: k 1000ms linear; animation-timeline: auto, scroll(x root); animation-range: 0 -10% } #q { scroll-timeline: --t }", 500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#eee8aabf\"", style_of("i"));
+static void test_l102_sheet_39(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: color(prophoto-rgb 0.1 1 none/none) } } body { timeline-scope: --u } #i { background-color: springgreen; animation: k 500ms 2; animation-timeline: SCROLL(), --u; animation-range-start: NORMAL; animation-range-end: 77.1% }", 1500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ff7f\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hwb(681.64 1 14/0.2845); background-color: black } 75% { color: white; background-color: color(prophoto-rgb none 0 none) } } @keyframes j { from { color: yellow; background-color: color(a98-rgb none -0.2 none) } } html { timeline-scope: --u; scroll-timeline-name: --t, --u } body { view-timeline: --v block } #i { background-color: #8f76; animation: j 1s linear 500ms, j 1000ms alternate; animation-timeline: --t }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#979700;background-color:#883777c0\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: #ddfcbb; background-color: rebeccapurple } } html { scroll-timeline-name: --v, none; view-timeline: --u block } body { timeline-scope: --u, --t, --v } #i { animation: j 500ms reverse; animation-timeline: --t, scroll(root) } #q { scroll-timeline-name: --u }", 0, 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(srgb 0 0.816 none); background-color: rgb(255 none none / 50%) } 100% { color: rgba(62 none none /0); background-color: color(xyz-d65 none 0.3639 none) } } html { scroll-timeline: --u x, --v x } #i { animation: k 1s both; animation-timeline: SCROLL(), scroll(self); animation-range-start: scroll 50%,118.9%,contain 33.33% }", 0, 7355);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00d0003a;background-color:#ffb100e2\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
-static void test_l102_sheet_38(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(srgb-linear 0.4568 0.76 none); background-color: color-mix(in srgb, rgba(none 123.76 30% 90%), rgb(157 219 178 / 0.5)) } } html { scroll-timeline-name: --t; timeline-scope: --u } #o { timeline-scope: --u } #i { background-color: mintcream; animation: k 1000ms both; animation-timeline: --v, scroll(x root); animation-range: 47.91% Entry 20% }", 1500, 3696);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f5fffa\"", style_of("i"));
+static void test_l102_sheet_40(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: hwb(-134.44 50% 54) } } html { scroll-timeline-name: --t; timeline-scope: --t --u } #i { background-color: darkred; animation-range-start: 95.36% , 25% , exit-crossing 60% , exit 90%; animation-range-end: 39.12%; animation: k 1s linear both; animation-timeline: --v; animation-range-start: 71.33%; animation-range-end: contain 34%,exit-crossing 28.3% }", 0, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#8b0000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: rgb(79% 7% 192 /none); background-color: #877 } } html { scroll-timeline: --u, --t x } body { scroll-timeline-name: --t } #o { timeline-scope: auto } #i { color: color(xyz 29% none -0.3206); scroll-timeline: --u y; view-timeline-name: --t; view-timeline-axis: y; animation: k 1000ms; animation-timeline: --u }", 1500, 10000);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color-mix(in srgb, #631276 0.042%, 25% rgba(none none none /none)) } 60% { color: currentcolor; background-color: rgb(52 255 none) } } html { scroll-timeline: --t y, --u inline } body { timeline-scope: --t --u } #o { timeline-scope: ALL } #i { animation: k 2s linear backwards, j 2s linear 250ms 0.5 reverse; animation-timeline: --v }", 0, 10000);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: currentcolor } 60% { color: color(none srgb-linear 0.855 0 88.71%); background-color: color(srgb-linear none 0.7 -1 /1.5) } } #o { scroll-timeline-name: --v } #i { color: hwb(100grad 75.869% 8.1344%); background-color: hwb(none 91 21% 43%); animation: k 1s; animation-timeline: --u; animation-range: entry -15.01% contain 33.33%, entry 10% entry -5%, scroll 50% exit -12.66% }", 0, 5000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d6eac1\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: currentcolor; background-color: color(rec2020 none 1.58 none / none) } 75% { background-color: hwb(337 none none) } } html { scroll-timeline-name: --t, none; scroll-timeline-axis: block } body { timeline-scope: --u, --t, --v } #o { timeline-scope: --v } #i { color: rgb(60.4% 56 78% / 50%); animation: k 500ms linear both, k 1000ms infinite; animation-timeline: scroll(nearest y), scroll(root); animation-range-start: exit, 59%, scroll 65%; animation-range-end: 0 } #q { scroll-timeline-name: --v, --u, none; scroll-timeline-axis: block, x }", 0, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9a38c780\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+}
+
+static void test_l102_sheet_41(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: #045b9b2a; background-color: hwb(none none none) } 60% { background-color: hwb(none none none / none) } 75% { color: #f90d } } @keyframes j { 50% { background-color: rgb(103 120 95 / 45.6%) } } html { scroll-timeline: --t } body { timeline-scope: --t, --u } #o { timeline-scope: --t } #i { color: red; animation: j 2s linear 1s; animation-timeline: --u; animation-range: 118.8% }", 0, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hwb(-149.02deg 98.67% 109.3%) } 50% { background-color: #b93d } 75% { background-color: hwb(31 50% 60.83%) } } @keyframes j { 50% { color: currentcolor; background-color: skyblue } } html { timeline-scope: all } body { scroll-timeline: --u; timeline-scope: --t } #o { timeline-scope: --v } #i { color: color(display-p3 0.572 none none / 0.5); background-color: #a7ebab; animation: k 2s linear forwards reverse; animation-timeline: scroll(nearest y) } #q { scroll-timeline-name: --t, none; scroll-timeline-axis: x, block }", 500, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#836d6ddf;background-color:#b0c573ee\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: rgb(73 84 159 / 50%); background-color: peachpuff } } html { scroll-timeline-name: --v, none } #o { timeline-scope: --v } #i { animation: j 1s; animation-timeline: none; animation-range-start: cover 0%,contain,scroll 95.5%; animation-range-end: exit-crossing 1.6%, exit -11%, entry -5%, 50% }", 1500, 5000);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_39(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: hsl(170, 48.6%, 2.1%, 0) } 75% { background-color: hsl(none 198 0.16% 10.97%) } } @keyframes j { 25% { color: rgb(-10 23% none); background-color: red } 60% { background-color: rgb(none 228.7 none) } 75% { background-color: teal } } #o { timeline-scope: auto } #i { animation: k 500ms 0.5 reverse, j 1000ms linear; animation-timeline: scroll(root); animation-range: exit entry 56.55%, cover 0% 107.9%, 12.5% }", 500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hwb(165 50% 92%); background-color: darkorange } 60% { color: color(xyz-d65 none none 77.2%/0); background-color: oklch(30.3% none -165.4grad) } 100% { background-color: rgba(7.3%, 157, 50.8%, 1.5) } } @keyframes j { 75% { background-color: hwb(none 33 none /none) } } html { scroll-timeline-name: --t } #i { color: hwb(100 50% 95 / 87%); background-color: rgb(195 45 178); animation: k 1000ms linear; animation-timeline: scroll(inline), --nobody }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#585858de;background-color:#c32db2\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: white } } html { view-timeline-name: --u; view-timeline-axis: y } #i { animation-range: 142.59%,0% 67%; animation: k 500ms, k 2s 500ms; animation-timeline: scroll(inline), scroll(x root); animation-range: normal 25% , scroll -18% entry 10% }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: white } } @keyframes j { 50% { background-color: rebeccapurple } 60% { background-color: color-mix(in srgb, 0% oklch(0.008 0.0420 -326.7 /none), oklch( 0% 65.5% 713.175deg )) } 75% { color: oklch(none 0 3.1416rad /none); background-color: color(a98-rgb none none none / 50%) } } html { scroll-timeline: --u y, --v, none x } #o { timeline-scope: --t, --u } #i { color: hsla(-0.9523rad, 82%, 10.26%, 99.99%); background-color: #15d; animation: j 1s linear, k 1000ms linear; animation-timeline: scroll(root); animation-range: unset; animation-composition: add }", 500, 1630);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d5abd1;background-color:#3e9fff\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hsl(6.1192rad 71% 85.7%) } 75% { color: hwb(120 81% 100%); background-color: rgb(246 94 192 / -0.5) } } html { scroll-timeline: --t y; view-timeline: --t inline } #i { animation: j 1s linear, k 1000ms linear; animation-timeline: scroll(root); animation-range: unset; animation-composition: add }", 500, 1630);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#775e62;background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(2, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_40(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: #6d37b1 } 60% { color: hsla(763grad, 68%, 0%, 100%) } } html { scroll-timeline-name: --u, --t } #i { animation: j 1000ms linear 1s; animation-timeline: view(block 10%); animation-range-start: 25%; animation-range-end: NORMAL,calc(10%) }", 1500, 2500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1124,6 +1163,9 @@ static void test_l102_sheet_40(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+}
+
+static void test_l102_sheet_42(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: rgb(80% -10 none); background-color: rgb(none none 155/none) } 75% { color: orangered; background-color: color-mix(in srgb, color(xyz-d65 none none none/none), 64.444% hsla(none 100% 12.79% / none)) } } html { timeline-scope: --u, --t, --v } body { timeline-scope: none } #i { animation: k 1s; animation-timeline: scroll(self); animation-range-start: 0% }", 500, 10000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1136,21 +1178,21 @@ static void test_l102_sheet_40(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_41(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: cornflowerblue } 33.33% { color: hwb(470.3deg 9 20); background-color: hwb(180 42.2% 2% /-0.5) } 50% { background-color: color-mix(in  srgb, #4ffd68b8, 0% rgba(132, 178, 62.2%, 1.5)) } } @keyframes j { 50% { color: color-mix(in	srgb, blue, lightgoldenrodyellow 0%) } 75% { background-color: currentcolor } } html { scroll-timeline-name: --t; timeline-scope: --t } body { timeline-scope: --t --u } #o { timeline-scope: --t } #i { color: hsl(-1.9779turn 58 25 / 99.99%); background-color: color(prophoto-rgb 0 1.2 none/none); animation: j 1000ms linear 500ms backwards; animation-timeline: --t; animation-range-end: entry-crossing 57.15% , 85% , contain 87.01% , contain; animation-composition: replace }", 500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#65251b;background-color:#00ff0000\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#65251b;background-color:#9affbb00\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: red } 50% { color: color(srgb-linear none none 0.512) } 75% { background-color: hwb(660 8% 78%) } } @keyframes j { 50% { background-color: currentcolor } 60% { background-color: color(xyz-d65 none none 0.77) } } html { scroll-timeline: --t; view-timeline: --v inline } body { timeline-scope: --u } #o { timeline-scope: ALL } #i { background-color: color(xyz none 0.35 0.384); animation: k 500ms linear; animation-timeline: --u; animation-range: Entry 20% exit 90%; animation-composition: replace }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00d69c\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00a690\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_43(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: rosybrown } 25% { color: white; background-color: transparent } 33.33% { color: color(prophoto-rgb none 0 none) } } html { scroll-timeline: --t block; timeline-scope: none } body { timeline-scope: --t --u } #i { background-color: hwb(9.22rad 15% 50%); animation: k 1s linear 3; animation-timeline: --u; animation-range-start: -28.84% , normal , 0% }", 0, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#26806e\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1163,9 +1205,6 @@ static void test_l102_sheet_41(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_42(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: color(srgb none none none) } 100% { color: currentcolor; background-color: color-mix(in srgb, color(rec2020 0 0.75 1e-1) 72%, color(srgb 0 none none)) } } @keyframes j { 33.33% { color: greenyellow; background-color: #adb4e7 } 60% { background-color: lab(none 52.56 -66/1.5) } } #i { color: hwb(360deg 96 41); background-color: hsl(none none none / 1.5); animation: k 1000ms, k 1000ms 250ms; animation-timeline: scroll(); animation-range-start: -32%; animation-range-end: scroll 78.28%, 93.98%, entry 29.7%, 10px, entry 4.5% } #q { scroll-timeline: --v y }", 500, 8100);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#030303;background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
@@ -1178,6 +1217,9 @@ static void test_l102_sheet_42(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_44(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: color(prophoto-rgb none 0 none/none) } } html { scroll-timeline-axis: block; scroll-timeline-name: --v, --u, none } #i { color: rgb(58 49 57 / 82.4%); background-color: color(srgb-linear none none none/1); animation: k 1s 500ms both; animation-timeline: scroll(inline); animation-range: 50% 50% } #q { view-timeline-name: --v }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#3a3139d2;background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1190,9 +1232,6 @@ static void test_l102_sheet_42(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_43(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: hwb(none none none); background-color: cornflowerblue } 25% { background-color: hwb(none 338 21% 71%) } 75% { color: midnightblue } } @keyframes j { 60% { color: #e12c } } html { scroll-timeline-name: --v } #o { scroll-timeline: --v y; timeline-scope: --t --u } #i { scroll-timeline-name: --t; animation: k 500ms linear, k 1000ms linear 0.5 both; animation-timeline: scroll(nearest y), scroll(root block) }", 0, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#8c0d38;background-color:#6495ed9f\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
@@ -1205,6 +1244,9 @@ static void test_l102_sheet_43(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_45(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(display-p3 none none -0.157 / none) } } @keyframes j { 33.33% { background-color: lime } to { color: rgb(none 171 4.2 222); background-color: hwb(88 12.79% 100%) } } html { scroll-timeline-axis: block; scroll-timeline-name: --t } body { timeline-scope: --t --u } #i { background-color: hwb(129 45% 0%/24.99%); animation: k 1000ms linear; animation-timeline: SCROLL(); animation-range-start: 25%, 10% entry; animation-range-end: 0%, scroll 99.8% }", 0, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#73ff8840\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1217,9 +1259,6 @@ static void test_l102_sheet_43(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_44(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: color(srgb-linear 0.6321 58% 0.8/120%) } } @keyframes j { 60% { background-color: red } 75% { color: lab(none 55% 101.65) } } html { view-timeline: --t inline; view-timeline-axis: inline } body { timeline-scope: auto } #i { view-timeline-name: --u; view-timeline-axis: y; animation: k 500ms linear both; animation-timeline: scroll(root block); animation-range: 0 contain 33.33%,-15% normal } #q { scroll-timeline: --v; view-timeline-name: --u }", 500, 5000);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#d0c8e7aa\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
@@ -1232,6 +1271,9 @@ static void test_l102_sheet_44(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_46(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: currentcolor } to { color: hwb(none none none / 0) } } body { view-timeline-name: --t; timeline-scope: all } #i { color: grey; scroll-timeline: --u; view-timeline: --v inline; animation: k 500ms 500ms, k 1s linear 500ms 0.5; animation-timeline: scroll(nearest y) } #q { view-timeline: --v inline }", 0, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#808080\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1244,9 +1286,6 @@ static void test_l102_sheet_44(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_45(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: rgb(114 119 187 / 1.5) } } html { view-timeline-name: --u; scroll-timeline-name: --v, --u } body { view-timeline: --v block; view-timeline-axis: y } #i { animation-range-start: entry,exit 90%; animation-range-end: scroll, entry 10px, cover; animation: k 500ms linear -500ms 2 backwards; animation-timeline: scroll(self); animation-range: entry -18.97%,NORMAL,115% cover 0%; animation-composition: accumulate }", 0, 10000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1259,6 +1298,9 @@ static void test_l102_sheet_45(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_47(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hwb(none none none); background-color: currentcolor } 50% { color: hwb(11.2943rad 27 21%/67.2%); background-color: hwb(89 none 54% / 120%) } } #o { timeline-scope: none } #i { animation: k 1000ms linear, j 1000ms linear reverse; animation-timeline: --t; animation-range: 12.5% 25%, 50% 116.04%, NORMAL, 0% 149% } #q { scroll-timeline: --v }", 1500, 8864);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1271,9 +1313,6 @@ static void test_l102_sheet_45(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_46(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: rgb(42% 50% none) } } html { scroll-timeline-name: --v, --t; scroll-timeline-axis: block } body { timeline-scope: --t, --u } #i { animation: j 1s, k 500ms; animation-timeline: scroll(root); animation-range: 25% } #q { scroll-timeline: --v y, --t }", 1500, 5000);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#6b8000eb\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
@@ -1286,6 +1325,9 @@ static void test_l102_sheet_46(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_48(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: hwb(248.4deg 9.57% 86.9665%/120%) } 60% { background-color: currentcolor } 75% { color: color-mix(in srgb, 50% steelblue, #7fd5) } } @keyframes j { 25% { color: hwb(none none 99) } 50% { color: rgba(none none none/53%); background-color: #7cd } 60% { color: hwb(-376.644deg 100% 6%) } } html { scroll-timeline-name: --u, --t; scroll-timeline-axis: x, y; timeline-scope: --t, --u } #i { color: rgba(none none none/none); background-color: rgba(30% 0 none); animation: k 1000ms linear 1s; animation-timeline: --v, scroll(inline) }", 500, 1460);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#4d0000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1298,9 +1340,6 @@ static void test_l102_sheet_46(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_47(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: color(xyz 0.2717 none 0 / 1.5) } } @keyframes j { 33.33% { background-color: currentcolor } 60% { background-color: color-mix(in srgb , rgb(86% 34 281 / 89%) , color-mix(in  srgb, hsl(690deg 123% 67.3 / 2), transparent) 100%) } 75% { color: hwb(none 61% 36 /none); background-color: hwb(411.7488deg 56.9187% 40.2%) } } #i { color: rgb(180 60 207 / 0.2); background-color: lime; animation: k 2s linear backwards; animation-timeline: --t, SCROLL() } #q { scroll-timeline: --v y, --u y }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b43ccf33;background-color:#00ff00\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1313,6 +1352,9 @@ static void test_l102_sheet_47(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_49(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: hsl(0.4rad 13% 36.19% / 0.9999) } } body { view-timeline: --u; view-timeline-axis: inline } #o { timeline-scope: --t } #i { color: hwb(-0.91rad 0% 0%); background-color: rgb(1 2 3 4); animation: k 1000ms linear -500ms 0.5 backwards; animation-timeline: scroll(), --u; animation-range: 30.88% contain }", 0, 9200);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00de\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1325,9 +1367,6 @@ static void test_l102_sheet_47(void) {
     TEST_ASSERT_EQUAL(2, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_48(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hwb(none none none); background-color: oklch(0.3 none none/0) } 50% { color: hwb(301 21% 29 / none); background-color: color-mix(in srgb, 25% rgb(19% none none / 0.384), rgb(none 76% 157 118)) } } html { scroll-timeline-name: --t; scroll-timeline-axis: x, block; scroll-timeline: initial } #i { animation: k 2s linear; animation-timeline: scroll(root); animation-range: 105.6% scroll 59.4%,cover 40.2% scroll 107.98%,cover 0% }", 500, 7700);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1340,6 +1379,9 @@ static void test_l102_sheet_48(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_50(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: hsla(100grad, 0%, 52%, 0.9999) } } html { scroll-timeline-name: --u, --v; scroll-timeline-axis: block; view-timeline-name: --v; timeline-scope: --t, --u } #i { background-color: lab(none none none); animation: j 1000ms linear backwards alternate, k 500ms linear 0.5 both; animation-timeline: view(), scroll(self); animation-range: 10px 45%, entry -5% contain, 50% entry 46.5% }", 500, 5000);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1352,9 +1394,6 @@ static void test_l102_sheet_48(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_49(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: hwb(0.5turn 50% 0%) } to { background-color: white } } html { scroll-timeline-name: --u, --t } body { timeline-scope: --t --u } #i { background-color: color(srgb 0.92 0.54 none); animation-range-start: entry 10% , 32.8%; animation-range-end: 100%; animation: k 1000ms 2; animation-timeline: scroll(inline), scroll(x root); animation-range-start: scroll 74.5%, 0%, 150%; animation-range-end: scroll 50% , cover 0% }", 500, 8900);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#eb8a00\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1367,6 +1406,9 @@ static void test_l102_sheet_49(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_51(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: hsl(260.6968deg none 58% / 0); background-color: rgb(0 none 68 / 0.202) } 33.33% { color: red; background-color: #671df5bb } 100% { color: color-mix(in  srgb,rebeccapurple 100%,#5db 100%); background-color: color-mix(in srgb, color(xyz none 0.899 0.86), color-mix(in srgb, hwb(30 none none) 0%, hsl(none none none /120%))) } } @keyframes j { 50% { color: salmon; background-color: hsla(-0.88turn 73.3% 78.3%) } } html { scroll-timeline-name: --t; scroll-timeline-axis: block, inline } body { timeline-scope: none } #o { timeline-scope: all } #i { color: hwb(360 50% 39.5% / -0.5); animation: j 500ms 1s forwards; animation-timeline: --t, --t; animation-range-start: 129.8%; animation-range-end: --x }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#9a808000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1374,14 +1416,11 @@ static void test_l102_sheet_49(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: rgba(none none none / none) } } html { scroll-timeline: --v y, --u; view-timeline-name: --u } body { scroll-timeline: --u, --v y, none y } #i { color: color(prophoto-rgb 0 none 0.5375); background-color: hsla(204.44deg 22.9% 0% / 0); animation: k 1000ms; animation-timeline: none; animation-range: 124.5% , scroll 31%; animation-composition: accumulate } #q { view-timeline: --u block }", 500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000a6;background-color:#00000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#001012;background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_50(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: currentcolor } 50% { color: darkgoldenrod; background-color: oklab(0.31 0 0.2120) } } html { scroll-timeline: --t block } body { timeline-scope: --u, --t, --v } #i { animation-range-end: exit-crossing; animation: k 1s linear forwards, k 1000ms forwards; animation-timeline: view(); animation-range: 120%,48.44% exit 114% }", 500, 7500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1394,6 +1433,9 @@ static void test_l102_sheet_50(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_52(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: oklab(none none none/none) } } @keyframes j { 50% { color: lch(none none 360/none); background-color: color(display-p3 none none none) } } html { scroll-timeline: --t y, none x; view-timeline-name: --u } body { scroll-timeline-name: --t, --u; scroll-timeline-axis: block; view-timeline-name: --t; view-timeline-axis: y } #i { color: dimgray; background-color: rgb(none none 59%); animation: k 1000ms; animation-timeline: --t, --t; animation-range-start: 48% , cover 67.87% , 84.6% }", 1500, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#696969;background-color:#000096\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1401,14 +1443,11 @@ static void test_l102_sheet_50(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: red } 75% { background-color: color-mix(in srgb, rgb(179 186 199 / 0), hwb(0 50% 17.2%)) } } html { scroll-timeline: --v inline } #o { view-timeline-name: --t; view-timeline-axis: y } #i { color: color(prophoto-rgb 105% none 0); background-color: hwb(24.4 64 0%); animation: k 2s linear both; animation-timeline: view(block 10%); animation-range: normal }", 0, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000;background-color:#ffc9a3\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff6671;background-color:#ffc9a3\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_51(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: currentcolor; background-color: black } 50% { color: hwb(330 66 none / none) } 60% { background-color: oklch(none 0.0585 none) } } html { scroll-timeline: --t, --u; view-timeline-name: --u } body { timeline-scope: none } #i { animation: j 1s; animation-timeline: view(block 10%); animation-range: -50% 50% }", 0, 6400);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1421,6 +1460,9 @@ static void test_l102_sheet_51(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_53(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hsla(-5.4126rad 75% 76% / 1) } } html { scroll-timeline-name: --v; view-timeline: --u block } body { view-timeline-name: --v; view-timeline-axis: y } #i { animation-range: cover 10% 20% 0; animation: k 1000ms linear both; animation-timeline: scroll(nearest y); animation-range: 12.5% -10% , cover entry 7.21% , scroll -9.97% 0% }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1433,9 +1475,6 @@ static void test_l102_sheet_51(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_52(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: rgba(none none none); background-color: lab(95 -47.4% none) } } html { view-timeline: --u block } #i { color: peru; animation: j 2s 500ms reverse; animation-timeline: none; animation-range: 60% 40% } #q { view-timeline: --v }", 500, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#cd853f\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1448,6 +1487,9 @@ static void test_l102_sheet_52(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_54(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hsl(3rad, 54.8%, 74.828%, 100%); background-color: currentcolor } 60% { background-color: lch(none 2.5e-2 1.554turn) } 75% { background-color: hsl(251.3deg 70% 121.1%/86%) } } html { scroll-timeline-name: --u; view-timeline: --t } body { timeline-scope: --u } #i { color: hwb(-229.6 50% -1%); background-color: #57cb; animation: j 1s reverse, k 1s -500ms; animation-timeline: --t; animation-range-end: 100%, 83% }", 0, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#80ff96;background-color:#5577ccbb\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1460,9 +1502,6 @@ static void test_l102_sheet_52(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_53(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: color-mix(in srgb, #f7cd, rgb(26.2% 19 69% / 1)) } 25% { color: hsla(none 13 82% 50% /-0.5) } 100% { background-color: red } } @keyframes j { 50% { color: oklab(0.808 none -0.4556); background-color: hsla(-515 none none) } } html { scroll-timeline: --u y, --t y, none x; scroll-timeline-name: unset } body { timeline-scope: --u, --t, --v } #o { timeline-scope: --t, --u } #i { color: color(none display-p3 1 -20% 0 / 50%); view-timeline: --v; animation-range: 0% 200%; animation: j 1s linear; animation-timeline: scroll(); animation-range-start: normal; animation-range-end: 0,70.9%,cover 54% }", 500, 7500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1470,11 +1509,14 @@ static void test_l102_sheet_53(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: dimgrey } 60% { color: lab(none -107.95 none / 77%); background-color: #eb07dcb9 } 75% { color: lab(43.98 30 none) } } @keyframes j { 25% { color: lightyellow; background-color: color(a98-rgb 0 0.67 none / none) } } html { scroll-timeline-name: --t } #o { view-timeline-name: --t } #i { color: #a54; background-color: color(prophoto-rgb none none 0.441 / none); animation: k 2s backwards; animation-timeline: view(block 10%); animation-range: entry; animation-composition: add } #q { scroll-timeline-name: --v; scroll-timeline-axis: y; view-timeline: --v block }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#aa5544;background-color:#00008d00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#aa5544;background-color:#000c0e00\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_55(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: red } } html { view-timeline-name: --t } body { timeline-scope: all } #i { color: #c7ce; animation: j 1s linear 500ms; animation-timeline: --u, none; animation-range-end: entry 10% , entry-crossing 35.48% , 86.27% , scroll -11.94% } #q { scroll-timeline-name: --v }", 0, 5300);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#cc77ccee\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1487,11 +1529,8 @@ static void test_l102_sheet_53(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_54(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { to { color: hsla(11.134rad, 50%, 0%, 100%) } } @keyframes j { 25% { color: rebeccapurple; background-color: oklch(none 0.3062 none / 45%) } 50% { background-color: oklch(none 0.4044 300) } 60% { color: color-mix(in srgb, hsl(11.979rad, 25.76%, 25.495%), 50% color(none xyz-d65 0.5 0.815 0)) } } html { view-timeline-axis: y; view-timeline: --v } body { scroll-timeline-name: --u, --v; scroll-timeline-axis: inline, x } #o { timeline-scope: none } #i { color: powderblue; animation: j 500ms linear 0.5; animation-timeline: scroll(nearest y), scroll(); animation-range: 0% 200% }", 500, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b8ac0;background-color:#15000039\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b8ac0;background-color:#00000039\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
@@ -1502,6 +1541,9 @@ static void test_l102_sheet_54(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_56(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: hwb(211 100% 50%) } 60% { color: red; background-color: red } } html { scroll-timeline: --u, --t y; scroll-timeline: initial; view-timeline: --t } body { timeline-scope: all } #i { animation: k 500ms -500ms; animation-timeline: --u, --t; animation-range-start: exit-crossing 75%; animation-range-end: cover 0% } #q { scroll-timeline-name: --v; scroll-timeline-axis: block, y }", 1500, 8942);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1514,9 +1556,6 @@ static void test_l102_sheet_54(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_55(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color-mix(in srgb, oklch(0.187 none none), #b38d01 25%); background-color: lightskyblue } } @keyframes j { 75% { color: oklab(none 0 0.3207) } } body { timeline-scope: --t --u } #o { timeline-scope: ALL } #i { animation: j 1000ms; animation-timeline: --nobody, SCROLL(); animation-range-start: 100% , 0% , -36.34%; animation-composition: accumulate }", 500, 9000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1529,6 +1568,9 @@ static void test_l102_sheet_55(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_57(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: currentcolor } 75% { color: currentcolor; background-color: rgba(none 244 246.3/none) } } html { scroll-timeline-name: --t; scroll-timeline: auto; view-timeline: --u block; view-timeline-axis: inline } #o { timeline-scope: auto } #i { color: darkorange; animation: j 1000ms, k 1s linear both alternate; animation-timeline: scroll(root); animation-range-start: 144%; animation-range-end: 110.3% , entry -7.1% , contain , -10% }", 0, 8700);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff8c00\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1541,9 +1583,6 @@ static void test_l102_sheet_55(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_56(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: currentcolor } 60% { background-color: oklch(0.71 0.1924 none) } 75% { color: rgb(54 223 222 / 36%); background-color: #8eb6c8 } } @keyframes j { 50% { background-color: hwb(252 100% 0%) } } html { scroll-timeline: --t block } #i { background-color: darkslateblue; animation: k 500ms linear; animation-timeline: scroll(x root), --t; animation-composition: accumulate }", 0, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#483d8b\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1556,6 +1595,9 @@ static void test_l102_sheet_56(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+}
+
+static void test_l102_sheet_58(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: hwb(-13.273deg 49 none/none); background-color: currentcolor } } html { scroll-timeline-name: --t } #i { color: rgb(55 47% none /none); animation-range-end: entry 62.2%; animation: j 1000ms linear both; animation-timeline: scroll(inline) } #q { scroll-timeline-name: --u, --t }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#37780000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1568,9 +1610,6 @@ static void test_l102_sheet_56(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_57(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: color-mix(in srgb, color(srgb-linear 0.2929 -1 none), rgb(none 0 0 none)) } 100% { color: hsl(none -86 29.6% 56%); background-color: rgb(73 60 100 / 120%) } } body { timeline-scope: ALL } #i { animation: j 2s; animation-timeline: --u, view(); animation-range-start: 132%; animation-range-end: -38.5%,entry-crossing,entry-crossing,entry-crossing 28.3% }", 0, 7500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1583,6 +1622,9 @@ static void test_l102_sheet_57(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_59(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: purple; background-color: lightslategray } } @keyframes j { to { background-color: hsl(none none none) } } html { scroll-timeline: --v inline, --u y } #o { timeline-scope: --t, --u } #i { animation: k 2s linear infinite; animation-timeline: scroll(), --t; animation-range-start: contain 39%; animation-range-end: scroll 50% }", 1500, 7500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1590,14 +1632,11 @@ static void test_l102_sheet_57(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: hwb(558 63.24% 100%) } 100% { color: lch(none 152% none/0.5); background-color: color(none srgb-linear 0.8877 -0.6 0.0626/1.5) } } html { scroll-timeline: --t y } #i { background-color: black; animation: k 1s; animation-timeline: scroll(root block); animation-range-start: contain 33.33% , contain 78% , contain 33.33% , 97.76%; animation-range-end: 150%, exit-crossing, contain 37%; animation-composition: replace } #q { scroll-timeline: --u }", 0, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1a0004e3;background-color:#393939\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#060003e3;background-color:#393939\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_58(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: red; background-color: currentcolor } } @keyframes j { 50% { background-color: hsl(none 33.8% 95.4%) } } html { scroll-timeline-name: --u, --v } body { timeline-scope: --t } #o { timeline-scope: --t, --u } #i { animation: k 1s linear, j 1000ms linear 3; animation-timeline: view(), --t; animation-range-start: cover 105%; animation-range-end: 0%,normal }", 500, 10000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1610,6 +1649,9 @@ static void test_l102_sheet_58(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_60(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: #1c3ffc1b } } @keyframes j { 50% { color: hwb(658.3 none none/none); background-color: hwb(none none none) } } html { scroll-timeline-name: --v; scroll-timeline-axis: y } body { scroll-timeline-name: --t; view-timeline-name: --t } #i { color: rgb(10.3 1.62 none); animation-range-start: entry 10%; animation-range-end: contain 33.33%,50%,scroll 31.72%; animation: k 1000ms -500ms, k 500ms linear 500ms; animation-timeline: --u; animation-range: exit-crossing,-10% contain 67.08%,normal 10% contain 108.93% }", 0, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#0a0200\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1622,9 +1664,6 @@ static void test_l102_sheet_58(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_59(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: currentcolor } } html { scroll-timeline: --t } #i { background-color: hsla(-350.4deg 9.0336% 38% / 50%); animation: k 1000ms 250ms both; animation-timeline: scroll(x root); animation-range: unset } #q { scroll-timeline-name: --u, --v; scroll-timeline-axis: inline, x }", 0, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#6a5b5880\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1637,6 +1676,9 @@ static void test_l102_sheet_59(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_61(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: color(xyz-d65 1.1 none none) } } html { scroll-timeline: --v y, --t, none inline } #o { scroll-timeline-name: --u; scroll-timeline-name: auto; timeline-scope: all } #i { animation: k 500ms linear 1s forwards; animation-timeline: --t; animation-range-start: -49.57%; animation-range-end: entry; animation-composition: replace }", 500, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
@@ -1649,9 +1691,6 @@ static void test_l102_sheet_59(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_60(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: #a568 } 33.33% { color: red; background-color: currentcolor } 50% { color: hwb(16 0% 0% /0.3) } } @keyframes j { 33.33% { background-color: hsl(66deg, 90%, 0%, 150%) } 75% { background-color: hwb(616.4 72 79%) } } body { timeline-scope: --u, --t, --v } #i { animation: j 1s linear 2, k 2s linear -500ms; animation-timeline: none; animation-range: 50% 50% } #q { scroll-timeline: --v y, --u y, none }", 0, 4000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1664,8 +1703,11 @@ static void test_l102_sheet_60(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_62(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: darkslategray; background-color: hwb(-1.888rad 32% 100% /0.5) } } html { scroll-timeline: --t, --u block, none; scroll-timeline: --t --u } #i { color: rgb(150 none none); background-color: color(rec2020 41.82% 0.8 none); animation: k 1000ms linear; animation-timeline: scroll(); animation-range-end: exit-crossing 62.7%; animation-composition: accumulate }", 1500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#c54f4f;background-color:#1ff91f\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#c54f4f;background-color:#1ff61f\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(2, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
@@ -1676,9 +1718,6 @@ static void test_l102_sheet_60(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_61(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: hsl(30 58% 10.06% / none); background-color: lightgoldenrodyellow } } html { scroll-timeline-name: --t; scroll-timeline-name: inherit; view-timeline-name: --t } body { timeline-scope: --v } #o { timeline-scope: --u } #i { color: aqua; animation: k 500ms, j 1000ms linear -500ms alternate; animation-timeline: scroll(self); animation-range-start: scroll 50%; animation-range-end: contain 33.33% , 5 }", 500, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1691,6 +1730,9 @@ static void test_l102_sheet_61(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_63(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: rgb(242 121 -22 / 0.85); background-color: color-mix(in srgb, rgba(none 247 77% 50% /1.5), 25% hwb(none 18% none)) } 75% { color: rgb(48.8 none none / none); background-color: white } } html { scroll-timeline: --t block } body { timeline-scope: --v } #i { color: hwb(none none none); animation-range-start: 0%, contain 87.69%; animation-range-end: -10%, 108.27%, 50%; animation: j 500ms 250ms backwards; animation-timeline: scroll(self), scroll(root); animation-range: exit }", 1500, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1703,9 +1745,6 @@ static void test_l102_sheet_61(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_62(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: hsl(294.06deg 74% 2%); background-color: rgb(none 50 93%/-0.5) } 25% { color: lch(5.1% none 2.9turn); background-color: color(xyz 116.83% none 0.04) } 75% { color: color-mix(in  srgb, 83% red, firebrick) } } @keyframes j { 33.33% { background-color: color-mix(in srgb, hsl(nonedeg 10% 10%), hwb(30 none 62)) } 100% { color: color(xyz-d65 none none 0.0542/none) } } html { view-timeline-name: --v; view-timeline-axis: y } #i { background-color: rgba(none 191.7 15%); animation: k 1000ms backwards; animation-timeline: scroll(self); animation-composition: replace }", 1500, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00c026\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1718,6 +1757,9 @@ static void test_l102_sheet_62(void) {
     TEST_ASSERT_EQUAL(1, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_64(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: hwb(-339deg none none/120%) } 60% { background-color: currentcolor } 75% { color: lch(23 none 300); background-color: color-mix(in srgb, color(a98-rgb none 0 none), hwb(90 0% 41.7% / 1) 50%) } } @keyframes j { 25% { color: slategray; background-color: color-mix(in srgb, hwb(180 none 14%), hsl(none none none / none)) } 75% { color: hwb(720deg 18% 35% /1) } 100% { color: color(srgb none 0.9 119.1%/none) } } html { scroll-timeline-name: --t } #o { scroll-timeline-name: --t; scroll-timeline-axis: y, block; view-timeline: --u block } #i { color: hsla(none -466 89.69% 17%); background-color: hsl(none 62.7% none/none); animation: k 1s linear forwards, j 1s linear; animation-timeline: view(block 10%); animation-range-start: cover 56% , 0% , scroll 99% , exit-crossing 2.7%; animation-range-end: contain 33.33% , exit-crossing 103.2% , 50% , cover 53.2% }", 500, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1730,9 +1772,6 @@ static void test_l102_sheet_62(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_63(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: lch(none 23.26% none) } } html { scroll-timeline: --u block, --t } body { timeline-scope: auto } #o { timeline-scope: auto } #i { color: powderblue; background-color: hwb(192 none none/1); animation: j 500ms 3; animation-timeline: scroll(inline), none }", 0, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b0e0e6;background-color:#00ccff\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1745,6 +1784,9 @@ static void test_l102_sheet_63(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_65(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color-mix(in srgb,hwb(720deg 100% 0%) 100%,50% rgb(53, 128, 73)) } } html { scroll-timeline-name: --u; scroll-timeline-axis: inline } #o { timeline-scope: --t } #i { color: hsl(none none 0%); background-color: lab(none 32 24.463 51); animation: k 1000ms 1s reverse; animation-timeline: --t }", 0, 5000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1757,9 +1799,6 @@ static void test_l102_sheet_63(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_64(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: red; background-color: hsl(759.531deg none none) } } html { scroll-timeline: --t y; view-timeline-name: --u; timeline-scope: none } #o { timeline-scope: ALL } #i { animation: j 500ms linear 3 forwards, j 2s; animation-timeline: scroll(root block); animation-range-start: entry -5%,0; animation-range-end: 0% , entry-crossing 61.6% , exit , 33.4%; animation-composition: add }", 0, 6482);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1767,11 +1806,14 @@ static void test_l102_sheet_64(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: color(prophoto-rgb none 0.7 none / none) } 75% { background-color: hsla(none none none/10%) } 100% { color: hwb(134 81 41 / none); background-color: color-mix(in srgb, hwb(none 76 92/none) 47%, color(prophoto-rgb none none 0)) } } @keyframes j { 50% { background-color: color-mix(in  srgb , hwb(222.0193 59% 68.5% /1) 50% , blue) } 60% { color: hotpink } } html { scroll-timeline-name: --t; scroll-timeline-axis: block; view-timeline-name: --t } #o { timeline-scope: none } #i { background-color: oklab(74% none 0.1088 /none); animation: j 1s linear -500ms 3, k 1000ms 0.5 backwards; animation-timeline: scroll(), SCROLL(); animation-range-start: entry-crossing 22%, 0%; animation-range-end: 50% }", 0, 3500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#666666;background-color:#0094001a\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#666666;background-color:#0083001a\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_66(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: cornsilk } 75% { color: hwb(144 25.4494% 20); background-color: currentcolor } } #i { color: oklch(0.2 none none / none); animation: k 500ms; animation-timeline: --v; animation-range: -50% 50% }", 500, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#16161600\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1784,9 +1826,6 @@ static void test_l102_sheet_64(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_65(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color-mix(in srgb, white, 100% #7ad); background-color: currentcolor } 33.33% { color: color(none a98-rgb 0.1 0.124 2); background-color: hwb(30 80 100%) } 60% { color: color(xyz -1 0 none/none); background-color: rgba(8%, 105, 45.5%, 0) } } html { scroll-timeline: --t; view-timeline-name: --v } body { timeline-scope: all } #o { timeline-scope: --t } #i { background-color: lch(none 44.03% 174.2 60 / 61%); animation-range: -29% , Entry 20% 12.5% , contain 139.4%; animation: j 2s 0.5 reverse; animation-timeline: SCROLL(); animation-range: exit 97% contain 77% } #q { scroll-timeline-name: --t, --u }", 1500, 2500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1799,6 +1838,9 @@ static void test_l102_sheet_65(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_67(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: rgb(none 35 0 /none); background-color: color-mix(in srgb,rgba(51, 235, 216, 1.5),hsl(66, 37.6%, 42.44%)) } } body { timeline-scope: --u, --t, --v } #i { background-color: oklab(0.2 0 none / none); animation: k 1000ms; animation-timeline: --t; animation-range: 150%, entry entry 7.4%, 148.11% }", 500, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#16161600\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1811,9 +1853,6 @@ static void test_l102_sheet_65(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_66(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: rgb(137, 8, 162) } } @keyframes j { 50% { color: hsl(60 none none/none); background-color: hsla(259 92.18% 58% / 100%) } } html { scroll-timeline: --u x } #o { timeline-scope: --u } #i { background-color: papayawhip; animation: j 2s reverse; animation-timeline: view(block 10%); animation-range: entry 10% exit 90% }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffefd5\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1821,11 +1860,14 @@ static void test_l102_sheet_66(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: currentcolor; background-color: hsla(286 60.67% 100% / 0) } } html { scroll-timeline-axis: y; scroll-timeline-name: --t } body { timeline-scope: --v } #o { timeline-scope: --t, --u } #i { background-color: color(a98-rgb 0.9 0 -0.04); animation: j 1000ms 2 forwards, j 1s linear 1s; animation-timeline: scroll(root block), view(block 10%) }", 0, 3899);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff0000\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff1208\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_68(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: green; background-color: oklab(none 0 -0.2315 0.4051) } } @keyframes j { from { color: oklch(0.636 none none /0); background-color: lch(none -2 none) } 25% { color: red; background-color: hsla(86.851grad 113.8% 80.1%) } 75% { color: hwb(399.1 16% 50%); background-color: transparent } } html { view-timeline-name: --u; view-timeline-axis: y } body { timeline-scope: --t } #i { background-color: hsla(694.44 0% 46.4104% / 0.5); animation: j 500ms linear, k 1000ms both; animation-timeline: view(block 10%); animation-range: 50% 50%; animation-composition: add } #q { scroll-timeline-name: --u; scroll-timeline-name: --t --u }", 500, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#76767680\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1838,63 +1880,48 @@ static void test_l102_sheet_66(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_67(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: lightsteelblue } } @keyframes j { 33.33% { color: currentcolor; background-color: color-mix(in srgb, color-mix(in srgb, oklch(0 0 250deg /none), color(a98-rgb none 0.2 none)), lch(42.7 none none)) } 75% { background-color: color-mix(in srgb, rgb(none, 0, 0), 0% white) } to { color: color(xyz 0.3622 -0.717 -16.41% / none) } } html { scroll-timeline: --v, none block } #i { animation: k 2s; animation-timeline: view(block 10%), scroll(nearest y); animation-range-start: contain 33.33%,cover 52.15%,entry-crossing 52.5%; animation-range-end: exit-crossing -8.3% }", 0, 7556);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: rgb(6 49 59 / 1); background-color: hsl(259 10.44% none / 120%) } } body { timeline-scope: all } #i { color: rebeccapurple; animation: j 1000ms linear -500ms forwards; animation-timeline: view(); animation-range: 119.6% 1.46% , contain 16% NORMAL , 24.5% 12.5%; animation-composition: accumulate }", 1500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#663399\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: rgb(87 36 49 / 0); background-color: currentcolor } 25% { color: rgb(1 5 48 / 0.7); background-color: rgb(none 134 38) } } html { scroll-timeline-name: --v, --u; scroll-timeline-axis: y } body { timeline-scope: none } #o { timeline-scope: --t } #i { color: white; background-color: #ee6cc6da; animation: k 1s linear; animation-timeline: scroll(root); animation-range-start: normal, 83%; animation-range-end: cover , cover , entry-crossing 24% , scroll 106.2% }", 500, 7315);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b8b9c5e4;background-color:#ee7687e7\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: rgb(1 5 48 / 0.7); background-color: rgb(none 134 38) } } html { scroll-timeline: --t } #o { timeline-scope: none } #i { animation: k 2s linear; animation-timeline: scroll(root); animation-range: entry 10% Entry 20% }", 1500, 700);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#01052bb8;background-color:#008626ed\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: hsla(none none none); background-color: color(prophoto-rgb 0.6 2.5e-2 0.6) } } html { view-timeline: --t } body { timeline-scope: auto } #o { view-timeline: --t inline; timeline-scope: --v } #i { background-color: lch(none none none /120%); animation: j 1000ms linear, j 1s; animation-timeline: --t, scroll(inline) }", 0, 4167);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: #bfa } } html { scroll-timeline-name: --v; scroll-timeline-axis: inline; view-timeline: --t inline } #o { timeline-scope: ALL } #i { background-color: hwb(166 50% 59); animation: j 2s linear 2 both reverse; animation-timeline: scroll(root), scroll(inline); animation-range: 42.4% }", 500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#757575\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_68(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: indigo } } @keyframes j { 60% { color: currentcolor; background-color: lch(50% none none / none) } 75% { color: #fe5d8e03; background-color: rgb(none 15 47%) } } html { scroll-timeline: --t inline } body { timeline-scope: all } #i { background-color: #fbb1f0; animation: k 1s alternate; animation-timeline: --t; animation-range: normal }", 1500, 1632);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#fbb1f0\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: color(rec2020 0.44 none 0.13 / 1) } } @keyframes j { 25% { background-color: color(rec2020 none 0.65 1/20%) } } html { scroll-timeline-name: --u; scroll-timeline-axis: y, block } #i { color: color(none srgb 0.908 1e1 0); animation: k 1000ms linear both; animation-timeline: scroll(root), scroll(nearest y); animation-range: -50% 50% }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(1, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: red; background-color: oklch(none 0 0 87.5deg) } } html { scroll-timeline-name: --t; scroll-timeline-name: --t --u } #o { scroll-timeline: --u, --v } #i { background-color: color(prophoto-rgb 0 none 0.8/none); scroll-timeline: --t; view-timeline-name: --v; animation: k 500ms 1s, k 1000ms reverse; animation-timeline: none; animation-range-start: scroll }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000e400\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: color(srgb none 0 none); background-color: hsl(-34.269, 87.2%, 49.5%, 0.5) } } #i { color: color(none a98-rgb 0.77 0.6 0.368); animation: k 2s, k 2s linear 500ms; animation-timeline: scroll(nearest y), scroll(x root); animation-range-start: contain,contain 33.33%; animation-range-end: exit-crossing 93.9%,contain }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
 }
 
 static void test_l102_sheet_69(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color-mix(in srgb, color-mix(in srgb, 50% color(none 1 0 0), lab(0 none 88)), hsla(12rad 52.7794% 114.9%)); background-color: oklab(none 2.5e-2 -0.2701 -0.0728 /0.95) } 33.33% { color: lime; background-color: teal } 60% { color: rgb(none none none) } } @keyframes j { 33.33% { background-color: darkslategray } } html { scroll-timeline: --t } #o { timeline-scope: all } #i { background-color: hsl(686.15deg, 89.1%, 76.3%); animation: k 1s linear -500ms infinite; animation-timeline: scroll(nearest y); animation-range: unset; animation-composition: add } #q { scroll-timeline: unset; scroll-timeline-name: --v; scroll-timeline-axis: block }", 0, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f88dc9\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: #a3b5; background-color: hwb(-60deg 80 13.4% / 120%) } 25% { color: hsl(none 76.7% 100%) } } #o { scroll-timeline: --u y; timeline-scope: --t } #i { color: rgb(47% 51.1% 19%); scroll-timeline-name: --v; animation: k 1000ms linear reverse, j 2s; animation-timeline: --t; animation-range-end: -10% }", 500, 669);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#788230\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: hwb(48.8deg 94% 85 /0.2) } 50% { color: rgb() } 75% { color: color(srgb-linear none none -10.1%); background-color: hsl(2rad 31.6% 51% / 1) } } html { timeline-scope: all; scroll-timeline-name: --v, --t } body { timeline-scope: auto } #o { timeline-scope: --t --u; scroll-timeline: --t y, --v y; view-timeline-name: --u } #i { background-color: mediumaquamarine; animation: k 1000ms; animation-timeline: view() } #q { view-timeline: --t }", 500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#66cdaa\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: color-mix(in srgb, lch(55 none 104 / none), color(srgb none none none/120%) 73%); background-color: #2c1af604 } 33.33% { color: oklch(none 0.1205 none); background-color: rgb(1, 2) } } html { scroll-timeline: --u y } body { timeline-scope: --v } #o { timeline-scope: ALL } #i { color: rgb(44%, 26.4%, 296); background-color: hsla(320, 68.9%, 0%, 100%); animation: j 2s, j 1000ms linear 500ms backwards; animation-timeline: scroll(nearest y), scroll(x root); animation-range-start: contain,contain 33.33%; animation-range-end: exit-crossing 93.9%,contain }", 0, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7043ff;background-color:#000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_70(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: color-mix(in srgb, lch(85.33 14.292 539.2deg/none), 52% color(xyz-d65 10.9% 0.8451 none / none)); background-color: mediumorchid } 60% { background-color: color-mix(in srgb, 25% #eaf, color-mix(in srgb, blue, 25% hsla(209deg, 57.04%, 50%, 100%))) } 75% { color: rgba(234, 1, 95%, 1.5); background-color: color-mix(in srgb,hsla(641.8deg 70% -3% / 0.9999),lightsalmon) } } html { scroll-timeline: --u x, --t } #i { color: #ed1; animation: k 1000ms linear -500ms; animation-timeline: --t }", 1500, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#9c01a2;background-color:#5946ef\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
@@ -1921,7 +1948,7 @@ static void test_l102_sheet_69(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
-static void test_l102_sheet_70(void) {
+static void test_l102_sheet_71(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(srgb none none 0.668/none); background-color: hwb(2turn 16.5% 36% /120%) } } @keyframes j { 33.33% { color: currentcolor } } #i { animation-range-start: 89.8% , exit 73.8%; animation-range-end: 94.28%; animation: k 1000ms both, j 2s linear 1s both; animation-timeline: --nobody; animation-range: entry }", 0, 2000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1948,7 +1975,7 @@ static void test_l102_sheet_70(void) {
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
 }
 
-static void test_l102_sheet_71(void) {
+static void test_l102_sheet_72(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: currentcolor; background-color: white } 33.33% { background-color: hwb(-522.6 100% 73%) } 75% { background-color: hwb(none 100% none) } } #i { animation-range-start: entry , 105.18% , exit 90%; animation-range-end: exit; animation: j 1s -500ms; animation-timeline: scroll(x root); animation-range-start: 50% } #q { view-timeline: --u; view-timeline-axis: y }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -1961,60 +1988,75 @@ static void test_l102_sheet_71(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: lightskyblue; background-color: color-mix(in srgb, rebeccapurple, color(rec2020 0 0.138 0.34)) } 60% { color: color(a98-rgb none 58% none); background-color: lch(4.87 79.545 none / none) } } html { scroll-timeline-name: --t, --v; scroll-timeline-axis: y, inline; view-timeline: --v } #o { timeline-scope: --u, --t, --v; scroll-timeline-axis: y; scroll-timeline-name: --v, none } #i { animation: k 500ms, k 1s linear 3; animation-timeline: auto; animation-range: normal }", 0, 2500);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: color(xyz-d50 0.6 0.433 1) } 75% { color: currentcolor; background-color: hsl(none none none /none) } } #i { background-color: oklab(none -0.2918 none/none); animation-range-start: cover 108.85%; animation-range-end: entry -5%; animation: k 1000ms linear 3 both; animation-timeline: scroll(root block), --v; animation-range: entry } #q { scroll-timeline-name: --u; scroll-timeline-axis: y, x }", 0, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hwb(200grad 30 59% /0.6); background-color: hwb(none none 4) } 75% { color: hsl(none none 73.4761%); background-color: hsl(60 103.34% none/1.5) } } @keyframes j { 75% { background-color: hwb(1turn 94% 0%/84.6%) } to { background-color: pink } } html { scroll-timeline: --t block, --u y, none block } #i { color: hsl(none none none /none); background-color: hwb(none 65 42 45); animation: k 2s linear backwards, j 1s forwards; animation-timeline: auto; animation-range: exit 85%,exit-crossing,entry exit-crossing 19.8%,150% }", 0, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_72(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: currentcolor } 75% { color: hwb(none none 3% / 0.03); background-color: hwb(none 26 78%) } } @keyframes j { 60% { color: hwb(359 none none /none) } 75% { color: hwb(none 276.277 21% 52); background-color: color(xyz-d65 0.122 1.5953 none) } } html { scroll-timeline-name: --t, none } #o { scroll-timeline-name: --u; scroll-timeline-axis: inline, inline } #i { color: darkviolet; background-color: hwb(-420.6 none 88); animation: k 1000ms linear 0.5; animation-timeline: --t; animation-range: 7.2% , entry -17.5% -43% }", 1500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9400d3;background-color:#1e001f\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: rgb(72 191 144 / 0.869) } 75% { color: hwb(640.247grad 8.4% 100% / 120%); background-color: rgb(203 192 230 / 1) } } body { scroll-timeline-name: --v, --t; scroll-timeline-axis: block, x; view-timeline-name: --t } #i { color: #afdb; background-color: oklch(none 0.3088 1); animation: j 2s, j 2s linear; animation-timeline: scroll(root block); animation-range-start: 12.5%; animation-range-end: scroll 111%, 12.5% }", 0, 4066);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#aaffddbb;background-color:#160000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { to { color: red; background-color: hsla(none none 90.8%) } } html { scroll-timeline-name: --t } body { timeline-scope: --t } #i { color: rgb(23 46 84 / 1); background-color: snow; animation: k 500ms; animation-timeline: scroll(); animation-range: exit 79.8%,contain,51.12% }", 1500, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f60203;background-color:#e8e8e8\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: orchid } 50% { background-color: mediumslateblue } } #i { animation: k 1000ms linear both alternate, k 1000ms 250ms; animation-timeline: --nobody; animation-range-start: entry,entry-crossing,entry -5%,entry-crossing 115.1%; animation-range-end: 50% }", 0, 3200);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_73(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: currentcolor } 60% { background-color: lightslategray } } @keyframes j { 0% { color: currentcolor; background-color: color-mix(in srgb, oklch(6.64% 0.2493 326 / none), lab(none none none /none)) } 50% { color: color-mix(in srgb, navajowhite, rgb(61% 40% 78%)); background-color: hwb(2.07turn 50% 0% /77%) } 100% { background-color: color-mix(in srgb, lime, oklab(-3.67% -0.977 none)) } } #o { view-timeline-name: --v; view-timeline-axis: y; scroll-timeline-name: --u } #i { color: black; background-color: color(none xyz-d65 0 0.7995 0.8279 / 12%); animation: k 2s linear; animation-timeline: view(block 10%); animation-range-start: cover , 10% entry , 150%; animation-range-end: cover 0% , 100% }", 500, 3700);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: rgb(none none 100% / 0.77) } 33.33% { background-color: hwb(206 50% 24) } 75% { color: #acb9d0 } } @keyframes j { 25% { color: rgb(none 198 none / none) } 33.33% { background-color: color(prophoto-rgb none none none /62.2%) } 50% { color: rgb(none 249 50% 102.03) } } html { scroll-timeline: --u, --v x } #i { color: black; background-color: hwb(none -23 85% 86%); animation: k 500ms linear both; animation-timeline: --t, scroll(); animation-composition: replace }", 0, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_73(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: hsl(none -489.163 52% 116.15%) } } @keyframes j { 25% { color: seagreen; background-color: color(a98-rgb none none none / none) } } html { scroll-timeline: --t block, none block } #o { timeline-scope: all } #i { color: white; background-color: blue; animation: k 1s linear 2 backwards, j 500ms; animation-timeline: --v; animation-range-start: 0%; animation-range-end: cover -9.1% , scroll 50% , cover 47.91% }", 0, 9300);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#0000ff\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: rgb(72 191 144 / 0.869) } } html { scroll-timeline: --v x, none inline } body { timeline-scope: ALL } #i { color: red; animation: j 1000ms forwards reverse; animation-timeline: scroll(inline); animation-range-end: -10%,12.5%,entry 40%,entry 78%; animation-composition: accumulate }", 500, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: white; background-color: red } 100% { color: currentcolor; background-color: color(prophoto-rgb 0.6 0.52 none) } } html { view-timeline: --v } #o { timeline-scope: all } #i { background-color: hwb(90deg 100% 76/0); animation: k 1000ms 2 reverse; animation-timeline: view(); animation-range: cover 10% 20% } #q { scroll-timeline: --t }", 1500, 10000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#91919100\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 100% { color: hwb(-1.6732rad 47 75); background-color: hsla(-642 49% 0%) } } html { scroll-timeline: --t inline; view-timeline: --u inline } body { timeline-scope: ALL } #i { color: rebeccapurple; background-color: #a25dc6; animation: j 1000ms backwards alternate; animation-timeline: scroll(inline), scroll(x root); animation-range: -50% 50%; animation-composition: add }", 1500, 10000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#663399;background-color:#a25dc6\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_74(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: rgb(175 184 183 / 50%); background-color: yellowgreen } } #i { color: rgb(221 95 101 / 0.5); background-color: rgb(80% 239 93%); animation: j 1s linear 500ms both; animation-timeline: none, scroll(); animation-range: none; animation-composition: add }", 0, 6588);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#dd5f6580;background-color:#ccefed\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: chartreuse; background-color: color(xyz-d50 0.298 none 50%) } 75% { background-color: hwb(697 78 100%/0.12) } } html { scroll-timeline: --v, --t, none } #i { color: #677c5b; background-color: rgb(30 215 175 / 1.5); animation: k 2s, k 500ms linear; animation-timeline: view(), scroll(root); animation-range-start: -29% } #q { scroll-timeline: --v, --u y }", 1500, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7cee0c;background-color:#75706dd1\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: black } } body { timeline-scope: all } #o { scroll-timeline-name: --u, --v, none; scroll-timeline-axis: x } #i { color: color(none xyz-d65 0 0.7995 0.8279 / 12%); animation: j 1000ms; animation-timeline: --nobody; animation-range-start: scroll, entry-crossing 13.6%; animation-range-end: cover 0% , 100% }", 500, 3700);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: lch(none none none) } 33.33% { background-color: color-mix(in srgb, hsla(140 56.05% 0% / 0.9999), 74% color-mix(in srgb , #aff , #00ef3d 0%)) } } #o { timeline-scope: none } #i { animation: j 1000ms 3 reverse; animation-timeline: --t; animation-range: 129% }", 1500, 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_75(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(xyz-d65 none none none); background-color: rgba(none 94.34 99% /none) } } html { scroll-timeline: --u inline, --t block } body { timeline-scope: ALL } #o { timeline-scope: ALL } #i { background-color: color(srgb none none 50% /none); scroll-timeline-name: --v; scroll-timeline-axis: y; animation: k 500ms reverse; animation-timeline: none; animation-range: 50% 58% } #q { scroll-timeline-name: --v, none; scroll-timeline-axis: block }", 0, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00008000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2027,9 +2069,6 @@ static void test_l102_sheet_73(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_74(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: hsl(-85.525grad, 44.62%, 35%, 2) } } #o { timeline-scope: --u } #i { color: hwb(330 -1% 113.6%); scroll-timeline: --t y; animation: k 500ms infinite; animation-timeline: scroll() } #q { view-timeline-name: --t }", 0, 4065);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2042,6 +2081,9 @@ static void test_l102_sheet_74(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_76(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(display-p3 none none none /1.5) } } @keyframes j { 75% { color: rgb(none 300 100% 35); background-color: paleturquoise } } html { scroll-timeline: --v block, --t, none; timeline-scope: auto } body { timeline-scope: all } #i { background-color: rgb(none 55% none /8.6%); animation: k 1000ms; animation-timeline: scroll(root), scroll(nearest y) } #q { view-timeline-name: --u }", 0, 5117);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#008c0016\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
@@ -2054,9 +2096,6 @@ static void test_l102_sheet_74(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_75(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color-mix(in srgb, hsl(11rad 50% 3 / 100%), hwb(none 12% 27%/none)) } } @keyframes j { 33.33% { color: red; background-color: hsl(-351.6393 none none /50%) } 75% { color: currentcolor } } html { scroll-timeline-name: --t; scroll-timeline-axis: block, x } body { timeline-scope: none } #o { timeline-scope: --u, --t, --v } #i { animation: k 1000ms linear alternate, k 500ms reverse; animation-timeline: scroll(x root), view(block 10%); animation-range: 0% 200%; animation-composition: accumulate }", 1500, 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2069,6 +2108,9 @@ static void test_l102_sheet_75(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_77(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: #1af807a6 } 50% { color: color(xyz none 0 94%) } 100% { color: lightgrey; background-color: lab(none -130% none) } } @keyframes j { 25% { color: white } } html { scroll-timeline: --t block } #i { color: hsl(120, 50%, 50%); background-color: color(srgb 0.157 none 0.93); scroll-timeline: --t y; animation: k 1000ms linear 500ms both; animation-timeline: scroll(inline), --t; animation-range: entry-crossing cover 0%,scroll 50%,Entry 20%,0 entry-crossing } #q { scroll-timeline: --v }", 0, 6116);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#40bf40;background-color:#2800ed\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2081,9 +2123,6 @@ static void test_l102_sheet_75(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_76(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: color(xyz-d50 none none none); background-color: hwb(none 96 46% /none) } } @keyframes j { 33.33% { background-color: color(a98-rgb none none none) } 75% { color: rebeccapurple; background-color: rgb(none 50% 15% 72% /0.5) } } html { scroll-timeline: --t x; timeline-scope: ALL } body { timeline-scope: --u, --t, --v } #o { timeline-scope: --u, --t, --v } #i { color: oklch(none none none); animation: k 1000ms linear, j 1000ms linear; animation-timeline: scroll(x root); animation-range: 12.5% entry 116% } #q { scroll-timeline-name: --v; view-timeline: --v; scroll-timeline-axis: y }", 500, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2096,6 +2135,9 @@ static void test_l102_sheet_76(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_78(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: rebeccapurple; background-color: hwb(6.2832rad 70.3% 50%) } 100% { color: hwb(487grad 94.13% 100%) } } html { scroll-timeline-name: --t; scroll-timeline-axis: y, y; timeline-scope: auto } body { timeline-scope: --v } #o { timeline-scope: --v } #i { animation: k 500ms; animation-timeline: scroll(nearest y); animation-composition: accumulate }", 1500, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#786e82;background-color:#95959532\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
@@ -2108,9 +2150,6 @@ static void test_l102_sheet_76(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_77(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: papayawhip; background-color: white } } body { timeline-scope: --u, --t, --v } #o { timeline-scope: all } #i { color: white; background-color: black; animation-range: 0% contain 78.18%; animation: k 2s linear; animation-timeline: none, SCROLL() } #q { scroll-timeline-name: --v, none; scroll-timeline-axis: x; view-timeline: --v }", 0, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2118,11 +2157,14 @@ static void test_l102_sheet_77(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: powderblue; background-color: hsl(none 34% none/none) } 60% { color: red } 100% { color: color(display-p3 none none 0.717) } } html { scroll-timeline: --t, none } body { timeline-scope: all } #i { background-color: color(prophoto-rgb none none 0.8 /120%); animation: k 2s linear 250ms alternate; animation-timeline: view(block 10%), scroll(inline); animation-range: normal }", 0, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000e4\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#001a1c\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_79(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: color(prophoto-rgb 0.07 0.016 0.33) } } html { scroll-timeline: --v; view-timeline-name: --t; view-timeline-axis: y } body { timeline-scope: --v } #i { animation: k 1000ms 250ms both; animation-timeline: auto; animation-range: 12.5% 109.5%,150% scroll 84.99%; animation-composition: replace }", 0, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
@@ -2135,9 +2177,6 @@ static void test_l102_sheet_77(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_78(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hsl(none none none / none); background-color: currentcolor } 50% { color: hwb(1.5708rad 9.83% 80% / -0.5); background-color: rgba(none -10 0 100%) } 60% { background-color: hsl(737.8grad 83.0245% 75.66 / 2) } } @keyframes j { 25% { background-color: color(xyz none none none / none) } } html { scroll-timeline: --t inline, none x; view-timeline: --t inline } #i { color: hwb(none none none /none); background-color: rgb(32 114 128 / 0); scroll-timeline-name: --t; view-timeline: --t inline; animation: k 2s linear both, k 1s linear 1s both alternate; animation-timeline: scroll(x root); animation-range: -34.03%,0,114% 117.6% }", 1500, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff000000;background-color:#20728000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2145,11 +2184,14 @@ static void test_l102_sheet_78(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: red; background-color: hwb(none none 84 / none) } 33.33% { color: color-mix(in srgb, oklch(42.22% none 656 / none), color(display-p3 0 0.269 0.4) 0%); background-color: color-mix(in srgb, hsl(-619.9 96.6% 79.1% / 0.9999), #dffa 63.71%) } to { color: oklch(none none none); background-color: color-mix(in srgb, oklab(none none none), lch(none none -317.753/none)) } } html { scroll-timeline-name: --t; scroll-timeline: unset } #o { scroll-timeline-name: --t --u; scroll-timeline-axis: inline; scroll-timeline-name: --v } #i { background-color: oklch(0% 0.1324 none/none); animation: j 1000ms 3, j 500ms linear infinite; animation-timeline: --t, view(block 10%) }", 0, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#02000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_80(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: color(xyz-d50 none 0 none); background-color: rgb(87 222 194 / 0.5) } } html { timeline-scope: --t } body { timeline-scope: all } #o { timeline-scope: --t } #i { color: hsl(659, 109%, 30%); background-color: hsla(672.2289deg, 19.8%, 0%, 0.9999); animation: j 1000ms; animation-timeline: --v; animation-range: entry 15%, 0%, cover 113.13% contain; animation-composition: replace }", 1500, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#960099;background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2157,16 +2199,13 @@ static void test_l102_sheet_78(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: rgb(28.3 92.85 77% /none) } } html { scroll-timeline-name: --t; scroll-timeline-axis: y, block } #o { scroll-timeline-name: --u; scroll-timeline-axis: y, y; view-timeline: --u block; timeline-scope: ALL } #i { color: color(none display-p3 0.58 0.417 -16.4%); background-color: color(xyz 1.708 0.0965 none); animation-range-start: 71.07%, exit-crossing, contain 111.29%; animation-range-end: 52% , Entry 20%; animation: j 1s linear 2 forwards reverse; animation-timeline: view(), --t; animation-range: 75.07% 125.7% }", 1500, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff004e\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff0080\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_79(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hsla(-1.2143turn 94% 40%) } } html { scroll-timeline-name: --t, --u; scroll-timeline-axis: y, x } #o { scroll-timeline-name: --u, --v } #i { color: lch(20% 189.9 none); background-color: hwb(none 54% none/none); animation: k 500ms 1s both, k 1000ms; animation-timeline: scroll(root) } #q { scroll-timeline: --u y, --t }", 1500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9306c1;background-color:#ff8a8a00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8f06c1;background-color:#ff8a8a00\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
@@ -2177,6 +2216,9 @@ static void test_l102_sheet_79(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+}
+
+static void test_l102_sheet_81(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: hwb(477.7 100% 37%) } } html { view-timeline-name: --u } #o { scroll-timeline-name: --v; view-timeline-name: --v; timeline-scope: --v } #i { animation: k 500ms -500ms both; animation-timeline: scroll(self); animation-composition: replace } #q { scroll-timeline: --t y }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2189,9 +2231,6 @@ static void test_l102_sheet_79(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_80(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hwb(none 92.66deg 23 35); background-color: color(xyz-d50 none none none /87.9%) } } html { scroll-timeline: --t y; view-timeline-name: --u } #i { color: color(rec2020 none none none /none); background-color: color(display-p3 none none none); animation-range-start: entry -5% , 10%; animation-range-end: 1em, scroll 50%; animation: k 2s forwards; animation-timeline: none, --nobody; animation-range: cover 38.7%, 133.9% exit 112% }", 500, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2204,8 +2243,11 @@ static void test_l102_sheet_80(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+}
+
+static void test_l102_sheet_82(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color(a98-rgb none 0.985 0.2); background-color: hwb(none none none) } 33.33% { color: color-mix(in srgb, oklab(none 0 0.2124), color(a98-rgb none none none /10.6%)); background-color: hsla(318grad, 24%, 92%, 1) } 75% { color: hsla(-208.8deg 33% 87% / 0.5); background-color: currentcolor } } html { scroll-timeline-name: --u; scroll-timeline-axis: x; view-timeline-name: --v } #o { timeline-scope: --u } #i { animation: k 1000ms linear backwards; animation-timeline: scroll(); animation-range: entry-crossing -36.97% , 48.5% cover , cover 7.7% 100% } #q { scroll-timeline: --t; scroll-timeline-name: unset }", 1500, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4f645488;background-color:#c4c4c7cf\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4f585488;background-color:#c4c1c7cf\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
@@ -2216,9 +2258,6 @@ static void test_l102_sheet_80(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_81(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color(srgb none none 0.9135) } 50% { background-color: #b55a } to { color: hsla(none 30 92.563% 87.8%) } } @keyframes j { 60% { background-color: lab(none none none) } } #i { color: hwb(-359.7grad 30.757% 50% /1); animation: k 1000ms linear 500ms, k 1000ms -500ms both; animation-timeline: --t; animation-range-start: calc(10%) , cover , 0%; animation-range-end: 122.44% }", 500, 1100);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#806c4e\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2231,6 +2270,9 @@ static void test_l102_sheet_81(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+}
+
+static void test_l102_sheet_83(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: #eed1 } } html { scroll-timeline: --t } #i { background-color: hsla(-2turn 121% 65%); animation: k 2s linear 1s; animation-timeline: --v; animation-range: entry 15.1%,91% contain 33.33% }", 500, 7500);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff4d4d\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2243,137 +2285,95 @@ static void test_l102_sheet_81(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_82(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: rgb(56.2 15% 29%); background-color: color-mix(in srgb, lab( 23.929  13.171  -26.581 ), rgba(171.1 231 218 /none) 25%) } 75% { background-color: rgb(183 195 120 / 1.5) } } @keyframes j { 50% { color: rgba(83.7 61 none /44%); background-color: hsla(none 120 84.89% 51.52%) } 75% { color: color-mix(in srgb, oklab(none none none/0), lch(65.72%  146.9%  -0.166turn)); background-color: hwb(none 60 49 54%) } } html { scroll-timeline-name: --t; scroll-timeline-axis: y, y; view-timeline-name: --v } #i { color: hwb(165grad 50% 16%); background-color: hwb(317.06grad 63% 92); animation: k 2s linear; animation-timeline: --u, scroll(root); animation-range: -50% 50% } #q { scroll-timeline: --v }", 0, 3637);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#80d6a9;background-color:#686868\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: lab(none 9999.9999 none) } 75% { color: indigo; background-color: currentcolor } } body { view-timeline-name: --v; view-timeline-axis: inline } #o { view-timeline-name: --v } #i { background-color: hwb(299 85.66% 1.13%); animation: k 1s linear reverse; animation-timeline: --t, --nobody; animation-range: 25% }", 500, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#fcdafc\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: currentcolor } } html { scroll-timeline: --u y; scroll-timeline-name: auto } body { view-timeline: --v; timeline-scope: --t --u } #o { timeline-scope: --u } #i { color: hwb(720deg 23.984% 50%); animation: k 500ms linear 250ms forwards; animation-timeline: scroll(root block); animation-range-start: 89.15%, contain; animation-range-end: entry 76%, exit-crossing, cover 0% }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#803d3d\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: rgb(268, 87, 137); background-color: seagreen } } html { view-timeline: --v inline; scroll-timeline: --t } #i { background-color: lime; animation: j 2s both; animation-timeline: --t, auto; animation-range-start: entry-crossing; animation-range-end: 54.4%, entry 115%, entry }", 1500, 4484);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ff00\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_83(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hwb(4.3rad 16% -15%/1) } 75% { color: rgba(144.9 none none / 0); background-color: currentcolor } 100% { color: black; background-color: hwb(none -659.911 8% 64% / 0) } } html { scroll-timeline: --t } #o { timeline-scope: --t --u } #i { color: hwb(-681.5 31.5% 35.33%); animation: k 1s linear 500ms alternate; animation-timeline: scroll(self), --t; animation-range: entry -5% scroll, normal, entry-crossing 95% scroll 29% }", 1500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a58750\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color(srgb-linear 0.6704 none .5); background-color: hsl(none 7% 0%) } } html { scroll-timeline-axis: y, y; scroll-timeline-name: --t, none; view-timeline-name: --v } #o { timeline-scope: --t, --u } #i { color: rgb(214 189 197 / 50%); background-color: red; scroll-timeline-name: --v; scroll-timeline-axis: x, block; animation: j 2s linear; animation-timeline: scroll(root block), SCROLL(); animation-range: contain 5.63% 116%,contain 117%,100% } #q { scroll-timeline-name: --t }", 0, 1000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d6bdc580;background-color:#ff0000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: hsla(none 20.8% none/none) } 25% { background-color: currentcolor } 75% { background-color: color-mix(in srgb, #bf110dbd 25%, color(prophoto-rgb none 0.96 0.711)) } } @keyframes j { 33.33% { color: #be40; background-color: color-mix(in srgb, hwb(121 none none / none), color-mix(in srgb, cornflowerblue 25%, white)) } 75% { color: color(prophoto-rgb 0.43 none 0) } } html { scroll-timeline-name: --t; timeline-scope: ALL } body { timeline-scope: --t, --u } #i { animation-range: scroll 60.52%, contain 33.33% contain, entry -19.7% entry 10%, 25%; animation: j 1000ms linear backwards, k 1000ms both; animation-timeline: scroll(), view(); animation-range-start: -47.3% , exit 15% , 22% , cover 0%; animation-range-end: exit-crossing , entry-crossing -2.3% , cover }", 500, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#790000;background-color:#6cf27f41\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(display-p3 0.5595 none none/none); background-color: hsl(151 5% none/none) } to { background-color: color-mix(in srgb, hsla(11rad 25.9% 105.27% / 0), oklch(0.374 none none)) } } @keyframes j { 60% { background-color: hsl(100grad 36% 116.2 / 1) } } html { scroll-timeline-name: --t; scroll-timeline-axis: block } #i { animation-range-start: exit-crossing 107.6% , entry -5%; animation-range-end: cover 77% , 0 , scroll 17.7% , -10%; animation: k 1s reverse; animation-timeline: scroll(root), --u; animation-range: contain 33.33% }", 1500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7d0000;background-color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: hwb(34 5.5% 20.4%) } } @keyframes j { 0% { color: #fe3dd5bd } 75% { color: #9b084dfb; background-color: color(prophoto-rgb 0.33 0.4737 -1 / 1) } 100% { background-color: hwb(none 31 16%/none) } } html { scroll-timeline-axis: x; scroll-timeline-name: --t, none } #o { timeline-scope: --t, --u } #i { color: oklab(none 0 -0.0917); animation: j 500ms linear 1s both, k 1s linear; animation-timeline: scroll(), scroll(root); animation-range-start: cover 31.59% }", 500, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#88510c;background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
 static void test_l102_sheet_84(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hsla(-6.46rad 51% 0.089% / 0.5) } 50% { background-color: hwb(466.8715 none none/19.26%) } } html { scroll-timeline-name: --t; scroll-timeline-axis: y } body { timeline-scope: --t, --u } #i { color: lime; background-color: white; animation: k 1s; animation-timeline: --t; animation-range-start: 100%, 150%; animation-range-end: -10%; animation-composition: accumulate }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff00;background-color:#ffffff\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: #d5d } 75% { color: color(xyz-d65 none 0 none/none); background-color: oklch(15.6% none 720deg/none) } } body { timeline-scope: --t, --u } #o { timeline-scope: --u, --t, --v } #i { animation: j 2s; animation-timeline: --t; animation-range: contain 33.33% normal,100%,contain 111.4% } #q { scroll-timeline: --u, --t }", 0, 10000);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: currentcolor } } html { scroll-timeline-name: --u; scroll-timeline-name: --t --u } body { timeline-scope: all } #o { timeline-scope: --u } #i { color: deeppink; animation: k 500ms linear; animation-timeline: scroll(nearest y); animation-range: entry 16.16%, 26.6% 10.3% }", 1500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff1493;background-color:#ff149355\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color-mix(in srgb, color(none xyz-d50 0.6476 -0.7 0.1/0.5) 100%, hwb(-619 none none)); background-color: hsl(6.2832rad 55.8% 51% / 0.5) } to { color: hwb(400grad 100% 82%/1); background-color: color(xyz-d65 none none none) } } html { scroll-timeline: --v inline } body { timeline-scope: auto } #i { animation: k 500ms linear, j 1s linear both reverse; animation-timeline: SCROLL(), --t; animation-range: contain 80.2%,-3% contain 33.33%,exit 98% cover 25.1% }", 1500, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: oklab(none none none / none) } 100% { background-color: currentcolor } } html { scroll-timeline: --t, --u inline, none inline; view-timeline-name: --u } body { timeline-scope: --v } #i { background-color: hwb(9.43rad 0% 51%); animation: j 500ms linear 0.5 alternate, k 1000ms linear 2 forwards alternate; animation-timeline: --t; animation-composition: replace }", 500, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color(srgb-linear none 0.446 0.3834) } 100% { color: hsl(154, 31%, 50%) } } html { scroll-timeline: --u block, --v x } #i { color: black; animation: k 500ms linear; animation-timeline: none; animation-range: 18.56% 97% , 114% , -36% }", 500, 5000);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: darkslategray; background-color: hwb(225.8 91% none/none) } 33.33% { color: burlywood } 60% { color: color(prophoto-rgb none 0.2414 0.434/none); background-color: rgb(61 75 218 / 0) } } html { scroll-timeline: --t } body { view-timeline-name: --t; view-timeline-axis: inline } #o { timeline-scope: --u, --t, --v } #i { color: color(srgb 0.28 0.483 none); animation-range-start: cover; animation-range-end: entry-crossing,96%,exit 117.8%; animation: j 1s linear; animation-timeline: scroll(nearest y); animation-range: contain 33.33% 27.97%,scroll 60.52% exit 90%,contain entry -19.7% }", 500, 2163);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#477b00\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_85(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: currentcolor } 50% { background-color: hsl(none 94.9% 18.7%) } 75% { background-color: color-mix(in srgb, rgb(none 0 none), rgb(none, 0, 0)) } } html { scroll-timeline-name: --t; scroll-timeline-name: unset } #i { background-color: color(none xyz-d65 0.2903 2 0.3076 / -0.5); animation: k 500ms 500ms, k 1000ms linear 1s 3 backwards; animation-timeline: scroll(inline); animation-range: unset }", 500, 5000);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hwb(1.768turn 19 50%) } 50% { background-color: dodgerblue } 60% { color: rgb(10 29 16% / 120%) } } html { scroll-timeline: --v } body { scroll-timeline: --t; view-timeline-name: --v } #i { background-color: hwb(331 0% 82% /0); animation: k 2s linear reverse; animation-timeline: --u; animation-range: scroll 43.15% -47.08% }", 0, 5000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#2e001600\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: oklab(0.6 none none /none); background-color: hsl(706 7 56% / 1) } } body { timeline-scope: all } #i { color: hsla(none none none); animation: k 500ms linear; animation-timeline: scroll(x root); animation-range: exit contain 95% }", 0, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color(rec2020 none 0 0.5845); background-color: color-mix(in srgb, color(prophoto-rgb  1%  68.4%  0.4), oklch(24.1% none none) 96%) } 50% { background-color: indigo } } html { scroll-timeline: --t; view-timeline-name: --v } #i { animation: k 2s linear 1s 0.5 backwards; animation-timeline: none; animation-range: cover 119% }", 500, 4200);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hsl(0rad 87.18% 21.9405% / 2) } 60% { background-color: color(none srgb 0.1822 32% 0.8) } 100% { color: rgb(100% 198 none); background-color: currentcolor } } #o { timeline-scope: --t } #i { background-color: rgb(128.2 none none); animation-range: entry 10%; animation: j 1000ms linear backwards, k 1s linear 3; animation-timeline: --v, SCROLL(); animation-range-start: 25%, entry 10%; animation-range-end: --x } #q { scroll-timeline-name: --t; scroll-timeline-axis: inline }", 0, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#690707;background-color:#7a0202\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_85(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: hsla(-172.94grad 24% 49% / 0.5) } } body { scroll-timeline-name: --v, --u } #o { scroll-timeline: --v, --t } #i { animation: k 500ms linear 1s; animation-timeline: scroll(root); animation-range-start: entry-crossing, 25%; animation-range-end: -10%; animation-composition: accumulate } #q { scroll-timeline: --u }", 0, 8600);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: dodgerblue } 60% { color: color(srgb-linear none 0 none); background-color: rebeccapurple } 75% { background-color: hwb(720deg 51% 100%) } } html { scroll-timeline: --t; view-timeline: --t block } body { timeline-scope: all } #i { animation: j 1s linear 0.5; animation-timeline: scroll(inline); animation-range: 10% 90% }", 0, 5000);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 100% { background-color: color(xyz-d50 none none 0 /120%) } } html { view-timeline-axis: inline; view-timeline-name: --t; scroll-timeline: --t y, --u inline; timeline-scope: --u } #i { background-color: hsla(175.88deg, 34.976%, 15%, 2); animation-range: entry 10% , exit-crossing 25% , scroll 50% entry-crossing , exit-crossing 61.8%; animation: j 1000ms 0.5; animation-timeline: scroll(x root); animation-range: entry } #q { scroll-timeline-name: --t, --v; view-timeline: --u inline; view-timeline-axis: y }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#193432\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color-mix(in srgb, lch(none none -2.372rad), rgb(none none none)); background-color: hwb(2.4turn 74.2% 0%/72.3%) } 75% { background-color: hsl(382.2, 50%, 40.589%) } } html { scroll-timeline-name: --t; view-timeline-name: --t } body { scroll-timeline-name: --u, --v } #i { color: oklch(none 0.0553 227 /none); background-color: lch(0% none none/none); animation-range-start: exit 90%; animation: j 1000ms alternate; animation-timeline: SCROLL(); animation-range: 100% exit 90%,0% entry -10.2%,entry 10% entry }", 500, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000100;background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
 static void test_l102_sheet_86(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: color(prophoto-rgb 0.75 0.1274 none) } } html { scroll-timeline-name: --t, --u, none; scroll-timeline-axis: y; timeline-scope: --u } #i { animation: j 1000ms linear 3; animation-timeline: scroll(root), --t; animation-range: -7%,85% }", 1500, 6700);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: color-mix(in srgb, 100% hwb(none none none), hsl(-207.4537, 109%, 41%)); background-color: color(a98-rgb none 0.193 none/none) } 60% { color: hwb(none none none); background-color: hwb(none none 45%/none) } } @keyframes j { 50% { background-color: color-mix(in srgb, lch(none 31.22 133 2rad), color-mix(in srgb, color(srgb-linear none 0 none), rgb(171 -10 none))) } 60% { background-color: lch(105 none 2.86turn) } } html { scroll-timeline-name: --t; view-timeline-name: --u } #o { scroll-timeline: --v } #i { color: hsla(715.82grad, 26%, 0%, 2); background-color: lab(none none none /0); animation: k 1s linear; animation-timeline: scroll(nearest y), --t } #q { scroll-timeline: --u y, --t y; view-timeline: --u inline; view-timeline-axis: y }", 0, 5000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000;background-color:#00000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: rgb(16% none none/none); background-color: #effeface } } @keyframes j { 50% { color: color(none display-p3 0.595 0.7 0.2375); background-color: color(srgb none 0 19%) } } html { scroll-timeline: --t } #o { timeline-scope: none } #i { background-color: #8b3; animation: k 1s linear -500ms alternate; animation-timeline: --t, scroll(root); animation-range-start: 25%,contain,contain 89%,-10%; animation-range-end: 100% } #q { scroll-timeline: --u y; scroll-timeline: initial }", 1500, 10000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#88bb33\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: hwb(none 77% none/50%) } } @keyframes j { 33.33% { color: hwb(120 100% 4.4%/0.5); background-color: color(none xyz -11% 0.7 0.08) } } html { scroll-timeline-name: --t, --v; scroll-timeline-axis: block } #i { animation: k 1000ms -500ms; animation-timeline: --t, --t; animation-range: 25%; animation-composition: replace } #q { scroll-timeline-name: --t, --v; view-timeline: --t inline }", 0, 10000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: maroon; background-color: black } 60% { background-color: #d2cb8b } } html { scroll-timeline-name: --u } body { timeline-scope: all } #i { animation: k 1000ms, k 500ms linear; animation-timeline: scroll(root), scroll(root); animation-range-start: 25%; animation-range-end: exit-crossing, scroll 119%, 32.6% } #q { scroll-timeline: --u y }", 0, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#720000;background-color:#313021\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: color(srgb 0 none none) } } #i { background-color: rgba(none none none / 0); animation: j 500ms linear forwards, k 2s linear 1s; animation-timeline: --v, scroll(root block); animation-range: contain 76.6% -26%,-10% normal; animation-composition: add }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000082\"", style_of("i"));
-    TEST_ASSERT_EQUAL(1, g_d.col_animated);
-    TEST_ASSERT_EQUAL(1, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: oklab(0.7 none none); background-color: red } 60% { color: rgb(none none none / none) } } @keyframes j { 100% { color: color-mix(in srgb , 25% orange , hwb(510.6grad 0% 94.27%)) } } #o { timeline-scope: --t } #i { background-color: hwb(none 60% none /0); animation: k 2s; animation-timeline: --u, --t; animation-range-start: cover 0%; animation-range-end: cover 32.76%; animation-composition: add }", 500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff999900\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: hsl(90deg none none) } 60% { color: hwb(430.102grad 46.667% 0%) } } body { scroll-timeline-name: --u; scroll-timeline-axis: block, y; view-timeline: --u block; view-timeline-axis: y } #i { animation: k 1s linear both; animation-timeline: --v }", 500, 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
@@ -2381,213 +2381,240 @@ static void test_l102_sheet_86(void) {
 }
 
 static void test_l102_sheet_87(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: #ae2c; background-color: color(a98-rgb 1 none 0) } 33.33% { color: color(none prophoto-rgb 0.0769 2.5e-2 0); background-color: lab(49.5% none 50%) } 75% { color: currentcolor; background-color: sandybrown } } @keyframes j { 33.33% { color: hwb(89 83 20% / none) } to { color: color-mix(in srgb, hwb(257 75 none) 100%, bisque); background-color: color-mix(in srgb , 60% blue , rgb(137 47 195 / 0.4719)) } } html { view-timeline-name: --t; view-timeline-axis: y } body { scroll-timeline: --t; timeline-scope: --u, --t, --v } #i { color: hwb(-2.8rad 100% 40%); animation-range: NORMAL entry-crossing; animation: k 1000ms 500ms reverse; animation-timeline: scroll(nearest y); animation-range: 87%, 89.97%, exit-crossing, cover 0% }", 500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b6b6b6\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: paleturquoise } } body { timeline-scope: all } #o { timeline-scope: ALL } #i { animation-range: -10%, 0%; animation: k 500ms infinite; animation-timeline: scroll(root); animation-range: normal }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: currentcolor; background-color: hwb(6.2832rad 22 54% / 0) } 60% { color: black; background-color: darkorange } to { background-color: currentcolor } } @keyframes j { 25% { color: white; background-color: hsla(none 3.48% none) } } html { scroll-timeline-name: --u, --t; scroll-timeline-axis: inline } #i { color: bisque; animation: j 1s linear backwards; animation-timeline: scroll(root) }", 1500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: rgb(241 34 210 / 120%); background-color: lab(37.15 1e-1 none/none) } 100% { background-color: lime } } html { view-timeline-name: --v; view-timeline-axis: inline } #o { timeline-scope: all } #i { animation: k 500ms; animation-timeline: scroll(self); animation-range: entry -5% 39.1%, entry 103.4% } #q { scroll-timeline-name: --u; scroll-timeline-axis: y, block }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_88(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: aliceblue; background-color: currentcolor } 60% { background-color: color-mix(in srgb, oklab(27.9%  0  -0.1085), 100% oklch(none 0.4070 none)) } } @keyframes j { 50% { background-color: color(a98-rgb 63.9% none none/none) } 75% { background-color: blue } } body { scroll-timeline-name: --v; scroll-timeline-axis: x, inline } #o { timeline-scope: --v } #i { background-color: hwb(-75deg 0% 38/-0.5); animation: k 1s linear; animation-timeline: --t, auto; animation-range: cover 0% contain 64% }", 500, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#77009e00\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: #edaaef94; background-color: rgba(4.1%, 232, 40%, 50%) } 60% { color: color(srgb-linear none none none / 84.1%); background-color: hwb(241 47 none) } 75% { color: hsla(150 63.6% none /none); background-color: hsl(none 98.2% none /0.5) } } html { scroll-timeline-name: --v, --t; scroll-timeline-axis: block; view-timeline-name: --t } body { timeline-scope: auto } #i { view-timeline-name: --t; scroll-timeline: --t; animation: k 500ms linear, k 1000ms linear alternate; animation-timeline: scroll(root), auto; animation-range-start: entry-crossing 25.94% , 5 , cover; animation-range-end: normal,46%,-10%,exit }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: hwb(60 3% 81%) } 25% { color: hsla(10.16rad, 0%, 12%, 0.5); background-color: currentcolor } 33.33% { background-color: color(xyz none -0.2989 none) } } @keyframes j { 25% { color: rgb(88.8%, 58%, 221); background-color: color(prophoto-rgb 0 117% none) } 75% { color: currentcolor; background-color: rgb(199, 255, 9) } } body { timeline-scope: --u, --t, --v } #i { animation: k 1000ms linear 250ms both; animation-timeline: scroll(x root); animation-range-start: cover,-21.5%,scroll 58%; animation-range-end: scroll 50%,39.2%,22%,exit-crossing }", 0, 7500);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: oklch(none 2.5e-2 0.1133 29) } 50% { color: color-mix(in srgb, 46% hsla(-0.5turn 36% 97.1% / 0.9999), oklch(none 0.4002 724.04deg/-0.5) 70.22%); background-color: color(srgb none none none/0.5) } 75% { color: rgb(9%, 109, 8%); background-color: slateblue } } @keyframes j { 50% { background-color: hsla(0.19rad, 62%, 73%, 1) } 75% { color: rgba(none 240 228 / 36%); background-color: oklch(none 0.4436 1.5708rad) } } html { scroll-timeline-name: --t; scroll-timeline-axis: inline; view-timeline: --v inline } #i { animation: j 2s linear 0.5; animation-timeline: --u; animation-range-start: -18%, entry-crossing 72%, entry 10%, scroll 50%; animation-range-end: 114%,exit 90%,entry }", 500, 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_89(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: rgb(250 104 53 / 0.5) } 25% { color: red; background-color: oklab(none 1 -0.1335 -0.2554) } } body { scroll-timeline-name: --t, --v; scroll-timeline-name: --t --u; timeline-scope: --u, --t, --v } #i { color: rgb(161 196 184 / 50%); background-color: lime; animation: k 1s linear, k 1000ms linear; animation-timeline: --t; animation-range: cover 10% 20%,contain 28.95% exit-crossing 44% } #q { scroll-timeline-name: --v, --u; scroll-timeline-axis: inline, block; view-timeline-name: --v }", 500, 3677);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a1c4b880;background-color:#00ff00\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: red } 50% { background-color: hwb(8.8846rad 43.8% 58.7%/0) } } @keyframes j { 60% { background-color: blue } } html { scroll-timeline: --t y; scroll-timeline: --t --u } body { timeline-scope: --t --u } #i { background-color: color(xyz 0.5 none none); animation: j 1000ms linear; animation-timeline: --t }", 0, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#950085\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color-mix(in srgb, oklab(0.856 none none), 100% hwb(none none 78%)) } } @keyframes j { from { color: hsl(-1.71turn, 3.44%, 40.2%, 1); background-color: orange } 33.33% { background-color: rgb(129 97 58 / 120%) } 100% { color: color-mix(in srgb, #d00, hwb(-0.047turn 37 53.8%)); background-color: black } } html { scroll-timeline-name: --v; scroll-timeline-axis: block, block } #o { scroll-timeline: --t y, --v y; view-timeline-name: --v } #i { background-color: rgb(70% 25 none /none); animation: k 1000ms linear 2; animation-timeline: scroll(); animation-range-start: exit-crossing, scroll 119%, 32.6%, -4.49%; animation-range-end: entry 44.8% , -10% }", 0, 5000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#b3190000\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: rgb(145 none 83%); background-color: oklch(none none none /1) } } @keyframes j { 0% { background-color: color(a98-rgb none none none /none) } 25% { background-color: royalblue } } body { timeline-scope: --v } #o { timeline-scope: --t, --u; view-timeline: --v inline } #i { color: red; background-color: color(a98-rgb 0.3243 none 0.5002); animation: j 1000ms linear, j 1s linear 500ms; animation-timeline: scroll(self); animation-range-start: -6% } #q { scroll-timeline-name: --v; view-timeline-name: --u }", 500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000;background-color:#600083\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: color(prophoto-rgb 0.3 0.31 0 / none) } } @keyframes j { 25% { background-color: blue } } html { scroll-timeline-name: --t; scroll-timeline-axis: x, y; timeline-scope: --u } #i { color: color(none display-p3 0.2 0.76 0.87); background-color: hsl(-670 71.9132 1 / 150%); animation: k 1000ms 3; animation-timeline: --u; animation-range: entry 59% exit,Entry 20% entry-crossing 11.1%,100%,50% -7.44% }", 0, 7170);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#040401\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: hsl(2.74rad 32.3% 64%); background-color: hwb(1.67turn 100% 0%/120%) } 50% { color: rgb(191 17 207 / 0.8); background-color: rgb(66 118 175 / 0.98) } to { color: hwb(79 13% 100%) } } html { scroll-timeline: --u, --t inline, none } #i { color: #ee0; animation: k 1s 2 alternate, k 2s linear 1s; animation-timeline: scroll(inline); animation-range-start: contain -13.7%, 63%, normal; animation-range-end: 50% , 67.7% , Entry 20% }", 500, 2302);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#eeee00\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-}
-
-static void test_l102_sheet_90(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: mediumpurple; background-color: currentcolor } 75% { color: oklch(none 0.0316 none) } } html { scroll-timeline-name: --t, none; view-timeline-name: --v; view-timeline-axis: y } body { timeline-scope: --t, --u } #o { timeline-scope: --t, --u } #i { color: oklab(none none none / none); background-color: rgb(204 157 100 / 50%); animation: j 1000ms linear 1s infinite; animation-timeline: --t }", 0, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#cc9d6480\"", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: #c7c } 60% { background-color: color-mix(in  srgb, darkgoldenrod, rgb(24 54.1% 26 / -0.5)) } } html { scroll-timeline-name: --u; scroll-timeline-axis: inline, block } #i { color: lightblue; animation: j 1000ms -500ms both, j 1000ms linear; animation-timeline: none, --v; animation-range: 50% 50% }", 1500, 10000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#add8e6\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: hwb(150.1grad 50% 90% /1.5) } 50% { background-color: currentcolor } 75% { background-color: lime } } @keyframes j { to { background-color: color(display-p3 none 19.4% 1.2279) } } html { scroll-timeline: --t x, none; view-timeline: --u } body { timeline-scope: --v } #i { animation: k 1000ms linear -500ms, k 2s linear -500ms; animation-timeline: scroll(inline); animation-range: 150% -2.9% , scroll 3.1% 132.09% , -10% 50%; animation-composition: accumulate }", 1500, 0);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { to { color: lch(none none none); background-color: color-mix(in srgb, color-mix(in srgb, azure 50%, #5c7927), hwb(none none none / 120%)) } } html { scroll-timeline: --t; view-timeline-name: --v; view-timeline-axis: y } #i { animation-range: 50% entry-crossing 28%; animation: j 500ms; animation-timeline: --v, SCROLL(); animation-range-start: exit 40% } #q { view-timeline-name: --u; view-timeline-axis: inline }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: lavenderblush } 60% { color: currentcolor; background-color: color(xyz-d65 none 0 0/none) } to { background-color: rgb(185 29 112 / 41%) } } html { scroll-timeline-name: --t } body { timeline-scope: --u } #i { background-color: hwb(61 none 28% / none); animation: k 1s linear both; animation-timeline: view(block 10%), scroll() }", 500, 5286);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#b5b80000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: color-mix(in srgb, oklab(0 none none/0.715) 72%, hwb(1.5708rad 53% 11%)) } 33.33% { background-color: hwb(none none none / none) } 60% { color: hsla(none none none) } } html { scroll-timeline-name: --u; view-timeline-name: --v } #i { background-color: lab(none -84 43); animation: j 2s linear reverse, k 500ms linear; animation-timeline: --nobody; animation-range: cover 0%, contain 44% scroll 50%, 27.54%, contain 33.33% }", 1500, 1759);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#002600\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
-static void test_l102_sheet_91(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: rgba(33%, 3%, -9, 0.5) } 50% { color: gray; background-color: color-mix(in srgb, 91.0106% lch(none none none / none), color(rec2020 none none none)) } 75% { background-color: hsla(none none none /none) } } body { scroll-timeline-name: --u } #o { timeline-scope: --t } #i { background-color: hsl(-121.7grad 0% 37% / 1); animation: k 1s linear alternate; animation-timeline: --t, --nobody } #q { view-timeline-name: --u }", 1500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5e5e5e\"", style_of("i"));
+static void test_l102_sheet_88(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: currentcolor } } html { scroll-timeline-name: --t; scroll-timeline-axis: block } body { timeline-scope: none } #i { color: #c92b; animation: j 1000ms 3 both; animation-timeline: auto, auto; animation-composition: add }", 500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#cc9922bb\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: currentcolor; background-color: hsl(251 none 53%) } } @keyframes j { 25% { color: currentcolor; background-color: hwb(6.2832rad 100% 100% / 0.5) } 60% { color: rgb(182 165 117 / 1.5); background-color: #6c1dfd3f } 75% { background-color: oklch(0.6102 none none) } } html { scroll-timeline: --t; timeline-scope: --t } #o { scroll-timeline-name: --v } #i { animation: j 2s linear 1s; animation-timeline: view(block 10%); animation-range: 25%; animation-composition: add }", 0, 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: hsl(514.81deg, 30.56%, 49.53%); background-color: lightsteelblue } 60% { background-color: hwb(none 98 none/none) } } body { timeline-scope: --u } #i { color: lch(none none none / 0.805); animation: k 1s linear infinite forwards; animation-timeline: SCROLL(), scroll(); animation-range-start: 84.18%; animation-range-end: 25%,63.75%,140.6%; animation-composition: accumulate } #q { view-timeline: --u block }", 0, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000cd\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: hsla(1.5708rad 27% 11.6% / 0) } 60% { color: currentcolor; background-color: rgb(1 2 3 / 4 / 5) } } @keyframes j { to { background-color: oklab(none 0.4141 -0.1315) } } body { timeline-scope: auto } #o { scroll-timeline: --v y, --t; view-timeline-name: --v } #i { color: hwb(300 69 0%); animation: j 1000ms 1s; animation-timeline: scroll(self) } #q { scroll-timeline-name: --t; scroll-timeline: unset }", 0, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffb0ff\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: lab(57.08 none -96 /120%) } 50% { color: hwb(none none 65); background-color: rgb(25, 63%, 153) } } html { scroll-timeline: --t block, --u } #o { view-timeline-name: --u; view-timeline-axis: inline; timeline-scope: --t --u } #i { background-color: white; animation: k 1000ms linear infinite, j 2s linear 500ms alternate; animation-timeline: view(); animation-range: -36% scroll 13%, normal Entry 20%, 12.5% 19.7%, 79.8% contain 39.93%; animation-composition: replace }", 500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffffff\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 100% { color: hsla(-0.5turn 71% 80.62% / 150%) } } @keyframes j { 25% { background-color: #3d99bd } } html { scroll-timeline: --t; scroll-timeline-name: --t --u } body { timeline-scope: all } #o { view-timeline-name: --t } #i { background-color: color(xyz 100% none none/1); scroll-timeline-name: --v; scroll-timeline-axis: x, y; animation: k 500ms linear 250ms, j 1s backwards; animation-timeline: auto; animation-range: 100% Entry 20%,-24.16% Entry 20%,exit-crossing exit 90%,entry 10px,0% exit-crossing 72.31% } #q { scroll-timeline-name: --t, --u; scroll-timeline-axis: y, y }", 500, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#557878;background-color:#ad4177\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: hwb(720deg none 54%) } 25% { color: currentcolor; background-color: hwb(240 50% 83%) } } @keyframes j { 33.33% { color: hsl(294 50% 13% / 100%) } 75% { background-color: hsl(5.74rad, 27%, 7%) } } html { scroll-timeline-name: --u, --t; scroll-timeline-axis: inline, y; scroll-timeline-name: --t --u } #o { timeline-scope: --v } #i { color: color(srgb none -19.18% 0.42); background-color: hsla(3.1416rad 47% 0% / 0.9999); animation: j 1000ms linear 500ms backwards; animation-timeline: scroll(nearest y); animation-range: calc(10%) scroll }", 1500, 1806);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00006b;background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
-static void test_l102_sheet_92(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: hwb(-362.6deg none none/120%) } 60% { background-color: oklab(none -0.4996 none) } } @keyframes j { 33.33% { color: hsl(180, 54%, 18.9075%, 99.99%); background-color: oklab(none 0.1 -0.2519/none) } 50% { color: rgb(1 2 3 4); background-color: #76c } } html { scroll-timeline: --v block, --t y; view-timeline: --t block; timeline-scope: --v } body { timeline-scope: --v } #i { animation: k 1000ms linear; animation-timeline: view(block 10%), --t; animation-range: 35%, 0 0%, entry 50%, 143.63% }", 1500, 5000);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+static void test_l102_sheet_89(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 100% { color: hwb(none 100 47); background-color: hsl(1turn, 37%, 74.628%) } } @keyframes j { 25% { background-color: color(srgb none none 0.84) } } #i { background-color: rgb(146.5 92% 49.5%); animation: j 1000ms linear; animation-timeline: scroll(root block); animation-range: cover 0% exit 90% }", 500, 2549);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#93ebd6\"", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: #bce6512f; background-color: color(xyz-d65 none 0.9 none) } 75% { background-color: hwb(none none none) } } html { scroll-timeline-name: --u, --t; scroll-timeline-axis: block, block } body { timeline-scope: ALL } #i { background-color: hsl(242.4689deg, 0%, 20%); animation: j 1000ms linear both; animation-timeline: --t; animation-range: cover 0% entry }", 0, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#333333\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color(prophoto-rgb 0.141 none none /79%); background-color: #b9fa } } body { timeline-scope: auto } #i { background-color: lab(none 16.99 0.2%/none); view-timeline-name: --v; animation: k 1000ms; animation-timeline: view(); animation-range: 50% entry 43.04%,scroll 49.8% scroll 50%; animation-composition: add } #q { scroll-timeline-name: --t }", 500, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#1e000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: currentcolor; background-color: white } 75% { color: color(prophoto-rgb none 0.16 none); background-color: color(xyz-d50 none 0.8 none) } } @keyframes j { 25% { color: hsl(287, 89%, 58.8%, 0); background-color: color(rec2020 none 0.3335 none/0.1) } } html { scroll-timeline: --t inline; view-timeline-name: --u } body { timeline-scope: ALL } #i { animation-range: cover 0% 86.18%; animation: k 1000ms linear backwards, k 1s linear; animation-timeline: view(block 10%); animation-range: 0% 200% }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: #dac5a0 } } html { scroll-timeline-name: --t; timeline-scope: all } #i { color: darkgrey; view-timeline: --v inline; scroll-timeline: --v, --t; animation: k 1s linear alternate; animation-timeline: --u; animation-range-start: normal; animation-range-end: 16.09% } #q { scroll-timeline-name: --u, --v; scroll-timeline-axis: y, y; view-timeline: --v inline; scroll-timeline: unset; view-timeline-axis: inline }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a9a9a9\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-}
-
-static void test_l102_sheet_93(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: floralwhite; background-color: currentcolor } 33.33% { background-color: #7fb } 75% { color: hsla(none 91 85% 57%); background-color: hwb(346 46.1905% 53) } } html { view-timeline-name: --t } #o { view-timeline-name: --v } #i { animation: k 2s -500ms, k 1000ms linear infinite both reverse; animation-timeline: scroll(x root); animation-range-start: scroll 50%; animation-range-end: normal }", 0, 10000);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: color-mix(in srgb, rgb(none 244.6 85 /120%), rgb(nonee 0 0)); background-color: hsla(2.01turn 60.3% 66% / 2) } } html { scroll-timeline: --t y } #o { timeline-scope: --t, --u } #i { background-color: lab(none none none); animation: k 2s backwards alternate; animation-timeline: scroll(); animation-range: 127% }", 0, 4295);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: color-mix(in srgb, 50% hsl(none 2.8% 95.3% /0), 32% oklch(none none 2.32turn)) } } html { scroll-timeline-name: --t } body { scroll-timeline: --u y } #i { background-color: oklab(none none none); animation: j 1000ms linear 250ms 3 forwards, k 500ms linear both; animation-timeline: --nobody; animation-range: 25% }", 0, 10000);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 100% { color: currentcolor } } html { scroll-timeline-name: --u, --t; scroll-timeline-axis: block, block; timeline-scope: all } #i { color: hwb(60 none 30 /none); animation: k 500ms; animation-timeline: SCROLL(); animation-range-start: scroll 46.9%,-10%; animation-range-end: scroll 57.74%; animation-composition: accumulate }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(1, g_d.col_animated);
-    TEST_ASSERT_EQUAL(1, g_d.prop_composed);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: currentcolor } 33.33% { color: currentcolor; background-color: currentcolor } } @keyframes j { 50% { background-color: color-mix(in srgb, hsla(none 124.3% 50% / 85.4%), color-mix(in srgb, black, rgb(none 0 0 / none / 1))) } } html { scroll-timeline: --t } #o { timeline-scope: none } #i { color: #d20d47ec; background-color: hwb(356 100% 100% /1); animation: j 500ms 2; animation-timeline: view(block 10%); animation-range: -37% contain 18.2%,contain 33.33% exit 113%,contain 33.33% }", 1500, 10000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d20d47ec;background-color:#808080\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_90(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: hsla(-1.76turn 100% 80.06% / 99.99%) } 50% { background-color: hsl(200grad, 92%, 100%, 100%) } 75% { color: hsla(28 none 40% / none); background-color: #3fe } } @keyframes j { 60% { color: rgb(103 217 104 / 50%) } } html { view-timeline-name: --u } body { scroll-timeline-name: --t; view-timeline: --v block } #i { color: #df63; background-color: blue; animation: k 500ms linear; animation-timeline: scroll(root); animation-range: --x scroll 50% }", 1500, 10000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ddff6633;background-color:#0000ff\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: rgba(246, 23, 232, 0.89) } 75% { background-color: hwb(1.5708rad 50% 36.2%) } } html { scroll-timeline: --t block; timeline-scope: auto } #i { color: hsl(none 99% none); background-color: oklab(none none none /1); animation-range: exit-crossing 118.8%; animation: j 2s linear -500ms forwards; animation-timeline: --nobody, none; animation-range-start: NORMAL, contain 107.6%; animation-range-end: 137.63% } #q { scroll-timeline-name: --v, --t }", 0, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: currentcolor } 75% { color: color-mix(in srgb, lab(none 81 118 / none) 25%, hwb(none none 16)) } } html { scroll-timeline: --t y } #o { timeline-scope: --u } #i { color: limegreen; background-color: white; animation: j 1000ms; animation-timeline: scroll(nearest y); animation-range-start: 100% , entry-crossing 110%; animation-range-end: cover -13.2%, exit 67.99%, 0, scroll 39.89% }", 500, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#32cd32;background-color:#ffffff\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: lch(23.32 none 388.9676 /120%) } 75% { color: color-mix(in srgb , white , rgb(68 75% 249 / 1)) } } html { scroll-timeline: --v, --t block } body { view-timeline: --v inline } #o { timeline-scope: none } #i { color: hsla(2rad, 50%, 56%, 100%); background-color: blue; animation: k 1000ms -500ms, k 1s 250ms 0.5; animation-timeline: none; animation-range: 50%; animation-composition: add } #q { scroll-timeline-name: --u; scroll-timeline-axis: y }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#61c757;background-color:#0000ff\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: currentcolor } 25% { color: rgb(16% none 130); background-color: color(none srgb-linear 0.76 0.78 0.9) } 33.33% { color: #4fb; background-color: rgb(none none none/0) } } #o { scroll-timeline-name: --v; view-timeline: --v } #i { background-color: hsla(0turn 86% 0% / 150%); animation: k 1s 2; animation-timeline: auto; animation-range: 25% } #q { view-timeline: --v block; view-timeline-axis: y }", 500, 5000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#28976f;background-color:#00000068\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+}
+
+static void test_l102_sheet_91(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: hotpink; background-color: currentcolor } 50% { color: coral; background-color: oklch(0 none 117 /-0.5) } 75% { color: color-mix(in srgb, oklch(none 67% 478.6grad /1.5), 100% color(display-p3 none 19.4% 1.2279)); background-color: lime } } @keyframes j { 25% { color: currentcolor; background-color: lch(none none none/none) } 75% { background-color: oklab(none none -0.0332 /none) } } html { scroll-timeline: --u x } body { timeline-scope: auto } #o { timeline-scope: --u } #i { animation: k 1s linear infinite; animation-timeline: --nobody; animation-range-start: 96%,87%; animation-range-end: entry -5%, 68% } #q { scroll-timeline-name: --u }", 0, 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hwb(2.37turn 100% 56.6%) } 60% { color: color(xyz 96.84% none none/0); background-color: #7f8a } 75% { color: lime; background-color: white } } @keyframes j { 25% { color: #4b1e; background-color: hwb(-67.803 51 50% / 0) } } html { scroll-timeline-name: --t, --v } body { timeline-scope: --t, --u } #i { background-color: color(display-p3 none none 0.3); animation-range: 22.5%; animation: k 1000ms 500ms; animation-timeline: scroll(nearest y), --t; animation-range: 50% 78.2% }", 1500, 5800);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000050\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: hsla(none 100% 88%); background-color: hsla(698.4403, 19.7671%, 44.48%, 150%) } 60% { color: hwb(none 63 none); background-color: rgba(33%, 3%, -9, 0.5) } } @keyframes j { 50% { background-color: plum } 60% { background-color: color(xyz-d50 0.1657 none none) } } html { scroll-timeline: --v inline, --t; view-timeline: --v inline; view-timeline-axis: y } body { timeline-scope: --t, --u } #i { color: #060; background-color: oklch(87.61% 0.4442 none/120%); animation-range-end: normal,130.7%,51.3%,scroll 7.1%; animation: k 1s linear 1s; animation-timeline: view(block 10%); animation-range: 100% exit-crossing }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006600;background-color:#ffbcd3\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: rgba(224.1, 127, 240, 50%) } } html { scroll-timeline: --t; view-timeline: --v inline } #i { color: lab(none none none); animation-range: cover 0%; animation: k 1000ms -500ms forwards; animation-timeline: --nobody; animation-range: 60% 40% }", 1500, 7300);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_92(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: oklab(0.402 none -0.0017) } } html { scroll-timeline-name: --t } body { scroll-timeline-name: --t, --u; view-timeline: --v } #i { background-color: color(srgb none 0 none /none); animation-range: scroll exit-crossing 100.56%; animation: k 1000ms 0.5; animation-timeline: view(block 10%), scroll(root); animation-range: 25%,exit-crossing 67% exit-crossing 115.35% }", 1500, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 100% { background-color: hsl(0 none none /none) } } @keyframes j { 33.33% { color: red; background-color: hwb(-340.91deg none 65% / 1.5) } } html { view-timeline: --v inline } body { timeline-scope: auto } #o { timeline-scope: --t --u } #i { color: lab(none none none); animation: k 1s alternate; animation-timeline: none; animation-range: contain 33.33%, -3.69% exit 12% }", 1500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: currentcolor } 25% { background-color: darkslategrey } 75% { color: hwb(2rad 0% 100%); background-color: rgb(75 198 119 / 0.2) } } html { scroll-timeline-name: --t, --v } #i { animation: k 1000ms linear both reverse; animation-timeline: scroll(x root); animation-range-start: Entry 20%, 122.3%, -24.16%, Entry 20%; animation-range-end: 122.92% , 0% } #q { scroll-timeline-name: --t, --u; scroll-timeline-axis: x, x }", 500, 2500);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hwb(none none none/7.4%); background-color: rgba(253 249 89% /0.2) } } body { timeline-scope: --t --u } #i { color: hsl(329 33% none /none); animation: j 1s linear backwards; animation-timeline: --t }", 0, 8500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
-static void test_l102_sheet_94(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: hsl(none -676.901 72.2579% 64.3831%); background-color: #072 } } #i { background-color: #5ef8; animation: k 1000ms linear 500ms forwards, k 500ms; animation-timeline: scroll(x root), scroll(inline) } #q { scroll-timeline: --t y, none y }", 1500, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#55eeff88\"", style_of("i"));
+static void test_l102_sheet_93(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: rgba(8.7%, 24%, 51%, 0.69) } 50% { color: color(prophoto-rgb 0.76 none 0.1808/1) } } #i { animation: k 2s, j 1000ms 2 alternate; animation-timeline: scroll(root block); animation-composition: accumulate }", 500, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(2, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: currentcolor; background-color: hsla(-12.04 70% none/1.5) } 50% { color: hsla(none 149 85.6% 63%); background-color: transparent } } #i { background-color: black; animation: k 2s 2 forwards, k 1000ms linear alternate; animation-timeline: --t, --v; animation-range: exit 90% -10%, entry 106.6%, normal, 64.8%; animation-composition: accumulate } #q { scroll-timeline: --v; view-timeline-name: --u }", 1500, 2788);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { background-color: color-mix(in srgb, color-mix(in srgb, oklch(none none none none), 64% lab(50 none)), color(display-p3 none 0.788 none)) } 75% { background-color: hwb(104.9deg 50% 99%) } } body { scroll-timeline: --t, --u; view-timeline-name: --t; view-timeline-axis: y; timeline-scope: --u, --t, --v } #i { background-color: #6ba; animation: k 500ms 2; animation-timeline: --u; animation-range-start: 0; animation-range-end: scroll } #q { view-timeline: --t inline }", 0, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#66bbaa\"", style_of("i"));
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: red; background-color: color(xyz-d50 none 0 0.65) } } @keyframes j { 33.33% { background-color: #8eef96ba } 50% { color: hsl(none 0% none); background-color: rgba(none none 98.6/120%) } } html { scroll-timeline: --t } body { timeline-scope: ALL } #i { background-color: hsl(none -605.9563 5.29% 0% / 98%); animation: k 500ms, j 1000ms linear 0.5; animation-timeline: view(); animation-composition: replace } #q { scroll-timeline: --t, --v }", 0, 2500);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: lab(55.91 none none / 1.5) } } @keyframes j { 60% { color: currentcolor } } html { scroll-timeline-axis: y; scroll-timeline-name: --t } #i { color: #7fb; background-color: lch(none none none/1); animation: j 1000ms linear; animation-timeline: --v; animation-range-end: entry -5% }", 0, 2395);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#77ffbb;background-color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: oklab(none 0 none) } 33.33% { color: color(srgb none none 0.1) } 75% { color: lab(none none none/none) } } @keyframes j { 60% { background-color: currentcolor } to { background-color: color-mix(in srgb, transparent, oklab(none -1.9% 0.1519 -0.1263)) } } html { scroll-timeline-name: --t; view-timeline-name: --u; view-timeline-axis: y } body { timeline-scope: --u, --t, --v } #i { color: color(srgb-linear 0.4 none none/12.35%); animation: j 2s linear reverse; animation-timeline: scroll(); animation-range-start: entry 10%,0%,56%,cover; animation-range-end: 0; animation-composition: replace }", 500, 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#aa00001f\"", style_of("i"));
+}
+
+static void test_l102_sheet_94(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color-mix(in srgb, 50% color(xyz-d50 none none none), color(srgb-linear 0 0.038 none /0.7)) } } @keyframes j { 0% { background-color: currentcolor } 33.33% { color: #cda; background-color: red } 60% { color: currentcolor; background-color: #c7f } } html { scroll-timeline: --t; view-timeline: --u; view-timeline-axis: y } body { timeline-scope: --t } #i { color: hwb(none 11% 74%); animation: j 1000ms linear both, k 1000ms 0.5 both; animation-timeline: view(block 10%), --t; animation-range: entry -5%, 5% -10%, 12.5% 30.7% }", 1500, 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#421c1c\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: rgb(27 66 27 / -0.5); background-color: lch(none 51 0% 231.6177deg) } 75% { color: #c54 } } html { scroll-timeline-axis: y, y; scroll-timeline-name: --t } #i { color: hwb(292 78 none); animation: j 1000ms, k 500ms; animation-timeline: scroll(root block); animation-range-start: 0%,51.69%,-10%,134.1%; animation-range-end: entry-crossing 75.1%,auto,50%,0%,contain 7% }", 1500, 9400);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#efb0d9\"", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color-mix(in srgb, hsl(152 none none /0), papayawhip); background-color: hwb(1.79rad 62% 50% /76%) } } html { scroll-timeline-name: --t; timeline-scope: auto } #i { color: white; background-color: color(a98-rgb none 0.7 none/none); animation: k 500ms linear 250ms; animation-timeline: scroll(nearest y), scroll(x root); animation-range: cover 0 }", 500, 7500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#fffaf1bf;background-color:#8d8d8d61\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hsl(none none none/60%) } 75% { background-color: hwb(36deg 27 none/none) } 100% { background-color: color-mix(in srgb, color(srgb-linear none 0.2125 none / none), rgb(none 0 0 none)) } } html { scroll-timeline-name: --t } body { scroll-timeline-name: --u; scroll-timeline-axis: y } #i { color: hsl(448.0761deg 33.95% none); animation-range: 0% 200%; animation: k 1s linear 1s infinite forwards; animation-timeline: scroll(root); animation-range: entry-crossing 109% exit 90% } #q { scroll-timeline: --t, --v y; view-timeline: --v; view-timeline-axis: y }", 1500, 5000);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+}
+
+static void test_l102_sheet_95(void) {
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: hwb(300 5.4448% 61%) } 33.33% { background-color: hwb(none none none / 9%) } } #i { color: hwb(255.6grad 100% 100%); animation: j 2s linear backwards; animation-timeline: scroll(x root) }", 0, 5281);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#808080\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { color: hwb(350 84.064% 61); background-color: hsl(-147grad 42% 39.5588 / 2) } } #i { color: lab(none 33.3184 -87/none); scroll-timeline-name: --v, --t; scroll-timeline-axis: y; view-timeline-name: --t; animation: k 1000ms linear 250ms, j 2s linear both reverse; animation-timeline: scroll(root); animation-range: unset }", 500, 2500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#94949415;background-color:#3b4c8f15\"", style_of("i"));
+    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: color-mix(in srgb, rgb(none 0) 100%, darkorange) } } html { scroll-timeline: --v, --t y; timeline-scope: ALL } body { timeline-scope: auto } #i { background-color: rgb(1 2 3 / 4 / 5); animation: j 1s 1s; animation-timeline: scroll(); animation-range-start: entry 10%,0%,56%,cover; animation-range-end: 0; animation-composition: replace }", 500, 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
+    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: currentcolor } 75% { color: hsl(none none none); background-color: color-mix(in srgb, 50% rgb(36% none none /none), 100% lab(50 none)) } } @keyframes j { 33.33% { color: color-mix(in srgb, #fdf, lab(3.85 none -62%)); background-color: rgba(107, 155, 162.78, 0.5) } 75% { color: lab(74 -137.71 none) } } html { view-timeline-name: --u; scroll-timeline-name: --u } body { timeline-scope: --u, --t, --v } #o { timeline-scope: --t } #i { color: hsl(none 30 50% 65%); background-color: rgb(161, 109, 244); animation: k 2s alternate; animation-timeline: --t, scroll(x root); animation-range-start: -44% }", 1500, 5498);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#a16df4\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2596,7 +2623,7 @@ static void test_l102_sheet_94(void) {
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
 }
 
-static void test_l102_sheet_95(void) {
+static void test_l102_sheet_96(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: hsl(30 9.3% 100% / none); background-color: hsl(none none 0%/-0.5) } 60% { background-color: hwb(300 120% 99 / 1) } } html { scroll-timeline: --u inline; timeline-scope: --u } #i { color: rgb(85 18 164 / 120%); animation: k 1s 1s; animation-timeline: --t; animation-range-start: 150%,14%; animation-range-end: contain 87% }", 0, 5000);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#5512a4\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2623,7 +2650,7 @@ static void test_l102_sheet_95(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
-static void test_l102_sheet_96(void) {
+static void test_l102_sheet_97(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: transparent; background-color: hwb(30 50% 50%) } } body { timeline-scope: --t --u } #o { timeline-scope: auto } #i { animation: k 1s both; animation-timeline: --u; animation-range-end: 11%, contain, scroll -8% } #q { view-timeline: --u }", 500, 10000);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2643,14 +2670,14 @@ static void test_l102_sheet_96(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 75% { background-color: color-mix(in srgb, hsl(none, 10%, 20%), hwb(300 88% 15.42%)) } 100% { color: hwb(730.146deg none none); background-color: currentcolor } } @keyframes j { 50% { background-color: color(xyz-d65 none none 0.8936) } } #i { color: hsla(310.8deg 0% none/none); background-color: coral; animation: j 1000ms, j 500ms 2; animation-timeline: scroll(); animation-range-end: 25%, 150%, entry -5% }", 0, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#ff7fec\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#ff7f16\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(2, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
 }
 
-static void test_l102_sheet_97(void) {
+static void test_l102_sheet_98(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: hsl(2rad, 94.09%, 72.57%, 2); background-color: currentcolor } } html { scroll-timeline: --u inline } body { timeline-scope: --t, --u } #i { color: hwb(100grad 57% 42% /0); scroll-timeline: --t y; animation: k 1000ms linear; animation-timeline: view(block 10%); animation-range: 10px 54.38% , exit-crossing , 147.8% NORMAL; animation-composition: accumulate } #q { view-timeline-name: --u }", 500, 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#93949100\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
@@ -2677,7 +2704,7 @@ static void test_l102_sheet_97(void) {
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
 }
 
-static void test_l102_sheet_98(void) {
+static void test_l102_sheet_99(void) {
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 60% { color: currentcolor; background-color: hwb(none 212 90% 6%) } } #i { animation: k 1000ms 1s backwards, j 1s linear 250ms backwards reverse; animation-timeline: scroll(), scroll(x root); animation-composition: replace }", 500, 6039);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
@@ -2697,38 +2724,11 @@ static void test_l102_sheet_98(void) {
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: hsla(361.46, 23.261%, 83.1%, 2) } } html { scroll-timeline-name: --t } body { scroll-timeline-name: --t; scroll-timeline-axis: block, y; scroll-timeline-name: initial; view-timeline: --u } #i { color: oklab(none none 0.1812); background-color: hsl(9.88rad, 67.8%, 1%, 100%); animation: k 1s, k 2s linear; animation-timeline: auto; animation-range: exit 86% entry-crossing,NORMAL } #q { scroll-timeline: --u y; scroll-timeline-name: --t --u }", 0, 2500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000e00;background-color:#010304\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#010304\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-}
-
-static void test_l102_sheet_99(void) {
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(xyz-d50 none none none); background-color: lab(40.57 32 -129.34%/none) } } html { scroll-timeline: --u, --v } body { timeline-scope: all } #i { animation: k 1000ms; animation-timeline: scroll(inline) }", 0, 6713);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: currentcolor; background-color: #a9ca } 75% { color: color-mix(in srgb, hwb(200grad 44.05% 63%), hsla(-185.57grad 72.644% 4% / 99.99%)); background-color: lch(none 17.6% 69 -338.583deg) } } @keyframes j { 33.33% { color: hwb(-378.83 25% 71% /56.7%); background-color: currentcolor } to { color: color(xyz-d65 0 54% 0.7404 / none); background-color: hsla(-0.6093turn 24% 50% / 0.5) } } html { scroll-timeline-name: --t, --u; scroll-timeline-axis: x, block } body { scroll-timeline-name: --t, --u; scroll-timeline-name: inherit; view-timeline: --v } #o { timeline-scope: --v } #i { color: #8f30ca; animation: k 1000ms linear 250ms both; animation-timeline: --t, scroll(self); animation-range: contain 33.33% entry-crossing, entry -29.12%, NORMAL -10%, 105% }", 1500, 10000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8f30ca\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: color-mix(in srgb, hwb(none 3% 76% /none), rgb(none none none) 50%); background-color: hsla(1 55% 100% / 0.9999) } 75% { background-color: rgb(none none none) } } html { scroll-timeline: --u, --v block } #i { background-color: hsl(none none 0%); animation: j 2s linear forwards; animation-timeline: --t; animation-range-start: entry -12.42%,entry; animation-range-end: entry 73% }", 1500, 5000);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    prep2("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: rgb(185, 208, 124); background-color: hwb(360 0% 46%) } } html { scroll-timeline: --v inline, --t block } #i { animation: k 2s backwards; animation-timeline: --v }", 0, 2500);
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL(0, g_d.col_animated);
-    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
 }
 
 int main(void) {

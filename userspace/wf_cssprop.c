@@ -1149,8 +1149,11 @@ static int cp_named_at(const char *v, int n) {
 }
 
 /* Lot 102: miss, the missing components (the none keyword): bits 0..2
- * the channels (red, green, blue), bit 3 the alpha */
-typedef struct { long long c[3], a; int miss; } cp_rgba_t;
+ * the channels (red, green, blue), bit 3 the alpha. Lot 103: the other
+ * analogous sets of CSS Color 4 (12.2): bit 4 lightness, 5 colourfulness
+ * (chroma, saturation), 6 hue, 7 opponent a, 8 opponent b; lin, when
+ * lin_ok, the linear sRGB values before gamut mapping (1/2^40) */
+typedef struct { long long c[3], a; int miss; long long lin[3]; int lin_ok; } cp_rgba_t;
 static int cp_rgba(const char *v, cp_rgba_t *o);
 
 static int cp_color(const char *v) {
@@ -2007,9 +2010,9 @@ static long long cp_encode(long long v) {
     return (long long)cp_wshr(cp_wmul(cp_w(211 * cp_powq(v, 5, 12) - 11 * CP_Q), 12750), 40).lo;
 }
 
-/* x (three values in 1/2^40 of space sp) as sRGB channels c[] */
-static void cp_space_rgb(int sp, long long *x, long long *c) {
-    long long l[3];
+/* x (three values in 1/2^40 of space sp, overwritten) as linear sRGB
+ * l[] (1/2^40, not clipped) */
+static void cp_space_lin(int sp, long long *x, long long *l) {
     int i, k;
     if (sp == CP_SP_LAB) {
         /* L a b to the D50 XYZ / white ratios: fy = (L + 16) / 116, fx =
@@ -2039,6 +2042,166 @@ static void cp_space_rgb(int sp, long long *x, long long *c) {
         l[k] = 0;
         for (i = 0; i < 3; i++) l[k] += cp_qmul(cp_mat[sp][3 * k + i], x[i]);
     }
+}
+
+/* ---- Lot 103: gamut mapping (CSS Color 4 section 13.2) and the
+ * conversions from linear sRGB to the other spaces (for color-mix() in
+ * them). Linear sRGB to each space of cp_mat, in 1/2^40 (products of the
+ * CSS Color 4 matrices, rounded once): lab gives XYZ D50 / white D50,
+ * oklab LMS, the rgb spaces their linear values */
+static const long long cp_inv[8][9] = {
+    {497211971836LL, 439158371015LL, 163141273125LL, 244633851437LL, 788225651481LL, 66652164568LL, 18554610962LL,
+     129367842700LL, 951589102230LL},
+    {453242298902LL, 589703861074LL, 56565467800LL, 232990357618LL, 748437070956LL, 118084199202LL, 97089580641LL,
+     309753139394LL, 692668907742LL},
+    {453428478981LL, 393168139063LL, 198440725438LL, 233799059474LL, 786336278126LL, 79376290175LL, 21254459952LL,
+     131056046354LL, 1045121153973LL},
+    {479459354711LL, 423478518438LL, 157316424322LL, 244633851437LL, 788225651481LL, 66652164568LL, 15309494903LL,
+     106742002429LL, 785160547949LL},
+    {904306498005LL, 195205129771LL, 0LL, 36497407611LL, 1063014220165LL, 0LL, 18782551111LL, 79601827831LL,
+     1001127248834LL},
+    {875892664319LL, 614586943001LL, 30421049688LL, 0LL, 1099511627776LL, 0LL, 0LL, 45258040943LL, 1054253586833LL},
+    {581946182056LL, 363008644302LL, 154556778988LL, 108154432670LL, 960391296442LL, 30965963536LL, 18554610962LL,
+     129367842700LL, 951589102230LL},
+    {689837878892LL, 362050529526LL, 47623219358LL, 75973273097LL, 1011045356595LL, 12492998084LL, 18022577639LL,
+     96771655410LL, 984717394727LL}};
+/* LMS' to OKLab (CSS Color 4), in 1/2^40 */
+static const long long cp_lmsok[9] = {231396915121LL, 872591971295LL, -4477258640LL, 2174832386132LL,
+                                      -2670265409259LL, 495433023127LL, 28481795897LL, 860666599741LL,
+                                      -889148395638LL};
+
+/* the cube root of v (1/2^40), odd */
+static long long cp_cbrtq(long long v) {
+    long long a = v < 0 ? -v : v, r;
+    if (!a) return 0;
+    r = cp_powq(a, 1, 3);
+    return v < 0 ? -r : r;
+}
+
+/* the gamma-encoded value of a linear component v (1/2^40) of space sp,
+ * odd around 0 (the inverse of cp_decode) */
+static long long cp_encq(int sp, long long v) {
+    long long a = v < 0 ? -v : v, r;
+    if (!a) return 0;
+    if (sp == CP_SP_P3) {
+        /* sRGB curve: 12.92 v up to 0.0031308, else 1.055 v^(1/2.4) - 0.055 */
+        if (!cp_wlt(cp_wmul(cp_w(31308), CP_Q), cp_wmul(cp_w(a), 10000000))) r = cp_div(a * 323, 25, 0);
+        else r = cp_div(211 * cp_powq(a, 5, 12) - 11 * CP_Q, 200, 0);
+    } else if (sp == CP_SP_A98) r = cp_powq(a, 256, 563);
+    else if (sp == CP_SP_PRO) r = a * 512 >= CP_Q ? cp_powq(a, 5, 9) : 16 * a;     /* 1 / 512 */
+    else if (sp == CP_SP_2020) {
+        /* alpha v^0.45 - (alpha - 1) from beta, else 4.5 v */
+        if (a >= 19850548305LL) r = cp_qmul(1208689643454LL, cp_powq(a, 9, 20)) - 109178015678LL;
+        else r = cp_div(a * 9, 2, 0);
+    } else r = a;
+    return v < 0 ? -r : r;
+}
+
+/* linear sRGB l (1/2^40) as the three values x of space sp (inverse of
+ * cp_space_lin) */
+static void cp_lin_space(int sp, const long long *l, long long *x) {
+    long long m[3];
+    int i, k;
+    for (k = 0; k < 3; k++) {
+        if (sp == CP_SP_LIN) { m[k] = l[k]; continue; }
+        m[k] = 0;
+        for (i = 0; i < 3; i++) m[k] += cp_qmul(cp_inv[sp][3 * k + i], l[i]);
+    }
+    if (sp == CP_SP_OKLAB) {
+        for (k = 0; k < 3; k++) m[k] = cp_cbrtq(m[k]);
+        for (k = 0; k < 3; k++) {
+            x[k] = 0;
+            for (i = 0; i < 3; i++) x[k] += cp_qmul(cp_lmsok[3 * k + i], m[i]);
+        }
+    } else if (sp == CP_SP_LAB) {
+        /* f(t) = t^(1/3) above 216 / 24389, else (24389 / 27 t + 16) / 116;
+         * L = 116 fy - 16, a = 500 (fx - fy), b = 200 (fy - fz) */
+        long long f[3];
+        for (k = 0; k < 3; k++)
+            f[k] = cp_wlt(cp_wmul(cp_w(CP_Q), 216), cp_wmul(cp_w(m[k]), 24389)) ? cp_cbrtq(m[k])
+                   : cp_div((long long)cp_wdiv(cp_wmul(cp_w(m[k]), 24389), 27, 0).lo + 16 * CP_Q, 116, 0);
+        x[0] = 116 * f[1] - 16 * CP_Q;
+        x[1] = 500 * (f[0] - f[1]);
+        x[2] = 200 * (f[1] - f[2]);
+    } else
+        for (k = 0; k < 3; k++) x[k] = cp_encq(sp, m[k]);
+}
+
+static int cp_ingamut(const long long *l) {
+    int k;
+    for (k = 0; k < 3; k++) if (l[k] < 0 || l[k] > CP_Q) return 0;
+    return 1;
+}
+
+/* (deltaE OK)^2 between two OKLab colours, in 1/2^80 */
+static cp_w_t cp_de2(const long long *p, const long long *q) {
+    cp_w_t s = cp_w(0);
+    int k;
+    for (k = 0; k < 3; k++) s = cp_wadd(s, cp_wmul(cp_w(p[k] - q[k]), p[k] - q[k]));
+    return s;
+}
+
+/* the OKLab of clip(l) into lc, clip(l) into cl */
+static void cp_clip_ok(const long long *l, long long *cl, long long *lc) {
+    int k;
+    for (k = 0; k < 3; k++) cl[k] = cp_clampll(l[k], 0, CP_Q);
+    cp_lin_space(CP_SP_OKLAB, cl, lc);
+}
+
+/* CSS Color 4 13.2.2 (binary search of the OKLCh chroma, JND 0.02,
+ * epsilon 0.0001): l (linear sRGB, 1/2^40) into the sRGB gamut; ok, the
+ * OKLab of l when it is known exactly (oklab(), oklch()), else 0. The
+ * in-gamut test comes first: an sRGB colour has 0 < L < 1 but black and
+ * white, which map to themselves. The chroma is scaled by t (0..1, hue
+ * kept); the search stops once (tmax - tmin) C <= 0.0001, compared
+ * squared. E < JND as E^2 2500 < 2^80, JND - E < epsilon as E^2 10^8 >
+ * 39601 2^80 */
+static void cp_gamut(long long *l, const long long *ok) {
+    long long o[3], cur[3], x[3], lc[3], cl[3], lcur[3], t, tmin = 0, tmax = CP_Q;
+    int k, mig = 1, it;
+    cp_w_t c2, e, j2 = cp_wshl(cp_w(1), 80);
+    if (cp_ingamut(l)) return;
+    if (ok) for (k = 0; k < 3; k++) o[k] = ok[k];
+    else cp_lin_space(CP_SP_OKLAB, l, o);
+    if (o[0] >= CP_Q || o[0] <= 0) {
+        for (k = 0; k < 3; k++) l[k] = o[0] > 0 ? CP_Q : 0;
+        return;
+    }
+    cp_clip_ok(l, cl, lc);
+    if (cp_wlt(cp_wmul(cp_de2(lc, o), 2500), j2)) {
+        for (k = 0; k < 3; k++) l[k] = cl[k];
+        return;
+    }
+    c2 = cp_wadd(cp_wmul(cp_w(o[1]), o[1]), cp_wmul(cp_w(o[2]), o[2]));
+    for (it = 0; cp_wlt(cp_wshl(cp_w(1), 80 + 2 * it), cp_wmul(c2, 100000000)); it++) {
+        t = (tmin + tmax) / 2;
+        cur[0] = o[0];
+        cur[1] = cp_qmul(o[1], t);
+        cur[2] = cp_qmul(o[2], t);
+        for (k = 0; k < 3; k++) x[k] = cur[k];
+        cp_space_lin(CP_SP_OKLAB, x, lcur);
+        if (mig && cp_ingamut(lcur)) { tmin = t; continue; }
+        cp_clip_ok(lcur, cl, lc);
+        e = cp_de2(lc, cur);
+        if (cp_wlt(cp_wmul(e, 2500), j2)) {
+            if (cp_wlt(cp_wmul(j2, 39601), cp_wmul(e, 100000000))) break;
+            mig = 0;
+            tmin = t;
+        } else tmax = t;
+    }
+    for (k = 0; k < 3; k++) l[k] = cl[k];
+}
+
+/* x (three values in 1/2^40 of space sp, overwritten) as sRGB channels
+ * c[]; Lot 103: gamut-mapped (ok: x is OKLab), the linear values before
+ * the mapping into lin when it is not 0 */
+static void cp_space_rgb(int sp, long long *x, long long *c, long long *lin) {
+    long long l[3], ok[3];
+    int k;
+    for (k = 0; k < 3; k++) ok[k] = x[k];
+    cp_space_lin(sp, x, l);
+    if (lin) for (k = 0; k < 3; k++) lin[k] = l[k];
+    cp_gamut(l, sp == CP_SP_OKLAB ? ok : 0);
     for (k = 0; k < 3; k++) c[k] = cp_encode(l[k]);
 }
 
@@ -2121,35 +2284,159 @@ static void cp_carry(cp_rgba_t *x, cp_rgba_t *y) {
     }
 }
 
+/* Lot 103: the spaces of color-mix() (CSS Color 5): their cp_mat index
+ * (-1 srgb, the Lot 100 path; -2 hsl and hwb, from the channels), the
+ * analogous set of each component (CSS Color 4 12.2; -1 none) and the
+ * hue component of the polar ones (-1) */
+static const char *const cp_mixn[] = {"srgb", "srgb-linear", "display-p3", "a98-rgb", "prophoto-rgb", "rec2020",
+                                      "lab", "oklab", "xyz", "xyz-d50", "xyz-d65", "hsl", "hwb", "lch", "oklch", 0};
+static const signed char cp_mixs[] = {-1, CP_SP_LIN, CP_SP_P3, CP_SP_A98, CP_SP_PRO, CP_SP_2020, CP_SP_LAB,
+                                      CP_SP_OKLAB, CP_SP_D65, CP_SP_D50, CP_SP_D65, -2, -2, CP_SP_LAB, CP_SP_OKLAB};
+static const signed char cp_mixc[][3] = {{0, 1, 2}, {0, 1, 2}, {0, 1, 2}, {0, 1, 2}, {0, 1, 2}, {0, 1, 2},
+                                         {4, 7, 8}, {4, 7, 8}, {0, 1, 2}, {0, 1, 2}, {0, 1, 2}, {6, 5, 4},
+                                         {6, -1, -1}, {4, 5, 6}, {4, 5, 6}};
+static const signed char cp_mixh[] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 2, 2};
+static const char *const cp_hues[] = {"shorter", "longer", "increasing", "decreasing", 0};
+
+/* the linear sRGB values of x (1/2^40): its own, else its channels decoded */
+static void cp_lin_of(const cp_rgba_t *x, long long *l) {
+    int k;
+    for (k = 0; k < 3; k++) l[k] = x->lin_ok ? x->lin[k] : cp_decode(CP_SP_P3, cp_div(x->c[k] * CP_Q, 255 * CP_S, 0));
+}
+
+/* the components of x in mix space m into v (hue in 1/10000 deg: hsl and
+ * hwb 0..3600000, lch and oklch -1800000..1800000, any turn being the same
+ * for the hue methods, cp_hsl_rgb, cp_hwb_rgb and cp_cossin; hsl and hwb
+ * in 1/10000 %, from the channels, exact; the others in 1/2^40); a
+ * powerless hue (CSS Color 4: hsl and hwb of a grey,
+ * an lch chroma at most 0.0015, an oklch one at most 0.000004) is missing
+ * (bit 6 into *miss) */
+static void cp_mix_comps(int m, const cp_rgba_t *x, long long *v, int *miss) {
+    long long l[3];
+    if (cp_mixs[m] == -2) {
+        long long r = x->c[0], g = x->c[1], b = x->c[2], u = 255 * CP_S;
+        long long mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        long long d = mx - mn, den = mx + mn < 2 * u - mx - mn ? mx + mn : 2 * u - mx - mn;
+        if (!d) { v[0] = 0; *miss |= 64; }
+        else if (mx == r) v[0] = cp_div(600000 * (g - b) + (g < b ? 3600000 : 0) * d, d, 0);
+        else if (mx == g) v[0] = cp_div(600000 * (b - r) + 1200000 * d, d, 0);
+        else v[0] = cp_div(600000 * (r - g) + 2400000 * d, d, 0);
+        if (m == 11) {
+            v[1] = den > 0 ? cp_div(d * 1000000, den, 0) : 0;
+            v[2] = cp_div((mx + mn) * 1000000, 2 * u, 0);
+        } else {
+            v[1] = cp_div(mn * 1000000, u, 0);
+            v[2] = cp_div((u - mx) * 1000000, u, 0);
+        }
+        return;
+    }
+    cp_lin_of(x, l);
+    cp_lin_space(cp_mixs[m], l, v);
+    if (cp_mixh[m] == 2) {
+        long long a = v[1], b = v[2];
+        v[1] = (long long)cp_isqrt(cp_wadd(cp_wmul(cp_w(a), a), cp_wmul(cp_w(b), b)));
+        v[2] = cp_atan2(b, a);
+        if (m == 13 ? v[1] * 10000 <= 15 * CP_Q : v[1] * 1000000 <= 4 * CP_Q) *miss |= 64;
+    }
+}
+
 /* Lot 100: color-mix(in srgb, C1 [P1], C2 [P2]) (CSS Color 5) at v[0..n):
  * the percentages default to 50% each, or to 100% minus the other; their
  * sum S (> 0) normalises them; the colours are mixed premultiplied and an
  * S under 100% scales the alpha. With P in 1/10000 %: A = a1 P1 + a2 P2,
  * each channel (c1 a1 P1 + c2 a2 P2) / A (0 when A is 0), the alpha A / S,
- * or A / 100% when S is under it; each rounded once */
+ * or A / 100% when S is under it; each rounded once. Lot 103: in any of
+ * cp_mixn, the polar ones with a hue method (shorter by default); each
+ * colour is converted from its linear sRGB values (hsl and hwb from its
+ * channels), a component missing in one colour (its analogous set, or a
+ * powerless hue) takes the other's value, the hue is not premultiplied,
+ * and the result is converted back (gamut-mapped); the missing
+ * components of both stay missing */
 static int cp_mix(const char *v, int n, cp_rgba_t *o, int depth) {
-    int pa[3], pb[3], k, w0, w1;
-    long long p[2];
+    int pa[3], pb[3], ha[4], hb[4], k, m = -1, hm = 0, nh, mi[2];
+    long long p[2], cv[2][3], an, sum;
     cp_rgba_t x[2];
-    long long sum, an;
     if (depth > 3 || cp_split(v, 10, n - 1, ',', pa, pb, 3) != 3) return 0;
-    /* "in", spaces, "srgb" (the part is followed by a comma, so
-     * v[w0 + 2] is inside v) */
-    w0 = pa[0];
-    if (!cp_eqn(v + w0, 2, "in") || !cp_sp(v[w0 + 2])) return 0;
-    for (w1 = w0 + 2; cp_sp(v[w1]); w1++) {}
-    if (!cp_eqn(v + w1, pb[0] - w1, "srgb")) return 0;
+    /* "in", the space, then a hue method and "hue" for a polar space */
+    nh = cp_split(v, pa[0], pb[0], ' ', ha, hb, 4);
+    if (nh != 2 && nh != 4) return 0;
+    if (!cp_eqn(v + ha[0], hb[0] - ha[0], "in")) return 0;
+    for (k = 0; cp_mixn[k] && m < 0; k++) if (cp_eqn(v + ha[1], hb[1] - ha[1], cp_mixn[k])) m = k;
+    if (m < 0) return 0;
+    if (nh == 4) {
+        for (hm = 0; cp_hues[hm] && !cp_eqn(v + ha[2], hb[2] - ha[2], cp_hues[hm]); hm++) {}
+        if (cp_mixh[m] < 0 || !cp_hues[hm] || !cp_eqn(v + ha[3], hb[3] - ha[3], "hue")) return 0;
+    }
     for (k = 0; k < 2; k++) if (!cp_mix_item(v, pa[k + 1], pb[k + 1], &x[k], &p[k], depth)) return 0;
-    cp_carry(&x[0], &x[1]);     /* Lot 102: a component missing in both stays missing */
-    o->miss = x[0].miss & x[1].miss;
     if (p[0] < 0 && p[1] < 0) p[0] = p[1] = 50 * CP_S;
     else if (p[0] < 0) p[0] = 100 * CP_S - p[1];
     else if (p[1] < 0) p[1] = 100 * CP_S - p[0];
     sum = p[0] + p[1];
     if (sum <= 0) return 0;
+    if (!m) {     /* o->lin_ok is 0 (cp_rgba_d) */
+        cp_carry(&x[0], &x[1]);     /* Lot 102: a component missing in both stays missing */
+        o->miss = x[0].miss & x[1].miss & 15;
+        an = x[0].a * p[0] + x[1].a * p[1];
+        for (k = 0; k < 3; k++)
+            o->c[k] = an ? cp_div(x[0].c[k] * x[0].a * p[0] + x[1].c[k] * x[1].a * p[1], an, 0) : 0;
+        o->a = cp_div(an, sum >= 100 * CP_S ? sum : 100 * CP_S, 0);
+        return 1;
+    }
+    for (k = 0; k < 2; k++) {
+        int j, cat;
+        mi[k] = 0;
+        cp_mix_comps(m, &x[k], cv[k], &mi[k]);
+        mi[k] = cp_mixh[m] >= 0 && (mi[k] & 64) ? 1 << cp_mixh[m] : 0;
+        for (j = 0; j < 3; j++) {
+            cat = cp_mixc[m][j];
+            if (cat >= 0 && ((x[k].miss >> cat) & 1)) mi[k] |= 1 << j;
+        }
+        if ((x[k].miss >> 3) & 1) mi[k] |= 8;
+    }
+    /* carry (CSS Color 4 12.3), the alpha as component 3 */
+    o->miss = 0;
+    for (k = 0; k < 4; k++) {
+        long long *q0 = k < 3 ? &cv[0][k] : &x[0].a, *q1 = k < 3 ? &cv[1][k] : &x[1].a;
+        int m0 = (mi[0] >> k) & 1, m1 = (mi[1] >> k) & 1;
+        if (m0 && m1) {
+            *q0 = *q1 = 0;
+            if (k == 3) o->miss |= 8;
+            else if (cp_mixc[m][k] >= 0) o->miss |= 1 << cp_mixc[m][k];
+        } else if (m0) *q0 = *q1;
+        else if (m1) *q1 = *q0;
+    }
     an = x[0].a * p[0] + x[1].a * p[1];
-    for (k = 0; k < 3; k++) o->c[k] = an ? cp_div(x[0].c[k] * x[0].a * p[0] + x[1].c[k] * x[1].a * p[1], an, 0) : 0;
+    for (k = 0; k < 3; k++) {
+        if (k == cp_mixh[m]) {
+            /* CSS Color 4 12.4: the hue method, then the weighted mean
+             * (not reduced modulo 360: the conversions back take any
+             * turn) */
+            long long h0 = cv[0][k], h1 = cv[1][k], dh = h1 - h0;
+            if (hm == 0) { if (dh > 1800000) h0 += 3600000; else if (dh < -1800000) h1 += 3600000; }
+            else if (hm == 1) { if (dh > 0 && dh < 1800000) h0 += 3600000; else if (dh > -1800000 && dh <= 0) h1 += 3600000; }
+            else if (hm == 2) { if (h1 < h0) h1 += 3600000; }
+            else if (h0 < h1) h0 += 3600000;
+            cv[0][k] = cp_div(h0 * p[0] + h1 * p[1], sum, 0);
+            continue;
+        }
+        cv[0][k] = an ? (long long)cp_wdiv(cp_wadd(cp_wmul(cp_w(cv[0][k]), x[0].a * p[0]),
+                                                   cp_wmul(cp_w(cv[1][k]), x[1].a * p[1])), an, 0).lo : 0;
+    }
     o->a = cp_div(an, sum >= 100 * CP_S ? sum : 100 * CP_S, 0);
+    if (cp_mixs[m] == -2) {
+        long long c1 = cp_clampll(cv[0][1], 0, 1000000), c2 = cp_clampll(cv[0][2], 0, 1000000);
+        if (m == 11) cp_hsl_rgb(cv[0][0], c1, c2, o->c);
+        else cp_hwb_rgb(cv[0][0], c1, c2, o->c);
+        return 1;
+    }
+    if (cp_mixh[m] == 2) {
+        long long cs, sn, c = cv[0][1];
+        cp_cossin(cv[0][2], &cs, &sn);
+        cv[0][1] = cp_qmul(c, cs);
+        cv[0][2] = cp_qmul(c, sn);
+    }
+    cp_space_rgb(cp_mixs[m], cv[0], o->c, o->lin);
+    o->lin_ok = 1;
     return 1;
 }
 
@@ -2170,6 +2457,7 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
     int n = cp_len(v), k;
     o->a = CP_S;
     o->miss = 0;
+    o->lin_ok = 0;
     if (cp_eqn(v, n, "transparent")) { o->c[0] = o->c[1] = o->c[2] = 0; o->a = 0; return 1; }
     if (cp_eqn(v, n, "currentcolor")) {
         /* Lot 101: the colour set by wf_cssprop_set_current, else none */
@@ -2222,14 +2510,14 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
         cp_q_t q;
         if (got != 3 && got != 4) return 0;
         comma = cp_comma_after(v, tb[0], n);    /* the legacy form: percentages only */
-        /* Lot 102: none (the space form only) is 0; an hsl component is
-         * not a channel, so only a missing alpha is kept */
+        /* Lot 102: none (the space form only) is 0; Lot 103: a missing
+         * hue (bit 6), saturation (5) or lightness (4) */
         for (k = 0; k < got; k++) if (comma && cp_none(v, ta[k], tb[k])) return 0;
-        if (cp_none(v, ta[0], tb[0])) q.v = 0;
+        if (cp_none(v, ta[0], tb[0])) { q.v = 0; o->miss |= 64; }
         else if (!cp_hue(v, ta[0], tb[0], &q)) return 0;
         h = q.v - cp_div(q.v, 3600000, 1) * 3600000;   /* 0..359.9999deg */
         for (k = 1; k < 3; k++) {
-            if (cp_none(v, ta[k], tb[k])) { x = 0; pct = 1; }
+            if (cp_none(v, ta[k], tb[k])) { x = 0; pct = 1; o->miss |= k == 1 ? 32 : 16; }
             else if (!cp_tok_num(v, ta[k], tb[k], &x, &pct) || (comma && !pct)) return 0;
             sl[k - 1] = cp_clampll(x, 0, 100 * CP_S);
         }
@@ -2244,7 +2532,7 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
         long long h, wb[2], x;
         cp_q_t q;
         if ((got != 3 && got != 4) || cp_comma_after(v, tb[0], n)) return 0;
-        if (cp_none(v, ta[0], tb[0])) q.v = 0;     /* Lot 102: none is 0 */
+        if (cp_none(v, ta[0], tb[0])) { q.v = 0; o->miss |= 64; }     /* Lot 102: none is 0; Lot 103: hue */
         else if (!cp_hue(v, ta[0], tb[0], &q)) return 0;
         h = q.v - cp_div(q.v, 3600000, 1) * 3600000;
         for (k = 1; k < 3; k++) {
@@ -2269,21 +2557,26 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
         if ((got != 3 && got != 4) || cp_comma_after(v, tb[0], n)) return 0;
         for (k = 0; k < 3; k++) {
             if (k == 2 && lch) {
-                if (cp_none(v, ta[2], tb[2])) q.v = 0;     /* Lot 102: none is 0 */
+                if (cp_none(v, ta[2], tb[2])) { q.v = 0; o->miss |= 64; }     /* Lot 102: 0; Lot 103: hue */
                 else if (!cp_hue(v, ta[2], tb[2], &q)) return 0;
                 cp_cossin(q.v, &cs, &sn);
                 x[2] = cp_qmul(x[1], sn);
                 x[1] = cp_qmul(x[1], cs);
                 continue;
             }
-            if (cp_none(v, ta[k], tb[k])) { y = 0; pct = 0; }
-            else if (!cp_tok_num(v, ta[k], tb[k], &y, &pct)) return 0;
+            if (cp_none(v, ta[k], tb[k])) {
+                /* Lot 103: L lightness (bit 4), C colourfulness (5), a and
+                 * b the opponent pairs (7, 8) */
+                y = 0; pct = 0;
+                o->miss |= !k ? 16 : lch ? 32 : k == 1 ? 128 : 256;
+            } else if (!cp_tok_num(v, ta[k], tb[k], &y, &pct)) return 0;
             if (!k) x[0] = cp_clampll(cp_q40(y, pct, ok ? 1 : 100, 1), 0, ok ? CP_Q : 100 * CP_Q);
             else if (k == 1 && lch) x[1] = cp_clampll(cp_q40(y, pct, ok ? 2 : 150, ok ? 5 : 1), 0, lim);
             else x[k] = cp_clampll(cp_q40(y, pct, ok ? 2 : 125, ok ? 5 : 1), -lim, lim);
         }
         if (got == 4 && !cp_alpha_tok(v, ta[3], tb[3], o)) return 0;
-        cp_space_rgb(ok ? CP_SP_OKLAB : CP_SP_LAB, x, o->c);
+        cp_space_rgb(ok ? CP_SP_OKLAB : CP_SP_LAB, x, o->c, o->lin);
+        o->lin_ok = 1;
         return 1;
     }
     if (n > 7 && cp_eqn(v, 6, "color(")) {
@@ -2311,7 +2604,10 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
             else x[k] = cp_clampll(cp_q40(y, pct, 1, 1), -100 * CP_Q, 100 * CP_Q);
         }
         if (got == 4 && !cp_alpha_tok(v, ta[3], tb[3], o)) return 0;
-        if (sp >= 0) cp_space_rgb(sp, x, o->c);
+        if (sp >= 0) {
+            cp_space_rgb(sp, x, o->c, o->lin);
+            o->lin_ok = 1;
+        }
         return 1;
     }
     if (n > 11 && cp_eqn(v, 10, "color-mix(")) return cp_mix(v, n, o, depth);

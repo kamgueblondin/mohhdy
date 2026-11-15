@@ -180,8 +180,13 @@ static void test_l100_mix(void) {
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, red -1%, blue)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, red 50, blue)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, red 10% 20%, blue)"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in hsl, red, blue)"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb-linear, red, blue)"));
+    /* Lot 103, converted: hsl and srgb-linear are mix spaces (hue 0 and
+     * 240 by the shorter arc: 300; linear 0.5 encodes to 187.5); other
+     * names stay invalid */
+    TEST_ASSERT_EQUAL_STRING("#ff00ff 255", rc("color-mix(in hsl, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("#bc00bc 255", rc("color-mix(in srgb-linear, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in hsv, red, blue)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb-lin, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(insrgb, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(srgb, red, blue)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(on srgb, red, blue)"));

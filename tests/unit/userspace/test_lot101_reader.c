@@ -143,8 +143,11 @@ static void test_l101_oklab(void) {
     TEST_ASSERT_EQUAL_STRING(rc("oklch(0.6 0.2 40)"), rc("oklch(0.6 50% 40)"));
     TEST_ASSERT_EQUAL_STRING(rc("oklab(0.6 0 -0.1)"), rc("oklch(0.6 0.1 270)"));
     TEST_ASSERT_EQUAL_STRING(rc("oklab(0.5 10 0)"), rc("oklab(0.5 50 0)"));   /* within 10 */
-    /* a -10 and b -10 give blue; a -40 and b -20 kept would give cyan */
-    TEST_ASSERT_EQUAL_STRING("#0000ff 255", rc("oklab(0 -40 -20)"));
+    /* a -10 and b -10 (kept within 10) */
+    TEST_ASSERT_EQUAL_STRING(rc("oklab(0.5 -10 -10)"), rc("oklab(0.5 -40 -20)"));
+    /* Lot 103, converted (was blue, the clipped a -10 b -10 at L 0): gamut
+     * mapping makes L 0 black (CSS Color 4 13.2.2) */
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("oklab(0 -40 -20)"));
     TEST_ASSERT_EQUAL_STRING("#636363 128", rc("OKLCH(0.5 0 0 / 50%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("oklab(0.5, 0, 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("oklch(0.5 0.1)"));
@@ -171,8 +174,9 @@ static void test_l101_color_fn(void) {
      * would give 6.59) */
     TEST_ASSERT_EQUAL_STRING("#060606 255", rc("color(prophoto-rgb 0.03 0.03 0.03)"));
     TEST_ASSERT_EQUAL_STRING("#ffffff 255", rc("color(display-p3 1 1 1)"));
-    /* display-p3 red is outside sRGB: clipped, no gamut mapping */
-    TEST_ASSERT_EQUAL_STRING("#ff0000 255", rc("color(display-p3 1 0 0)"));
+    /* display-p3 red is outside sRGB; Lot 103, converted (was #ff0000,
+     * clipped): gamut-mapped by the OKLCh chroma at its L 0.6487 */
+    TEST_ASSERT_EQUAL_STRING("#ff0b0c 255", rc("color(display-p3 1 0 0)"));
     TEST_ASSERT_EQUAL_STRING("#ffffff 255", rc("color(rec2020 1 1 1)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(rec2020 0 0 0)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(xyz 0 0 0)"));
