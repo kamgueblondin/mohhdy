@@ -13,8 +13,9 @@ The root html names a scroll timeline (scroll-timeline: --page101) and
 (500ms is set to show it), and the css-anim line has "scroll 1 pos
 2500 color 1 0"; at 100% the animation is over (no colour, no colour
 part). #v101 names a view timeline (Lot 104: active, fed by the layout
-geometry; the page does not scroll, so its progress is that of its box at
-offset 262 in the 480 px viewport: #747474 at every position, and the
+geometry; the page does not scroll, so its progress is that of its box (Lot 105:
+a div holding a block, kept as a box: offset 254, 26 px high) in the
+480 px viewport, cover [-226, 280]: #727272 at every position, and the
 css-anim line ends with "view 1 need 1 geom 1"). An out-of-range
 position is refused with the usage line. The Lot 100 page is checked by make qemu-lot100.
 No guest clock is involved (no -rtc option).
@@ -47,7 +48,7 @@ STATIC = ["node div #l101 display auto color #777777\n",
           "node div #o101 display auto bg #636363\n",
           "node div #a101 display auto color #818181\n",
           "node div #u101 display auto color #ff0000 bg #4000bf\n",
-          "node div #v101 display auto color #747474\n"]
+          "node div #v101 display auto color #727272\n"]
 
 
 def say(msg):
@@ -83,7 +84,7 @@ def step_reader(mon, proc, u):
     lw.run(mon, proc, "web-css time 0", "web-css time 0\n", 20)
     lw.run(mon, proc, "web-css off", "web-css off", 20)
     say("reader: lab #777777, oklch bg #636363, a98-rgb #818181, currentcolor mix bg #4000bf; "
-        "scroll timeline 25% #404040, 75% #bfbfbf, 100% over; view timeline #747474; 101 refused")
+        "scroll timeline 25% #404040, 75% #bfbfbf, 100% over; view timeline #727272; 101 refused")
 
 
 def boot(hp):
