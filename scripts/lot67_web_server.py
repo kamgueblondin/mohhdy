@@ -105,6 +105,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       currentcolor in color-mix(), a keyframes colour on
                       the named scroll timeline of the root, a view
                       timeline left idle
+  /lot102/range.html  Lot 102: none components (a missing red carried
+                      in color-mix()), scroll() and scroll(root) with
+                      animation-range, a named timeline hidden by
+                      timeline-scope, view() left idle
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -577,6 +581,31 @@ LOT101_PAGES = {
 }
 
 
+# Lot 102: reader page (tests/scripts/test_qemu_lot102.py); the guest sets
+# the reader scroll position first (web-css scroll N)
+LOT102_PAGES = {
+    "/lot102/range.html": (
+        "<!doctype html><html><head><title>Lot 102 ranges</title><style>"
+        "@keyframes k102 { from { color: #000000 } to { color: #ffffff } }\n"
+        "html { scroll-timeline: --page102 }\n"
+        "body { timeline-scope: --page102 }\n"
+        "#n102 { color: rgb(255 none 0) }\n"
+        "#m102 { background-color: color-mix(in srgb, rgb(none 0 0), rgb(200 0 0)) }\n"
+        "#s102 { animation: k102 1000ms linear; animation-timeline: scroll() }\n"
+        "#r102 { animation: k102 1000ms linear; animation-timeline: scroll(root); animation-range: 20% 60% }\n"
+        "#q102 { animation: k102 1000ms linear; animation-timeline: --page102 }\n"
+        "#v102 { animation: k102 1000ms linear; animation-timeline: view() }\n"
+        "</style></head><body><h1>Ranges 102</h1>"
+        "<div id=\"n102\"><p>nkeep102</p></div>"
+        "<div id=\"m102\"><p>mkeep102</p></div>"
+        "<div id=\"s102\"><p>skeep102</p></div>"
+        "<div id=\"r102\"><p>rkeep102</p></div>"
+        "<div id=\"q102\"><p>qkeep102</p></div>"
+        "<div id=\"v102\"><p>vkeep102</p></div>"
+        "<p>fin102</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -787,6 +816,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT101_PAGES:
             self._send(200, LOT101_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT102_PAGES:
+            self._send(200, LOT102_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

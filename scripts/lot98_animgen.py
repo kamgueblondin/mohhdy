@@ -334,11 +334,12 @@ def write_longs():
         vs = ", ".join("0" if s is None else cstr(s[1]) for s in slots)
         shs = ", ".join("1" if s and s[0] == "sh" else "0" for s in slots)
         # Lot 99, converted: the animation slots are ten (animation-timeline
-        # last, not set here)
-        nv = nl + 1 if anim else nl
+        # last, not set here). Lot 102, converted: twelve (then
+        # animation-range-start and -end, not set here)
+        nv = nl + 3 if anim else nl
         if anim:
-            vs += ", 0"
-            shs += ", 0"
+            vs += ", 0, 0, 0"
+            shs += ", 0, 0, 0"
         lines = ["{",
                  "    static const char *const v[%d] = {%s};" % (nv, vs),
                  "    static const unsigned char sh[%d] = {%s};" % (nv, shs),

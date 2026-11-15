@@ -226,16 +226,18 @@ enum {
     WF_SITE_K_ANIM = 27,      /* the animation shorthand */
     WF_SITE_K_TRANS = 28,     /* the transition shorthand */
     /* Lot 98: the longhands, slot = kind - WF_SITE_K_LONG0: the
-     * animation-* (WF_CSSANIM_L_*; Lot 99: ten, animation-timeline last)
-     * then the five transition-* (WF_CSSANIM_LONGS + WF_CSSTRANS_L_*) */
+     * animation-* (WF_CSSANIM_L_*; Lot 99: ten, animation-timeline last;
+     * Lot 102: twelve, animation-range-start and -end last) then the five
+     * transition-* (WF_CSSANIM_LONGS + WF_CSSTRANS_L_*) */
     WF_SITE_K_LONG0 = 29,
     /* Lot 101: scroll-timeline-name, scroll-timeline-axis,
      * view-timeline-name and view-timeline-axis (slot = kind -
-     * WF_SITE_K_TL0), lists in lpool like the animation longhands */
-    WF_SITE_K_TL0 = 44
+     * WF_SITE_K_TL0), lists in lpool like the animation longhands; Lot
+     * 102: timeline-scope */
+    WF_SITE_K_TL0 = 46        /* Lot 102: 46 (the animation-range longhands take 39 and 40) */
 };
-#define WF_SITE_ALONGS 15           /* Lot 98: WF_CSSANIM_LONGS + WF_CSSTRANS_LONGS slots per element (Lot 99: 15) */
-#define WF_SITE_TLS 4               /* Lot 101: the timeline longhand slots */
+#define WF_SITE_ALONGS 17           /* Lot 98: WF_CSSANIM_LONGS + WF_CSSTRANS_LONGS slots per element (Lot 102: 17) */
+#define WF_SITE_TLS 5               /* Lot 101: the timeline longhand slots (Lot 102: timeline-scope, slot 4) */
 /* Lot 89: a compound that names the scoping root */
 enum {
     WF_SITE_SREF_NONE = 0,

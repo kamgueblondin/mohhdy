@@ -284,6 +284,9 @@ def tl_list(rng, good):
 
 
 def tl_field(v):
+    if isinstance(v, tuple):
+        # Lot 102, converted: scroll() (3) and view() (4)
+        return "%d -" % (3 if v[0] == "scroll" else 4)
     return "%d %s" % (M.TIMELINE_CODE.get(v, 2), v if v not in ("auto", "none") else "-")
 
 
@@ -313,9 +316,11 @@ def write_timeline():
         got = M.coord(slots)
         vs = ", ".join("0" if s is None else cstr(s[1]) for s in slots)
         shs = ", ".join("1" if s and s[0] == "sh" else "0" for s in slots)
+        # Lot 102, converted: twelve slots (animation-range-start and -end
+        # last, not set here)
         lines = ["{",
-                 "    static const char *const v[10] = {%s};" % vs,
-                 "    static const unsigned char sh[10] = {%s};" % shs,
+                 "    static const char *const v[12] = {%s, 0, 0};" % vs,
+                 "    static const unsigned char sh[12] = {%s, 0, 0};" % shs,
                  "    TEST_ASSERT_EQUAL(%d, acoord(v, sh));" % len(got)]
         for j, x in enumerate(got):
             lines.append("    TEST_ASSERT_EQUAL_STRING(%s, afield(%d));" % (cstr(afield10(x)), j))

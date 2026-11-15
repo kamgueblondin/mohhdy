@@ -278,7 +278,7 @@ static void test_l99_timeline_api(void) {
     const char *v[WF_CSSANIM_LONGS] = {0};
     unsigned char sh[WF_CSSANIM_LONGS] = {0};
     TEST_ASSERT_EQUAL(9, WF_CSSANIM_L_TIMELINE);
-    TEST_ASSERT_EQUAL(10, WF_CSSANIM_LONGS);
+    TEST_ASSERT_EQUAL(12, WF_CSSANIM_LONGS);     /* Lot 102, converted: the range longhands (10) */
     TEST_ASSERT_EQUAL(0, WF_CSSANIM_TL_AUTO);
     TEST_ASSERT_EQUAL(3, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "--t, NONE, auto", a, WF_CSSANIM_MAX));
     TEST_ASSERT_EQUAL_STRING("2 --t", tlf(&a[0]));
@@ -288,9 +288,13 @@ static void test_l99_timeline_api(void) {
     TEST_ASSERT_EQUAL_STRING("2 --Scroller_9", tlf(&a[0]));
     TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "--xxxxxxxxxxxxxxxxxxxxxxxxxxxxx", a, WF_CSSANIM_MAX));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "--xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", a, WF_CSSANIM_MAX));
-    TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "scroll()", a, WF_CSSANIM_MAX));
-    TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "view(block)", a, WF_CSSANIM_MAX));
-    TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "auto, scroll()", a, WF_CSSANIM_MAX));
+    /* Lot 102, converted: scroll() and view() are taken (they were refused) */
+    TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "scroll()", a, WF_CSSANIM_MAX));
+    TEST_ASSERT_EQUAL_STRING("3 -", tlf(&a[0]));
+    TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "view(block)", a, WF_CSSANIM_MAX));
+    TEST_ASSERT_EQUAL_STRING("4 -", tlf(&a[0]));
+    TEST_ASSERT_EQUAL(2, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "auto, scroll()", a, WF_CSSANIM_MAX));
+    TEST_ASSERT_EQUAL_STRING("3 -", tlf(&a[1]));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "--", a, WF_CSSANIM_MAX));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "-t", a, WF_CSSANIM_MAX));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "t", a, WF_CSSANIM_MAX));
@@ -398,11 +402,13 @@ static void test_l99_timeline_reader(void) {
     TEST_ASSERT_EQUAL_STRING("50px", nv("o"));
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     TEST_ASSERT_EQUAL_STRING("keyframes 1 animated 1 transitioned 0 font 0 at 500ms", anim_text());
-    /* scroll() and view() are not taken: the declaration is dropped */
+    /* Lot 102, converted (were 10px and 50px: dropped): scroll() runs on
+     * the viewport, at the scroll position 0 here (the 0% frame); view()
+     * has no effect */
     prep(PN KF "#o { --p: 10px; animation: k 1000ms linear; animation-timeline: none; animation-timeline: scroll() }", 500);
-    TEST_ASSERT_EQUAL_STRING("10px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("0px", nv("o"));
     prep(PN KF "#o { --p: 10px; animation: k 1000ms linear; animation-timeline: view() }", 500);
-    TEST_ASSERT_EQUAL_STRING("50px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("10px", nv("o"));
     /* the shorthand resets the timeline to auto */
     prep(PN KF "#o { --p: 10px; animation-timeline: none; animation: k 1000ms linear }", 500);
     TEST_ASSERT_EQUAL_STRING("50px", nv("o"));

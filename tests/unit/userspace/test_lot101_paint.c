@@ -306,7 +306,7 @@ static void test_l101_paint_10(void) {
     prep("#o { color: oklch(1  0.4201  241); background-color: color(xyz 1 106% 0.79) } #i { color: lch(none 46 120); background: url(x.png) CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff;background-color:#ffffd6\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ffff;background-image:url(x.png)\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000f00;background-color:#000f00;background-image:url(x.png)\"", style_of("i"));
     prep("body { background-color: oklch(26.6% 0.0797 9.675rad } #o { background-color: color(srgb-linear  0.8774  1.705  0) } #i { color: hsla(-6.2018rad 73.01% 50% / 50%); background-color: color-mix(in srgb, CURRENTCOLOR 100%, lab(86.02%	-123.399	-23.08)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f1ff00\"", style_of("o"));
@@ -588,7 +588,7 @@ static void test_l101_paint_20(void) {
     prep("body { background-color: currentcolor } #o { color: oklch(0.39 0 609.14); background-color: color(prophoto-rgb  0.031  0  0.915/ 0) } #i { color: color(xyz -0.223 0.6811 0.342); background-color: oklab(none 102.9% 0.0641) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#454545;background-color:#0000fe00\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff7e\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff7e;background-color:#290000\"", style_of("i"));
 }
 
 static void test_l101_paint_21(void) {
@@ -653,7 +653,7 @@ static void test_l101_paint_23(void) {
     prep("body { color: color(rec2020 0.9362 0 0.9) } #o { color: oklch(1E-1 0 284) } #i { color: lch(none 61.84 -159.74) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00f2\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#002022\"", style_of("i"));
     prep("body { background: url(x.png) currentcolor } #i { color: color-mix(in srgb, color( xyz	0.9	0.8	0.1587/0), lab(3%	-73.26	-16.11%)); background: no-repeat hwb(-293deg 87 100%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-image:url(x.png)\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));

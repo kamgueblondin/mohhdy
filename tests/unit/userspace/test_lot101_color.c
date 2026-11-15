@@ -56,7 +56,7 @@ static void test_l101_color_1(void) {
 }
 
 static void test_l101_color_2(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("lab(none 0 0)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("lab(none 0 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lab(50, 0, 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color(srgb, 1, 0, 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color(p3 1 0 0)"));
@@ -257,7 +257,7 @@ static void test_l101_color_15(void) {
     TEST_ASSERT_EQUAL_STRING("#f0e68c 255", rc("khaki"));
     TEST_ASSERT_EQUAL_STRING("#f4cbcb 149", rc("color-mix(in srgb, hsl(407.735deg 50% 90 / 0.9999), color(xyz  0.688  0.26  0.2/0.17))"));
     TEST_ASSERT_EQUAL_STRING("#f1bf55 191", rc("color-mix(in srgb, oklab(0.89  0.102  -0.3484 /0.5), oklab(1 0.0171 0.4465))"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("oklab(none -0.0245 0.4025)"));
+    TEST_ASSERT_EQUAL_STRING("#003d00 255", rc("oklab(none -0.0245 0.4025)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lab()"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lch( 103.17  2.5e-2  49 )"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hwb(44.463px 31% 50%)"));
@@ -288,7 +288,7 @@ static void test_l101_color_17(void) {
     TEST_ASSERT_EQUAL_STRING("#c7c7c7 255", rc("hwb(-2turn 100% 28.1%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color(xyz 0 0.84 0.1 / 1 / 1)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("oklab(69.4% 0 -0.4646"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("oklch(none 0.4051 -360deg)"));
+    TEST_ASSERT_EQUAL_STRING("#230000 255", rc("oklch(none 0.4051 -360deg)"));
     TEST_ASSERT_EQUAL_STRING("#dcdcdc 255", rc("Gainsboro"));
     TEST_ASSERT_EQUAL_STRING("#262685 255", rc("color-mix(in srgb, oklab(0 -0.4706 -0.4853), oklch( 41.8%  0  1.8turn ))"));
     TEST_ASSERT_EQUAL_STRING("#ff0085 255", rc("color( xyz-d65 0.903 0.1 0.195)"));
@@ -390,7 +390,7 @@ static void test_l101_color_24(void) {
     TEST_ASSERT_EQUAL_STRING("#6872ff 255", rc("oklch(0.75 0.3836 271)"));
     TEST_ASSERT_EQUAL_STRING("#ce00ef 255", rc("color(srgb-linear	0.618	-1.4%	0.86)"));
     TEST_ASSERT_EQUAL_STRING("#0041c2 51", rc("color-mix(in srgb, rgba(1 2 3) 0.027%, lab( 24.18% 0% -86.3152 / 0.2 ))"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("oklch(none 116.1% 464.4)"));
+    TEST_ASSERT_EQUAL_STRING("#004700 255", rc("oklch(none 116.1% 464.4)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lch(67.498, 187.76, 180)"));
     TEST_ASSERT_EQUAL_STRING("#070000 255", rc("oklab(0 0.1665 0.1003)"));
     TEST_ASSERT_EQUAL_STRING("#00ff00 255", rc("Lime"));
@@ -450,7 +450,7 @@ static void test_l101_color_28(void) {
     TEST_ASSERT_EQUAL_STRING("#001432 255", rc("lch( -0	42.4	231 )"));
     TEST_ASSERT_EQUAL_STRING("#cad5b4 255", rc("hsla(80 28% 77% / 0.9999)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, currentcolor, rgb(145 251 17 / 0.5))"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("lab(none 93.09% 156.41)"));
+    TEST_ASSERT_EQUAL_STRING("#7a0000 255", rc("lab(none 93.09% 156.41)"));
     TEST_ASSERT_EQUAL_STRING("#1d00ff 255", rc("color( display-p3 0.1 0 1.6)"));
     TEST_ASSERT_EQUAL_STRING("#a72795 255", rc("color-mix(in srgb, color(rec2020	99%	0.1	1.58/120%), hsl(1rad 30% 24% / 100%))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("oklab(0 0 0.0017 1)"));
@@ -606,7 +606,7 @@ static void test_l101_color_38(void) {
     TEST_ASSERT_EQUAL_STRING("#5b0007 0", rc("lab(-0	93.9	.5 / 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lab(108%	21.46	2.5e-2/ 0)"));
     TEST_ASSERT_EQUAL_STRING("#641f19 241", rc("color-mix(in srgb, hwb(6.7252rad 50% 23 / 0.77) 24%, COLOR( srgb 0.3 0 0))"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("lch(none 138.7677 67)"));
+    TEST_ASSERT_EQUAL_STRING("#4f0000 255", rc("lch(none 138.7677 67)"));
     TEST_ASSERT_EQUAL_STRING("#52eac7 255", rc("color-mix(in srgb, COLOR(xyz-d50 0.6631 0.82 0.7825), color(display-p3	0.039	0.843	0.598/ 1))"));
 }
 
@@ -837,7 +837,7 @@ static void test_l101_color_53(void) {
 
 static void test_l101_color_54(void) {
     TEST_ASSERT_EQUAL_STRING("#ff00ff 255", rc("lab(21 20000 -75 /1.5)"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("lch(none 120.8 712.93deg)"));
+    TEST_ASSERT_EQUAL_STRING("#6f0021 255", rc("lch(none 120.8 712.93deg)"));
     TEST_ASSERT_EQUAL_STRING("#9900c4 128", rc("color(display-p3 0.55 0.1 0.74 / 50%)"));
     TEST_ASSERT_EQUAL_STRING("#9d8ec5 255", rc("color-mix(in srgb, rgb(92 62 138 / 120%), oklab(0.965 0.0424 -0.2037))"));
     TEST_ASSERT_EQUAL_STRING("#d1d1d1 128", rc("lch(83.93  -0  301/ 50%)"));
@@ -956,7 +956,7 @@ static void test_l101_color_61(void) {
 }
 
 static void test_l101_color_62(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("oklch(none 0.1658 99.4grad)"));
+    TEST_ASSERT_EQUAL_STRING("#000b00 255", rc("oklch(none 0.1658 99.4grad)"));
     TEST_ASSERT_EQUAL_STRING("#010000 255", rc(" oklch(-4.01% 0.0975 720deg)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color(--x 0 0.6208 0.48)"));
     TEST_ASSERT_EQUAL_STRING("#5ab8d5 255", rc("#5aB8D5"));

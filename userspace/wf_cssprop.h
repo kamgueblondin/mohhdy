@@ -340,6 +340,18 @@ enum { WF_CSSANIM_REPLACE = 0, WF_CSSANIM_ADD = 1, WF_CSSANIM_ACCUMULATE = 2 };
  * timeline, the reader clock), none, or a <dashed-ident> naming a scroll
  * or view timeline (the reader has none: no timeline either) */
 enum { WF_CSSANIM_TL_AUTO = 0, WF_CSSANIM_TL_NONE = 1, WF_CSSANIM_TL_NAMED = 2 };
+/* Lot 102: the anonymous timelines scroll(<scroller> || <axis>) and
+ * view(<axis> || <inset>) (tlsrc: the scroller of scroll(), tlaxis: the
+ * axis, WF_CSSTL_*) */
+enum { WF_CSSANIM_TL_SCROLL = 3, WF_CSSANIM_TL_VIEW = 4 };
+enum { WF_CSSANIM_SC_NEAREST = 0, WF_CSSANIM_SC_ROOT = 1, WF_CSSANIM_SC_SELF = 2 };
+/* Lot 102: an edge of animation-range (rs, re): normal, a percentage of
+ * the timeline (rsp, rep in 1/10000 %), or a timeline range name with its
+ * percentage (cover .. scroll: WF_CSSANIM_R_COVER + index) */
+enum {
+    WF_CSSANIM_R_NORMAL = 0, WF_CSSANIM_R_PCT = 1, WF_CSSANIM_R_COVER = 2, WF_CSSANIM_R_CONTAIN, WF_CSSANIM_R_ENTRY,
+    WF_CSSANIM_R_EXIT, WF_CSSANIM_R_ENTRY_CROSSING, WF_CSSANIM_R_EXIT_CROSSING, WF_CSSANIM_R_SCROLL
+};
 typedef struct {
     char name[WF_CSSPROP_NAME];
     int dur, delay, iters;
@@ -348,6 +360,9 @@ typedef struct {
     wf_cssease_t ease;
     unsigned char timeline;       /* Lot 99: WF_CSSANIM_TL_* */
     char tlname[WF_CSSPROP_NAME]; /* Lot 99: the <dashed-ident> of TL_NAMED */
+    unsigned char tlsrc, tlaxis;  /* Lot 102: scroll() and view() */
+    unsigned char rs, re;         /* Lot 102: animation-range edges, WF_CSSANIM_R_* */
+    int rsp, rep;                 /* Lot 102: their percentages (1/10000 %) */
 } wf_cssanim_t;
 /* the comma separated list v (lower case, trimmed): the number of
  * animations written to out (at most max), -1 when the list is not valid
@@ -375,7 +390,12 @@ int wf_csstrans_parse(const char *v, wf_csstrans_t *out, int max);
  *   animation-direction, animation-fill-mode, animation-play-state and
  *   animation-composition (replace, add, accumulate), Lot 99:
  *   animation-timeline (auto, none or a <dashed-ident> under 32 bytes;
- *   scroll() and view() are not taken: the list is dropped);
+ *   Lot 102: scroll([root | nearest | self] || <axis>) and view(<axis>
+ *   || [auto | <length-percentage>]{1,2}), defaults nearest and block),
+ *   Lot 102: animation-range-start and animation-range-end (normal, a
+ *   percentage, a unitless 0, or a timeline range name with an optional
+ *   percentage: 0% for a start, 100% for an end; other lengths are not
+ *   taken);
  *   transition-property (all, an identifier, or none alone),
  *   transition-duration (>= 0), transition-timing-function,
  *   transition-delay, transition-behavior (normal, allow-discrete).
@@ -385,13 +405,22 @@ int wf_csstrans_parse(const char *v, wf_csstrans_t *out, int max);
 enum {
     WF_CSSANIM_L_NAME = 0, WF_CSSANIM_L_DURATION, WF_CSSANIM_L_TIMING, WF_CSSANIM_L_DELAY, WF_CSSANIM_L_COUNT,
     WF_CSSANIM_L_DIRECTION, WF_CSSANIM_L_FILL, WF_CSSANIM_L_PLAY, WF_CSSANIM_L_COMPOSITION, WF_CSSANIM_L_TIMELINE,
-    WF_CSSANIM_LONGS
+    WF_CSSANIM_L_RANGE_START, WF_CSSANIM_L_RANGE_END, WF_CSSANIM_LONGS
 };
 enum {
     WF_CSSTRANS_L_PROPERTY = 0, WF_CSSTRANS_L_DURATION, WF_CSSTRANS_L_TIMING, WF_CSSTRANS_L_DELAY,
     WF_CSSTRANS_L_BEHAVIOR, WF_CSSTRANS_LONGS
 };
 int wf_cssanim_long(int which, const char *v, wf_cssanim_t *out, int max);
+/* Lot 102: the animation-range shorthand ([<start> <end>?]#, each edge as
+ * in the longhands; an end left out is the start's range name at 100%,
+ * else normal): the start and end of each item written to out (the other
+ * fields are left as they are), the count, -1 as wf_cssanim_long. And the
+ * edges of n items as a longhand list (end 0: the starts, 1: the ends;
+ * "normal", "12.5%", "entry 0%"): its length, 0 (and "") when it does not
+ * fit cap */
+int wf_cssanim_range(const char *v, wf_cssanim_t *out, int max);
+int wf_cssanim_range_text(const wf_cssanim_t *a, int n, int end, char *out, int cap);
 int wf_csstrans_long(int which, const char *v, wf_csstrans_t *out, int max);
 /* Lot 98: the coordinated lists (CSS Values 4, coordinating list-valued
  * properties). v[k] is the value of longhand k (0: its initial value),
@@ -425,6 +454,14 @@ int wf_cssanim_progress(const wf_cssanim_t *a, int ms, int *p, int *before);
  * is infinite or that sum is not in 1..WF_CSSANIM_MS_MAX ms (the
  * animation has no effect then) or prog is outside 0..10000. */
 int wf_cssanim_scroll_ms(const wf_cssanim_t *a, int prog, int *ms);
+/* Lot 102: the same within the animation range: the start S and end E
+ * (1/10000 % of the timeline; normal and a range name, which a scroll
+ * timeline does not have, are 0% and 100%) and the position P = prog
+ * 100 give ms = (delay + duration * count) (P - S) / (E - S), rounded
+ * down and kept within -2e8..2e8 (before S the animation is in its
+ * before phase, after E in its after phase). 0 (and ms 0) as
+ * wf_cssanim_scroll_ms, or when E <= S (an empty range: no effect) */
+int wf_cssanim_range_ms(const wf_cssanim_t *a, int prog, int *ms);
 
 /* Lot 101: scroll-timeline-name and view-timeline-name ([none |
  * <dashed-ident>]#, WF_CSSTL_NAMES), scroll-timeline-axis and
@@ -434,7 +471,11 @@ int wf_cssanim_scroll_ms(const wf_cssanim_t *a, int prog, int *ms);
  * kept as an empty name (it names no timeline); a name is shorter than
  * WF_CSSPROP_NAME bytes. */
 enum { WF_CSSTL_BLOCK = 0, WF_CSSTL_INLINE = 1, WF_CSSTL_X = 2, WF_CSSTL_Y = 3 };
-enum { WF_CSSTL_NAMES = 0, WF_CSSTL_AXES = 1, WF_CSSTL_SHORT = 2 };
+enum { WF_CSSTL_NAMES = 0, WF_CSSTL_AXES = 1, WF_CSSTL_SHORT = 2, WF_CSSTL_SCOPE = 3 };
+/* Lot 102: timeline-scope (none | all | <dashed-ident>#, WF_CSSTL_SCOPE):
+ * none and all are one item with an empty name, axis 0 for none and
+ * WF_CSSTL_ALL for all */
+#define WF_CSSTL_ALL 1
 typedef struct {
     char name[WF_CSSPROP_NAME];
     unsigned char axis;           /* WF_CSSTL_* (block for a names list) */
@@ -450,4 +491,8 @@ int wf_csstl_coord(const char *names, const char *axes, wf_csstl_t *out, int max
 /* the n names (axes 0) or axes (axes 1) of t as a list ("--a, none",
  * "block, x"): its length, 0 (and "") when it does not fit cap */
 int wf_csstl_text(const wf_csstl_t *t, int n, int axes, char *out, int cap);
+/* Lot 102: how the timeline-scope value v covers the timeline name: 1
+ * when it lists the name, 2 when it is all, 0 when it is none, does not
+ * list it, or is not valid */
+int wf_csstl_scoped(const char *v, const char *name);
 #endif

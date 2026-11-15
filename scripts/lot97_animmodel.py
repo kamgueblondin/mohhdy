@@ -494,9 +494,12 @@ def rgba97(v):
 
 
 def interp_colour(a, b, t):
-    x, y = rgba(a), rgba(b)
-    if x is None or y is None:
+    # Lot 102, converted: missing components (scripts/lot102_model.py)
+    import lot102_model as L102
+    xy = L102.carried(a, b)
+    if xy is None:
         return None
+    x, y = xy
     (ca, aa), (cb, ab) = x, y
     an = min(max(aa * S + (ab - aa) * t, 0), S * S)
     out = []

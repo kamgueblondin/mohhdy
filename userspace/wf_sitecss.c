@@ -2098,19 +2098,21 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
         {
             /* Lot 101: the scroll and view timeline names and axes, kept
              * as written; a shorthand gives its two lists */
-            static const char *const tn[6] = {
+            static const char *const tn[7] = {
                 "scroll-timeline-name", "scroll-timeline-axis", "view-timeline-name", "view-timeline-axis",
-                "scroll-timeline", "view-timeline"};
+                "scroll-timeline", "view-timeline", "timeline-scope"};
             static wf_csstl_t tt[WF_CSSANIM_MAX];
             static char tx[2][WF_SITE_LONG];
             int q, c, kind;
-            for (q = 0; q < 6 && !eq(prop, tn[q]); q++) {}
-            if (q < 6) {
+            for (q = 0; q < 7 && !eq(prop, tn[q]); q++) {}
+            if (q < 7) {
                 int ini = eq(val, "initial") || eq(val, "unset");
-                kind = WF_SITE_K_TL0 + (q < 4 ? q : (q - 4) * 2);
-                if (q < 4) {
+                /* Lot 102: timeline-scope is slot 4 */
+                kind = WF_SITE_K_TL0 + (q == 6 ? 4 : q < 4 ? q : (q - 4) * 2);
+                if (q < 4 || q == 6) {
                     if (ini) { (void)long_proto(d, kind, val, 0, proto); return 1; }
-                    c = wf_csstl_parse(q & 1 ? WF_CSSTL_AXES : WF_CSSTL_NAMES, val, tt, WF_CSSANIM_MAX);
+                    c = wf_csstl_parse(q == 6 ? WF_CSSTL_SCOPE : q & 1 ? WF_CSSTL_AXES : WF_CSSTL_NAMES, val, tt,
+                                       WF_CSSANIM_MAX);
                     if (c > 0 && long_proto(d, kind, val, 1, proto)) return 1;
                 } else {
                     c = ini ? 1 : wf_csstl_parse(WF_CSSTL_SHORT, val, tt, WF_CSSANIM_MAX);
@@ -2128,11 +2130,36 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             }
         }
         {
+            /* Lot 102: the animation-range shorthand gives its two lists,
+             * like scroll-timeline */
+            static wf_cssanim_t rr[WF_CSSANIM_MAX];
+            static char rx[2][WF_SITE_LONG];
+            if (eq(prop, "animation-range")) {
+                int ini = eq(val, "initial") || eq(val, "unset"), c, kind = WF_SITE_K_LONG0 + WF_CSSANIM_L_RANGE_START;
+                c = ini ? 1 : wf_cssanim_range(val, rr, WF_CSSANIM_MAX);
+                if (c > 0) {
+                    /* each text fits: at most 4 items of 28 bytes and 3
+                     * separators, 118 bytes < WF_SITE_LONG (unused for
+                     * initial) */
+                    (void)wf_cssanim_range_text(rr, c, 0, rx[0], WF_SITE_LONG);
+                    (void)wf_cssanim_range_text(rr, c, 1, rx[1], WF_SITE_LONG);
+                    g_more[0] = *proto;
+                    if (long_proto(d, kind, rx[0], !ini, proto) && long_proto(d, kind + 1, rx[1], !ini, &g_more[0])) {
+                        g_nmore = 1;
+                        return 1;
+                    }
+                }
+                if (i < n && body[i] == ';') i++;
+                continue;
+            }
+        }
+        {
             /* Lot 98: the longhands, kept as written like the shorthands */
             static const char *const lnames[WF_SITE_ALONGS] = {
                 "animation-name", "animation-duration", "animation-timing-function", "animation-delay",
                 "animation-iteration-count", "animation-direction", "animation-fill-mode", "animation-play-state",
-                "animation-composition", "animation-timeline", "transition-property", "transition-duration",
+                "animation-composition", "animation-timeline", "animation-range-start", "animation-range-end",
+                "transition-property", "transition-duration",
                 "transition-timing-function", "transition-delay", "transition-behavior"};
             static wf_cssanim_t la[WF_CSSANIM_MAX];
             static wf_csstrans_t lt[WF_CSSANIM_MAX];
@@ -4022,35 +4049,82 @@ static int kf_compose(const wf_cssprop_t *p, int c, const char *under, const cha
     return 1;
 }
 
+/* Lot 102: node j defines the timeline name (its scroll-timeline-name or
+ * view-timeline-name list has it): 1 for a scroll timeline (checked
+ * first), 2 for a view timeline, with its axis; 0 */
+static int tl_defines(const wf_site_t *d, int j, const char *name, int *axis) {
+    static wf_csstl_t tl[WF_CSSANIM_MAX];
+    const wf_site_node_t *nd = &d->node[j];
+    int s, n, k;
+    for (s = 0; s < 2; s++) {
+        int e = nd->tl[2 * s], x = nd->tl[2 * s + 1];
+        if (!e) continue;
+        n = wf_csstl_coord(d->lpool[e - 1], x ? d->lpool[x - 1] : 0, tl, WF_CSSANIM_MAX);
+        for (k = n - 1; k >= 0 && !eq(tl[k].name, name); k--) {}
+        if (k < 0) continue;
+        *axis = tl[k].axis;
+        return s + 1;
+    }
+    return 0;
+}
+
+/* Lot 102: the timeline-scope of node j covers name (1 listed, 2 all) */
+static int tl_scope(const wf_site_t *d, int j, const char *name) {
+    int e = d->node[j].tl[4];
+    return e ? wf_csstl_scoped(d->lpool[e - 1], name) : 0;
+}
+
+/* Lot 102: node q scopes name (CSS Scroll-driven Animations 1,
+ * timeline-scope): it lists the name, or it is all and a descendant that
+ * no element in between scopes defines the name */
+static int tl_scoped_at(const wf_site_t *d, int q, const char *name) {
+    int s = tl_scope(d, q, name), j, e, ax;
+    if (s != 2) return s;
+    for (j = 0; j < d->nnodes; j++) {
+        if (!tl_defines(d, j, name, &ax)) continue;     /* j == q: e never reaches q */
+        for (e = d->node[j].parent; e >= 0 && e != q && !tl_scope(d, e, name); e = d->node[e].parent) {}
+        if (e == q) return 1;
+    }
+    return 0;
+}
+
 /* the value of animation a (keyframes kf) for property name at the reader clock,
  * under the value below (base: the element's own value): 1 and out, 0
  * when it gives none */
 /* Lot 101: the time of animation a on node i. auto: the reader clock
- * (1). A <dashed-ident>: the nearest element, i or an ancestor (no
- * timeline-scope), whose scroll-timeline-name, else view-timeline-name,
- * has the name (the last one of its list); a scroll timeline runs only on
- * the root element (the scroller of the reader viewport) with axis block
- * or y, at the scroll position (2, wf_cssanim_scroll_ms). 0: no effect
- * (none, a name no element has, a view timeline: the reader has no
- * layout, an inline or x axis, another scroller) */
+ * (1). A <dashed-ident>: the nearest element, i or an ancestor, whose
+ * scroll-timeline-name, else view-timeline-name, has the name (the last
+ * one of its list); a scroll timeline runs only on the root element (the
+ * scroller of the reader viewport) with axis block or y, at the scroll
+ * position (2, wf_cssanim_range_ms). Lot 102: an element on the way
+ * whose timeline-scope covers the name stops the search (the timeline is
+ * then a descendant's, never the root's: no effect); scroll(): root, the
+ * viewport; nearest, the viewport too for any element but the root
+ * (the reader has no other scroll container); self, the root element
+ * only; view() has no effect. 0: no effect (none, a name no element has,
+ * a view timeline: the reader has no layout, an inline or x axis,
+ * another scroller) */
 static int anim_clock(const wf_site_t *d, int i, const wf_cssanim_t *a, int *ms) {
-    static wf_csstl_t tl[WF_CSSANIM_MAX];
-    int q, s, n, k;
+    int q, s, ax;
+    int root = d->node[i].parent < 0 && eq(d->node[i].tag, "html");
     *ms = d->anim_ms;
     if (a->timeline == WF_CSSANIM_TL_AUTO) return 1;
+    if (a->timeline == WF_CSSANIM_TL_SCROLL) {
+        if ((a->tlsrc == WF_CSSANIM_SC_SELF && !root) || (a->tlsrc == WF_CSSANIM_SC_NEAREST && d->node[i].parent < 0) ||
+            (a->tlaxis != WF_CSSTL_BLOCK && a->tlaxis != WF_CSSTL_Y))
+            return 0;
+        return wf_cssanim_range_ms(a, d->scroll_pm, ms) ? 2 : 0;
+    }
     if (a->timeline != WF_CSSANIM_TL_NAMED) return 0;
     for (q = i; q >= 0; q = d->node[q].parent) {
         const wf_site_node_t *nd = &d->node[q];
-        for (s = 0; s < 2; s++) {
-            int e = nd->tl[2 * s], x = nd->tl[2 * s + 1];
-            if (!e) continue;
-            n = wf_csstl_coord(d->lpool[e - 1], x ? d->lpool[x - 1] : 0, tl, WF_CSSANIM_MAX);
-            for (k = n - 1; k >= 0 && !eq(tl[k].name, a->tlname); k--) {}
-            if (k < 0) continue;
-            if (s || nd->parent >= 0 || !eq(nd->tag, "html") || (tl[k].axis != WF_CSSTL_BLOCK && tl[k].axis != WF_CSSTL_Y))
+        s = tl_defines(d, q, a->tlname, &ax);
+        if (s) {
+            if (s == 2 || nd->parent >= 0 || !eq(nd->tag, "html") || (ax != WF_CSSTL_BLOCK && ax != WF_CSSTL_Y))
                 return 0;
-            return wf_cssanim_scroll_ms(a, d->scroll_pm, ms) ? 2 : 0;
+            return wf_cssanim_range_ms(a, d->scroll_pm, ms) ? 2 : 0;
         }
+        if (tl_scoped_at(d, q, a->tlname)) return 0;
     }
     return 0;
 }

@@ -255,6 +255,11 @@ def timeline_one(w):
     lw = w.lower()
     if lw in ("auto", "none"):
         return lw
+    # Lot 102, converted: scroll() and view() (scripts/lot102_model.py)
+    import lot102_model as L102
+    r = L102.anon_tl(lw)
+    if r is not NotImplemented:
+        return r
     if len(w) < 3 or not w.startswith("--") or not A.is_ident(lw) or len(w) >= 32:
         return None
     return w
@@ -318,4 +323,6 @@ def coord(slots):
 
 
 def idle(anims, kfs):
-    return sum(1 for a in anims if a["timeline"] != "auto" and a["name"] and a["name"] in kfs)
+    # Lot 102, converted: an animation without a running clock
+    import lot102_model as L102
+    return sum(1 for a in anims if a["name"] and a["name"] in kfs and L102.simple_clock(a, 0) is None)

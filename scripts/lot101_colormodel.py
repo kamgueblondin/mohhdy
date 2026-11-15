@@ -417,6 +417,13 @@ def clock(a, chain, ms, pm):
     tl = a.get("timeline", "auto")
     if tl == "auto":
         return ("auto", ms)
+    if isinstance(tl, tuple):
+        # Lot 102, converted: scroll() and view() (scripts/lot102_model.py)
+        import lot102_model as L102
+        n = len(chain)
+        nodes = [{"parent": k - 1, "tag": "html" if k == 0 and chain[-1][1] else "div", "tl": [None] * 5}
+                 for k in range(n)]
+        return L102.clock(a, nodes, n - 1, ms, pm)
     if tl == "none":
         return None
     name = tl.lower()
@@ -429,7 +436,8 @@ def clock(a, chain, ms, pm):
                 continue
             if s or not root or got[-1][1] not in ("block", "y"):
                 return None
-            t = scroll_ms(a, pm)
+            import lot102_model as L102     # Lot 102, converted: animation-range
+            t = L102.range_ms(a, pm)
             return None if t is None else ("scroll", t)
     return None
 

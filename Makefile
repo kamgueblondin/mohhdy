@@ -1687,6 +1687,13 @@ qemu-lot100: $(OS_IMAGE) pack-initrd disk
 qemu-lot101: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot101.py
 
+# Lot 102: none components carried in color-mix(), scroll() and
+# animation-range, a named timeline hidden by timeline-scope, view() idle
+# (tests/scripts/test_qemu_lot102.py)
+.PHONY: qemu-lot102
+qemu-lot102: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot102.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py
