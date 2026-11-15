@@ -29,7 +29,9 @@ arithmetic, not the rules).
   through Bradford).
 * Linear sRGB values are clipped to 0..1 (no gamut mapping) and encoded
   with the sRGB curve; each channel is rounded half away from zero to
-  1/10000 of 0..255, like every other colour.
+  1/10000 of 0..255, like every other colour. Lot 103, converted: they
+  are gamut-mapped (CSS Color 4 13.2.2) by scripts/lot103_model.py
+  instead of clipped.
 * currentcolor (set by the caller in lot100_colormodel.CUR): in color
   it is the parent's final colour (color: currentcolor alone is inherit),
   in background-color and in the background shorthand the element's own
@@ -158,7 +160,15 @@ SPACES = {
 }
 
 
-def encode(lin):
+def encode(lin, ok=None):
+    """linear sRGB to channels in 1/10000 of 0..255; Lot 103, converted:
+    gamut-mapped by scripts/lot103_model.py (ok: the OKLab of an oklab()
+    or oklch() colour, else None)"""
+    import lot103_model as L103
+    return L103.map_encode(lin, ok)
+
+
+def encode_clip(lin):
     """linear sRGB to channels in 1/10000 of 0..255 (clipped)"""
     out = []
     for v in lin:
@@ -210,6 +220,16 @@ def clampf(x, lo, hi):
 
 
 def labish(v):
+    r = labish_lin(v)
+    if r is None:
+        return None
+    lin, okv, al = r
+    return encode(lin, okv), al
+
+
+def labish_lin(v):
+    """Lot 103: (linear sRGB, the OKLab values of an OK form or None,
+    alpha) of lab(), lch(), oklab() or oklch(), or None"""
     lv = v.lower()
     ok = lv.startswith("ok")
     name = lv[2:] if ok else lv
@@ -243,10 +263,36 @@ def labish(v):
     if al is None:
         return None
     lin = oklab_lin(L, a, b) if ok else lab_lin(L, a, b)
-    return encode(lin), al
+    return lin, ([L, a, b] if ok else None), al
+
+
+def space_lin(space, xs):
+    """Lot 103: the linear sRGB values of the components xs of a color()
+    space other than srgb"""
+    curve, m = SPACES[space]
+    if curve:
+        xs = [curve(x) for x in xs]
+    if m == "D65":
+        return mv(XYZ_TO_SRGB, xs)
+    if m == "D50":
+        return mv(XYZ_TO_SRGB, mv(D50_TO_D65, xs))
+    if m == "PRO":
+        return mv(XYZ_TO_SRGB, mv(D50_TO_D65, mv(PRO_TO_XYZ, xs)))
+    if m is None:
+        return list(xs)
+    return mv(XYZ_TO_SRGB, mv(m, xs))
 
 
 def color_fn(v):
+    r = color_lin(v)
+    if r is None or r[0] == "srgb":
+        return None if r is None else (r[1], r[2])
+    return encode(r[1]), r[2]
+
+
+def color_lin(v):
+    """Lot 103: ("srgb", channels, alpha) or ("lin", linear sRGB, alpha)
+    of color(), or None"""
     body = v[6:-1].lstrip(SP)
     i = 0
     while i < len(body) and body[i] not in SP:
@@ -267,7 +313,7 @@ def color_fn(v):
             x = F(r[0] * 255, 100) if r[1] else F(r[0] * 255)
             ch.append(min(max(M98.rhalf(x), 0), 255 * S))
         al = alpha(toks)
-        return None if al is None else (ch, al)
+        return None if al is None else ("srgb", ch, al)
     xs = []
     for t in toks[:3]:
         c = comp(t, 1)
@@ -277,20 +323,7 @@ def color_fn(v):
     al = alpha(toks)
     if al is None:
         return None
-    curve, m = SPACES[space]
-    if curve:
-        xs = [curve(x) for x in xs]
-    if m == "D65":
-        lin = mv(XYZ_TO_SRGB, xs)
-    elif m == "D50":
-        lin = mv(XYZ_TO_SRGB, mv(D50_TO_D65, xs))
-    elif m == "PRO":
-        lin = mv(XYZ_TO_SRGB, mv(D50_TO_D65, mv(PRO_TO_XYZ, xs)))
-    elif m is None:
-        lin = xs
-    else:
-        lin = mv(XYZ_TO_SRGB, mv(m, xs))
-    return encode(lin), al
+    return "lin", space_lin(space, xs), al
 
 
 def rhalf_f(fr):

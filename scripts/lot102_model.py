@@ -155,9 +155,15 @@ def mixm(v, depth):
     parts = L100.split_top(v[10:-1], True)
     if parts is None or len(parts) != 3:
         return None
-    m = parts[0]
-    if len(m) < 7 or m[:2] != "in" or m[2] not in SP or m[2:].lstrip(SP) != "srgb":
+    # Lot 103, converted: the other spaces and the hue methods by
+    # scripts/lot103_model.py
+    import lot103_model as L103
+    hd = L103.head_of(parts[0])
+    if hd is None:
         return None
+    if hd[0] != "srgb":
+        r = L103.mix_space(parts, hd, depth)
+        return None if r is None else (list(r[0]), r[1], r[2])
     items = []
     for t in parts[1:]:
         it = mix_item(t, depth)
@@ -177,7 +183,8 @@ def mixm(v, depth):
         return None
     an = x[1] * p0 + y[1] * p1
     ch = [rhalf(F(x[0][k] * x[1] * p0 + y[0][k] * y[1] * p1, an)) if an else 0 for k in range(3)]
-    return ch, rhalf(F(an, max(tot, 100 * S))), x[2] & y[2]
+    # Lot 103, converted: only the red, green, blue and alpha sets carry
+    return ch, rhalf(F(an, max(tot, 100 * S))), x[2] & y[2] & 15
 
 
 def rgbam(v, depth=0):

@@ -25,8 +25,12 @@ static const char *style_of(const char *id) {
 }
 
 static void test_l101_paint_0(void) {
+    prep("body { background: currentColor } #o { background: url(x.png) color-mix(in srgb, currentColor 0%, hsla(100grad 81.4% 65.3% / 2)) } #i { color: color-mix(in srgb, lab(2 92.3504 -70), oklab(0.7686	77.43%	-0.3612)); background-color: lab(13.2863  -69.0644  -101.77/ 120%) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8646a0;background-color:#001d1d\"", style_of("i"));
     prep("body { background-color: oklab(2% 39.4% 0.0483) } #o { color: currentcolor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0b0000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: hwb(-320grad 100% 88%/90%); background: color-mix(in srgb, Lch(81.49 187 239.2deg), saddlebrown) } #o { background-color: currentcolor }", 0);
@@ -42,32 +46,28 @@ static void test_l101_paint_0(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#663399\"", style_of("i"));
     prep("body { color: color-mix(in srgb, currentColor, color(display-p3  0  0.5  0.88)) } #o { color: color-mix(in srgb, rgb(239.23, 7, 93%), currentColor 50%); background-color: currentColor } #i { background: url(x.png) color( xyz +0.5 0.4266 -0.116/ 73%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#004174\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7824b1;background-color:#7824b1\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#004170\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7824af;background-color:#7824af\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_1(void) {
     prep("body { background: red } #o { color: currentcolor; background: no-repeat hwb(-460.9 0% 0%) } #i { color: #9dd60abc; background: color-mix(in srgb, currentcolor, hsl(-59.533, 54%, 39.7%, 99.99%)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff0000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5100ff;background-repeat:no-repeat\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#9dd60abc\"", style_of("i"));
-}
-
-static void test_l101_paint_1(void) {
     prep("body { color: currentcolor } #i { color: color-mix(in srgb, currentColor, beige); background-color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#7b7b6e;background-color:#7b7b6e\"", style_of("i"));
-    prep("#o { background-color: currentcolor } #i { color: lab(5  97.76%  -133.886 /0.2) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000dc33\"", style_of("i"));
     prep("body { background: oklaba(1 -64.45% 0.4636) } #o { color: color( REC2020  0.369  0  0.244/ 0.5); background-color: midnightblue } #i { color: color(a98-rgb  0.706  1  0.7); background-color: color-mix(in srgb, currentcolor, lime) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#87005180;background-color:#191970\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7f004f80;background-color:#191970\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#89ffb0;background-color:#45ff58\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, currentcolor 0%, hsla(200grad 0% 59%)) } #o { color: oklab(1	0.0731	0.3093 / 0.8023) } #i { color: mediumseagreen; background-color: color-mix(in srgb, red, color(prophoto-rgb	0	0.42	0.61/ 50%)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#969696\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffd400cd\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3cb371;background-color:#aa2e3bbf\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffffcd\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3cb371;background-color:#aa272abf\"", style_of("i"));
     prep("#o { color: color-mix(in srgb, currentColor 25%, hsla(2rad 100% 96.3% / 99.99%)); background: color-mix(in srgb, rebeccapurple 50%, color(srgb 0.807 0.6163 -3.8%)) } #i { color: color-mix(in srgb, hwb(400grad 100% 94%), CURRENTCOLOR) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b2bfb1\"", style_of("o"));
@@ -85,47 +85,47 @@ static void test_l101_paint_2(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0a0a0a\"", style_of("i"));
     prep("body { color: currentcolor; background-color: #b98d } #o { color: color-mix(in srgb, hsla(-6.27rad 0% 40.2% / 1), color(srgb-linear	0.4757	31%	0.172)); background-color: color-mix(in srgb, lch(5.25 67% 126.9155deg), color( display-p3 0% 0.3544 1.6)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#bb9988dd\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8f7f6d;background-color:#004180\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8f7f6d;background-color:#335280\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { background: url(x.png) color-mix(in srgb, lab( 92 153.72 69.59% ) 25%, #c8dfa70c) } #i { color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: color-mix(in srgb, currentcolor 50%, oklab(0.01 0.2535 -0.2996 / 0)); background-color: oklch(0.51 0.4734 730.53grad/0) } #o { color: currentColor } #i { color: currentcolor; background: no-repeat color(srgb-linear  0  0.647  0.54) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080;background-color:#9c00ff00\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080;background-color:#8200f500\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080\"", style_of("i"));
     prep("body { color: color-mix(in srgb, oklch(1 0.1849 120/0.5), #cff70f98); background-color: rgb(234 162 66 / 33%) } #i { color: color-mix(in srgb, currentColor 44%, rgb(137 227 133 / 120%)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#defb3d8c;background-color:#eaa24254\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e5fb7c8c;background-color:#eaa24254\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a3ea6fcc\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a5ea82cc\"", style_of("i"));
     prep("#o { color: currentcolor; background-color: color(Xyz	0.4965	0	0.64) } #i { color: color-mix(in srgb, color(xyz-d65 -0.2634 0 0.88), CURRENTCOLOR 25%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff00da\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006eb8\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#88006c\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000202\"", style_of("i"));
 }
 
 static void test_l101_paint_3(void) {
     prep("body { background-color: color-mix(in srgb, color(a98-rgb  0  0.51  0/-0.5), CURRENTCOLOR) } #o { color: lab(86.3% 128% -139) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000080\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffeeff\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { color: color(display-p3  0  0.41  0.7 / 1.5); background-color: color-mix(in srgb, currentColor, transparent) } #i { color: lch(27%	1.1	705.73) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006bb8;background-color:#006bb880\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006bb4;background-color:#006bb480\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#413f40\"", style_of("i"));
     prep("#o { background-color: color(prophoto-rgb 0.3006 0.75 1.85) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00daff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00c8ea\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: inherit; background: no-repeat rgb(83 7 221 / 0.6) } #o { color: oklab(0.5 28.67% -0.1403); background-color: color-mix(in srgb, color(xyz  -0.48  0.23  0.45) 100%, #9fbd05) } #i { color: color-mix(in srgb, color( xyz-d65 1.7 0 0), #db5cadb6); background-color: color-mix(in srgb, currentcolor, #3a5) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5307dd99;background-repeat:no-repeat\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#823baf;background-color:#00f5aa\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f0267bdb;background-color:#8a6d67ed\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#823baf;background-color:#003f36\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d32686db;background-color:#7d6d6ced\"", style_of("i"));
     prep("body { color: color-mix(in srgb, oklch(0.75 0 -192.18grad), oklab(0.58	50%	0.3087)); background-color: color-mix(in srgb, lab(51.5432 117.0849 -15.44%), #3aa) } #i { color: lab(19%  82.3  -0) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d65757;background-color:#9955a5\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b68457;background-color:#9455a2\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#890033\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6b0034\"", style_of("i"));
     prep("body { color: color-mix(in srgb, hwb(112 48.1% 16.6%/50%), currentcolor) } #i { color: color-mix(in srgb, white, currentcolor) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#2d4729bf\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -138,20 +138,20 @@ static void test_l101_paint_4(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: color-mix(in srgb, hwb(112.082grad 100% 10%), oklch(68.12% 0.3291 120/ 0.5)) } #o { color: color-mix(in srgb, #bfa4911c, currentcolor 100%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#c7d49bbf\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#c9d29bbf\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: color-mix(in srgb, lab(-0.57	-103.8364	-60), currentColor 25%) } #o { color: color(xyz-d50 100% 0 0.6077); background: url(x.png) color( xyz  105%  86.1%  0.24) } #i { color: oklch(62% 0.4123 177 1) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#002341\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00f7;background-color:#ffcd67;background-image:url(x.png)\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000101\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a60079;background-color:#ffedd8;background-image:url(x.png)\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: color-mix(in srgb, CURRENTCOLOR, black) } #o { color: color-mix(in srgb, CURRENTCOLOR, oklab(2.5e-2  -0.0506  0.0079)) } #i { color: oklab(0.79  -0.0324  0.4671); background-color: oklab(0 -0.0197 -0.2862) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff9500;background-color:#1a0053\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e1b600;background-color:#000000\"", style_of("i"));
     prep("body { color: oklab(1  0  0.1688 /1); background-color: color(rec2020 0 1.4 -1) } #o { color: currentcolor; background: no-repeat color-mix(in srgb, oklab(0.1696  -32.9%  -0.4999/ 0.5), CURRENTCOLOR 32%) } #i { color: lch(42.37 3.358 -5.1rad); background: #a3f53d }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#fff965;background-color:#00ff00\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#fff965\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#ffffff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#68635f;background-color:#a3f53d\"", style_of("i"));
     prep("body { color: unset } #o { color: currentcolor } #i { color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
@@ -165,13 +165,13 @@ static void test_l101_paint_5(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#393939\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#1a1a1a;background-color:#3a849a\"", style_of("i"));
     prep("body { color: color(xyz-d50	0.1	0.6001	115%); background-color: color-mix(in srgb, rgb(30.4% 44% 318 / 83%), oklch(1  0.0980  219.76grad)) } #o { color: currentcolor; background: url(x.png) CURRENTCOLOR } #i { color: unset }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff;background-color:#81beffe9\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff;background-color:#00ffff;background-image:url(x.png)\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00d9db;background-color:#afbeffe9\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00d9db;background-color:#00d9db;background-image:url(x.png)\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00d9db\"", style_of("i"));
     prep("body { color: color( srgb 74.6% 0.64 0.227/ 1.5); background-color: OKLCH(1e1  0.1293  89) } #o { color: lab(92%	152.426	-127.3/0.9) } #i { color: currentcolor; background: no-repeat currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#bea33a\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00ffe6\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00ffe6;background-color:#ff00ffe6;background-repeat:no-repeat\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffffe6\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffffe6;background-color:#ffffffe6;background-repeat:no-repeat\"", style_of("i"));
     prep("body { color: hsl(788.7676grad 24.3 71.8417%); background-color: color-mix(in srgb, #5de, currentColor) } #o { color: hsl(49.9grad 97 90.446% / 100%); background: no-repeat color-mix(in srgb, lch(82.1 66.6042 -1), currentcolor) } #i { color: currentcolor; background-color: oklch(0 0 1deg) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#c9a6ac;background-color:#8fc2cd\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#fef2cf\"", style_of("o"));
@@ -180,21 +180,17 @@ static void test_l101_paint_5(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#adff2f\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("#o { background: oklab(0.0094	0	0.3372) } #i { background-color: oklab(34.93%	0	0.0274) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#002c00\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#403a2a\"", style_of("i"));
-}
-
-static void test_l101_paint_6(void) {
     prep("body { color: color-mix(in srgb, currentcolor 50%, oklab(1e1 22% -0.2477/7%)) } #o { color: hwb(87 0% 59%); background: no-repeat color-mix(in srgb, #7ea2 57%, oklch(62.19% 0.0581 -1.1833turn/0.4336)) } #i { color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#3a6900\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#3a6900\"", style_of("i"));
+}
+
+static void test_l101_paint_6(void) {
     prep("body { color: oklch(0.4 0.4081 214); background: no-repeat color( rec2020  0.4  0.9  0.01) } #i { background-color: color-mix(in srgb, plum, lab(103.5%  .5  34)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0057c9;background-color:#00f300;background-repeat:no-repeat\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#005365;background-color:#00ec00;background-repeat:no-repeat\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#eecfcd\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#eecfd4\"", style_of("i"));
     prep("body { color: red; background: no-repeat color-mix(in srgb, currentcolor 11%, color(prophoto-rgb -1 0.2607 0.6 / 0.07)) } #o { color: red } #i { background: url(x.png) color-mix(in srgb, currentcolor 39.93%, oklch(61.99% 0.0437 242.2865deg)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("o"));
@@ -202,84 +198,103 @@ static void test_l101_paint_6(void) {
     prep("body { background: url(x.png) color( prophoto-rgb 0.6 0.573 0.392) } #o { color: unset } #i { color: color-mix(in srgb, oklab(0 -0.2504 0.3226), lch(76.3 58.2 244)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#007a80\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1b6580\"", style_of("i"));
+    prep("body { background-color: Color(a98-rgb	0.085	0	-1) } #i { color: currentColor; background-color: color-mix(in srgb, color( a98-rgb 0.3 .5 1.9135), currentcolor 31%) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#6d86b0\"", style_of("i"));
     prep("#o { color: CURRENTCOLOR; background-color: oklab(0.6 0 0.1277/0) } #i { color: color( display-p3 0.07 0 0) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#9e7b0000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#150000\"", style_of("i"));
     prep("body { color: color-mix(in srgb, black, color(srgb-linear 1.2357 0 1.63)); background-color: color-mix(in srgb, color(xyz-d65	0.1	0	+0.5) 54.8%, color(prophoto-rgb 1E-1 1 0.8084)) } #o { background: lab(60.69 109 -120) } #i { color: currentColor; background-color: color-mix(in srgb, black, currentcolor) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#800080\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#e400ff\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#400040\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7c3c80\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#c483ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#3e1e40\"", style_of("i"));
 }
 
 static void test_l101_paint_7(void) {
+    prep("body { color: lab(85.33%	50.3%	-100 /1); background-color: darkblue } #o { color: CURRENTCOLOR; background: no-repeat color-mix(in srgb, rgb(113.49 22% 215 / -0.5), currentcolor) } #i { color: color-mix(in srgb, LCH(22.6	109	-199.3grad) 25%, oklab(0.3 0.0661 -0.0305 /1)) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e4dbff;background-color:#00008b\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e4dbff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#332539\"", style_of("i"));
     prep("body { color: currentcolor } #o { background: no-repeat lab(105%  -46  -13.447) } #i { color: oklch(0 0.2529 1.6turn / 50%); background: url(x.png) color( xyz	0.829	0	2) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#6dffff;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00002280;background-color:#ff00ff;background-image:url(x.png)\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#d2ffff;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080;background-color:#b200af;background-image:url(x.png)\"", style_of("i"));
+    prep("body { background: no-repeat lab(93 -68.6058 70 / -0.5) } #o { color: currentColor; background-color: color(a98-rgb 39.9% +0.5 0.4) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#7fff6e00;background-repeat:no-repeat\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#588165\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { color: rgb(117 212 91 / 1.5); background-color: hwb(8 50% 85%) } #i { color: lab(64	-157.28	98.2%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#75d45b;background-color:#5e5e5e\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00c800\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ae4f\"", style_of("i"));
     prep("body { background-color: oklaba(0 0 0.0163) } #o { background: url(x.png) CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-image:url(x.png)\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background: no-repeat lab(+0.5 8% 72) } #o { color: CURRENTCOLOR; background-color: color-mix(in srgb, currentcolor 49%, rgb(101 240 82 / 1)) } #i { color: color( prophoto-rgb 0.98 0.433 100%/ 53%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#2e0000;background-repeat:no-repeat\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-repeat:no-repeat\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#347a2a\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff3fff87\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff84f087\"", style_of("i"));
+}
+
+static void test_l101_paint_8(void) {
     prep("#o { color: color-mix(in srgb, oklab(1e1 -0.573 0.0866 /0), currentcolor 25%) } #i { background-color: color(xyz-d65 0 0 0.3) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#001d99\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000607\"", style_of("i"));
     prep("body { color: color-mix(in srgb, color( srgb 0.67 111.4% 0.5 /1.5), currentcolor); background-color: hsl(1turn 92.4% 39.791 / 150%) } #o { color: rgb(155 234 197 / 0.2) } #i { color: rgb(231 70 180 / 14%); background-color: currentColor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#558040;background-color:#c30808\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#9beac533\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#e746b424;background-color:#e746b424\"", style_of("i"));
-}
-
-static void test_l101_paint_8(void) {
     prep("body { color: color-mix(in srgb, skyblue, currentColor 0%) } #o { color: color-mix(in srgb, CURRENTCOLOR 50%, Oklab(0 53.3% 0.3111/ 0.895)); background-color: lab(70.61  100%  67) } #i { background-color: color-mix(in srgb, currentcolor, hsl(211, 44.6%, 47.6463%)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#87ceeb\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#477f7cf2;background-color:#ff0042\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#457b97f8\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#476d7cf2;background-color:#ff8e91\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#457297f8\"", style_of("i"));
     prep("body { color: inherit; background-color: color(rec2020  0.3  0.433  0.16) } #o { color: lab(-0.2  20  -17.2%); background-color: color-mix(in srgb, color( xyz-d50 0% 0.784 0.392), currentcolor 25%) } #i { color: color( prophoto-rgb 0.6 0.79 0.15) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#427f2a\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#190024;background-color:#06bf84\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9adc00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0d0011;background-color:#03b797\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9ddb00\"", style_of("i"));
     prep("body { color: color(a98-rgb 1.1px 0.6205 0.34) } #o { color: color-mix(in srgb, #bc3, currentcolor); background-color: color-mix(in srgb, color(rec2020 -101 0.3 2.5e-2 /0) 25%, black) } #i { color: unset }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#5e661a\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#5e661a\"", style_of("i"));
     prep("body { background: url(x.png) oklab(0.63 -0.3590 -0.2876) } #o { color: unset; background-color: color-mix(in srgb, oklab(0  0  -0.2427 /0), lch(91%  22.1%  -2.88rad)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00a4ff;background-image:url(x.png)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#009bbf;background-image:url(x.png)\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#90f7f480\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("body { color: color(a98-rgb 14% 0 1.9/ 0.12) } #o { color: color(display-p3 0.2 0.638 0/0); background: url(x.png) currentcolor } #i { background-color: color(xyz 0.71 0.16 0.11) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#2500ff1f\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00a50000;background-color:#00a50000;background-image:url(x.png)\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff0062\"", style_of("i"));
-    prep("body { color: #1ac; background: url(x.png) color-mix(in srgb, hwb(57 0% 24.9847%), currentColor 36%) } #o { color: lch(92 194 -1.6632rad) } #i { color: lab(0 -11.2 109); background-color: hwb(-144grad 50% 37%/85%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#11aacc\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#260300;background-color:#8085a1d9\"", style_of("i"));
 }
 
 static void test_l101_paint_9(void) {
+    prep("body { color: color-mix(in srgb, transparent, currentColor) } #o { color: lab(50% -46.1 -157.7429) } #i { color: color-mix(in srgb, lch(-0 51% 0.116turn), lab( 100 1E-1 50% / -0.5 )) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006362\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    prep("body { color: color(a98-rgb 14% 0 1.9/ 0.12) } #o { color: color(display-p3 0.2 0.638 0/0); background: url(x.png) currentcolor } #i { background-color: color(xyz 0.71 0.16 0.11) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#79a6ff1f\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00a40000;background-color:#00a40000;background-image:url(x.png)\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#fa0076\"", style_of("i"));
+    prep("body { color: #1ac; background: url(x.png) color-mix(in srgb, hwb(57 0% 24.9847%), currentColor 36%) } #o { color: lch(92 194 -1.6632rad) } #i { color: lab(0 -11.2 109); background-color: hwb(-144grad 50% 37%/85%) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#11aacc\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b9f8ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#8085a1d9\"", style_of("i"));
     prep("body { color: color(prophoto-rgb 0 0.56 1.8/ 0.41) } #i { background-color: color-mix(in srgb, oklch(+0.5 0.1915 343 /1), currentcolor) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00aeff69\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00737169\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#7649a4b4\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#76387bb4\"", style_of("i"));
     prep("body { color: color(xyz-d50 0.02 0.307 0.12; background: no-repeat color-mix(in srgb, currentcolor 68.2469%, color(xyz-d50 0.1387 0.886 0.42/ 92.17%)) } #o { color: currentcolor } #i { color: rgb(120 241 217 / 3%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#78f1d908\"", style_of("i"));
     prep("body { color: color-mix(in srgb, lab(61.6828 96.7% -146.21/1) 50%, color(a98-rgb 0.5 0.61 0.3881 / 89%)); background-color: CURRENTCOLOR } #o { background: no-repeat currentcolor } #i { color: oklab(0	0.1446	0.2572); background-color: currentcolor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a84ab4f1;background-color:#a84ab4f1\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#a84ab4f1;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#001d00;background-color:#001d00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#989ab4f1;background-color:#989ab4f1\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#989ab4f1;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000\"", style_of("i"));
+}
+
+static void test_l101_paint_10(void) {
     prep("body { color: unset } #o { color: salmon } #i { color: color(srgb 0 -1 0.2); background: url(x.png) currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#fa8072\"", style_of("o"));
@@ -292,9 +307,6 @@ static void test_l101_paint_9(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
-}
-
-static void test_l101_paint_10(void) {
     prep("#o { color: oklch(0 0.0012 0rad) } #i { color: color-mix(in srgb, rebeccapurple, currentColor); background: no-repeat CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("o"));
@@ -305,58 +317,65 @@ static void test_l101_paint_10(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#102f096c\"", style_of("i"));
     prep("#o { color: oklch(1  0.4201  241); background-color: color(xyz 1 106% 0.79) } #i { color: lch(none 46 120); background: url(x.png) CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff;background-color:#ffffd6\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000f00;background-color:#000f00;background-image:url(x.png)\"", style_of("i"));
-    prep("body { background-color: oklch(26.6% 0.0797 9.675rad } #o { background-color: color(srgb-linear  0.8774  1.705  0) } #i { color: hsla(-6.2018rad 73.01% 50% / 50%); background-color: color-mix(in srgb, CURRENTCOLOR 100%, lab(86.02%	-123.399	-23.08)) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f1ff00\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#dd312280;background-color:#dd312280\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, lab(84.5971 1e1 75.295 / 0.5), currentcolor); background: url(x.png) oklch(98% 0.4471 0.8018turn) } #o { background: hwb(-1.2558turn 21.27% 26%) } #i { color: currentColor; background-color: COLOR( prophoto-rgb 0.1832 0.89 2 / 92%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff93ff;background-image:url(x.png)\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#7536bd\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00fcffeb\"", style_of("i"));
-    prep("body { color: color( prophoto-rgb  0.3816  1.0927  0.61/ 61%); background: no-repeat color-mix(in srgb, CURRENTCOLOR 80%, color(rec2020  1  0  -8%/2%)) } #o { color: darkmagenta; background: no-repeat color(xyz-d50	0.45	0.8	0) } #i { color: color-mix(in srgb, mediumpurple, currentColor 25%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff949c\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b008b;background-color:#60ff00;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9154c7\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#ffffff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000;background-image:url(x.png)\"", style_of("i"));
 }
 
 static void test_l101_paint_11(void) {
+    prep("body { color: color(display-p3	-0.0073	0.8	53.44%/35.51%) } #o { color: color(REC2020	0.545	0.189	0.59 / 76%); background-color: hsla(1.87turn 78.9% 80% / 0.9999) } #i { color: CURRENTCOLOR }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ca895b\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b323a7c2;background-color:#f4a4e3\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b323a7c2\"", style_of("i"));
+    prep("body { background-color: oklch(26.6% 0.0797 9.675rad } #o { background-color: color(srgb-linear  0.8774  1.705  0) } #i { color: hsla(-6.2018rad 73.01% 50% / 50%); background-color: color-mix(in srgb, CURRENTCOLOR 100%, lab(86.02%	-123.399	-23.08)) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffffff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#dd312280;background-color:#dd312280\"", style_of("i"));
+    prep("body { color: color-mix(in srgb, lab(84.5971 1e1 75.295 / 0.5), currentcolor); background: url(x.png) oklch(98% 0.4471 0.8018turn) } #o { background: hwb(-1.2558turn 21.27% 26%) } #i { color: currentColor; background-color: COLOR( prophoto-rgb 0.1832 0.89 2 / 92%) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f7f6ff;background-image:url(x.png)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#7536bd\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00dbf5eb\"", style_of("i"));
+    prep("body { color: color( prophoto-rgb  0.3816  1.0927  0.61/ 61%); background: no-repeat color-mix(in srgb, CURRENTCOLOR 80%, color(rec2020  1  0  -8%/2%)) } #o { color: darkmagenta; background: no-repeat color(xyz-d50	0.45	0.8	0) } #i { color: color-mix(in srgb, mediumpurple, currentColor 25%) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#62ffc49c\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b008b;background-color:#81ff00;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9154c7\"", style_of("i"));
     prep("body { color: unset } #o { color: color(display-p3	0.96	0.8	0.24); background-color: transparent } #i { color: lch(91.7 133.28 180) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#fdca00\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffe3\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffdf\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, color(prophoto-rgb 1 0 0.925), lch(100%  214.3  0.8turn)) } #o { background: url(x.png) color(xyz 0.7089 0.927) } #i { color: color-mix(in srgb, oklab( 68.54% -0.0919 -0.0557/ 1 ), color( xyz-d65	0.52	0	0.035)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#8072ff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffa3ec\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#975684\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#555680\"", style_of("i"));
+}
+
+static void test_l101_paint_12(void) {
     prep("body { color: unset; background: url(x.png) color-mix(in srgb, white, CURRENTCOLOR 0%) } #o { background-color: lab(50% 159 66 / 17%) } #i { color: oklab(103% 0 -0.0863); background-color: color( rec2020	0	6%	0) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff00292b\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e8fdff;background-color:#002100\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#fc005a2b\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#001e02\"", style_of("i"));
     prep("body { color: CURRENTCOLOR } #o { color: #d28a; background: no-repeat oklab(51.37% -0.1654 -0.3327) } #i { color: color(prophoto-rgb 47.03% 2.5e-2 -1) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#dd2288aa;background-color:#004cff;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#dd2288aa;background-color:#006cb8;background-repeat:no-repeat\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: oklch(0.77  0.4385  382.014) } #o { color: inherit; background-color: color(display-p3  0.1644  0.52  0.24/50%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff0000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff8685\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00873380\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { color: color-mix(in srgb, color(xyz-d65 0 0 0.71/ 50%), currentcolor 50%) } #i { color: white; background-color: hwb(360 0% 31%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00104bbf\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000405bf\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#b00000\"", style_of("i"));
-}
-
-static void test_l101_paint_12(void) {
     prep("body { color: #ad4b; background-color: color-mix(in srgb, currentColor 100%, rgb(48% 28% 110 / 0.5)) } #o { background-color: color-mix(in srgb, currentColor 100%, lab(8% 1E-1 -102.65%/ 0.5)) } #i { color: currentcolor; background-color: color-mix(in srgb, oklab( 0 0 -0.2088 /38.2% ), currentcolor) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#aadd44bb;background-color:#aadd44bb\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#74913e8e\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#70912d8e\"", style_of("i"));
     prep("body { color: CURRENTCOLOR } #o { color: color-mix(in srgb, currentcolor, lavenderblush) } #i { color: currentColor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#80787b\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#80787b\"", style_of("i"));
+}
+
+static void test_l101_paint_13(void) {
     prep("body { color: color-mix(in srgb, CURRENTCOLOR, oklch(1E-1 0 53)) } #o { color: color-mix(in srgb, lch(3.13 -0.34% -1.27turn) 50%, ghostwhite); background: no-repeat color(a98-rgb	0.71	21.27%	0.7) } #i { color: color-mix(in srgb, CURRENTCOLOR, hsla(2.74turn 0% 99% / 99.99%)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#828285;background-color:#d233b7;background-repeat:no-repeat\"", style_of("o"));
@@ -370,24 +389,24 @@ static void test_l101_paint_12(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#42324d;background-color:#49e3f600\"", style_of("i"));
     prep("body { color: color-mix(in srgb, color(xyz-d50 0.1 0.95 0.5), color( srgb  0  0.827  0.1/ 50%)) } #o { color: currentcolor; background: CURRENTCOLOR } #i { color: color-mix(in srgb, CURRENTCOLOR, hsla(413grad, 11.19%, 45.4%, 0.5)); background-color: color-mix(in srgb, oklab(27% 0.65 0.1051), currentcolor 0%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00f085bf\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00f085bf;background-color:#00f085bf\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#34bb799f;background-color:#d40000\"", style_of("i"));
-}
-
-static void test_l101_paint_13(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#32f099bf\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#32f099bf;background-color:#32f099bf\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#52bb859f;background-color:#530019\"", style_of("i"));
     prep("body { background: CURRENTCOLOR } #o { color: color( xyz-d65 0 0 0.061/ 0) } #i { color: hsla(1.45turn 30.54% 50% / 0); background-color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00084800\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00010200\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#59a68f00;background-color:#59a68f00\"", style_of("i"));
     prep("#o { color: color( rec2020  0.4  0.68  0.0071 /120%); background: oklab(0.18 -0.2089 -0.4824 /50%) } #i { background-color: color-mix(in srgb, color(xyz	0.7	87%	0.076) 97%, oklab(0 +0.5 0.2792/0)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1fbc00\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#33bb00\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f3fa00f7\"", style_of("i"));
+}
+
+static void test_l101_paint_14(void) {
     prep("body { background: no-repeat currentcolor } #o { color: Color(a98-rgb  0.38  91.3%  -0.1407/91.95%); background-color: hwb(143.7 50% 21%/50%) } #i { color: color-mix(in srgb, lab(21.74 94.2% 106.2% /1), currentColor) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-repeat:no-repeat\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00e900ea;background-color:#80c99d80\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#626f00f4\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00e321ea;background-color:#80c99d80\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#2f8710f4\"", style_of("i"));
     prep("#o { color: inherit; background-color: color(prophoto-rgb	0.9	0.7654	0.725 /50%) } #i { color: lab(92.49% -62); background: color-mix(in srgb, hsl(-0.787turn 56% 55% / 50%), CURRENTCOLOR 77.28%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffc7c480\"", style_of("o"));
@@ -395,26 +414,22 @@ static void test_l101_paint_13(void) {
     prep("body { color: unset } #o { color: color(srgb  1.3923  0.83  0.2) } #i { color: lch(1.02	58%	-3.3322rad/1.5); background-color: oklab(0.0737 0 -0.0144) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffd433\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#002800;background-color:#010103\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#010103\"", style_of("i"));
     prep("body { background-color: lab(106 -92.154 130.1881) } #o { color: color-mix(in srgb, lab(29.68%  -60.943  27.43/ 1), hwb(400grad 75.6% 0% /0.5)) } #i { background-color: oklch(1 0.0473 -279.696) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#11ff00\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#557b4ebf\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#fffddc\"", style_of("i"));
-}
-
-static void test_l101_paint_14(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ceffbf\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#55775abf\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffffff\"", style_of("i"));
     prep("body { color: hsl(1turn, 72.85%, 50%) } #o { color: lch(19	133	12.72rad); background: no-repeat LAB(-5.1% -53.823 59.7%) } #i { color: color(prophoto-rgb 78% 0.2473 0 /0.5) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#dc2323\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#bb0021;background-color:#001c00;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff000080\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#740031;background-color:#000000;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0e1680\"", style_of("i"));
     prep("body { color: oklab(0.4	0	-0.3226) } #i { background-color: lab(14.94% -35 70/-0.5) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#2d00f1\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#2800dd\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0c2f0000\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, COLOR(xyz  2.5e-2  -4.9%  0.9218/ 0.5), currentColor); background-color: color-mix(in srgb, currentcolor, lime) } #o { background: url(x.png) color(xyz-d65 -1 0.372 1) } #i { color: color-mix(in srgb, color( srgb 0.526 0.3796 0 / -0.5), color( prophoto-rgb	0	0.44	0/1)); background-color: color-mix(in srgb, honeydew, currentColor 5%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#008000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00fff6;background-image:url(x.png)\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00910080;background-color:#eafceaf9\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#1d270000\"", style_of("i"));
+}
+
+static void test_l101_paint_15(void) {
     prep("body { background: url(x.png) salmon } #i { color: oklab(0 0.4841); background: lab(65.9	31.36%	20.53%/0.5) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#fa8072;background-image:url(x.png)\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -422,26 +437,26 @@ static void test_l101_paint_14(void) {
     prep("body { color: unset; background-color: rgb(196 137 151 / 67%) } #o { color: currentcolor } #i { color: color( xyz -1 0.7 55.28%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#c48997ab\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffa7\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#007765\"", style_of("i"));
     prep("#o { color: oklch(0	0.1037	320.45grad) } #i { color: lch(44% 137.53% 2.9739turn/0) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#01000b\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00a900\"", style_of("i"));
-}
-
-static void test_l101_paint_15(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e8009100\"", style_of("i"));
     prep("body { background: color-mix(in srgb, currentcolor 0%, OKLAB(98% 0.1250 -0.3463 / -0.5)) } #i { color: color( xyz-d65	0	0	0.26); background: Color( xyz  0.3  32%  0.022) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#001b8f;background-color:#b69700\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000506;background-color:#b69700\"", style_of("i"));
     prep("body { background-color: hsl(325.3deg 100% 17.21% / 0) } #o { color: #bfee } #i { color: darkred; background-color: color-mix(in srgb, rgb(152 224 248 / 68%), COLOR( xyz-d65	0	0	0.162)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#58003300\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#bbffeeee\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b0000;background-color:#3e66a9d6\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b0000;background-color:#3e5d67d6\"", style_of("i"));
     prep("body { color: COLOR(rec2020 0.07 0.08 0.439); background-color: color-mix(in srgb, color( xyz 0.3 108.24% 0.89 / 120%), hwb(6.5575rad 57% 0%)) } #o { color: color( xyz 0.7473 0.6801 0.88/ 97.2%) } #i { color: lch(51.35% 109% -1.7552rad); background: no-repeat color-mix(in srgb, currentColor, lab(75.51% 155 -6.253 / -0.5)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#022383;background-color:#80d7b8\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#022383;background-color:#e1d7c2\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#f8caebf8\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0098ff\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006867\"", style_of("i"));
+}
+
+static void test_l101_paint_16(void) {
     prep("body { color: color-mix(in srgb, oklch( 0 0 410.015deg ) 24%, color( Srgb-linear	0.7	0	100%)); background-color: color-mix(in srgb, CURRENTCOLOR 30.22%, oklch( 1  0  0 )) } #o { color: #4e9 } #i { color: lightgrey }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#a600c2;background-color:#e4b2ed\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#44ee99\"", style_of("o"));
@@ -453,14 +468,11 @@ static void test_l101_paint_15(void) {
     prep("body { background: color(xyz  0.223  0.9319  0.847) } #o { background-color: beige } #i { color: color-mix(in srgb, currentColor, hsla(2rad 12% 96% / 0.5)); background-color: oklab(0  0.2798  0.4632) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f5f5dc\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#515251bf;background-color:#004b00\"", style_of("i"));
-}
-
-static void test_l101_paint_16(void) {
-    prep("#o { color: color-mix(in srgb, color(xyz-d50 63.4% 0.9 0), hsl(100grad, 90.31%, 113.81%, 2)) } #i { color: currentcolor }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e0ff80\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e0ff80\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#515251bf;background-color:#000000\"", style_of("i"));
+    prep("body { background-color: OKLAB(0	-0.3038	0.1621) } #o { color: hsla(-1rad 100% 90.3% / 50%) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffcefd80\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background: url(x.png) hsla(-523.236 25% 28.5%) } #o { color: mediumaquamarine; background-color: lch(60	3%	8) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#37515b;background-image:url(x.png)\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#66cdaa;background-color:#998e90\"", style_of("o"));
@@ -469,64 +481,63 @@ static void test_l101_paint_16(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#787f8200\"", style_of("i"));
+}
+
+static void test_l101_paint_17(void) {
     prep("body { background-color: currentColor } #o { color: currentColor; background: no-repeat lch(94.57%	17.69	-31.2grad) } #i { color: CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffe5ff;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("body { color: currentcolor } #o { color: color(xyz-d65  0  0.84  0.77); background-color: CURRENTCOLOR } #i { background: no-repeat color-mix(in srgb, oklab(0.3241	0	-0.2264 / 86.2%), CURRENTCOLOR) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffd2;background-color:#00ffd2\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { background-color: color-mix(in srgb, hsla(271.62grad 52.988% 72% / 50%), currentcolor) } #i { color: unset }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#32314abf\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_17(void) {
     prep("body { color: color-mix(in srgb, rgb(190 19 87 / 1), currentcolor 25%); background-color: oklab(1  50%  -0.2422) } #i { color: hwb(300 0% 9%); background: currentColor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8f0e41;background-color:#ffb3ff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8f0e41;background-color:#ffffff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#e800e8;background-color:#e800e8\"", style_of("i"));
+    prep("body { color: CURRENTCOLOR } #o { color: color(srgb	0	0.75	0); background-color: color-mix(in srgb, lab(54.9749 -11% 103 /0.488) 81%, color( xyz-d65  0.907  0.5  0.8)) } #i { color: inherit; background: rgb(168 167 146 / 0) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00bf00;background-color:#ac914695\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00bf00;background-color:#a8a79200\"", style_of("i"));
     prep("body { background: url(x.png) #cdb } #o { color: lch(19 153.45% 0); background: no-repeat color(0 0.84 0.1993) } #i { color: lab(-10% -0 120.1%); background: url(x.png) color-mix(in srgb, CURRENTCOLOR 0%, hsl(128.6deg, 19%, 25.5%, 2)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ccddbb;background-image:url(x.png)\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0043\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#380000\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#860045\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     prep("#o { color: rgb(125 84 252 / 5%) } #i { color: color(xyz-d65  0  0.547  0.124); background: no-repeat color(srgb-linear 0 0 -0.78) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#7d54fc0d\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff26;background-color:#000000;background-repeat:no-repeat\"", style_of("i"));
-    prep("body { color: lch(33.82%  111.74  11.18rad/50%) } #o { color: color-mix(in srgb, currentcolor 50%, #ef436f); background-color: color(display-p3	107.76%	-6.14%	0.36) } #i { color: CURRENTCOLOR }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0050ff80\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9f479fc0;background-color:#ff0056\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9f479fc0\"", style_of("i"));
-    prep("#o { color: color-mix(in srgb, rebeccapurple, CURRENTCOLOR); background-color: hsl(-405 97% 1) } #i { color: currentcolor; background-color: lab(104	-151	45.58 / 0.3) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#331a4d;background-color:#050004\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#331a4d;background-color:#00ff9b4d\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, oklch( 0	0.2532	98.31grad/21.5% ), currentcolor) } #o { background: url(x.png) hwb(-1.044turn 0% 100%) } #i { color: oklab(0.1 -0.4396 -0.2356/0) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0005009b\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-image:url(x.png)\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00006b00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00d190;background-color:#000000;background-repeat:no-repeat\"", style_of("i"));
 }
 
 static void test_l101_paint_18(void) {
+    prep("body { color: lch(33.82%  111.74  11.18rad/50%) } #o { color: color-mix(in srgb, currentcolor 50%, #ef436f); background-color: color(display-p3	107.76%	-6.14%	0.36) } #i { color: CURRENTCOLOR }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00618380\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9f4d76c0;background-color:#ff4a6c\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9f4d76c0\"", style_of("i"));
+    prep("#o { color: color-mix(in srgb, rebeccapurple, CURRENTCOLOR); background-color: hsl(-405 97% 1) } #i { color: currentcolor; background-color: lab(104	-151	45.58 / 0.3) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#331a4d;background-color:#050004\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#331a4d;background-color:#adffdd4d\"", style_of("i"));
+    prep("body { color: color-mix(in srgb, oklch( 0	0.2532	98.31grad/21.5% ), currentcolor) } #o { background: url(x.png) hwb(-1.044turn 0% 100%) } #i { color: oklab(0.1 -0.4396 -0.2356/0) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000009b\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-image:url(x.png)\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00050800\"", style_of("i"));
     prep("body { background-color: currentcolor } #o { color: rgba(15%, 41, 167, 0.8); background-color: color(srgb 0.4 67.19% 43.46%) } #i { background: no-repeat chocolate }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#2629a7cc;background-color:#66ab6f\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#d2691e;background-repeat:no-repeat\"", style_of("i"));
     prep("body { color: oklab(0.08 -88.4% -0.0484); background-color: aliceblue } #i { background-color: currentcolor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000b16;background-color:#f0f8ff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000303;background-color:#f0f8ff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000b16\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000303\"", style_of("i"));
     prep("#o { color: color-mix(in srgb, currentColor 50%, rgb(217 181 117 / 72%)) } #i { background-color: oklch(0	0.4064	142.851deg) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#5b4c31db\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#001700\"", style_of("i"));
-    prep("body { background-color: currentcolor } #o { color: color-mix(in srgb, currentcolor 50%, oklch(0.659 86.93% 589)); background-color: currentcolor } #i { background-color: lab(2.5e-2 1e1 -70/ 61.8%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#005180;background-color:#005180\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
+}
+
+static void test_l101_paint_19(void) {
     prep("body { color: oklcha(1 0.1114 51); background: no-repeat color-mix(in srgb, currentColor 89.4093%, oklab(0% 0 0.1788)) } #o { color: color-mix(in srgb, white, currentcolor) } #i { color: CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#808080\"", style_of("o"));
@@ -535,106 +546,106 @@ static void test_l101_paint_18(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#001f23d1\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffebcd\"", style_of("i"));
-}
-
-static void test_l101_paint_19(void) {
     prep("body { color: currentcolor } #o { background-color: lab(-10 26.54% 33.13) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#340000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background: no-repeat hwb(200grad 113% 100% / 1) } #i { color: color-mix(in srgb, currentcolor 50%, rgb(88% 13.3% 47.3)); background-color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#808080;background-repeat:no-repeat\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#701118;background-color:#701118\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, currentColor 100%, lch(-3.96% 71.1% 270)) } #o { color: oklch(0.1605 0 212); background-color: currentcolor } #i { background-color: hsl(-1.1turn 94.8 50%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0d0d0d;background-color:#0d0d0d\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f80798\"", style_of("i"));
+    prep("body { color: color-mix(in srgb, lab(47.02%	16.994	99.74% /1) 95%, oklch(1 0.2121 60/ 1)); background-color: color-mix(in srgb, #ae3dc4be, lch(-0 121.12% -224.6307deg/0)) } #o { color: currentColor; background: url(x.png) color-mix(in srgb, lab(92.886 -40.24% -86.83), currentcolor) } #i { color: unset; background: no-repeat CURRENTCOLOR }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#95700d;background-color:#ae3dc45f\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#95700d\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#95700d;background-color:#95700d;background-repeat:no-repeat\"", style_of("i"));
     prep("body { background-color: currentcolor } #o { color: currentcolor; background: color-mix(in srgb, CURRENTCOLOR, color(xyz-d65	0.673	0.69	0.6 /0.5)) } #i { color: oklch(0	0	210); background: url(x.png) currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000;background-image:url(x.png)\"", style_of("i"));
+}
+
+static void test_l101_paint_20(void) {
     prep("#o { color: color-mix(in srgb, color(srgb 0.5 0.3 1E-1 /50%), oklab(1e1	0.1559	0.3835 / 0)); background: oklab(0.52  -0.2910  -0.4946) } #i { color: hwb(0.19turn 84% 94%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0070b3\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#787878\"", style_of("i"));
     prep("body { background-color: currentColor } #o { color: color-mix(in srgb, hwb(246 0% 45), currentColor) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#070046\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_20(void) {
     prep("body { color: lch(41.17, 2.5e-2, -606.5744) } #o { color: color-mix(in srgb, rgb(1, 2, 3, 4, 5), currentColor); background-color: oklab(0.729 0 0.3952) } #i { background-color: color-mix(in srgb, oklab(1  0.8  0.3789/0.5), currentcolor) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff8100\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#550000bf\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, CURRENTCOLOR, oklab(0.6771 0.0579 0.3744)) } #o { background-color: currentcolor } #i { color: color-mix(in srgb, darkgoldenrod, color(xyz 0.64 0.057 0.018)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#802d00\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#802d00\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#dc4323\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#d0a000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#555555bf\"", style_of("i"));
     prep("body { color: oklch(0.2092  0.2203  148); background: no-repeat color-mix(in srgb, lch(20	91	3.6rad), currentcolor 100%) } #o { color: LCH(23.8  131.88%  -139.8233deg) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#002a00\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#005fff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#002200\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#002e2d\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: currentcolor; background-color: color-mix(in srgb, grey 85.2%, oklch(0	0.2137	702.32)) } #i { color: inherit; background: no-repeat oklch(0 0.4140 -2.346rad) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#6e6d6d\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#6d6d6d\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000060;background-repeat:no-repeat\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-repeat:no-repeat\"", style_of("i"));
     prep("body { background-color: color(Srgb -4.48% 0.81 0) } #o { color: currentcolor; background-color: currentcolor } #i { color: currentColor; background-color: rgba(7%, 16.9%, 186, 50%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00cf00\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#122bba80\"", style_of("i"));
-    prep("body { background-color: currentcolor } #o { color: oklch(0.39 0 609.14); background-color: color(prophoto-rgb  0.031  0  0.915/ 0) } #i { color: color(xyz -0.223 0.6811 0.342); background-color: oklab(none 102.9% 0.0641) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#454545;background-color:#0000fe00\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff7e;background-color:#290000\"", style_of("i"));
 }
 
 static void test_l101_paint_21(void) {
+    prep("body { background-color: currentcolor } #o { color: oklch(0.39 0 609.14); background-color: color(prophoto-rgb  0.031  0  0.915/ 0) } #i { color: color(xyz -0.223 0.6811 0.342); background-color: oklab(none 102.9% 0.0641) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#454545;background-color:#001f2100\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00c9a6;background-color:#000000\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, lch(+0.5  69  -396.251grad/0.83), currentColor) } #o { color: hsla(2rad 50% 0% / 1); background-color: color-mix(in srgb, lch(22.5% 0% -97deg), currentColor) } #i { color: CURRENTCOLOR; background: url(x.png) lab(99  -18  -43) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#210000e9\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0b0000e9\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#1b1b1b\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#9fffff;background-image:url(x.png)\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#ecffff;background-image:url(x.png)\"", style_of("i"));
+    prep("body { color: oklab(54% -0.8808 0.3419) } #o { color: color-mix(in srgb, hwb(684 92% 50%), oklab(50%  -0.4670  0.1933)) } #i { color: red }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00884c\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#539073\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("i"));
     prep("#o { color: color-mix(in srgb, currentcolor 100%, oklab(1  0.1726  0.4042 /1.5)) } #i { color: color( srgb 1 0.61 0.825) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff9cd2\"", style_of("i"));
+    prep("#o { background-color: color(rec2020  0.4566  -0.96  0.4) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: color(xyz	0.992	64.1%	2) } #o { background-color: color(srgb	0.7299	0.56	39%/ 0) } #i { color: currentcolor; background-color: rgb(84 190 87 / 52%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff9aff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f3c9ff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ba8f6300\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#54be5785\"", style_of("i"));
+}
+
+static void test_l101_paint_22(void) {
     prep("body { color: Lch( 48 172 240 ) } #o { color: oklch(+0.5  0.3492  297.42deg) } #i { color: rgb(0 235 215 / 50%); background-color: color( srgb  0.052  0.5  0.0026) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#009cff\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8600ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#005b5a\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7f00ef\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ebd780;background-color:#0d8001\"", style_of("i"));
     prep("#o { color: currentColor; background-color: color-mix(in srgb, hwb(360 28.6176% 69), currentcolor 0%) } #i { background-color: color-mix(in srgb, color(srgb-linear 0.153 0 1e1), color(xyz-d65 0.926 0.0451 0/ 0.1)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#4f4949\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("body { color: color(xyz 0.7 0.3 0); background-color: currentColor } #i { color: oklch(104.62% 0.1111 330); background: url(x.png) lab(100%	-12000	14.8%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000;background-color:#ff0000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffe4ff;background-color:#00ffb6;background-image:url(x.png)\"", style_of("i"));
-}
-
-static void test_l101_paint_22(void) {
     prep("body { color: dimgrey } #o { color: color-mix(in srgb, lch(61.3% 100% 6.7rad), plum); background: currentcolor } #i { color: color-mix(in srgb, color( xyz-d65  0  0.5456  0/ 1.5), hsla(-323.8 114% 124.89% / 2)); background-color: color(srgb-linear 0.8892 30.34% 0) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#696969\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ee508d;background-color:#ee508d\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#80ff80;background-color:#f29600\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ee7ca9;background-color:#ee7ca9\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#80e9be;background-color:#f29600\"", style_of("i"));
     prep("#i { color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: color-mix(in srgb, color(xyz 0 0.892 0.7), color( a98-rgb 0.3 0.66 0.06)) } #o { background-color: currentcolor } #i { color: color-mix(in srgb, CURRENTCOLOR, color( srgb-linear 0.26 0.246 0)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00d462\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00d369\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#464400\"", style_of("i"));
     prep("body { color: color(xyz-d65 0.6957 0 -1) } #o { color: color-mix(in srgb, rebeccapurple, currentColor); background-color: oklab(0 0.4918 -0.0239 / 65%) } #i { color: color-mix(in srgb, black, color(xyz-d65  0.412  0.4232  0.0858 /0)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b31a4d;background-color:#2f0000a6\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#331a4d;background-color:#000000a6\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080\"", style_of("i"));
+}
+
+static void test_l101_paint_23(void) {
     prep("#o { color: color-mix(in srgb, #adf3, currentColor); background-color: #e2718f } #i { color: unset; background-color: chartreuse }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#1c252b99;background-color:#e2718f\"", style_of("o"));
@@ -643,79 +654,64 @@ static void test_l101_paint_22(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_23(void) {
     prep("#o { color: oklch(0.8952  0.4174  200grad); background: url(x.png) blue } #i { color: lab(1e1 123 0% / 0); background: no-repeat CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffe7;background-color:#0000ff;background-image:url(x.png)\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ffe7;background-repeat:no-repeat\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffe1;background-color:#0000ff;background-image:url(x.png)\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ffe1;background-repeat:no-repeat\"", style_of("i"));
     prep("body { color: color(rec2020 0.9362 0 0.9) } #o { color: oklch(1E-1 0 284) } #i { color: lch(none 61.84 -159.74) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00f2\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff26de\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#002022\"", style_of("i"));
-    prep("body { background: url(x.png) currentcolor } #i { color: color-mix(in srgb, color( xyz	0.9	0.8	0.1587/0), lab(3%	-73.26	-16.11%)); background: no-repeat hwb(-293deg 87 100%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-image:url(x.png)\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00282680;background-color:#777777;background-repeat:no-repeat\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
+    prep("body { color: currentcolor; background-color: color(display-p3 0.48 6.3% 0.8) } #o { color: hwb(-60deg 96% 50%/1); background-color: currentColor } #i { color: color( xyz-d50	0.7902	0.96	0.019); background-color: color-mix(in srgb, hwb(2.8turn 42 26.82%), oklch(1 0.1639 720deg/1.5)) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#8600d4\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a8a8a8;background-color:#a8a8a8\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f4ff00;background-color:#d5b5dd\"", style_of("i"));
     prep("body { background: no-repeat color(srgb	0.6992	96.66%	0.63) } #o { color: rgb(28% 76% 32); background-color: color(xyz-d65 0.013 0.24 1) } #i { color: inherit; background-color: #4f5d64 }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#b2f6a1;background-repeat:no-repeat\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#47c220;background-color:#00b8ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#47c220;background-color:#00625b\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#47c220;background-color:#4f5d64\"", style_of("i"));
-    prep("body { color: transparent; background-color: oklch(93% 0.2523 10.74rad) } #o { color: color-mix(in srgb, CURRENTCOLOR 17%, darkblue) } #i { color: hwb(1.03rad 39% 73); background-color: oklab(0.539  -0.45  0.0067) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#60e7ff\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00008bd4\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#595959;background-color:#00aa74\"", style_of("i"));
+}
+
+static void test_l101_paint_24(void) {
     prep("body { color: color(rec2020, 86%, 0.5343, 0.77); background-color: color-mix(in srgb, turquoise, currentColor) } #o { color: CURRENTCOLOR } #i { color: oklab(0 1e1 -0.3068) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#207068\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_24(void) {
     prep("#o { background-color: color-mix(in srgb, oklab(0 0.3405 -0.1078), currentcolor 55.5%) } #i { color: color( rec2020 0.539 0.27 0); background-color: color-mix(in srgb, CURRENTCOLOR, oklab(38%	0.0098	0.2642 /0.7821)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#080003\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b24700;background-color:#993600e3\"", style_of("i"));
-    prep("body { color: currentcolor; background-color: #edf } #o { color: CURRENTCOLOR } #i { color: lch(79.2  155.1%  -253.2grad); background-color: hsla(598.98grad 110% 57.4% / 0.9999) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#eeddff\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00f800;background-color:#26fffc\"", style_of("i"));
-    prep("body { color: CURRENTCOLOR; background-color: color( xyz-d50 -0.9569 0.96 107%) } #o { color: color(xyz-d65 0 0 0 / 1 / 1) } #i { color: oklab(0.457 0.2914 0.1777) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ffff\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d90000\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b24700;background-color:#8a4300e3\"", style_of("i"));
     prep("body { color: color-mix(in srgb, currentColor, #f0c035b2) } #o { color: color-mix(in srgb, oklch(0 0.1765 173/50%), CURRENTCOLOR 100%) } #i { color: color-mix(in srgb, color( xyz  0  0.21  -1), currentcolor 50%); background: #425b }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#634f16d8\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#634f16d8\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6c7b0aec;background-color:#442255bb\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6b680aec;background-color:#442255bb\"", style_of("i"));
     prep("body { color: currentColor; background-color: color(xyz-d65 1.055 0.3675 0.57) } #i { color: inherit; background-color: CURRENTCOLOR }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff00c9\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff86bf\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     prep("#o { color: lch(87.36 43 0.1rad) } #i { color: lightskyblue }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffbbd5\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffcbd9\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#87cefa\"", style_of("i"));
-}
-
-static void test_l101_paint_25(void) {
     prep("body { color: currentcolor } #i { background-color: color-mix(in srgb, color(a98-rgb 0 0.637 0) 100%, hsl(2rad 0% 0%)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00a400\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00993c\"", style_of("i"));
+}
+
+static void test_l101_paint_25(void) {
     prep("body { color: hwb(-569.5 97.9259% 100%) } #o { color: color-mix(in srgb, Color(xyz -0 0.24 0.137), currentcolor); background-color: hwb(304 84 6%) } #i { color: oklch(0 0.3614 -80.78grad / 1) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#7e7e7e\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3f996b;background-color:#f0d6ee\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#260069\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3f8776;background-color:#f0d6ee\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     prep("body { background: no-repeat color-mix(in srgb, lch(17 -2.531 -144), color(srgb  0.768  0.08  1)) } #o { color: lab(39.5 129.3% -49.4413) } #i { color: color(prophoto-rgb  0.17  0.7421  0.6) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00b4\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00dba4\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#cb0092\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00c2a4\"", style_of("i"));
     prep("body { color: oklcha(0.9 -3.91% -271); background-color: color-mix(in srgb, color(xyz-d65 0.93 0.2 -4.17%) 100%, oklab(0 54% -0.2258)) } #o { color: inherit } #i { color: color-mix(in srgb, lab(16.592	19.67%	103.3983), #53cc); background: no-repeat color-mix(in srgb, Color( rec2020	0.5404	-1	0.9), color(xyz-d65	0.48	.5	0.03)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff0000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff3164\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#55225be6\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#412e5be6\"", style_of("i"));
     prep("body { color: rgba(86, 59, 110, 0.4); background-color: color-mix(in srgb, currentcolor, color(srgb	1.045	0	0.3)) } #o { color: color-mix(in srgb, currentcolor, red); background-color: CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#563b6e66;background-color:#cf1156b3\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#cf111fb3;background-color:#cf111fb3\"", style_of("o"));
@@ -724,52 +720,44 @@ static void test_l101_paint_25(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-repeat:no-repeat\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#595b3c91\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#fff5005e\"", style_of("i"));
+    prep("body { color: hwb(329 8% 50%) } #o { color: oklch(104.5%	0.2299	440.3021deg/0.2206) } #i { color: currentcolor; background-color: #c6bc0ebf }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#80144c\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff38\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff38;background-color:#c6bc0ebf\"", style_of("i"));
 }
 
 static void test_l101_paint_26(void) {
-    prep("body { color: hwb(329 8% 50%) } #o { color: oklch(104.5%	0.2299	440.3021deg/0.2206) } #i { color: currentcolor; background-color: #c6bc0ebf }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#80144c\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffea0038\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffea0038;background-color:#c6bc0ebf\"", style_of("i"));
     prep("#o { color: color(display-p3 0.2 0.9 0.3209/0) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ea3000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00e54d00\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { color: transparent }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: oklab(77% 0 -0.2626) } #i { color: oklch(0.955 0.3216 347.86grad / 1 / 1); background-color: transparent }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#779fff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#92afff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: color-mix(in srgb, oklch(20.07%  0.0588  187), color(a98-rgb 0.56 0 0.7)); background-color: currentcolor } #o { background-color: CURRENTCOLOR } #i { color: lab(8.5% 93.39 77/ 0.6) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#540f69;background-color:#540f69\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#540f69\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#79000099\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#32140099\"", style_of("i"));
     prep("body { color: #adb } #o { color: rgb(1px, 2, 3) } #i { color: color-mix(in srgb, currentcolor 100%, hsl(-366.7464deg 100 5.7% / 100%)); background-color: oklab(85.62% 0 0.3007) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#aaddbb\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#aaddbb;background-color:#ffbc00\"", style_of("i"));
-}
-
-static void test_l101_paint_27(void) {
-    prep("body { color: color-mix(in srgb, currentcolor 50%, rebeccapurple); background-color: color-mix(in srgb, currentcolor 84%, rebeccapurple) } #o { color: color-mix(in srgb, Color(xyz 0 0.8 0.2) 100%, LAB(45 -64.34 -96.7503)) } #i { background: no-repeat color( xyz 0.8169 -0.82 1.86/1.5) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#331a4d;background-color:#3b1e59\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff3e\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#aaddbb;background-color:#ffc700\"", style_of("i"));
     prep("#o { color: currentcolor } #i { background-color: color-mix(in srgb, CURRENTCOLOR 50%, hwb(241.9grad 14.53% 100%)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#101010\"", style_of("i"));
+}
+
+static void test_l101_paint_27(void) {
     prep("body { color: blue; background-color: color-mix(in srgb, hwb(791.821grad 122.1% 100% /120%) 40%, color(display-p3 0 0.28 0)) } #o { color: lab(88.362 -59.4% 153.088 / 79.4%); background-color: CURRENTCOLOR } #i { background-color: color-mix(in srgb, hsla(-1.646rad 50% 52% / 0) 16%, color(rec2020  0.813  -0.999  0.3)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff;background-color:#335f33\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5afe00ca;background-color:#5afe00ca\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff007dd6\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, #e49, lab(10%	140	3%)) } #o { color: hsl(0.1turn 57.63 -15% / 1); background-color: color(xyz  0  0.944  0.17) } #i { color: color-mix(in srgb, color(prophoto-rgb 0.257 0 -6%), CURRENTCOLOR) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#c8225e\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00ff00\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3b0000\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff;background-color:#335e33\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#77f900ca;background-color:#77f900ca\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000d6\"", style_of("i"));
     prep("body { color: currentcolor } #o { color: hsl(41deg, 87.6%, -8%); background-color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000\"", style_of("o"));
@@ -778,12 +766,9 @@ static void test_l101_paint_27(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f0fff0\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#98ffac\"", style_of("i"));
-}
-
-static void test_l101_paint_28(void) {
     prep("body { background-color: currentColor } #o { color: oklch(0.5549 0.3415 90deg /-0.5) } #i { color: lch(22.413 .5 11rad) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#bd500000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#916e0000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#353636\"", style_of("i"));
     prep("body { background-color: #700 } #o { color: color-mix(in srgb, LCH(10.1% 124% 0.5turn/-0.5), lab(26  -136  -24.9% / 0)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#770000\"", style_of("b"));
@@ -793,10 +778,9 @@ static void test_l101_paint_28(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#493eb0;background-repeat:no-repeat\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#594c77\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("body { color: color-mix(in srgb, lch(31.09  -5  63), currentColor 56%) } #o { color: CURRENTCOLOR; background: no-repeat color(0.2 0 0.542) } #i { background-color: lab(52	100%	86.32) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#202020\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#202020\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff0000\"", style_of("i"));
+}
+
+static void test_l101_paint_28(void) {
     prep("body { background-color: color-mix(in srgb, currentcolor, saddlebrown) } #i { color: color( a98-rgb  1e1  0.8253  0) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#46230a\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -805,9 +789,6 @@ static void test_l101_paint_28(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#303030\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#303030\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_29(void) {
     prep("body { background: url(x.png) color-mix(in srgb, currentColor 25%, hsla(154, 50%, 3%, 2)) } #o { background-color: color-mix(in srgb, currentColor, oklab(0.608	3.53%	0.1277/ 0.78)) } #i { color: lch(1E-1  102.6618  675.8757deg) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#493600e3\"", style_of("o"));
@@ -818,58 +799,54 @@ static void test_l101_paint_29(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: currentColor } #o { color: color-mix(in srgb, CURRENTCOLOR 100%, oklch(0  0  -0.206rad)); background: no-repeat lab(67 -126.35% 87) } #i { color: color(xyz	0	1.3	0.03); background: url(x.png) color( xyz 0.592 42% 0.491) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00d200;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff00;background-color:#ff85b6;background-image:url(x.png)\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, blueviolet 50%, lab(54%  -90.6%  -20.36%/ 1)); background: url(x.png) currentcolor } #o { background-color: lab(88.5% -98% 16) } #i { color: unset }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4568c6;background-color:#4568c6;background-image:url(x.png)\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ffba\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("body { color: color( xyz	0.77	0.694	6.2%) } #o { color: color-mix(in srgb, lch( 2.4	117.23	-325.59 ) 96.1%, oklch(0 0.2057 36)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffc500\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#660000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00b65f;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#ff85b6;background-image:url(x.png)\"", style_of("i"));
     prep("body { color: inherit; background-color: rgb(79%, 54%, 88%) } #o { color: #04fc8835 }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#c98ae0\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#04fc8835\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
 }
 
-static void test_l101_paint_30(void) {
+static void test_l101_paint_29(void) {
     prep("body { background-color: rgb(65 101 14 / 120%) } #o { color: currentcolor; background-color: currentcolor } #i { color: currentcolor; background-color: currentColor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#41650e\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
+    prep("body { color: color(xyz-d50  8.5%  0.26  0.5104 /95%); background: no-repeat currentcolor } #o { color: color-mix(in srgb, lime, currentcolor); background-color: currentcolor } #i { background-color: lch(82% 138.51% 90deg) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0099a2f2;background-color:#0099a2f2;background-repeat:no-repeat\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00cd4ff8;background-color:#00cd4ff8\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#e7cb00\"", style_of("i"));
     prep("body { color: currentColor } #o { color: currentColor } #i { background-color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     prep("#o { color: lch( 0%	67	-0.5turn/ 0 ); background: url(x.png) oklab(1 0.1082 -0.1877 1) } #i { color: lch(95 72 -304.2deg/ 0) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00220000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffd07e00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffecd800\"", style_of("i"));
     prep("body { color: hsla(369.1502deg 32.4% 56% / 2); background-color: color-mix(in srgb, white, currentColor) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b3766a;background-color:#d9bbb5\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background: CURRENTCOLOR } #o { color: oklab(0.2093 0 0.2436 / 1.5); background: no-repeat color-mix(in srgb, lightcoral, CURRENTCOLOR) } #i { color: color-mix(in srgb, currentcolor 50%, lch(6.4163 217.675 -311)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3e0000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#700000\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#231600\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#290b00\"", style_of("i"));
+}
+
+static void test_l101_paint_30(void) {
     prep("body { background: url(x.png) #fba6fc } #o { color: red; background: color-mix(in srgb, currentcolor 68%, lch(0 13% 0.1turn/0)) } #i { color: hsl(248 89.0162 102.7% / 0.5); background-color: color-mix(in srgb, color(srgb-linear 0.6 72.2% 0.9732), currentcolor) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#fba6fc;background-image:url(x.png)\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff80;background-color:#dde8fdc0\"", style_of("i"));
-}
-
-static void test_l101_paint_31(void) {
     prep("body { color: color(display-p3	0	0.4	0); background-color: currentcolor } #o { color: CURRENTCOLOR } #i { background-color: color(xyz-d65 0.5 11% 0.01/0) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006800;background-color:#006800\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006800\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff002200\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006600;background-color:#006600\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006600\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#d8005000\"", style_of("i"));
     prep("body { background: oklch(0  0.4902  -0.7442turn) } #o { background-color: oklab(44.7% -0.18 0.1591) } #i { color: color-mix(in srgb, oklch(0% +0.5 1.5708rad/1), hsla(488.612deg -19.38% 100% / 150%)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#005200\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#006d00\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#80aa80\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0d6800\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#808080\"", style_of("i"));
     prep("body { color: color-mix(in srgb, hsla(80 10.73% 47% / 0), currentColor 100%) } #o { color: lime; background-color: color-mix(in srgb, oklch(0	1e1	-671.753), CURRENTCOLOR) } #i { color: currentColor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff00\"", style_of("o"));
@@ -882,25 +859,25 @@ static void test_l101_paint_31(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_31(void) {
     prep("#o { color: CURRENTCOLOR } #i { color: color-mix(in srgb, oklab(0.053	-0.4030	0.1796/0.238), currentColor 31%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00030079\"", style_of("i"));
-}
-
-static void test_l101_paint_32(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000079\"", style_of("i"));
     prep("body { background-color: oklab(0.396 50% 0.1119 / 0.71) } #i { color: oklch(1 0.3595 194grad); background-color: color(rec2020	29.99%	-1	0) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#9f0000b5\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#900000b5\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffef;background-color:#e20058\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#000000\"", style_of("i"));
     prep("#o { background-color: currentcolor } #i { color: inherit; background-color: lch(65.4  -0  5.018rad/ 0) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#9f9f9f00\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, rebeccapurple, CURRENTCOLOR 81%) } #o { color: color(xyz-d50 0.21 0.0454 5% /0.5) } #i { color: oklab(1 0 -0.0970 1); background-color: color-mix(in srgb, currentcolor 97.66%, rgba(2, 30%, 99%, 50%)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#130a1d\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#c5004d80\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#c0025180\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b004b80\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#88024f80\"", style_of("i"));
     prep("#o { color: currentcolor } #i { color: currentColor; background-color: color-mix(in srgb, oklch(60.79% 0 133/ -0.5), color(srgb 0.63 0 69%)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -909,40 +886,25 @@ static void test_l101_paint_32(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b7d9a5\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#001e5a\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#001e5a\"", style_of("i"));
-    prep("#o { color: hwb(-122.6 0% 0% / 0); background-color: color(--x 1e1 0 0) } #i { color: slategray; background: lch(20  31.69%  263) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000bff00\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#708090;background-color:#003677\"", style_of("i"));
 }
 
-static void test_l101_paint_33(void) {
+static void test_l101_paint_32(void) {
     prep("body { background-color: color( xyz  0.8  0.05  0.7854) } #o { color: color-mix(in srgb, oklab(6%  0.2215  0.1865), oklab(29% 0 0.2167 / 50%)) } #i { color: color-mix(in srgb, lch(48.75%  157.12%  14/33%), currentcolor 50%); background: color-mix(in srgb, currentcolor 50%, white) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff00ef\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#390600bf\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7604158a\"", style_of("i"));
-    prep("#o { color: color( rec2020 0.2357 1.8 1/1.5) } #i { color: oklab(0.2281 0.3910 -0.2137); background-color: color(0 0 0.6) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffe4\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6d0073\"", style_of("i"));
-    prep("body { color: hsl(7.3rad 7.82% 74%) } #o { color: color-mix(in srgb, color(srgb-linear 0.6 +0.5 -17%), color(xyz 19.89% 0.43 2)); background-color: currentColor } #i { color: color(srgb 0.6082 0.0688 56.99%; background-color: currentcolor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#c2c2b8\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#66ca80;background-color:#66ca80\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#66ca80\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#c60095\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#170d00bf\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5e09238a\"", style_of("i"));
     prep("body { color: rgba(45%, 41, 35%, 50%) } #o { background-color: color( xyz-d50 38% 0.4 0.6/50%) } #i { color: #f5a0ad }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#73295980\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#89ace480\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#f5a0ad\"", style_of("i"));
     prep("body { color: color-mix(in srgb, color(xyz	-0.5	0.7	0.9/1.5), currentColor) } #o { background-color: color( display-p3 0.78 0 49%) } #i { color: currentcolor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#008072\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#da007f\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00443b\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#d7007f\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: color-mix(in srgb, hwb(360 31% 70.7% /86%), currentcolor 33.851%) } #o { background-color: currentcolor } #i { color: currentColor; background-color: CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#313131e7\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#313131e7\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#313131e7\"", style_of("i"));
-}
-
-static void test_l101_paint_34(void) {
     prep("body { background: no-repeat currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-repeat:no-repeat\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -950,34 +912,37 @@ static void test_l101_paint_34(void) {
     prep("#o { color: CURRENTCOLOR } #i { color: color( prophoto-rgb  100%  0.381  0.395/-0.5) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff007600\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff889800\"", style_of("i"));
+}
+
+static void test_l101_paint_33(void) {
     prep("body { color: currentcolor } #o { color: lab(2.5e-2 2.5e-2 42.74%); background: no-repeat CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-repeat:no-repeat\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: oklab(0 0 0.0872) } #o { color: hwb(458.13deg 18 50%/1) } #i { color: inherit }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000200\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#4c802e\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#4c802e\"", style_of("i"));
     prep("body { background-color: color(xyz-d50	0	0	0) } #o { color: color(xyz-d50 1E-1 0 0.2) } #i { color: color(xyz-d50 0 2 0.78); background-color: color-mix(in srgb, currentcolor 46%, grey) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffd1;background-color:#45baa5\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#bababa\"", style_of("i"));
     prep("body { color: color( a98-rgb 0.03 0.9 0); background-color: lch(105 1E-1 256.7) } #o { color: Color( xyz-d50  0  0.123  0.1); background: no-repeat oklab(0.081  57.2%  0.4262) } #i { color: rebeccapurple; background-color: oklab(-2.98% 0 0.0660/ -0.5) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00e600\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00865e;background-color:#3e2300;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#663399;background-color:#00010000\"", style_of("i"));
-}
-
-static void test_l101_paint_35(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00d65c\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#006a59;background-color:#070000;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#663399;background-color:#00000000\"", style_of("i"));
     prep("#o { color: color-mix(in srgb, COLOR(xyz-d65	0.77	1.5	0), CURRENTCOLOR); background: url(x.png) CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3c8000;background-color:#3c8000;background-image:url(x.png)\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#808080;background-color:#808080;background-image:url(x.png)\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: color-mix(in srgb, currentColor 100%, #afd8cdee); background: url(x.png) color(xyz-d65 0.457 0.4 0.0502/ -0.5) } #o { background-color: color( xyz 0.548 0.9351 0.6198) } #i { color: thistle }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#30ffbb\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#aeffd5\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#d8bfd8\"", style_of("i"));
+}
+
+static void test_l101_paint_34(void) {
     prep("body { color: currentcolor; background-color: color-mix(in srgb, #c4e6, currentcolor 0%) } #o { color: color-mix(in srgb, oklch(0.757 0 400grad), currentColor); background: hsla(400grad, 87%, 33%, 0.9999) } #i { background-color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#cc44ee66\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#585858;background-color:#9d0b0b\"", style_of("o"));
@@ -991,55 +956,55 @@ static void test_l101_paint_35(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#7ddfef\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#e10ae2be\"", style_of("i"));
     prep("body { color: color-mix(in srgb, oklch(89.5%  0.0868  400grad), currentColor); background-color: oklab(0 0 0.0336/0) } #o { color: color-mix(in srgb, oklab(6.87% -0.3 0.4032 /19%), CURRENTCOLOR 0%); background-color: color-mix(in srgb, blue, currentcolor 25%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#80626d;background-color:#00000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#002e0030;background-color:#0003f0cb\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#80636d;background-color:#00000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00020030;background-color:#0000f0cb\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_36(void) {
     prep("body { color: color-mix(in srgb, color(prophoto-rgb 0.0845 0.4 0.029), currentColor 50%); background: url(x.png) COLOR(xyz-d50  0.354  0.4448  0.6) } #o { color: inherit; background-color: currentcolor } #i { color: color(display-p3	0.58	0.976	0.35 /25.5%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#004200\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#004200;background-color:#004200\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#003c14\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#003c14;background-color:#003c14\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#6cfc3141\"", style_of("i"));
     prep("body { color: color-mix(in srgb, currentcolor 50%, Lch(-4.4%	-8.5	463)) } #o { color: oklab(100% 0 0.3618); background: color-mix(in srgb, CURRENTCOLOR, blue) } #i { color: color-mix(in srgb, currentcolor, LCH(80.7% 72.2611 169)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffe600\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#80e756\"", style_of("i"));
-    prep("body { background-color: oklab( 0.726  0.3538  -0.3527 ) } #o { color: color-mix(in srgb, currentcolor 73%, color(xyz-d50  0.245  -0.16  0%)); background-color: lab( 93% 9999.9999 126.9 /0.5 ) } #i { background-color: color( srgb 0.417 0.09 0.569/1.5) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff00ff\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#450012;background-color:#ff00ff80\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#6a1791\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#80f2d6\"", style_of("i"));
+}
+
+static void test_l101_paint_35(void) {
     prep("body { background-color: black } #o { color: hwb(180 41% 50%) } #i { color: rgb(20%, 95%, 18); background: color-mix(in srgb, rgba(114, 6%, 312, 24%), currentcolor) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#698080\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#33f212\"", style_of("i"));
     prep("body { color: unset; background-color: hwb(-60deg 27.7% 74) } #o { color: lch(38.4  197.167  -86deg) } #i { color: #eda8e2; background: url(x.png) color-mix(in srgb, color(a98-rgb -101 0.4 0.7606), navajowhite) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#454545\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0071ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#005455\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#eda8e2\"", style_of("i"));
     prep("body { background: color-mix(in srgb, color(srgb-linear 0.81 66.63% 0/1.5), color( display-p3 0.932 0.4999 0.74)) } #o { color: #dbc30bee; background-color: lab(1E-1 108 -23.69) } #i { color: oklab(2.5e-2 55.2% -0.1725 /50%); background: no-repeat lab(31 .5) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#dbc30bee\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_37(void) {
     prep("body { color: color-mix(in srgb, oklch(9% -0 -676.76), color(srgb  0  0.5  0.69)) } #i { color: #f8faab72 }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#014159\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#f8faab72\"", style_of("i"));
+    prep("body { background-color: color-mix(in srgb, color(xyz-d50  0.9  0.579  .5/1), CURRENTCOLOR) } #o { color: #9bcef1; background: no-repeat rgb(59 235 188 / 0.05) } #i { color: currentcolor }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#805968\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9bcef1;background-color:#3bebbc0d;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9bcef1\"", style_of("i"));
     prep("body { background: url(x.png) oklab(2.5e-2 0 -0.3307/0.5) } #o { color: lch(50.937 109 -337.004); background: no-repeat lch(86.4 180.51 -0.5turn) } #i { background: color-mix(in srgb, color( srgb-linear 93.34% -0.346 0.17), currentcolor) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff003c;background-color:#00ffd3;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f70049;background-color:#00eccc;background-repeat:no-repeat\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_36(void) {
     prep("body { background: no-repeat color(xyz-d65 0.7194 1.803 0.49/49%) } #o { color: CURRENTCOLOR; background: rgb(52 9 0 / 1.5) } #i { background: lab(59.7% 93.807 124.4/86%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#340900\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff0000db\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff441cdb\"", style_of("i"));
     prep("body { color: lab(72.15 50.7449 -139.5); background-color: CURRENTCOLOR } #i { color: color( prophoto-rgb 0.602 0.3958 0 /1.5); background-color: color-mix(in srgb, hwb(6.4rad 36.5% 0%), color( srgb 0.6 0.1 7% / 50%)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#009aff;background-color:#009aff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#95c1ff;background-color:#95c1ff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d76900;background-color:#dd5344bf\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d46b00;background-color:#dd5344bf\"", style_of("i"));
     prep("body { color: hsla(512.9 47.009% 66% / 100%) } #o { color: unset } #i { background-color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#80d1ac\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#80d1ac\"", style_of("o"));
@@ -1048,106 +1013,98 @@ static void test_l101_paint_37(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#df19d6;background-color:#b4406b\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_38(void) {
     prep("body { color: unset; background: url(x.png) color-mix(in srgb, currentColor, color( xyz  0  0.9548  0/0)) } #o { color: lab(62.5 62 33) } #i { color: color-mix(in srgb, Color( display-p3 93% 0.3693 0.3562), currentColor); background-color: color(xyz 0.17 39.4% 0.2491) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff5e61\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff575b;background-color:#00c979\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff575b;background-color:#00c084\"", style_of("i"));
     prep("body { color: color( srgb	0.02	0.9	0.132); background-color: oklab(105%  -0.1386  -0.1668) } #o { color: CURRENTCOLOR } #i { color: lab( 15.23 -117.935 139 ) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#05e622;background-color:#00ffff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#05e622;background-color:#ffffff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#05e622\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#003e00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#092300\"", style_of("i"));
+}
+
+static void test_l101_paint_37(void) {
     prep("body { color: lch(106.188 209.69 668.0785deg/ 54%) } #o { color: color(srgb-linear 0.9482 0.4977 84.89% / 51%); background-color: color( xyz-d50  1  0.2432  0.8) } #i { background-color: color-mix(in srgb, currentColor, white) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff7cff8a\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f9bbed82;background-color:#ff00ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff8a\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f9bbed82;background-color:#ff3bd2\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#fde8f9c0\"", style_of("i"));
     prep("#o { color: oklab(1e1  -0.3155  -0.0272); background: url(x.png) color(xyz-d50	0	0	1 / 12%) } #i { color: hwb(-338.8588 34.21% 19%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0033ff1f;background-image:url(x.png)\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0022241f;background-image:url(x.png)\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#cf8157\"", style_of("i"));
     prep("#o { color: color-mix(in srgb, color(a98-rgb 0.41 0.1853 23.5%) 13%, lch( 0 78.405 -222.14grad /120% )); background: oklab(0.4 0.0316 -0.3972) } #i { color: color-mix(in srgb, currentcolor 25%, lightcoral) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#102508;background-color:#4a00ff\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b86962\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#100608;background-color:#3500d6\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b86262\"", style_of("i"));
     prep("#o { color: color-mix(in srgb, hwb(100grad 50% 76.84%), LCH(79 166.45 29)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b23253\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b28e8e\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_39(void) {
     prep("body { color: lch(46.157 3.53 -199.1664) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#686f6b\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("body { color: color-mix(in srgb, currentColor, black); background: url(x.png) color-mix(in srgb, currentcolor 25%, oklab(1e1 0 0.0606)) } #o { color: color-mix(in srgb, rgb(113 222 136 / 50%), color( a98-rgb	0.2	0.593	-1/ 1.5)); background: Oklch(9.7% 0.4848 227) } #i { color: lab(44.43%	-81.8%	-118.4095); background-color: rgb(233 212 123 / 50%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#26b02dbf;background-color:#2f009d\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0090ff;background-color:#e9d47b80\"", style_of("i"));
     prep("#o { color: color-mix(in srgb, CURRENTCOLOR 100%, color(srgb -0.31 0 0/50%)); background-color: rgb(81 35% 93% / 0.54) } #i { color: unset }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#5159ed8a\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
+}
+
+static void test_l101_paint_38(void) {
     prep("#o { color: currentcolor; background-color: color-mix(in srgb, lch(45% 100% 217), currentcolor) } #i { background: url(x.png) color(xyz-d65	0.075	0.5552	36.8%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#004880\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#002b29\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { color: inherit; background-color: currentcolor } #i { color: color-mix(in srgb, hsl(-1.84turn 79 66.7266 / 100%), currentcolor 50%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#777434\"", style_of("i"));
     prep("body { color: color-mix(in srgb, color(display-p3 0.74 0.411 0.5 /1.5), oklch(0.268  0.0872  9.207rad)) } #o { color: color-mix(in srgb, CURRENTCOLOR, rgb(128 71 177 / 1)) } #i { background-color: currentColor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#654b4e\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#654a4f\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#734980\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#734980\"", style_of("i"));
-}
-
-static void test_l101_paint_40(void) {
     prep("#o { color: color-mix(in srgb, currentcolor, lab(77.3 -91.3 1e1/ 0)); background-color: currentcolor } #i { color: OKLCH(1 19.3% 2.7429rad) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d5ffeb\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("i"));
     prep("body { color: color-mix(in srgb, CURRENTCOLOR 100%, transparent); background: no-repeat color-mix(in srgb, currentcolor 25%, color(rec2020 1.66 0.29 0.03)) } #i { color: #e03; background: url(x.png) lab(99.6 -23.52%deg 75.8) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ee0033\"", style_of("i"));
     prep("body { background-color: oklab(18% 0.0570 -0.3545) } #o { color: color-mix(in srgb, currentcolor, #bbcca5e3); background-color: hsla(148.9275grad, 36.1%, 22.33%, 0.9999) } #i { color: slategrey; background-color: hwb(264 -1% 8% /0) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#3900af\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#100049\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#58604ef1;background-color:#244d2e\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#708090;background-color:#5e00eb00\"", style_of("i"));
+}
+
+static void test_l101_paint_39(void) {
     prep("#o { background-color: oklab(0 -14.06% 0.4979) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#005400\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { color: OKLCH(17.8% 0.4180 720deg) } #i { color: unset }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6f000a\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6f000a\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#2c000f\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#2c000f\"", style_of("i"));
     prep("#o { background-color: color-mix(in srgb, color( srgb-linear	0.7	0.4	0 / -0.5), currentcolor 19.9%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000033\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_41(void) {
     prep("#o { color: lab(85	79.7477	136.51); background-color: color-mix(in srgb, hwb(3.7929rad 55.75% 59%), CURRENTCOLOR 50%) } #i { background: url(x.png) white }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff8500;background-color:#bd803e\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffc9aa;background-color:#bda293\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffffff;background-image:url(x.png)\"", style_of("i"));
     prep("body { color: color(xyz  0.832  1.3161  0.8075) } #o { background: color-mix(in srgb, oklab(107.2%  0  -0.2199), hwb(-12.0147deg 0% 41% /0.1524)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8effd0\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("body { background: no-repeat color(A98-rgb  99.5  0.15  0.8) } #o { background: url(x.png) color-mix(in srgb, lab(21.8 .5 89) 50%, rgb(142 102 37 / 11.6%)) } #i { color: color(rec2020	0.63	21.7%	0.7192); background-color: violet }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff21d1;background-repeat:no-repeat\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ca23c6;background-color:#ee82ee\"", style_of("i"));
     prep("#o { color: lch(63  82  3.1deg/0); background: no-repeat wheat } #i { color: color-mix(in srgb, currentcolor, color(XYZ  -1  0.93  0)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff3b9500;background-color:#f5deb3;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff0080\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff509600;background-color:#f5deb3;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00927780\"", style_of("i"));
+}
+
+static void test_l101_paint_40(void) {
     prep("body { color: lch(55.943	-4.3	-3.499rad /1) } #o { color: unset } #i { color: color-mix(in srgb, color(xyz-d65	0.6394	0.84	119%/0.71), color(srgb-linear 0.813 1 0.4058/ 120%)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#868686\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#868686\"", style_of("o"));
@@ -1156,90 +1113,83 @@ static void test_l101_paint_41(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#727272;background-color:#f79f9f\"", style_of("i"));
-}
-
-static void test_l101_paint_42(void) {
-    prep("body { color: color(xyz-d65 0.6937 0.32 0.73) } #i { color: color-mix(in srgb, currentcolor, lime); background-color: currentColor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00e0\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#808070;background-color:#808070\"", style_of("i"));
     prep("body { color: color-mix(in srgb, hwb(559 99 69.8%), currentColor) } #o { color: lch(26.419  37.14%  -1turn); background-color: color-mix(in srgb, currentcolor 25%, lab(-5.6% 128.6 50%)) } #i { color: oklab(1 -120% 0.1247); background-color: color-mix(in srgb, CURRENTCOLOR, lch(19.6 0 229.022/ 120%)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#4b4b4b\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#840041;background-color:#7e0010\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffa4;background-color:#18976a\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#840041;background-color:#210010\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#979797\"", style_of("i"));
     prep("#o { color: oklab(-6.52% 0 0.4378) } #i { background-color: color( display-p3	0.09	0.273	11%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#004600\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#004716\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, currentColor 0%, oklab(18%	-0.3023	0.2523)); background: no-repeat color-mix(in srgb, greenyellow 85.732%, color(rec2020 0.0546 0.089 0.2687/1.5)) } #o { color: color-mix(in srgb, color( rec2020 0.65 0.6 0.4), currentcolor); background-color: #450 } #i { background-color: color-mix(in srgb, lab(52.51%  -153.872  104.5%), currentColor) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#002500\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5c6336;background-color:#445500\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#2e841b\"", style_of("i"));
     prep("body { color: color-mix(in srgb, currentcolor, #b60f13); background: currentcolor } #o { background-color: color(xyz-d50 113.46% 1 1) } #i { color: unset }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#5b080a;background-color:#5b080a\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffecff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffffff\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { color: color( rec2020 -1 -0.53 1e1) } #i { color: color-mix(in srgb, oklch(0.005 0.4666 9/87%), currentColor) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#180000ee\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000ee\"", style_of("i"));
 }
 
-static void test_l101_paint_43(void) {
-    prep("body { background: hwb(647.7243grad 95.4505% 93.4%) } #o { color: unset; background-color: Lab(12.7 -72.68 -122 /56%) } #i { color: CURRENTCOLOR; background-color: color(xyz-d65	0.6	.5	-1/1.5) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0040de8f\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff9800\"", style_of("i"));
+static void test_l101_paint_41(void) {
     prep("#o { background: no-repeat dimgray } #i { background: url(x.png) color-mix(in srgb, oklab(7.03% -1 -0.0647), CURRENTCOLOR) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#696969;background-repeat:no-repeat\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    prep("#o { color: color(xyz-d50 0.3 0.46 0.586 / 50%); background-color: hsl(11.483rad 97 81) } #i { color: inherit; background-color: lch(-3 101.87 317.8682deg) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00cbdc80;background-color:#faa0fe\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00cbdc80;background-color:#20003d\"", style_of("i"));
     prep("body { color: rgb(129 177 99 / 74%); background: no-repeat color-mix(in srgb, hwb(0 26.9% 86/-0.5), color(srgb -1 -0.6 0)) } #o { color: hwb(-380.9grad 0% 11.23%); background: no-repeat color(display-p3 0.1 0 0.58) } #i { color: lch(101.58 211.815 -646.9); background-color: rebeccapurple }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#81b163bd\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#e24100;background-color:#1d009a;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffc800;background-color:#663399\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#663399\"", style_of("i"));
     prep("body { background-color: lcha(1e1 127% -1turn) } #o { background-color: color(rec2020 0.939 1.7 0.8/1.5) } #i { color: color(srgb, -0.273, 0.498, 0.219); background-color: lch(105%  -7.5%  246) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ffaa\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffffff\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffffff\"", style_of("i"));
     prep("body { color: color-mix(in srgb, oklch(0.524 0.3035 -425), oklab(0.9202 0.48 -0.3261)) } #i { color: color( srgb  0.6  -2.95%  0); background-color: currentColor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#c000ff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#c067ff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#990000;background-color:#990000\"", style_of("i"));
-    prep("#o { color: red; background-color: oklab(74%	-0.3581	-0.3730/0.5) } #i { color: color-mix(in srgb, currentColor, black); background-color: color-mix(in srgb, oklab(1	0.1050	0.3532) 74%, oklab(0.2 0% 0.4927)) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000;background-color:#00bbff80\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#800000;background-color:#d29200\"", style_of("i"));
+    prep("body { color: color-mix(in srgb, darkorchid, CURRENTCOLOR); background-color: color-mix(in srgb, lab(50% 76.18% 21%), currentcolor 100%) } #o { color: color-mix(in srgb, currentColor, OKLAB(73.9%	0	-0.2013)) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4d1966;background-color:#4d1966\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#695eb3\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
 }
 
-static void test_l101_paint_44(void) {
+static void test_l101_paint_42(void) {
+    prep("#o { color: red; background-color: oklab(74%	-0.3581	-0.3730/0.5) } #i { color: color-mix(in srgb, currentColor, black); background-color: color-mix(in srgb, oklab(1	0.1050	0.3532) 74%, oklab(0.2 0% 0.4927)) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000;background-color:#00bdf980\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#800000;background-color:#c5c2bd\"", style_of("i"));
     prep("body { color: CURRENTCOLOR; background: oklab(100% 0.3138 0.0116) } #o { background-color: color(srgb-linear	0.87	0.1	0/ 0.5) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff86ee\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffffff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f0590080\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: currentcolor } #o { color: lab(8.1% -114.89 0.1%); background: color-mix(in srgb, CURRENTCOLOR, oklab(1	-106%	-0.2605/0)) } #i { color: oklch(.5 1e1 0rad); background: url(x.png) rebeccapurple }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#003614\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000805\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#663399;background-image:url(x.png)\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, brown 25%, color( xyz-d50 0.007 0.54 0.94)) } #o { color: #74fbd3aa; background: url(x.png) currentcolor } #i { background: lab(.5  +0.5  -8.3%/ 1) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#29caca\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#29a29d\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#74fbd3aa;background-color:#74fbd3aa;background-image:url(x.png)\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000216\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000306\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, color( a98-rgb 0.6 0.641 35.02%) 0%, Color(SRGB-LINEAR	0.2954	0.126	1e1)) } #o { color: color( a98-rgb	1.864	-0.9961	0); background-color: currentColor } #i { color: color-mix(in srgb, lch(25.7	82%	99), red); background-color: Lch(15.288  134  180) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff003a;background-color:#ff003a\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9d2200;background-color:#004223\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffd4d8;background-color:#ffd4d8\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9b2000;background-color:#001610\"", style_of("i"));
     prep("#o { color: #fe1bfefc; background-color: CURRENTCOLOR } #i { color: CURRENTCOLOR; background: no-repeat currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#fe1bfefc;background-color:#fe1bfefc\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#fe1bfefc;background-color:#fe1bfefc;background-repeat:no-repeat\"", style_of("i"));
+}
+
+static void test_l101_paint_43(void) {
     prep("body { background: no-repeat color-mix(in srgb, currentColor, color(srgb-linear 1.7 0 0.59)) } #o { color: lime; background: url(x.png) currentcolor } #i { color: color-mix(in srgb, currentcolor, color( xyz-d65 0.55 0 0)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff00;background-color:#00ff00;background-image:url(x.png)\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#808018\"", style_of("i"));
-}
-
-static void test_l101_paint_45(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3e801f\"", style_of("i"));
     prep("body { color: color-mix(in srgb, hwb(1.0594turn 129.1% 50%) 25%, color(display-p3 0.379 0.03 0)); background-color: currentcolor } #o { color: unset; background: currentColor } #i { color: color(--x 0.4 0.3 0) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#7a2b2b;background-color:#7a2b2b\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#7a2b2b;background-color:#7a2b2b\"", style_of("o"));
@@ -1247,42 +1197,34 @@ static void test_l101_paint_45(void) {
     prep("body { color: unset } #i { background-color: color-mix(in srgb, color(xyz-d50  0.545  0.9  0.2107), lch(101.8% 132.13% -657)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#b5d132\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#d4ffd0\"", style_of("i"));
     prep("body { color: currentcolor; background-color: color( XYZ  0.796  0%  0.8/0.5) } #o { color: color( srgb 0.16 2 10.51%); background: url(x.png) CURRENTCOLOR }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff00f280\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#a4007c80\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#29ff1b;background-color:#29ff1b;background-image:url(x.png)\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("body { background: color( xyz	0	0.03	46%) } #o { color: color(DISPLAY-P3 0.86 0.65 0 /1); background: color-mix(in srgb, lch( 68% 202.814 360 ), currentColor 68%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#004eb8\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e5a300\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: oklab(23.26% -0.1811 -0.2839) } #o { color: color(srgb-linear 0.48 0.716 0.823/ 86%); background-color: #6fbee7 } #i { color: color-mix(in srgb, color( srgb 0.62 0.074 0.9), CURRENTCOLOR) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000a7\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00213d\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b8dceadb;background-color:#6fbee7\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#aa70e8ed\"", style_of("i"));
     prep("body { color: inherit } #o { color: currentColor; background-color: color-mix(in srgb, currentcolor 25%, oklab(0.8 0 0.2776)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#bf8100\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#b08800\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
 }
 
-static void test_l101_paint_46(void) {
+static void test_l101_paint_44(void) {
     prep("body { background-color: currentcolor } #o { color: oklab(0  0  0.4878 /-0.5); background-color: color-mix(in srgb, currentcolor, white) } #i { color: oklch(0.982 +0.5 120/0.5) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00520000;background-color:#ffffff80\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d9ff0080\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#ffffff80\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#eeff9f80\"", style_of("i"));
     prep("body { color: CURRENTCOLOR; background: url(x.png) color-mix(in srgb, rgb(241, 93, 52%), currentcolor) } #o { color: lab(-5.03% 97 42.76%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#630000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: #7fcc } #o { color: Color(srgb-linear 1 0.1 0/ 50%) } #i { color: color-mix(in srgb, lab(53.7%	+0.5	-155) 25%, rgb(18% 37% 112 / 50%)); background-color: lab(39.53  -10.0948  36.02%/50%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#77ffcccc\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff590080\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1c72a99f;background-color:#5c610280\"", style_of("i"));
-    prep("body { color: color(srgb 0.8px 0.8 0.4); background-color: CURRENTCOLOR } #o { color: color-mix(in srgb, color(rec2020 0.427 0.67 52.2%), currentcolor) } #i { color: color-mix(in srgb, CURRENTCOLOR, oklch(59%	0.0983	-296grad/1.5)); background-color: color-mix(in srgb, currentColor, lab(102.5%  20000  -127.3%/ -0.5)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1b5d46\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#566c3b;background-color:#566c3b80\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1c6b779f;background-color:#5c610280\"", style_of("i"));
     prep("body { color: hsla(-1.32turn 58% 68.4% / 0.5) } #o { color: color-mix(in srgb, oklab(0.9 0.4500 0.3168), currentColor 100%) } #i { color: unset; background: url(x.png) color-mix(in srgb, CURRENTCOLOR, OKLCH(0  0.1659  51)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#8780dd80\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#8780dd80\"", style_of("o"));
@@ -1290,52 +1232,56 @@ static void test_l101_paint_46(void) {
     prep("#o { color: color-mix(in srgb, CURRENTCOLOR, hwb(1turn 93.7% 100% / -0.5)) } #i { color: color-mix(in srgb, color( rec2020 95% 0.1329 0.1879), oklch( 0.756 0 2.338turn/ 50% )) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e53b5fbf\"", style_of("i"));
-}
-
-static void test_l101_paint_47(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e56676bf\"", style_of("i"));
     prep("body { color: color-mix(in srgb, currentColor 100%, rgb(39.3% 71% 81%)) } #o { color: color-mix(in srgb, currentcolor, red); background: url(x.png) currentcolor } #i { color: oklch(0.7688	0	443.4grad) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#800000;background-color:#800000;background-image:url(x.png)\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b4b4b4\"", style_of("i"));
+}
+
+static void test_l101_paint_45(void) {
     prep("#o { background-color: color-mix(in srgb, lab(56.08% 137 138 / 0.61), currentColor) } #i { color: CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#610000cd\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#610f1acd\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: rgb() } #o { color: rgb(135 39 188 / -0.5); background: OKLAB(76.84%  -0.1638  -0.0829/0.5) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#8727bc00\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: color(xyz-d65 0.6 34% 0.4323); background: color-mix(in srgb, hsl(656.372grad 39.6% 11.3% / 0), currentColor 28.9%) } #o { background-color: color-mix(in srgb, color(xyz-d65 0.969 0.397 0.233 /0.5) 100%, Lch(50%  83.8  -305.99grad)) } #i { color: unset; background-color: color-mix(in srgb, lightskyblue, currentcolor 41%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff4dae\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff008180\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#b899db\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, lab(60.596  20000  10.8%/16.8%), currentColor 100%) } #o { color: color-mix(in srgb, currentcolor 11%, hwb(0rad 35.86% 29.74%)); background-color: color(xyz-d50 10.1% 0.3514 0.993) } #i { color: unset; background-color: color-mix(in srgb, oklch(7.7% 0 31/120%), color(xyz 0.8 0.98 0.5 /0)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9f5151;background-color:#00cdff\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9f5151;background-color:#02020280\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff5fad\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff8fa680\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#b8a0da\"", style_of("i"));
+    prep("body { color: color-mix(in srgb, color(srgb-linear	0.0628	2	1.08) 100%, hwb(283 1% 9)); background-color: #a3df } #o { color: unset; background: no-repeat lime } #i { color: color-mix(in srgb, red, CURRENTCOLOR 90.27%); background-color: oklch(-4.9%	0.4509	213.8deg) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#aa33dd\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#00ff00;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffe6e6;background-color:#000000\"", style_of("i"));
     prep("body { color: rgb(47 149 249 / 0.53); background: color-mix(in srgb, currentcolor, black) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#2f95f987\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_48(void) {
     prep("body { color: inherit; background-color: lab(99.78% 42 1e1) } #i { background: no-repeat currentColor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-repeat:no-repeat\"", style_of("i"));
+}
+
+static void test_l101_paint_46(void) {
     prep("body { color: CURRENTCOLOR } #o { color: hsl(-0.5turn 98.8711% 41.99%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#01d5d5\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    prep("body { color: oklab( 0.3268 -1 -0.3261 ); background-color: color(srgb-linear  0.0877  0.4414  -0.1785) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#003f42;background-color:#76a700\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: color-mix(in srgb, currentColor, color(srgb-linear 0.3 0.4 0.94)) } #o { color: inherit } #i { color: maroon }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#4a557c\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#800000\"", style_of("i"));
     prep("body { color: lab( 76 79.3% 0%/ 0.5 ) } #o { color: orchid; background: no-repeat lab(97  -80.6  47.3%) } #i { color: CURRENTCOLOR }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff3fc180\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#da70d6;background-color:#07ff78;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffa1c480\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#da70d6;background-color:#acffba;background-repeat:no-repeat\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#da70d6\"", style_of("i"));
     prep("body { color: hsl(2turn -14% 123.73%); background-color: black } #o { color: color-mix(in srgb, hwb(137.431grad 19.751% 18%), currentcolor 61%); background: no-repeat hsla(2.2turn, 127.3%, 11.2%, 0.9999) } #i { color: color-mix(in srgb, currentColor, hwb(336.32deg 69% 97%)); background: CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#000000\"", style_of("b"));
@@ -1347,17 +1293,17 @@ static void test_l101_paint_48(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#c7ba77;background-color:#b99966\"", style_of("i"));
 }
 
-static void test_l101_paint_49(void) {
+static void test_l101_paint_47(void) {
     prep("body { color: currentColor } #o { color: color( xyz-d50  0.2646  27.5%  12.07% /0) } #i { color: currentColor; background: currentColor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#9a8e6300\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#9a8e6300;background-color:#9a8e6300\"", style_of("i"));
     prep("#o { color: color( a98-rgb 0.67 0.7 0.2); background-color: oklab(0.383  0  0.3310) } #i { color: inherit; background: url(x.png) CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a9b41b;background-color:#830f00\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a9b41b;background-color:#573f00\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#a9b41b;background-color:#a9b41b;background-image:url(x.png)\"", style_of("i"));
     prep("body { color: color( display-p3 0.424 0.1 1.19) } #o { color: burlywood } #i { color: inherit; background-color: color( rec2020  0.501  0.358  0.934) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#760dff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7152ff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#deb887\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#deb887;background-color:#9262fa\"", style_of("i"));
     prep("body { color: unset } #o { color: Color(srgb  -17%  0.22  1e1) } #i { color: oklcha(0 0.0099 761grad); background-color: rgb(41 116 203 / 50%) }", 0);
@@ -1371,10 +1317,10 @@ static void test_l101_paint_49(void) {
     prep("body { background: no-repeat CURRENTCOLOR } #o { color: #a7fc809a; background-color: hsla(-639, 95%, 45.2%, 0.9999) } #i { color: color( xyz-d50 0 1.09 100.51% /120%); background-color: color(xyz-d50 2 2.5e-2 -0.6) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-repeat:no-repeat\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#a7fc809a;background-color:#94e106\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#94fff3\"", style_of("i"));
 }
 
-static void test_l101_paint_50(void) {
+static void test_l101_paint_48(void) {
     prep("body { color: inherit } #o { color: unset }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -1395,25 +1341,40 @@ static void test_l101_paint_50(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#620e0e80\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#31070780\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#31070780\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, color( xyz  0.048  -10.69%  0.92), hsl(0.2turn, 63%, 35%)); background-color: CURRENTCOLOR } #o { color: oklab(0 0.2202 0.0029); background-color: color(a98-rgb	0.2	1.49	+0.5) } #i { color: unset }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3d4990;background-color:#3d4990\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#090000;background-color:#00ff63\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#090000\"", style_of("i"));
+    prep("#o { color: lab(94.01  51%  65.98%/ 0); background-color: currentColor } #i { background: color(srgb 0 0.2782 0 /0.5) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffeada00;background-color:#ffeada00\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00470080\"", style_of("i"));
 }
 
-static void test_l101_paint_51(void) {
+static void test_l101_paint_49(void) {
+    prep("body { color: color-mix(in srgb, color( xyz  0.048  -10.69%  0.92), hsl(0.2turn, 63%, 35%)); background-color: CURRENTCOLOR } #o { color: oklab(0 0.2202 0.0029); background-color: color(a98-rgb	0.2	1.49	+0.5) } #i { color: unset }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3d4911;background-color:#3d4911\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#ffffff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
+    prep("body { color: currentcolor; background-color: color-mix(in srgb, currentcolor, lab(55.342  50%  156.1783 /120%)) } #o { color: lch(101% 206 1.731turn) } #i { color: darkcyan; background-color: currentcolor }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#6d3000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#008b8b;background-color:#008b8b\"", style_of("i"));
+    prep("body { color: lch(-9% 60 299); background-color: color-mix(in srgb, hwb(-269.74deg 36 109.1%), currentcolor) } #o { color: color-mix(in srgb, rebeccapurple 100%, oklab(.5 0 -0.0257)); background-color: lab(-4.6%  -81.6%  50%/ -0.5) } #i { background: no-repeat oklab(40% -0.99 -0.2212 / 120%) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000609;background-color:#222526\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#663399;background-color:#00000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#005654;background-repeat:no-repeat\"", style_of("i"));
     prep("#o { color: hwb(507.3 100% 51.89%); background: url(x.png) lab(59.5 -44.5% -116.14/ 92%) } #i { color: oklab(3.54% 0 -0.1412/0); background-color: color-mix(in srgb, darkblue, currentcolor 100%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a8a8a8;background-color:#00b0ffeb;background-image:url(x.png)\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#07002400;background-color:#00000000\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a8a8a8;background-color:#009fb7eb;background-image:url(x.png)\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000400;background-color:#00000000\"", style_of("i"));
     prep("body { color: CURRENTCOLOR; background-color: currentcolor } #o { background-color: color(xyz-d50 0.2 0% 0.58 / 1 / 1) } #i { color: inherit; background: no-repeat color-mix(in srgb, lch(-6 38.6% -6rad), lch(0 220.6 -201 /0)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: currentcolor; background-color: color( Rec2020 0.55 -0 0.9/ 0.25) } #o { color: rgb(174 226 65 / 120%) } #i { color: unset; background-color: lab(52.5% 14.68% -54) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#b400f340\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ae00e740\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#aee241\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#aee241;background-color:#6e75db\"", style_of("i"));
+}
+
+static void test_l101_paint_50(void) {
     prep("body { color: inherit; background-color: color-mix(in srgb, currentcolor 0%, color(srgb-linear	0.6	0.023	0.9)) } #o { color: oklch(0.72 1E-1 6.2832rad); background-color: color-mix(in srgb, hsla(-3.5724rad 66.5% 7.9%), currentcolor) } #i { color: color(A98-RGB 0 0.0301 71.4%/ -0.5) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#cb2af3\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#03110b\"", style_of("o"));
@@ -1421,26 +1382,26 @@ static void test_l101_paint_51(void) {
     prep("#o { color: olivedrab; background-color: hwb(-0.45turn 50% 47%) } #i { color: lch(102.9% 223.3 379.519grad) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#6b8e23;background-color:#808587\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00ff\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("i"));
     prep("#o { color: color(srgb	0.4	0.8	-0.3/0.5) } #i { background-color: color(display-p3 0.346 1e1 0) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#66cc0080\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_52(void) {
     prep("body { color: currentcolor } #i { color: color(prophoto-rgb 0 0.6 0.125); background-color: lime }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ba00;background-color:#00ff00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00a353;background-color:#00ff00\"", style_of("i"));
     prep("body { color: color-mix(in srgb, rgb(38 16 81 / 0.5), CURRENTCOLOR) } #o { background: no-repeat blanchedalmond } #i { color: oklab(0 0 -0.4694) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#0d051bbf\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffebcd;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3d00a6\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, peachpuff, currentcolor 50%) } #o { color: lch(20 198.83 20); background: no-repeat color-mix(in srgb, oklab(0%	0.1356	0.3733), CURRENTCOLOR) } #i { color: color-mix(in srgb, oklab(1 0 0.2732/ -0.5), lab(103.469	-59	-59.3/ 1.5)); background-color: color(xyz 0.4986 0 0.7) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#806d5d\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f70000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff80;background-color:#ff00e3\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#82002c\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ddffff80;background-color:#890070\"", style_of("i"));
+}
+
+static void test_l101_paint_51(void) {
     prep("#i { color: lch(98.32% 8 -1.2turn) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -1450,41 +1411,38 @@ static void test_l101_paint_52(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#be9180\"", style_of("i"));
     prep("body { color: lab(-5.04 83.6 50%) } #o { color: currentcolor; background-color: oklab(1E-1 0.0998deg 0.1957) } #i { color: unset; background-color: oklch(1 0 -2.46rad) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5a0000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5a0000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5a0000;background-color:#ffffff\"", style_of("i"));
-}
-
-static void test_l101_paint_53(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#ffffff\"", style_of("i"));
     prep("body { color: oklch(1 0.0902 708.398deg) } #o { color: unset }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffe7ff\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffe7ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background-color: lch(33.7% 91.98 1.12turn) } #o { color: color-mix(in srgb, rebeccapurple 0%, color(xyz-d65 0.694 0.4 0.7/ -0.5)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ac0000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#a90000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: #eac3b9; background: no-repeat color-mix(in srgb, currentcolor 61.16%, #6e99) } #i { background: no-repeat lime }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#eac3b9\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ff00;background-repeat:no-repeat\"", style_of("i"));
-    prep("#o { background-color: color-mix(in srgb, lch(3.1  145.393  720deg /1), CURRENTCOLOR 0%) } #i { color: inherit; background-color: color-mix(in srgb, color( srgb-linear 0.4885 0.4 -1 / 1), currentColor) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#900019\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5d5500\"", style_of("i"));
-    prep("body { background-color: oklab(21.12%  116.48%  -0.4637) } #o { color: CURRENTCOLOR } #i { background-color: color( xyz  0  0.0242  0.102) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#7800e3\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#003f5a\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, color(prophoto-rgb 0.96 0.46 4.16%), currentcolor) } #i { color: CURRENTCOLOR; background-color: currentColor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#802b00\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#802b00\"", style_of("i"));
 }
 
-static void test_l101_paint_54(void) {
+static void test_l101_paint_52(void) {
+    prep("body { background-color: oklab(21.12%  116.48%  -0.4637) } #o { color: CURRENTCOLOR } #i { background-color: color( xyz  0  0.0242  0.102) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#2d003e\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#001d1a\"", style_of("i"));
+    prep("body { color: currentColor; background-color: color-mix(in srgb, currentColor, color( srgb-linear 0.75 0.2354 0.14)) } #o { color: oklch(0.56	0.4268	10rad/0.66); background-color: LCH(100%	1E-1	10.734rad/0.1001) } #i { color: color-mix(in srgb, hsl(0turn -5.68% 56% / 0.9999), currentColor) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#704334\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00859da8\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#568b94d3\"", style_of("i"));
+    prep("body { color: color-mix(in srgb, color(prophoto-rgb 0.96 0.46 4.16%), currentcolor) } #i { color: CURRENTCOLOR; background-color: currentColor }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#804935\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#804935\"", style_of("i"));
     prep("body { color: lab(50% 29.8482 102 /50%); background-color: currentcolor } #o { color: color(srgb-linear  0.15  0  1E-1/120%); background: color-mix(in srgb, black, currentcolor 50%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b4600080;background-color:#b4600080\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ae650080;background-color:#ae650080\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { color: CURRENTCOLOR; background: color(prophoto-rgb, 0.1339, 0.89, 0.9) } #i { background-color: hsl(0.5turn 100 93.9% / 2) }", 0);
@@ -1495,8 +1453,11 @@ static void test_l101_paint_54(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#cce2cc\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#9a4f68\"", style_of("i"));
+}
+
+static void test_l101_paint_53(void) {
     prep("body { background-color: lab(-0	0	4.2 / 0) } #o { color: color(a98-rgb  0.04  0.05  0/ 60%); background-color: color(prophoto-rgb	0.4699	0.33	0.451 / 0.5) } #i { color: color-mix(in srgb, currentColor 0%, hwb(2rad 31% 50%)); background-color: oklch(0, 0.3985, 3.1416rad) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#04000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#02050099;background-color:#a05c8a80\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#53804f\"", style_of("i"));
     prep("#o { color: color-mix(in srgb, rgb(221 246 49 / 7.6%), currentColor 55.58%) } #i { color: rgb(98 233 108 / 1); background-color: red }", 0);
@@ -1507,36 +1468,37 @@ static void test_l101_paint_54(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b2b2b2;background-color:#e6e6fa\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_55(void) {
     prep("body { color: color(xyz-d50 0.123 0.9524); background: no-repeat color-mix(in srgb, CURRENTCOLOR 100%, color( display-p3 0 0.1 76%)) } #o { color: oklch(45.59% 0 1turn) } #i { color: color( prophoto-rgb  0  0.655  0.637); background-color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#575757\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00c7b2;background-color:#00c7b2\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ab9e;background-color:#00ab9e\"", style_of("i"));
     prep("body { background-color: rgba(128, 149, 25.06, 24.3%) } #o { color: color-mix(in srgb, rebeccapurple, currentColor 10%); background-color: CURRENTCOLOR } #i { color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#8095193e\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#5c2e8a;background-color:#5c2e8a\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#5c2e8a\"", style_of("i"));
     prep("body { color: color(xyz 0.7 0.148 0.92 /120%); background: no-repeat color-mix(in srgb, oklab(1E-1 -0.0851 -0.2758/1.5), currentcolor 27.4%) } #o { background: no-repeat currentcolor } #i { color: color(display-p3  0.8  0.18  0.778); background: no-repeat lch( 50% 153.4% -290.565grad ) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00fd\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff00fd;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#de0acd;background-color:#618400;background-repeat:no-repeat\"", style_of("i"));
-    prep("#o { color: color-mix(in srgb, oklch(0.2 0.3948 171), CURRENTCOLOR 25%) } #i { color: color-mix(in srgb, rgb(68 207 14 / 120%), lab(47.54%	105	49.9527)); background-color: color(xyz 59.7% 1 0%) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#002600\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a2681c;background-color:#a9ff00\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, currentColor, hsla(250.88grad, 64.0286%, 73.9%, 0.9999)) } #o { color: color-mix(in srgb, color(display-p3	0.8	0.01	0), CURRENTCOLOR); background-color: lch(100% 37.4% 180 /0.5) } #i { color: rgba(249, 248, 207, 0.28); background-color: hsl(77, 106.6%, 100%, 150%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#495374\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#942a3a;background-color:#56fffd80\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f9f8cf47;background-color:#ffffff\"", style_of("i"));
-    prep("body { background-color: oklch(1	0.1653	120) } #o { color: color-mix(in srgb, lch(-0	.5	109), currentcolor); background-color: hwb(0.5turn 26.53% 73) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f1ff87\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#444545\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ea00c3\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ea00c3;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#de0acd;background-color:#6a7e00;background-repeat:no-repeat\"", style_of("i"));
 }
 
-static void test_l101_paint_56(void) {
+static void test_l101_paint_54(void) {
+    prep("#o { color: color-mix(in srgb, oklch(0.2 0.3948 171), CURRENTCOLOR 25%) } #i { color: color-mix(in srgb, rgb(68 207 14 / 120%), lab(47.54%	105	49.9527)); background-color: color(xyz 59.7% 1 0%) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00170e\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#966828;background-color:#e0ffb8\"", style_of("i"));
+    prep("body { color: color-mix(in srgb, currentColor, hsla(250.88grad, 64.0286%, 73.9%, 0.9999)) } #o { color: color-mix(in srgb, color(display-p3	0.8	0.01	0), CURRENTCOLOR); background-color: lch(100% 37.4% 180 /0.5) } #i { color: rgba(249, 248, 207, 0.28); background-color: hsl(77, 106.6%, 100%, 150%) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#495374\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#932a3a;background-color:#d1fffa80\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f9f8cf47;background-color:#ffffff\"", style_of("i"));
+    prep("body { background-color: oklch(1	0.1653	120) } #o { color: color-mix(in srgb, lch(-0	.5	109), currentcolor); background-color: hwb(0.5turn 26.53% 73) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffffff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#444545\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    prep("body { color: CURRENTCOLOR; background: url(x.png) lab( 61 139 56.4% ) } #i { color: inherit; background: hsl(285grad 95.12% 69% / 99.99%) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff5770;background-image:url(x.png)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background: no-repeat color-mix(in srgb, currentcolor 33%, lab(90.559 25% -24.177)) } #o { color: currentcolor } #i { background-color: color-mix(in srgb, currentColor, lch(91.155 2.5e-2 0.1turn / 50%)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -1545,55 +1507,39 @@ static void test_l101_paint_56(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("body { color: unset } #o { color: color(prophoto-rgb 0.63 0.767 1E-1) } #i { color: color( xyz-d50	99.5	0	0.7/ 0) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00ff00\"", style_of("i"));
+}
+
+static void test_l101_paint_55(void) {
     prep("body { background-color: color-mix(in srgb, currentcolor, color( a98-rgb  0  0.33  0.8)) } #o { color: yellowgreen } #i { color: color-mix(in srgb, lch(-1.432 146% 60 / 50%) 30%, color(srgb-linear 0.37 0.0336 0.43)); background-color: darkmagenta }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#002a68\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#002c60\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#9acd32\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9c2a90d9;background-color:#8b008b\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#872a90d9;background-color:#8b008b\"", style_of("i"));
     prep("#i { color: color-mix(in srgb, color(xyz  0.3253  0.9933  0.5), currentcolor) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00804f\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#54806d\"", style_of("i"));
     prep("body { color: lab(87.71  -33%  -80 / 1) } #o { color: color-mix(in srgb, color(xyz 0.193 0.2 0.79), CURRENTCOLOR); background-color: lch(50% 141 0 /50%) } #i { color: inherit; background-color: lab(84 79 144) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00f6ff\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00bcf3;background-color:#ff008080\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00bcf3;background-color:#ff8300\"", style_of("i"));
-}
-
-static void test_l101_paint_57(void) {
-    prep("body { background-color: currentcolor } #o { color: color-mix(in srgb, lab(72 -13.04% -47.3%) 0%, color(xyz-d50  -101  0.7721  0.458 / 9.95%)); background-color: currentcolor } #i { color: color-mix(in srgb, currentColor, rgb(70 45 204 / 46.89%)); background-color: color-mix(in srgb, CURRENTCOLOR, oklab(0.62 0 -0.0959)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff0019;background-color:#00ff0019\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#3a51a948;background-color:#6478bba4\"", style_of("i"));
-    prep("body { color: #ff4 } #o { background-color: oklch(0.79 0.2914 373.45deg / 0) } #i { color: color(xyz-d50  0  0.99  0.4574) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffff44\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff3a8200\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffad\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#96e8ff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4bb5e9;background-color:#f6008280\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4bb5e9;background-color:#ffc5a4\"", style_of("i"));
     prep("#o { color: hsla(255 86.1% 40%); background: url(x.png) currentcolor } #i { color: hwb(12.17deg 100% 57.52%); background-color: color-mix(in srgb, lab(89  46  137.452), currentcolor) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#3a0ebe;background-color:#3a0ebe;background-image:url(x.png)\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a2a2a2;background-color:#d1ae51\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a2a2a2;background-color:#d1bca1\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, #ae3cae, currentColor) } #o { color: color-mix(in srgb, currentcolor 100%, oklch(0.56 0.4086 348)); background-color: color(a98-rgb 0 0 0.071/0) } #i { color: inherit; background-color: hsl(53.3107grad, 0%, 31%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#571e57\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#00000a00\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#4f4f4f\"", style_of("i"));
-    prep("body { color: color-mix(in srgb, currentColor, lch(79.168 50% -3.13rad)) } #o { color: oklab(0	0.1257	-0.1193 /120%); background: no-repeat lch(-7.114 138.91% -5.7684grad) } #i { color: hsla(3.1416rad, 85.0554%, 81%, 99.99%); background-color: color( a98-rgb 0 0.53 0 / 16%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#007361\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#02000f;background-color:#bd002d;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#a5f8f8;background-color:#00880029\"", style_of("i"));
     prep("body { color: lch(106.863  210.1  100grad); background-color: CURRENTCOLOR } #o { color: currentcolor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#fffc00;background-color:#fffc00\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#fffc00\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffa5;background-color:#ffffa5\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffa5\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
 }
 
-static void test_l101_paint_58(void) {
+static void test_l101_paint_56(void) {
     prep("#o { color: oklab(59% 0 -0.0099); background-color: color(xyz-d65	0.1834	0	0.4598) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7b7d83;background-color:#a300bb\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7b7d83;background-color:#5a005a\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: oklch(0.858	0	338.3262deg) } #i { color: inherit }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#d0d0d0\"", style_of("b"));
@@ -1601,27 +1547,23 @@ static void test_l101_paint_58(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background: url(x.png) color-mix(in srgb, color( display-p3  0.613  0.44  0/0.33), currentcolor 100%) } #o { color: color(rec2020 0.949 2 119%) } #i { color: color(prophoto-rgb 0.17 0.7987 0.1688 / 1) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00e900\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00d264\"", style_of("i"));
     prep("body { color: currentcolor } #o { color: color(xyz-d50 74% 2 0) } #i { color: color-mix(in srgb, CURRENTCOLOR, color(Rec2020	0.727	0.7	1.5113 / 120%)); background-color: color( Xyz-d50  0.5  0.64  0) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ff00\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#57db80;background-color:#c1df00\"", style_of("i"));
-    prep("body { color: inherit; background-color: color( srgb  105.83%  91.05%  0%) } #o { color: Lch(1e1  100%  318deg/50%); background-color: color-mix(in srgb, CURRENTCOLOR, oklch(76.12% 43% 214)) } #i { color: CURRENTCOLOR }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffe800\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00657a\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e2e7ff;background-color:#c2dd00\"", style_of("i"));
     prep("body { background-color: currentcolor } #o { background-color: OKLAB(0  0  0.2140) } #i { color: currentcolor; background-color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#001400\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
-}
-
-static void test_l101_paint_59(void) {
     prep("#o { color: Color(display-p3  2.5e-2  -1  0.209); background-color: CURRENTCOLOR } #i { color: CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_57(void) {
     prep("#o { color: color(srgb-linear 0.638 0.5074 0 / 1 / 1); background: no-repeat color-mix(in srgb, color(srgb  115.45%  -0.7  -0.8) 15.55%, rgb(153 40 125 / 94%)) } #i { background: no-repeat color-mix(in srgb, currentColor, lab(45.1  40.73%  -124)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -1629,9 +1571,9 @@ static void test_l101_paint_59(void) {
     prep("#o { color: COLOR( srgb-linear 0.9608 0.261 0.064 / 0.5); background: color-mix(in srgb, color(srgb-linear  0  0.3387  0.9), CURRENTCOLOR) } #i { color: oklab(61%	0.4008	-0.3838 / 1.5) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#fb8c4880\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f500ff\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#c900fe\"", style_of("i"));
     prep("body { background-color: LCH(6 110.9% 320) } #o { color: color-mix(in srgb, rgb(1, 2), oklab(0.3719 0.4278 -0.0367)) } #i { background: currentcolor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5900b2\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#450078\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     prep("body { background: url(x.png) color-mix(in srgb, color( xyz-d50	23.89%	0.0349	1), hwb(687.78 100% 12.61%)) } #o { color: CURRENTCOLOR } #i { background: currentColor }", 0);
@@ -1640,65 +1582,58 @@ static void test_l101_paint_59(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     prep("body { color: inherit } #o { color: oklab(0.5 -0.4748 0.3603); background-color: Lch(45	203	39) } #i { color: color-mix(in srgb, currentColor, lch(10  0  -1.742turn)); background-color: hwb(3.4rad 16.6% 0% /0.6) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#009600;background-color:#ff0000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0e590e;background-color:#2acbff99\"", style_of("i"));
-}
-
-static void test_l101_paint_60(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#007c00;background-color:#e7003e\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0e4c0e;background-color:#2acbff99\"", style_of("i"));
     prep("body { background: color-mix(in srgb, oklch(86.58% 0.1442 181.24deg / 50%), currentcolor 49%) } #o { color: color-mix(in srgb, CURRENTCOLOR, hsla(150, 14.8203%, 100%, 150%)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#808080\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_58(void) {
+    prep("body { color: LAB(20.7431  0  -122.81%); background: color-mix(in srgb, CURRENTCOLOR, hwb(1turn 50% 72%)) } #o { color: lch(95 54% 720deg); background-color: color-mix(in srgb, currentcolor, hsl(655.76deg 12 4% / 1)) } #i { color: CURRENTCOLOR; background-color: #6c3 }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#003132\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#fff1f9;background-color:#857d82\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#fff1f9;background-color:#66cc33\"", style_of("i"));
     prep("body { color: color-mix(in srgb, rgba(233, 27%, 17, -0.5), currentcolor 50%); background-color: lch(54% 115 418/1.5) } #o { color: #cf941d }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080;background-color:#e74600\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000080;background-color:#e54900\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#cf941d\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: currentcolor } #o { color: lch(95  1E-1  128); background-color: color(Srgb-linear	-0.404	2.5e-2	0.6 /1) } #i { background-color: lab( 5.67% 5 102 ) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#360b00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#150b00\"", style_of("i"));
     prep("body { color: color-mix(in srgb, lch(1E-1 216.01 79.5), lch(26 -0 166)); background: no-repeat color-mix(in srgb, currentColor, color(prophoto-rgb	0	0.5	0)) } #o { color: oklab(0	0.1271	0.2162 / 0); background-color: lch(19  66  601.38deg) } #i { color: color-mix(in srgb, lab( 104.4 -6.05% -25 /120% ), currentcolor 50%); background-color: color(xyz, 113.8%, 0.76, 0.31) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00140000;background-color:#003c85\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d9ffff80\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#003237\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff80\"", style_of("i"));
     prep("body { background-color: oklch(29.2% 0.1253 30/ 0.5) } #o { color: hsl(751deg, 35%, 24%) } #i { color: color-mix(in srgb, hsla(74 54.05% 21.93% / 150%), CURRENTCOLOR 84.3%); background: no-repeat oklab(0.76 -0.4532 0.2796 / 0.5) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5b000080\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#533e28\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#514226\"", style_of("i"));
-    prep("body { color: inherit } #o { color: Color(prophoto-rgb -101 29.9% 0/ 1) } #i { color: currentColor }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff\"", style_of("i"));
+    prep("body { color: color-mix(in srgb, color(XYZ-D65  0.2054  0.054  0.898), currentColor 16%) } #o { color: lab(50%	-11%	+0.5/-0.5); background-color: color-mix(in srgb, hsla(757.4488grad 81% 94.8% / 0), currentcolor 0%) } #i { background-color: color-mix(in srgb, oklch( 0.179 38.7% 4 ), currentColor) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4f00b5\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5d7e7600;background-color:#00000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#2d000d80\"", style_of("i"));
 }
 
-static void test_l101_paint_61(void) {
-    prep("#o { color: oklch(89% 0.2260 109); background-color: color-mix(in srgb, currentcolor, hsl(0.181turn 43% 50%)) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#e8e400;background-color:#cacd24\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    prep("body { color: color-mix(in srgb, color(XYZ-D65  0.2054  0.054  0.898), currentColor 16%) } #o { color: lab(50%	-11%	+0.5/-0.5); background-color: color-mix(in srgb, hsla(757.4488grad 81% 94.8% / 0), currentcolor 0%) } #i { background-color: color-mix(in srgb, oklch( 0.179 38.7% 4 ), currentColor) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5600d1\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5d7e7600;background-color:#00000000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#3c000980\"", style_of("i"));
+static void test_l101_paint_59(void) {
     prep("body { background: url(x.png) color-mix(in srgb, oklch(67.17% 0.4585 -1.7turn) 0%, rgb(7 64 239 / 70%)) } #o { color: color-mix(in srgb, lab(66.9234  0.7  -101/ 94%) 50%, rgb(1 2 3 4)) } #i { color: color(xyz 0 -0.79 0); background-color: color-mix(in srgb, lab(21  -128  -76/0), currentColor 100%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0070;background-color:#ff0070\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000\"", style_of("i"));
     prep("body { background: url(x.png) color( display-p3	0.5	0.725	0.3) } #o { color: unset; background-color: CURRENTCOLOR } #i { color: currentColor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background: no-repeat hsl(120, 50%, 50%) } #o { color: oklch(0.3858 0.4495 1turn) } #i { color: color(xyz 0.66 0.639 0.51 1) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#40bf40;background-repeat:no-repeat\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#cd003a\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#850040\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background: slategray } #o { color: currentColor } #i { color: lch(3.2  113  90deg/0.4); background-color: rgb(127 9 111 / 1) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#708090\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#33050066;background-color:#7f096f\"", style_of("i"));
-}
-
-static void test_l101_paint_62(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000066;background-color:#7f096f\"", style_of("i"));
     prep("body { color: burlywood } #o { color: currentcolor } #i { color: currentcolor; background: currentColor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#deb887\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#deb887\"", style_of("o"));
@@ -1707,6 +1642,9 @@ static void test_l101_paint_62(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_60(void) {
     prep("body { color: currentcolor } #o { color: currentColor } #i { color: CURRENTCOLOR; background: color-mix(in srgb, hwb(319.767 50% 1%), currentcolor 81%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -1720,12 +1658,9 @@ static void test_l101_paint_62(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#141414\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#4d004d\"", style_of("i"));
     prep("body { color: lab( 7.2%	124%	60.3 ); background-color: lch(-8.748 183.011 209) } #o { color: currentColor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#aa0000;background-color:#003b83\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#aa0000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#440500;background-color:#000505\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#440500\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_63(void) {
     prep("#o { color: color-mix(in srgb, currentcolor 50%, #773); background-color: CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#3c3c1a;background-color:#3c3c1a\"", style_of("o"));
@@ -1734,6 +1669,9 @@ static void test_l101_paint_63(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff;background-color:#00000080\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_61(void) {
     prep("body { color: color-mix(in srgb, color(srgb-linear	0.1224	0.4	0), currentcolor 100%); background-color: lightslategrey } #i { background-color: CURRENTCOLOR }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#778899\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
@@ -1741,30 +1679,30 @@ static void test_l101_paint_63(void) {
     prep("body { color: CURRENTCOLOR } #o { color: color-mix(in srgb, lch( 64	8.2	50 ), currentcolor 59.05%) } #i { color: oklch(67% 0.0162 0.5turn); background-color: color-mix(in srgb, color( srgb-linear  0.25  -0.38  2.7%), currentcolor) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#453e3b\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b9995;background-color:#8a4d61\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b9995;background-color:#464d4b\"", style_of("i"));
     prep("body { background: lab(1E-1 104.3% -20.3% / 1 / 1) } #o { color: color(srgb 0.06 0.863 0 }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { background-color: color-mix(in srgb, Oklch( 38.05% 0.4642 1.5708rad ), currentcolor 0%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#970000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#563f00\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_64(void) {
     prep("#o { background-color: color-mix(in srgb, lab(-8.8535 -12% 6.569/0), currentColor 87.2078%) } #i { color: color(a98-rgb  0.53  0.3986  0.5 / -0.5) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000de\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#93668200\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, rgb(85 95 186 / 0), lab(100%	-101%	110.9%)) } #o { background-color: color-mix(in srgb, currentColor, Lch(73 16 -369.4289 /50%)) } #i { color: currentcolor; background-color: oklch(0 2.5e-2 -264.377/ 0.159) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ff0080\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#c0ffc180\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#45383ebf\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_62(void) {
     prep("#o { background: url(x.png) currentColor } #i { color: oklab(102.9% -0.3515 -0.3483) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-image:url(x.png)\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffff\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, CURRENTCOLOR, hsla(-76, 50%, 94%, 100%)) } #o { background: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#7a747c\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
@@ -1772,52 +1710,52 @@ static void test_l101_paint_64(void) {
     prep("body { color: CURRENTCOLOR; background-color: color-mix(in srgb, hsla(0rad 52.81% 93.1324% / 150%), CURRENTCOLOR) } #o { background-color: currentcolor } #i { color: color(srgb-linear 2 0.238 1.701/ 50%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#7b7272\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff86ff80\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffd6ff80\"", style_of("i"));
     prep("body { color: color-mix(in srgb, oklab(0.8823 0 -0.0594/50%), transparent); background-color: oklab(2.5e-2	-0.507	-0.4079 / 0.5) } #o { color: color(rec2020	0.1	0%	0.7287/0); background-color: lab(.5 100% 24) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#c9d7ff40\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000cb00;background-color:#780000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000cb00;background-color:#050000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_65(void) {
     prep("body { background-color: color(srgb	-0.68	38.66%	-4.5%) } #o { color: currentColor; background-color: currentcolor } #i { color: color-mix(in srgb, color(xyz  0.95  0.6504  0.8) 0%, lab(96%  -0  -151.66)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#006300\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00ffff\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ecffff\"", style_of("i"));
     prep("body { background: no-repeat rgb(141 165 231 / 50%) } #i { color: lch(62 111 404.8deg; background: lightgrey }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#8da5e780;background-repeat:no-repeat\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#d3d3d3\"", style_of("i"));
+}
+
+static void test_l101_paint_63(void) {
     prep("body { color: lab(107 2.5e-2 60.913/ 120%) } #o { color: lab(42.289  1E-1  84.0421/1.5) } #i { color: lch(99 35.6 462.5) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffffb7\"", style_of("i"));
     prep("#o { color: #05a; background: no-repeat oklab(91% 0.1850 0.1003 /1) } #i { background-color: color-mix(in srgb, currentcolor, oklab(0.6559 -1 0.0597 / 42%)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0055aa;background-color:#ffa28e;background-repeat:no-repeat\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00879db5\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0055aa;background-color:#ffd1c8;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#006fa2b5\"", style_of("i"));
     prep("#o { color: CURRENTCOLOR; background-color: color-mix(in srgb, currentcolor 25%, oklab(1 -0.4652 -0.1582 /1.5)) } #i { background-color: fuchsia }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00bfbf\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#bfbfbf\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ff00ff\"", style_of("i"));
     prep("body { background: lch(85 .5 0.1turn /1) } #o { color: rgb(170, 74%, 62%) } #i { background: hsla(109.7grad, 16%, 71.9%, 150%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#d5d4d4\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#aabd9e\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_66(void) {
     prep("body { background-color: oklch(0.144	110.8%	1.8turn) } #o { color: inherit } #i { color: CURRENTCOLOR; background: no-repeat color(xyz-d65 0.7 1E-1 0.7/ 1.5) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#4700c0\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0d0032\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("#o { background: url(x.png) oklch(0.473 0.2436 10.2rad / 1.5) } #i { color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_64(void) {
     prep("body { background-color: #0c44cf } #o { color: currentcolor; background-color: lab(34.441 -76.4007 53.3%) } #i { color: color-mix(in srgb, lch(1E-1 70.3 -0.5turn), white); background: url(x.png) color-mix(in srgb, currentcolor, oklch(60.92% 0.3486 32.3deg /0)) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0c44cf\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#006700\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#005f0b\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { background: color-mix(in srgb, rebeccapurple, currentcolor) } #o { color: hwb(519.1deg 98 0%/1.5); background-color: currentColor } #i { color: color-mix(in srgb, CURRENTCOLOR, transparent); background: no-repeat currentColor }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
@@ -1826,76 +1764,76 @@ static void test_l101_paint_66(void) {
     prep("body { color: CURRENTCOLOR; background: url(x.png) color-mix(in srgb, rgba(86%, 2%, 217, 1.5), currentcolor 87.27%) } #o { color: color-mix(in srgb, hsla(-123.6deg, 85.5%, 57%, 100%) 94%, oklab( 0.54  0.1640  0.1686/0.048 )); background-color: color-mix(in srgb, lch(100%	+0.5	-106.4deg /120%), currentcolor 61%) } #i { color: color( xyz-d50  0  -0.787  +0.5) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#343feef0;background-color:#868df5f6\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00f1\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     prep("body { background-color: lab(50% -128.081 7) } #o { background-color: color-mix(in srgb, rgba(58, 74, 68, 0.6), currentColor) } #i { background-color: color( SRGB  0.6239  0.6  0.2) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#009b67\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00836b\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#161c1acc\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#9f9933\"", style_of("i"));
+    prep("#o { color: currentcolor; background-color: oklch(1 0.1167 -713.32) } #i { color: unset; background-color: darkolivegreen }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffffff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#556b2f\"", style_of("i"));
+    prep("body { color: lab(11%	113.6504	-25.7 /-0.5) } #o { color: color-mix(in srgb, color(xyz 0.194 0.78 0.3 / 0), currentcolor); background: url(x.png) color-mix(in srgb, currentcolor 84.2%, oklch(0% 0.0842 90deg /15%)) } #i { color: unset; background-color: currentColor }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#54003400\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#00000000\"", style_of("i"));
 }
 
-static void test_l101_paint_67(void) {
-    prep("#o { color: lch(70.9% 67% 213.4 /120%) } #i { color: color-mix(in srgb, color( a98-rgb  107%  0.886  0/1), currentColor) }", 0);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00d3ff\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#80db80\"", style_of("i"));
+static void test_l101_paint_65(void) {
     prep("body { color: color-mix(in srgb, currentcolor, lab(0 -89.15% 1E-1 / -0.5)) } #o { color: color(prophoto-rgb 116.77% 0 0.465); background: no-repeat color-mix(in srgb, Oklch(107.5% 0.4808 -231.2/0) 25%, oklab(0 -64.77% -0.0319)) } #i { color: color-mix(in srgb, currentcolor, lch(19.7  144.7351  154)); background: lch(33  149%  0.1turn/ 24.6%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0091\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#802449;background-color:#ff00003f\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff84a9\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#805b55;background-color:#b700273f\"", style_of("i"));
     prep("body { color: unset; background: url(x.png) lch( 87.854 88 7rad ) } #o { color: lab(46.8% -160 33.5); background-color: currentColor } #i { color: color-mix(in srgb, currentcolor 47%, hwb(262 0% 35% / 0)); background-color: hwb(31 40.03% 9%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffa172;background-image:url(x.png)\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00942c;background-color:#00942c\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00942c78;background-color:#e8a966\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffd2c3;background-image:url(x.png)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#007a53;background-color:#007a53\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#007a5378;background-color:#e8a966\"", style_of("i"));
     prep("body { color: rgb(98% 93% 49.7%); background-color: currentColor } #o { color: lab(65.9 97.3% 113.47% / 42.38%); background-color: currentcolor } #i { color: currentColor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#faed7f;background-color:#faed7f\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00006c;background-color:#ff00006c\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00006c\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff75696c;background-color:#ff75696c\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff75696c\"", style_of("i"));
     prep("body { background-color: color-mix(in srgb, currentColor, hwb(137.875deg 95 100%)) } #o { color: color-mix(in srgb, color( a98-rgb 0 0 0.978/ 0) 100%, LAB(21  -1%  -83.3054)); background: no-repeat lab(87.41% -20.8% -160/0.5) } #i { color: rgb(95 29 65 / 24%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#3e3e3e\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#00f7ff80;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000000;background-color:#99edff80;background-repeat:no-repeat\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#5f1d413d\"", style_of("i"));
     prep("#o { color: oklch(2.5e-2	0.0867	241) } #i { color: lch(49.05%px -0.43% 554); background-color: color-mix(in srgb, lab(68.91% -49.78% 1E-1 / 12%), lch(65%	11.66%	-497.0379)) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-}
-
-static void test_l101_paint_68(void) {
     prep("body { color: unset; background-color: currentcolor } #o { color: currentcolor } #i { color: inherit }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_66(void) {
     prep("body { background-color: oklch(0 0 205.02) } #o { color: inherit } #i { color: lch(51 66.21% 0.5turn 1); background-color: oklab(-9% -0.4271 -0.3960) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000091\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
     prep("body { color: currentcolor } #o { color: currentColor; background: no-repeat color(srgb-linear 0.2 0 0.821) } #i { color: oklch(0 0 435.626deg) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#7c00ea;background-repeat:no-repeat\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     prep("body { background-color: lab(46.85 -45 -159) } #o { color: lch(45 138 5.5rad / 1 / 1) } #i { color: color( rec2020  0.18  -1  23.7%); background-color: hsl(0.9437turn 49.3 22.68% / 0.9999) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0091ff\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#005c5c\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d40076;background-color:#561d31\"", style_of("i"));
-    prep("body { background-color: color-mix(in srgb, CURRENTCOLOR, lab(63 0 105.89)) } #o { color: color(srgb	19.72%	0.1	0.378); background-color: color-mix(in srgb, lch( +0.5 127 -32.703 ), CURRENTCOLOR 43.9%) } #i { background-color: color-mix(in srgb, red, color(rec2020 -101 +0.5 0.02)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#594b00\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#321a60;background-color:#450b64\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#808080\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#561d31\"", style_of("i"));
     prep("body { color: color-mix(in srgb, oklch( 0.421 0.2168 -0.83turn / 24% ), currentcolor) } #o { background: CURRENTCOLOR } #i { color: color-mix(in srgb, rgb(122, 289, 236), currentcolor); background-color: color-mix(in srgb, color(xyz 0.37 0 0), CURRENTCOLOR 60.9%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1d01009e\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#1d01009e\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#569e92ce;background-color:#a15863e1\"", style_of("i"));
-}
-
-static void test_l101_paint_69(void) {
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#180b009e\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#180b009e\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#55a292ce;background-color:#5d5a67e1\"", style_of("i"));
     prep("body { color: color-mix(in srgb, hsl(774.542deg, 36.2%, 21%), oklab(0.1369 0.0390 0.1881)); background-color: lab(21.342 -33.2% 11 /0.7619) } #o { color: hwb(176deg 70 16% /-0.5); background-color: color-mix(in srgb, oklch(1 0 0.25turn), hsl(0.25turn, 13.9286%, 78%)) } #i { color: color-mix(in srgb, oklch(0.3723 0 0.25turn), currentColor 12%) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#392311;background-color:#004021c2\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#2e2511;background-color:#003d25c2\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#b3d6d400;background-color:#e3e7df\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#404040e0\"", style_of("i"));
     prep("body { color: currentColor; background-color: color-mix(in srgb, CURRENTCOLOR, oklch(96%  0.0769  2.9turn)) } #o { background-color: oklch(2.5e-2 0 754.4deg) } #i { color: #d3e; background: url(x.png) color-mix(in srgb, currentcolor, hwb(606.6527deg 5% 50%)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#807080\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#807280\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#dd33ee\"", style_of("i"));
+}
+
+static void test_l101_paint_67(void) {
     prep("body { color: color( prophoto-rgb	0.3	0.3863	0.1); background: no-repeat oklab(0.797 -0.0723 -0.2681/18%) } #o { color: CURRENTCOLOR } #i { color: color(p3 -1% 0 0); background-color: color-mix(in srgb, hwb(-113.2deg 50% 10%), currentColor) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#587a00\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#587a00\"", style_of("o"));
@@ -1906,12 +1844,74 @@ static void test_l101_paint_69(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#5b7f70\"", style_of("i"));
     prep("body { background-color: khaki } #o { color: currentcolor; background: color(display-p3 0.8 0 38.15%) } #i { color: currentcolor }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#f0e68c\"", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#df0061\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#dc0062\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     prep("body { color: rgb(1,2,3 } #o { color: color-mix(in srgb, currentcolor 50%, lightpink) } #i { color: color-mix(in srgb, oklch(47.6%  0.0677  -334grad), currentcolor 40.9913%) }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#805b61\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#7c5646\"", style_of("i"));
+    prep("#o { background-color: #e10f6790 } #i { color: lab(75px -155 91) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#e10f6790\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    prep("body { background: url(x.png) color-mix(in srgb, Color( srgb  0.07  0  0.5352), oklch(0.4 0.0803 6.2832rad/ 0.5)) } #o { background-color: currentColor } #i { background-color: currentColor }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("i"));
+}
+
+static void test_l101_paint_68(void) {
+    prep("#o { color: color-mix(in srgb, hsl(781.1667grad 20.75% 69.5271% / 0.9999), CURRENTCOLOR 100%) } #i { color: color(srgb  0.85  0.0691  0.8/6%); background-color: color(prophoto-rgb  0.268  0.614  0) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d912cc0f;background-color:#00b300\"", style_of("i"));
+    prep("body { color: currentColor; background-color: oklch(0% 0.3074 256) } #o { color: color-mix(in srgb, #c5efdc96, currentcolor); background-color: color-mix(in srgb, color( srgb	99.5	0.7	0/3%), lch( 0 102% 720deg / 51.4% )) } #i { color: oklch(0px -7.6% 1.5708rad); background-color: color-mix(in srgb, currentColor, OKLCH(0 0 200grad)) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#495951ca;background-color:#2c0a0b45\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#202724e5\"", style_of("i"));
+    prep("body { color: currentColor; background: url(x.png) currentColor } #o { color: color-mix(in srgb, lch(98	7%	-236.5552grad), currentcolor 70.3484%); background: rgb(114 162 50 / 1.5) } #i { color: color( xyz-d65  0.36  0.1  0.9); background-color: color-mix(in srgb, #fed, CURRENTCOLOR 100%) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-image:url(x.png)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#464b46;background-color:#72a232\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ac00cd;background-color:#ac00cd\"", style_of("i"));
+    prep("body { color: lab( 105.71% 1e1 -0 / 0.2158 ); background-color: color-mix(in srgb, currentColor, color(xyz-d50	0.71	0.1	0.7715)) } #o { color: rgba(96%, 236, 253, 1) } #i { color: color(rec2020 0 0.229 0.08) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#6b005b\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f5ecfd\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00472a\"", style_of("i"));
+    prep("body { background-color: currentcolor } #o { color: lab(2.5e-2 125 -33.1%); background-color: color(prophoto-rgb, 1, 0.8511, 1) } #i { color: CURRENTCOLOR; background-color: lightsalmon }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#ffa07a\"", style_of("i"));
+    prep("body { color: color(prophoto-rgb 0.1 0.968 0.55/0.5); background-color: color(display-p3  0.993  0.773  0.4) } #o { color: oklab(0.314 0deg -0.2950); background: no-repeat #499 } #i { color: currentColor }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00edae80;background-color:#ffc251\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#449999;background-repeat:no-repeat\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+}
+
+static void test_l101_paint_69(void) {
+    prep("body { background-color: color( xyz 0.7623 0 1.6451) } #o { color: color-mix(in srgb, lch(101.73% 140.839 737.4736grad) 25%, color(display-p3 0.3 0.468 0.87 / 93%)); background-color: oklab(0  0.3820  -0.1157) } #i { color: currentColor }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#aa00a0\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#719cecf2;background-color:#000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#719cecf2\"", style_of("i"));
+    prep("body { background-color: color(xyz-d50  1.66  -1  0% /77%) } #o { color: color(srgb-linear 102% 0.41 0) } #i { color: CURRENTCOLOR; background-color: color(srgb-linear  0  0.537  0.77 / 0.5) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000c4\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffac00\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffac00;background-color:#00c2e380\"", style_of("i"));
+    prep("body { background: url(x.png) currentcolor } #o { color: unset } #i { color: color-mix(in srgb, magenta, currentcolor) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-image:url(x.png)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#800080\"", style_of("i"));
+    prep("#i { color: currentcolor; background-color: color-mix(in srgb, CURRENTCOLOR, rebeccapurple) }", 0);
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#331a4d\"", style_of("i"));
+    prep("body { background: url(x.png) currentcolor } #o { color: color-mix(in srgb, currentcolor 0%, color(display-p3	-1	-0	0.3)); background: url(x.png) black } #i { background-color: lab(30.59% -86.04 2.5e-2) }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000;background-image:url(x.png)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000;background-image:url(x.png)\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    prep("body { color: rgb(133, 185, 54.5); background-color: oklch( 0% 0.3131 359.1144 ) } #o { color: color(0.46 0.34 0.3025); background-color: color-mix(in srgb, currentColor 83.43%, hwb(4 26.9% 50%)) } #i { color: blue }", 0);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#85b937;background-color:#000000\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#84a639\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("i"));
 }
 
 int main(void) {

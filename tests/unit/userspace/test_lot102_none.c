@@ -62,7 +62,7 @@ static void test_l102_none_1(void) {
     TEST_ASSERT_EQUAL_STRING("#9e9e9e 255", rc("oklch(0.7 none 120)"));
     TEST_ASSERT_EQUAL_STRING("#d2849c 255", rc("oklch(0.7 0.1 none)"));
     TEST_ASSERT_EQUAL_STRING("#00ff00 255", rc("color(srgb none 1 0)"));
-    TEST_ASSERT_EQUAL_STRING("#008281 255", rc("color(display-p3 none 0.5 0.5)"));
+    TEST_ASSERT_EQUAL_STRING("#00807f 255", rc("color(display-p3 none 0.5 0.5)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(xyz none none none)"));
     TEST_ASSERT_EQUAL_STRING("#ff00ff 0", rc("color(srgb-linear 1 none 1 / none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("rgb(none, 0, 0)"));
@@ -89,12 +89,12 @@ static void test_l102_none_2(void) {
 static void test_l102_none_3(void) {
     TEST_ASSERT_EQUAL_STRING("-", rc("lab(none -7% 40% -119.501)"));
     TEST_ASSERT_EQUAL_STRING("#808080 0", rc("hsl(none none 50% /none)"));
-    TEST_ASSERT_EQUAL_STRING("#230000 255", rc("OKLCH(0 100% none)"));
-    TEST_ASSERT_EQUAL_STRING("#00fff9 0", rc("color(prophoto-rgb none 119.64% 1/none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("OKLCH(0 100% none)"));
+    TEST_ASSERT_EQUAL_STRING("#86ffef 0", rc("color(prophoto-rgb none 119.64% 1/none)"));
     TEST_ASSERT_EQUAL_STRING("#ff7acc 255", rc("hwb(323 48 none)"));
-    TEST_ASSERT_EQUAL_STRING("#ff00ac 255", rc("lab(66.937 118.09% none)"));
+    TEST_ASSERT_EQUAL_STRING("#ff7cb0 255", rc("lab(66.937 118.09% none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("rgb(none 0% none)"));
-    TEST_ASSERT_EQUAL_STRING("#002300 255", rc("lab(none -68.54 none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("lab(none -68.54 none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("lch(none none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hsl(none 73 13.3559% 39.9%)"));
     TEST_ASSERT_EQUAL_STRING("#cf4300 255", rc("rgb(206.9 67 none)"));
@@ -102,17 +102,17 @@ static void test_l102_none_3(void) {
 }
 
 static void test_l102_none_4(void) {
-    TEST_ASSERT_EQUAL_STRING("#005300 255", rc("color(rec2020 none 0.2478 none)"));
+    TEST_ASSERT_EQUAL_STRING("#004c17 255", rc("color(rec2020 none 0.2478 none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(xyz-d50 none none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lab(none 57 9 10 /-0.5)"));
     TEST_ASSERT_EQUAL_STRING("#00ff00 255", rc("RGB(none 300 none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color(none xyz-d50 0.8338 -1 1.86), color(none a98-rgb 0 2 0.084))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("rgb(none 204 116 93%)"));
-    TEST_ASSERT_EQUAL_STRING("#2e0000 0", rc("lab(none none 106.17 / none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("lab(none none 106.17 / none)"));
     TEST_ASSERT_EQUAL_STRING("#00d439 0", rc("rgb(none 83% 57/none)"));
-    TEST_ASSERT_EQUAL_STRING("#00e800 224", rc("color(xyz -0.835 none none/88%)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 224", rc("color(xyz -0.835 none none/88%)"));
     TEST_ASSERT_EQUAL_STRING("#000080 0", rc("rgb(none none 50%/none)"));
-    TEST_ASSERT_EQUAL_STRING("#ff1c00 0", rc("oklab(0.9 50% 0.4506 / none)"));
+    TEST_ASSERT_EQUAL_STRING("#ffd196 0", rc("oklab(0.9 50% 0.4506 / none)"));
     TEST_ASSERT_EQUAL_STRING("#ffadad 180", rc("hwb(none 68% none/70.55%)"));
 }
 
@@ -127,7 +127,7 @@ static void test_l102_none_5(void) {
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("hsl(172.115 117.24% none / 1)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color(srgb-linear 0 0.8413 0.48), oklch(none none none none))"));
     TEST_ASSERT_EQUAL_STRING("#4e8a00 255", rc("color(a98-rgb 39.12% 53.48% none)"));
-    TEST_ASSERT_EQUAL_STRING("#00cc00 66", rc("color-mix(in srgb, hwb(-327.7deg none none / 0), lab(65.9597 -112.2% 90.9% / 52%))"));
+    TEST_ASSERT_EQUAL_STRING("#00b54e 66", rc("color-mix(in srgb, hwb(-327.7deg none none / 0), lab(65.9597 -112.2% 90.9% / 52%))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("oklch(none 0.75 0 26.1051)"));
 }
 
@@ -136,7 +136,7 @@ static void test_l102_none_6(void) {
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, oklch(39.32%  0.0597  333), oklch(none none none none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, lab(none 148.5364 none), 0% color-mix(in srgb, rgb(1, 2), 50% color(srgb 0.0767 0.3648 none)))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, oklch(0 none 0.5turn /none), color(none xyz-d50 -0.28 0.3369 0.968))"));
-    TEST_ASSERT_EQUAL_STRING("#00169d 255", rc("color(xyz-d50 none none 0.241)"));
+    TEST_ASSERT_EQUAL_STRING("#000d0f 255", rc("color(xyz-d50 none none 0.241)"));
     TEST_ASSERT_EQUAL_STRING("#545454 0", rc("hsla(none none 32.99% /0)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(prophoto-rgb none none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, 5.3% color-mix(in srgb, color(display-p3 none 0.0164 0.36 / none), lime), color(xyz 1e1 none 0.823 /none))"));
@@ -150,9 +150,9 @@ static void test_l102_none_7(void) {
     TEST_ASSERT_EQUAL_STRING("-", rc("color(none srgb 76% 1.3786 0.475 / 50%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, hsl(none, 10%, 20%), oklch(0 none -134grad))"));
     TEST_ASSERT_EQUAL_STRING("#004b00 255", rc("color(srgb-linear none 0.07 none)"));
-    TEST_ASSERT_EQUAL_STRING("#00e000 255", rc("color(srgb-linear none 0.745 -0.489)"));
+    TEST_ASSERT_EQUAL_STRING("#9ac600 255", rc("color(srgb-linear none 0.745 -0.489)"));
     TEST_ASSERT_EQUAL_STRING("#ff0022 255", rc("hwb(352 none none)"));
-    TEST_ASSERT_EQUAL_STRING("#6d866f 102", rc("color-mix(in srgb, color(display-p3 -6.7% none 0.1 / none), rgb(217 134 194 / 0.4))"));
+    TEST_ASSERT_EQUAL_STRING("#6d8661 102", rc("color-mix(in srgb, color(display-p3 -6.7% none 0.1 / none), rgb(217 134 194 / 0.4))"));
     TEST_ASSERT_EQUAL_STRING("#00ff11 255", rc("hwb(124 none none);"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hsl(none, 10%, 20%)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color-mix(in srgb, black, 46% lab(0% none none))"));
@@ -173,31 +173,31 @@ static void test_l102_none_8(void) {
     TEST_ASSERT_EQUAL_STRING("-", rc("hsl(none -279 43.46% 19%)"));
     TEST_ASSERT_EQUAL_STRING("#225d1d 255", rc("color-mix(in srgb, hsl(168 none 23% /none), hwb(-244deg none 50))"));
     TEST_ASSERT_EQUAL_STRING("#0000c2 255", rc("rgba(none none 194);"));
-    TEST_ASSERT_EQUAL_STRING("#000078 255", rc("color-mix(in srgb, 49% color(xyz-d65 none none 0.863), black)"));
+    TEST_ASSERT_EQUAL_STRING("#000008 255", rc("color-mix(in srgb, 49% color(xyz-d65 none none 0.863), black)"));
 }
 
 static void test_l102_none_9(void) {
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("color(display-p3 none 0 none /none)"));
     TEST_ASSERT_EQUAL_STRING("#adff2f 255", rc("color-mix(in srgb, 76.569% greenyellow, rgb(none none none))"));
-    TEST_ASSERT_EQUAL_STRING("#004500 255", rc("color-mix(in srgb, hsl(-659.52 none none /1), color(prophoto-rgb none 0.418 none /1))"));
+    TEST_ASSERT_EQUAL_STRING("#003d00 255", rc("color-mix(in srgb, hsl(-659.52 none none /1), color(prophoto-rgb none 0.418 none /1))"));
     TEST_ASSERT_EQUAL_STRING("#555a57 191", rc("color-mix(in srgb, lab(3 none none), hwb(141.93 91.8% 3 /50%))"));
-    TEST_ASSERT_EQUAL_STRING("#050000 255", rc("oklab(none 0.1532 0.0886)"));
-    TEST_ASSERT_EQUAL_STRING("#00b200 0", rc("color(xyz-d50 0 0.232 none / none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("oklab(none 0.1532 0.0886)"));
+    TEST_ASSERT_EQUAL_STRING("#009152 0", rc("color(xyz-d50 0 0.232 none / none)"));
     TEST_ASSERT_EQUAL_STRING("#030000 0", rc("rgb(3 none none/none)"));
     TEST_ASSERT_EQUAL_STRING("#00ee5a 0", rc("RGB(none 238 90.3/none)"));
     TEST_ASSERT_EQUAL_STRING("#ffffff 128", rc("color-mix(in srgb, rgb(none none none/none), hsl(395.1 none 126.1% / 50%))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, hsl(717.613deg 55% none), hwb(none, 10%, 10%) 0%), oklch(none 0.2059 0/none))"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("hsl(none none none)"));
-    TEST_ASSERT_EQUAL_STRING("#7a000b 0", rc("color(xyz 0.0601 0 none / -0.5)"));
+    TEST_ASSERT_EQUAL_STRING("#2b0010 0", rc("color(xyz 0.0601 0 none / -0.5)"));
 }
 
 static void test_l102_none_10(void) {
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, Color(A98-rgb  0.8  2%  0), hsl(nonedeg 10% 10%))"));
-    TEST_ASSERT_EQUAL_STRING("#de2200 0", rc("lch(48.43% 136 60 /none)"));
-    TEST_ASSERT_EQUAL_STRING("#2d002e 255", rc("color-mix(in srgb, color-mix(in srgb, hsl(-121 68% 8.5), LCH(98 110% -389 / none) 79%) 22%, hsl(none none none / 1.5))"));
+    TEST_ASSERT_EQUAL_STRING("#d03f00 0", rc("lch(48.43% 136 60 /none)"));
+    TEST_ASSERT_EQUAL_STRING("#2d2d2e 255", rc("color-mix(in srgb, color-mix(in srgb, hsl(-121 68% 8.5), LCH(98 110% -389 / none) 79%) 22%, hsl(none none none / 1.5))"));
     TEST_ASSERT_EQUAL_STRING("-", rc(" hsla(235deg none none) x"));
     TEST_ASSERT_EQUAL_STRING("-", rc("oklch(none 0 0.0567 0.1turn /1.5)"));
-    TEST_ASSERT_EQUAL_STRING("#00565a 0", rc("color(rec2020 0.0156 0.2617 0.288/none)"));
+    TEST_ASSERT_EQUAL_STRING("#005152 0", rc("color(rec2020 0.0156 0.2617 0.288/none)"));
     TEST_ASSERT_EQUAL_STRING("#ff1717 0", rc("hwb(none 9% none / none)"));
     TEST_ASSERT_EQUAL_STRING("#280000 0", rc("RGB(40 none none/none)"));
     TEST_ASSERT_EQUAL_STRING("#ace3f2 255", rc("color-mix(in srgb, hwb(167 74 none), hwb(248 none none /none) 11%)"));
@@ -210,21 +210,21 @@ static void test_l102_none_11(void) {
     TEST_ASSERT_EQUAL_STRING("#000080 128", rc("rgb(none none 50%/0.5)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("hsla(0 51% none /0)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("color(xyz-d65 none none none/none)"));
-    TEST_ASSERT_EQUAL_STRING("#000800 255", rc("color-mix(in srgb, color-mix(in srgb, oklab(none -0.0162 0.2814 /none), hsl(143 -10.8% none)), oklch(0 none none))"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color-mix(in srgb, color-mix(in srgb, oklab(none -0.0162 0.2814 /none), hsl(143 -10.8% none)), oklch(0 none none))"));
     TEST_ASSERT_EQUAL_STRING("#6de570 255", rc("color-mix(in srgb, color(display-p3 0.552 0.889 0.4932), rgb(none none none))"));
-    TEST_ASSERT_EQUAL_STRING("#5c0000 0", rc("color(xyz 0 none -0.2161 / none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("color(xyz 0 none -0.2161 / none)"));
     TEST_ASSERT_EQUAL_STRING("#c800ff 255", rc("RGB(200 none 255)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, color(xyz none none none), RGB(none none -10)), oklch(none 0 0.3634 -427.1845))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, rgb(1 2 3 4), lab(16	-50	4.9))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("rgb(none 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, hsl(59 none 50%) 64%, oklch(none none none none))"));
-    TEST_ASSERT_EQUAL_STRING("#fe0091 0", rc("color(rec2020 0.78 0 0.503 / none)"));
+    TEST_ASSERT_EQUAL_STRING("#ec008e 0", rc("color(rec2020 0.78 0 0.503 / none)"));
 }
 
 static void test_l102_none_12(void) {
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc(" color(prophoto-rgb none none none);"));
     TEST_ASSERT_EQUAL_STRING("-", rc(" color(xyz-d50 none none none))"));
-    TEST_ASSERT_EQUAL_STRING("#795037 255", rc("color-mix(in srgb, hwb(-6.531rad 55 100%) 100%, 64% oklab(+0.5 none 0.3338))"));
+    TEST_ASSERT_EQUAL_STRING("#685c37 255", rc("color-mix(in srgb, hwb(-6.531rad 55 100%) 100%, 64% oklab(+0.5 none 0.3338))"));
     TEST_ASSERT_EQUAL_STRING("#c40000 255", rc("rgb(77% none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, oklch(0	0	-584.1063/0), hsl(none 29% 50% / none)), oklab(none 1 0.773 -0.4385))"));
     TEST_ASSERT_EQUAL_STRING("#000000 128", rc("hsl(none none none / 0.5)"));
@@ -239,21 +239,19 @@ static void test_l102_none_12(void) {
 static void test_l102_none_13(void) {
     TEST_ASSERT_EQUAL_STRING("-", rc("rgba(10, none, 0, 0.5)"));
     TEST_ASSERT_EQUAL_STRING("#1a2c2e 0", rc("hsla(-172.53deg 27.22% 14.2% /none)"));
-    TEST_ASSERT_EQUAL_STRING("#08009b 255", rc("color-mix(in srgb, color(a98-rgb 0 none 1.5 / none), oklab(none none -0.2195))"));
+    TEST_ASSERT_EQUAL_STRING("#1d0080 255", rc("color-mix(in srgb, color(a98-rgb 0 none 1.5 / none), oklab(none none -0.2195))"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("hsl(-35.2 91.3% none /none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, 53.1939% color-mix(in srgb, oklab(109.6% -0.4623 none), midnightblue), lab(50 none) 100%)"));
-    TEST_ASSERT_EQUAL_STRING("#00fff9 0", rc("color(xyz-d65 0.1425 0.5886 1 / none)"));
+    TEST_ASSERT_EQUAL_STRING("#00d7ce 0", rc("color(xyz-d65 0.1425 0.5886 1 / none)"));
     TEST_ASSERT_EQUAL_STRING("#f5d6da 255", rc("color-mix(in srgb, hsl(-7.101, 62%, 90.1%, 0.9999), hwb(none 8% none/0.7) 0%)"));
-    TEST_ASSERT_EQUAL_STRING("#96319f 255", rc("color-mix(in srgb, color(xyz-d65 0.43 none 0.9919), hsl(2.7558turn, 12.1795%, 22%, 0.9999))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, 0% hsl(none -388.39 0% 89.1%), 0% rgb(93.7 none none))"));
-    TEST_ASSERT_EQUAL_STRING("#000b00 0", rc("oklab(none none 0.1647/none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("oklab(none none 0.1647/none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(prophoto-rgb none 0 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("rgb(39% 0 none) x"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, color(xyz-d65  -0.659  0.9488  0) 25%, color(none xyz-d50 70.62% 0.81 0.2548)), rgba(42, 49, 171.6, 0.856) 50%)"));
 }
 
 static void test_l102_none_14(void) {
-    TEST_ASSERT_EQUAL_STRING("#00ffff 128", rc("color-mix(in srgb, color-mix(in srgb, hsla(none none 103%/-0.5), lch(90.9792 153.546 595.42deg)), LAB(8.2% -110.9% none) 0%)"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, color(xyz-d65  -0.659  0.9488  0) 25%, color(none xyz-d50 70.62% 0.81 0.2548)), rgba(42, 49, 171.6, 0.856) 50%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color(none rec2020 -0.477 0.9 0.417)"));
     TEST_ASSERT_EQUAL_STRING("#424242 255", rc("lab(28 none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color(none xyz 1 0.2 0.3147)"));
@@ -263,14 +261,14 @@ static void test_l102_none_14(void) {
     TEST_ASSERT_EQUAL_STRING("#d6d6d6 255", rc("lab(85.8% 0% none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("hsl(none none none / none)"));
     TEST_ASSERT_EQUAL_STRING("#14aa12 255", rc("color-mix(in srgb, hwb(475.5 14% 67%/none), lime)"));
-    TEST_ASSERT_EQUAL_STRING("#500059 255", rc("color-mix(in srgb, rgb(80 none none / none), color-mix(in srgb, 35% color(rec2020 2 -12% 1.033), lch(none none none)) 0%)"));
+    TEST_ASSERT_EQUAL_STRING("#505959 255", rc("color-mix(in srgb, rgb(80 none none / none), color-mix(in srgb, 35% color(rec2020 2 -12% 1.033), lch(none none none)) 0%)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("rgba(none 97 92%/0))"));
+    TEST_ASSERT_EQUAL_STRING("#fffbbf 128", rc("hwb(56 75 none /50%)"));
 }
 
 static void test_l102_none_15(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("rgba(none 97 92%/0))"));
-    TEST_ASSERT_EQUAL_STRING("#fffbbf 128", rc("hwb(56 75 none /50%)"));
     TEST_ASSERT_EQUAL_STRING("#f60306 128", rc("color-mix(in srgb, hwb(none none 36 /0.5), 100% rgb(246 3 6 / 0.5))"));
-    TEST_ASSERT_EQUAL_STRING("#ff7d00 0", rc("color(xyz-d50 0.9656 0.6 none /none)"));
+    TEST_ASSERT_EQUAL_STRING("#ffbc97 0", rc("color(xyz-d50 0.9656 0.6 none /none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color(none 1 0 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, lab(none 28.5 71.5894 -138.93/1.5) 25%, COLOR( Display-p3  1  0  0.9))"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("lch(0% none none)"));
@@ -279,118 +277,117 @@ static void test_l102_none_15(void) {
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color(prophoto-rgb none none none) 75.13%, color-mix(in srgb, lab(46% none 49 / none), hsl(-219.6416deg none 21%)))"));
     TEST_ASSERT_EQUAL_STRING("#800000 0", rc("rgb(50% none none/none)"));
     TEST_ASSERT_EQUAL_STRING("#300000 255", rc("hwb(none none 81)"));
+    TEST_ASSERT_EQUAL_STRING("#004340 212", rc("color(xyz-d50 none 0.1 0.6708 / 0.83)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("hwb(none 323 81 91%/0.5)"));
 }
 
 static void test_l102_none_16(void) {
-    TEST_ASSERT_EQUAL_STRING("#0080f6 212", rc("color(xyz-d50 none 0.1 0.6708 / 0.83)"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("hwb(none 323 81 91%/0.5)"));
     TEST_ASSERT_EQUAL_STRING("-", rc(" oklch(92.1% none none/none) x"));
     TEST_ASSERT_EQUAL_STRING("-", rc(" color(none srgb 0.607 0.1806 0.54 / 0);"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hwb(none 90deg 29% 19)"));
-    TEST_ASSERT_EQUAL_STRING("#00ffff 0", rc("oklab(1 -0.2742 none /0)"));
+    TEST_ASSERT_EQUAL_STRING("#ffffff 0", rc("oklab(1 -0.2742 none /0)"));
     TEST_ASSERT_EQUAL_STRING("#4f4f4f 255", rc("lch(33.7349 none 352) !important"));
     TEST_ASSERT_EQUAL_STRING("#b787dc 242", rc("color-mix(in srgb, rgb(183 135 181 / 0.9), color(srgb-linear none none 1.763))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hsl(none 240 4% 84.568%)"));
     TEST_ASSERT_EQUAL_STRING("#df0094 255", rc("rgb(223 0 148)"));
     TEST_ASSERT_EQUAL_STRING("#000000 128", rc(" lab(none none none /50%) !important"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, palegoldenrod, hsla(none 100% 29.5814%)), color-mix(in srgb, lch(-4.3% none none), 50% whitesmoke) 50%)"));
+    TEST_ASSERT_EQUAL_STRING("#ff2400 255", rc("hwb(728.55deg none none)"));
+    TEST_ASSERT_EQUAL_STRING("#3f7775 255", rc("color-mix(in srgb, color-mix(in srgb, color(a98-rgb	0.4	89%	0.8647), oklab(none 0.3606 none)), hsl(none -16.84% 49.1%))"));
 }
 
 static void test_l102_none_17(void) {
-    TEST_ASSERT_EQUAL_STRING("#ff2400 255", rc("hwb(728.55deg none none)"));
-    TEST_ASSERT_EQUAL_STRING("#467876 255", rc("color-mix(in srgb, color-mix(in srgb, color(a98-rgb	0.4	89%	0.8647), oklab(none 0.3606 none)), hsl(none -16.84% 49.1%))"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(xyz-d65 none 0 none)"));
-    TEST_ASSERT_EQUAL_STRING("#f8f2f9 255", rc("color-mix(in srgb, 16.51% ivory, color-mix(in srgb, hsl(91 none 96.76%), color(a98-rgb none 0.9072 1)))"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, lab(none 3 none/71%), 100% color-mix(in srgb, rgb(173 70 12 / 1.5), 14% rgb(none 21% 100% 100%)))"));
+    TEST_ASSERT_EQUAL_STRING("#f8eef1 255", rc("color-mix(in srgb, 16.51% ivory, color-mix(in srgb, hsl(91 none 96.76%), color(a98-rgb none 0.9072 1)))"));
     TEST_ASSERT_EQUAL_STRING("#ff0000 128", rc("hwb(none none none / 0.5)"));
-    TEST_ASSERT_EQUAL_STRING("#300600 255", rc("oklab(0.2 none 0.1558)"));
-    TEST_ASSERT_EQUAL_STRING("#000003 255", rc("color-mix(in srgb, oklch(none none 1.7turn/none) 36.47%, oklch(none 0.0705 631.49deg/120%))"));
+    TEST_ASSERT_EQUAL_STRING("#201400 255", rc("oklab(0.2 none 0.1558)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color-mix(in srgb, oklch(none none 1.7turn/none) 36.47%, oklch(none 0.0705 631.49deg/120%))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("rgb(none 0 0 none)"));
     TEST_ASSERT_EQUAL_STRING("#ff0000 255", rc("hwb(720deg none none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("LCH(none none none)"));
-    TEST_ASSERT_EQUAL_STRING("#ffa0f1 255", rc("oklab(0.98 0.2573 none)"));
-}
-
-static void test_l102_none_18(void) {
+    TEST_ASSERT_EQUAL_STRING("#ffeff7 255", rc("oklab(0.98 0.2573 none)"));
     TEST_ASSERT_EQUAL_STRING("#4f363b 255", rc("color-mix(in srgb, rgb(158 42% 117), hsl(720deg 50% none))"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("RGB(none none -10/none)"));
     TEST_ASSERT_EQUAL_STRING("#9d9595 128", rc("color-mix(in srgb, hsl(none 4.125% 60%), hsl(none 0% 50% /0))"));
+}
+
+static void test_l102_none_18(void) {
     TEST_ASSERT_EQUAL_STRING("#202020 255", rc("color-mix(in srgb, hsl(14.78deg 49% none), 25% hsl(none 0% 50%))"));
-    TEST_ASSERT_EQUAL_STRING("#ff0042 0", rc("color(xyz-d65 0.98 none none /none) "));
+    TEST_ASSERT_EQUAL_STRING("#a10052 0", rc("color(xyz-d65 0.98 none none /none) "));
     TEST_ASSERT_EQUAL_STRING("#ba4523 255", rc("color-mix(in srgb, color(rec2020 none none 0/1), hsl(none 45.8% 50%))"));
     TEST_ASSERT_EQUAL_STRING("#26000d 0", rc("lch(3.164 20.752 none /0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, lch(49% 126 none), lab(50 none)), color-mix(in srgb, rgba(16% 155 159.1), hwb(321 65% 43%)))"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("color-mix(in srgb, hsl(-332.8431 none 0% / 0), lch(none none 275 / none))"));
     TEST_ASSERT_EQUAL_STRING("#ffffff 255", rc("lch(105 none 0.75rad)"));
-    TEST_ASSERT_EQUAL_STRING("#71000c 255", rc("lch(none 120.396 none)"));
-    TEST_ASSERT_EQUAL_STRING("#b88bff 235", rc("color-mix(in srgb, color(display-p3 0.9801 0 none / 0.84), color(srgb-linear 0.2 1.61 1))"));
+    TEST_ASSERT_EQUAL_STRING("#180007 255", rc("lch(none 120.396 none)"));
+    TEST_ASSERT_EQUAL_STRING("#ff8bff 235", rc("color-mix(in srgb, color(display-p3 0.9801 0 none / 0.84), color(srgb-linear 0.2 1.61 1))"));
+    TEST_ASSERT_EQUAL_STRING("#aefacb 255", rc("color-mix(in srgb, limegreen 5%, hsl(145, 94%, 85%, 2))"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("rgb(nonee 0 0)"));
+    TEST_ASSERT_EQUAL_STRING("#180007 0", rc("LCH(none 119 none/none)"));
 }
 
 static void test_l102_none_19(void) {
-    TEST_ASSERT_EQUAL_STRING("#aefacb 255", rc("color-mix(in srgb, limegreen 5%, hsl(145, 94%, 85%, 2))"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("rgb(nonee 0 0)"));
-    TEST_ASSERT_EQUAL_STRING("#70000c 0", rc("LCH(none 119 none/none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(rec2020 none none none)"));
-    TEST_ASSERT_EQUAL_STRING("#f2000d 140", rc("color-mix(in srgb, lab(none 99.7% none / 0.1), color(xyz-d65 1.6924 0.22 none))"));
+    TEST_ASSERT_EQUAL_STRING("#ea6608 140", rc("color-mix(in srgb, lab(none 99.7% none / 0.1), color(xyz-d65 1.6924 0.22 none))"));
     TEST_ASSERT_EQUAL_STRING("#000000 128", rc("lch(none none 1.5708rad/50%)"));
     TEST_ASSERT_EQUAL_STRING("#130000 0", rc("RGB(19 0 none/none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, hsl(none 100% none /1), rgb(nonee 0 0))"));
     TEST_ASSERT_EQUAL_STRING("#000021 255", rc("rgba(none none 13%)"));
     TEST_ASSERT_EQUAL_STRING("#00f800 255", rc("color(srgb none 0.971 none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, hsl(-65.829 none 84.66%), hsla(120, 50%, 50%, none))"));
-    TEST_ASSERT_EQUAL_STRING("#0036f9 255", rc("color(xyz-d65 none 0 0.9)"));
+    TEST_ASSERT_EQUAL_STRING("#001011 255", rc("color(xyz-d65 none 0 0.9)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color-mix(in srgb, lab(none -124.8% none), lch(18.3 none 6.2832rad /none) 0%)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("hsl(none 355.3223 101% 100%/56%)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, 26.12% Oklab(none none none / none), color-mix(in srgb, oklab(0	-0.4316	-0.4969/67%), rgb(24 65 64 / 0.5)) 0%)"));
 }
 
 static void test_l102_none_20(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("hsl(none 355.3223 101% 100%/56%)"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, 26.12% Oklab(none none none / none), color-mix(in srgb, oklab(0	-0.4316	-0.4969/67%), rgb(24 65 64 / 0.5)) 0%)"));
     TEST_ASSERT_EQUAL_STRING("#fd5b4a 191", rc("color-mix(in srgb, color-mix(in srgb, hwb(none 16 none), lch(82.3366 25.36% -296.311deg/50%)), 0% RGB(none none 255))"));
-    TEST_ASSERT_EQUAL_STRING("#af0019 255", rc("lch(none 192 none)"));
-    TEST_ASSERT_EQUAL_STRING("#0027ea 0", rc(" lab(+0.5 none -150 / none) "));
+    TEST_ASSERT_EQUAL_STRING("#290011 255", rc("lch(none 192 none)"));
+    TEST_ASSERT_EQUAL_STRING("#00191b 0", rc(" lab(+0.5 none -150 / none) "));
     TEST_ASSERT_EQUAL_STRING("#f40000 128", rc("RGB(243.8 none none/50%)"));
-    TEST_ASSERT_EQUAL_STRING("#002a00 255", rc("oklab(none 0 0.3173)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("oklab(none 0 0.3173)"));
     TEST_ASSERT_EQUAL_STRING("#000063 0", rc("rgb(none none 99/none)"));
-    TEST_ASSERT_EQUAL_STRING("#330083 0", rc("oklab(0 0.4334 -0.4259 / none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("oklab(0 0.4334 -0.4259 / none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, 88% oklab(none 2% 0.2 0.1011), color(srgb 107.7% 1.0829 none /120%)) 25%, 25% hsla(714.1181grad 65% 50%))"));
     TEST_ASSERT_EQUAL_STRING("#ffffff 255", rc("lch(105% -4.3 0.25turn)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hwb(none -361deg 28% 14 / -0.5)"));
+    TEST_ASSERT_EQUAL_STRING("#333333 255", rc("oklch(0.323 0 none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("OKLAB(none 0 0.4132 /none)"));
 }
 
 static void test_l102_none_21(void) {
-    TEST_ASSERT_EQUAL_STRING("#333333 255", rc("oklch(0.323 0 none)"));
-    TEST_ASSERT_EQUAL_STRING("#004000 0", rc("OKLAB(none 0 0.4132 /none)"));
     TEST_ASSERT_EQUAL_STRING("#7d3333 255", rc("hwb(none 20 51)"));
     TEST_ASSERT_EQUAL_STRING("#984040 255", rc("color-mix(in srgb, hwb(none none 31%), gray)"));
     TEST_ASSERT_EQUAL_STRING("#4cb325 255", rc("color-mix(in srgb, 59.73% olive, hwb(-218.258 none none/none))"));
     TEST_ASSERT_EQUAL_STRING("#7c736c 0", rc("lch(49 6 -5.203rad / none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, lab(50 none), hwb(-2turn 48% 50%))"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(xyz 0 0 none)"));
-    TEST_ASSERT_EQUAL_STRING("#00ff00 0", rc("color(xyz-d50 0 0.7 none /none)"));
+    TEST_ASSERT_EQUAL_STRING("#00ec8d 0", rc("color(xyz-d50 0 0.7 none /none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("color(srgb-linear none none none /none)"));
-    TEST_ASSERT_EQUAL_STRING("#411900 171", rc("color-mix(in srgb, hsla(333 50% none), color(prophoto-rgb 0.92 0.4738 0.17 /0.34))"));
+    TEST_ASSERT_EQUAL_STRING("#41241a 171", rc("color-mix(in srgb, hsla(333 50% none), color(prophoto-rgb 0.92 0.4738 0.17 /0.34))"));
     TEST_ASSERT_EQUAL_STRING("#000045 255", rc("rgb(none none 27%)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("oklch(-0 0.0213 -1.73turn / none)"));
+    TEST_ASSERT_EQUAL_STRING("#ffadad 107", rc("hwb(none 68% none/0.42)"));
 }
 
 static void test_l102_none_22(void) {
-    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("oklch(-0 0.0213 -1.73turn / none)"));
-    TEST_ASSERT_EQUAL_STRING("#ffadad 107", rc("hwb(none 68% none/0.42)"));
-    TEST_ASSERT_EQUAL_STRING("#009069 206", rc("lab(45.7 -147.94 none/80.76%)"));
+    TEST_ASSERT_EQUAL_STRING("#007664 206", rc("lab(45.7 -147.94 none/80.76%)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("lab(none none none)"));
     TEST_ASSERT_EQUAL_STRING("#0c00ed 239", rc("color-mix(in srgb, color-mix(in srgb, hsla(0 none none / 87.28%), hsl(270 none none)) 0%, rgb(11.6 none 237 / none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color(xyz 0 0.7608 0.98/0.5), color-mix(in srgb, lab(18.78 -1 1e1 / none), rgb(none 91.52 62.9)))"));
     TEST_ASSERT_EQUAL_STRING("#0011a8 255", rc("color(display-p3 none 6.57% 0.63)"));
     TEST_ASSERT_EQUAL_STRING("-", rc(" lch(0.7 .5 none) x"));
-    TEST_ASSERT_EQUAL_STRING("#b600f1 255", rc("color-mix(in srgb, oklab(0.23 0.3508 -0.4425), lab(none 9999.9999 none/none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color(none xyz-d65 0.18 -0.1793 45.94%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color(none xyz 0.41 0.6491 0.31);"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hwb(none 149 4 12% /1)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc(" LAB(none 76 78.523 /none) !important"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("RGB(none none none)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, 0% hwb(none, 10%, 10%), lch(68.6616 none 2 /50%)) 31%, rgb(none 0))"));
 }
 
 static void test_l102_none_23(void) {
-    TEST_ASSERT_EQUAL_STRING("#560000 0", rc(" LAB(none 76 78.523 /none) !important"));
-    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("RGB(none none none)"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, 0% hwb(none, 10%, 10%), lch(68.6616 none 2 /50%)) 31%, rgb(none 0))"));
-    TEST_ASSERT_EQUAL_STRING("#4a7f40 255", rc("color-mix(in srgb, color(rec2020 0 -0.71 0.078), color(xyz-d50	0.1749	0.6	0.1148))"));
+    TEST_ASSERT_EQUAL_STRING("#007341 255", rc("color-mix(in srgb, color(rec2020 0 -0.71 0.078), color(xyz-d50	0.1749	0.6	0.1148))"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(xyz-d65 none none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, rgb(0.7 none none/120%) 25%, rgb(none, 0, 0))"));
     TEST_ASSERT_EQUAL_STRING("#6419bf 117", rc("color-mix(in srgb, red, 100% color-mix(in srgb, #6419bf83, 10.5993% rgb(none none none/0)))"));
@@ -399,26 +396,27 @@ static void test_l102_none_23(void) {
     TEST_ASSERT_EQUAL_STRING("-", rc("color(xyz none 0.7 none) x"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("color(xyz-d65 none none none/0) "));
     TEST_ASSERT_EQUAL_STRING("#ff0000 0", rc(" hwb(none none none /none)"));
-}
-
-static void test_l102_none_24(void) {
     TEST_ASSERT_EQUAL_STRING("#150202 255", rc("color-mix(in srgb, rgba(1 2 3) 83.1%, 25% hwb(none none 65% /none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, oklab(0  -0.0495  -0.3914/ 0), color-mix(in srgb, oklch(none 1E-1 none), rgba(10, none, 0, 0.5)))"));
     TEST_ASSERT_EQUAL_STRING("#ff0000 0", rc("hwb(none none none/none)"));
+}
+
+static void test_l102_none_24(void) {
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, hwb(none 30 4% 31%), Oklch(46% 0 none/none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc(" lab(0 0.89 none) x"));
     TEST_ASSERT_EQUAL_STRING("#ffffff 255", rc("lch(100% none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color(a98-rgb 0 0.1 0.437 / 50%), 75% color-mix(in srgb, lab(2 -102.69% -112.3), oklch(none 0.1088 none) 93.566%))"));
-    TEST_ASSERT_EQUAL_STRING("#db8796 255", rc("color-mix(in srgb, color(xyz-d65 none 0.098 none /none), hwb(none 59 14%))"));
+    TEST_ASSERT_EQUAL_STRING("#db7c96 255", rc("color-mix(in srgb, color(xyz-d65 none 0.098 none /none), hwb(none 59 14%))"));
     TEST_ASSERT_EQUAL_STRING("#9d0000 0", rc("color(srgb-linear 33.6% 0 none / none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("RGB(none 0% 183 14/1.5)"));
     TEST_ASSERT_EQUAL_STRING("#0e0505 0", rc("hsl(none 50% 3.6% / none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("color(rec2020 none none none / none)"));
+    TEST_ASSERT_EQUAL_STRING("#00810a 255", rc("color-mix(in srgb, #0d1 72%, 51.1918% oklab( 3.3% 0.2343 -0.0048 ))"));
+    TEST_ASSERT_EQUAL_STRING("#272e30 199", rc("color-mix(in srgb, 25% color-mix(in srgb, lightblue, hsla(none none 50%/0.563)), oklab(0 none none/none))"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, color(srgb-linear  -101  0.1003  0.83), oklch(none 0.34 0.2039 16) 100%), color-mix(in srgb, rebeccapurple, darkred))"));
 }
 
 static void test_l102_none_25(void) {
-    TEST_ASSERT_EQUAL_STRING("#272e30 199", rc("color-mix(in srgb, 25% color-mix(in srgb, lightblue, hsla(none none 50%/0.563)), oklab(0 none none/none))"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, color(srgb-linear  -101  0.1003  0.83), oklch(none 0.34 0.2039 16) 100%), color-mix(in srgb, rebeccapurple, darkred))"));
     TEST_ASSERT_EQUAL_STRING("#00ef00 0", rc("rgba(none 239 none / 0)"));
     TEST_ASSERT_EQUAL_STRING("#0000ff 255", rc("RGB(none none 255)"));
     TEST_ASSERT_EQUAL_STRING("#121212 0", rc("lch(5.32% none 355/none)"));
@@ -427,28 +425,28 @@ static void test_l102_none_25(void) {
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("lch(none none 0.34turn)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("hsl(none none -15% /none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(display-p3 none none none)"));
-    TEST_ASSERT_EQUAL_STRING("#ffd000 0", rc("lch(100% 123.502 -329.41grad / none)"));
+    TEST_ASSERT_EQUAL_STRING("#ffffff 0", rc("lch(100% 123.502 -329.41grad / none)"));
     TEST_ASSERT_EQUAL_STRING("#031300 255", rc("color(srgb 0.0103 0.0744 none)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("rgb(none 0 234.73 74)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("hsla(none none none)"));
 }
 
 static void test_l102_none_26(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("rgb(none 0 234.73 74)"));
-    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("hsla(none none none)"));
-    TEST_ASSERT_EQUAL_STRING("#00ff00 255", rc("color(prophoto-rgb 0 1 none /120%)"));
+    TEST_ASSERT_EQUAL_STRING("#00f575 255", rc("color(prophoto-rgb 0 1 none /120%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, color(none srgb-linear 0 0.3 0.7337 / 0.5), 0% hsl(none none 127%)), color(none 1 0 0) 0%)"));
-    TEST_ASSERT_EQUAL_STRING("#0030ff 0", rc("color(xyz-d50 none none 0.9 /none)"));
+    TEST_ASSERT_EQUAL_STRING("#002022 0", rc("color(xyz-d50 none none 0.9 /none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("Lch(none none -360.016)"));
     TEST_ASSERT_EQUAL_STRING("#658e00 255", rc(" color(a98-rgb 0.4458 0.55 none) "));
     TEST_ASSERT_EQUAL_STRING("#331a4d 255", rc("color-mix(in srgb, rebeccapurple, oklch(none 0.0060 12.06rad / none))"));
-    TEST_ASSERT_EQUAL_STRING("#006579 0", rc("color(display-p3 none 0.3871 0.4641 /none)"));
+    TEST_ASSERT_EQUAL_STRING("#006477 0", rc("color(display-p3 none 0.3871 0.4641 /none)"));
     TEST_ASSERT_EQUAL_STRING("#ffffff 138", rc("oklab(1 none none / 0.54) "));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("rgb(none -10 none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(xyz-d65 none none 0)"));
+    TEST_ASSERT_EQUAL_STRING("#2a2204 170", rc("color-mix(in srgb, #a815 50%, hsl(none none none))"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, 50% rgb(1 2 3 4), 70.4% color-mix(in srgb, oklab(2.5e-2 -0.2453 -0.2607) 47%, hsla(0turn 100% 91.9079% / 0)))"));
 }
 
 static void test_l102_none_27(void) {
-    TEST_ASSERT_EQUAL_STRING("#2a2204 170", rc("color-mix(in srgb, #a815 50%, hsl(none none none))"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, 50% rgb(1 2 3 4), 70.4% color-mix(in srgb, oklab(2.5e-2 -0.2453 -0.2607) 47%, hsla(0turn 100% 91.9079% / 0)))"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc(" color(srgb none none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, hwb(none, 10%, 10%), 50% lch(79.393 4.57% -76.3grad))"));
     TEST_ASSERT_EQUAL_STRING("#005d00 255", rc("color(a98-rgb 0.1812 0.366 none)"));
@@ -458,15 +456,15 @@ static void test_l102_none_27(void) {
     TEST_ASSERT_EQUAL_STRING("#aa0000 0", rc("color(srgb-linear 0.4 none none/none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color(srgb none none), color-mix(in srgb, hsla(120, 50%, 50%, none), hwb(2.2rad 50% 28)) 41.8295%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("oklch(none 0.25 0.1137 300 /1.5)"));
-    TEST_ASSERT_EQUAL_STRING("#009aff 255", rc("lab(61 none -92.35 /1)"));
+    TEST_ASSERT_EQUAL_STRING("#00a0ff 255", rc("lab(61 none -92.35 /1)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("LCH(none none none/none)"));
+    TEST_ASSERT_EQUAL_STRING("#9e5757 255", rc("hwb(none 34% 38%)"));
 }
 
 static void test_l102_none_28(void) {
-    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("LCH(none none none/none)"));
-    TEST_ASSERT_EQUAL_STRING("#9e5757 255", rc("hwb(none 34% 38%)"));
     TEST_ASSERT_EQUAL_STRING("#0d0d0d 255", rc("color-mix(in srgb, oklch(0.216  0  564.62), color-mix(in srgb, hsl(none none none / none), Oklch(none 0.1774 467.09deg/none)))"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("hsla(none none none /none)"));
-    TEST_ASSERT_EQUAL_STRING("#190000 0", rc("oklch(none 0.3187 12.7rad /none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("oklch(none 0.3187 12.7rad /none)"));
     TEST_ASSERT_EQUAL_STRING("#40e0d0 255", rc("color-mix(in srgb, hwb(117 none none / 17%), turquoise 100%)"));
     TEST_ASSERT_EQUAL_STRING("#300000 255", rc("hwb(none none 81%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color(srgb none none), hsla(none none none))"));
@@ -474,130 +472,131 @@ static void test_l102_none_28(void) {
     TEST_ASSERT_EQUAL_STRING("#ff0000 194", rc("hwb(none none none /76%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hsl(nonedeg 10% 10%)"));
     TEST_ASSERT_EQUAL_STRING("#a64f00 0", rc("color(srgb 0.65 0.31 0 /none)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("oklab(none 0.396 0 -0.3246/63%)"));
+    TEST_ASSERT_EQUAL_STRING("#7b7b7b 255", rc("lch(51.81% none 287.2235deg) !important"));
 }
 
 static void test_l102_none_29(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("oklab(none 0.396 0 -0.3246/63%)"));
-    TEST_ASSERT_EQUAL_STRING("#7b7b7b 255", rc("lch(51.81% none 287.2235deg) !important"));
-    TEST_ASSERT_EQUAL_STRING("#008100 0", rc("color(a98-rgb none 0.5 none / none)"));
+    TEST_ASSERT_EQUAL_STRING("#00782b 0", rc("color(a98-rgb none 0.5 none / none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color(xyz-d65 none none none), color-mix(in srgb, 50% hsla(0.1turn 43% 43% / 99.99%), 41.5% rgb(none 67% none)))"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("hsl(60 none none)"));
     TEST_ASSERT_EQUAL_STRING("#255834 255", rc("color-mix(in srgb, hwb(-222.2 29 31% /none), hsl(552.2371 none none / 1))"));
-    TEST_ASSERT_EQUAL_STRING("#006caa 191", rc("color-mix(in srgb, hsl(100grad 51 0 / 50%), color-mix(in srgb, color(xyz-d65 none none none /none), lab(67.85% 22 -114.5822)))"));
-    TEST_ASSERT_EQUAL_STRING("#34b979 191", rc("color-mix(in srgb, color(a98-rgb 0 98.8% none), rgb(60.9% 50.1 121.01 / 0.5))"));
+    TEST_ASSERT_EQUAL_STRING("#4177aa 191", rc("color-mix(in srgb, hsl(100grad 51 0 / 50%), color-mix(in srgb, color(xyz-d65 none none none /none), lab(67.85% 22 -114.5822)))"));
+    TEST_ASSERT_EQUAL_STRING("#34ac79 191", rc("color-mix(in srgb, color(a98-rgb 0 98.8% none), rgb(60.9% 50.1 121.01 / 0.5))"));
     TEST_ASSERT_EQUAL_STRING("#828282 255", rc("hsl(-1.577deg none 51%)"));
     TEST_ASSERT_EQUAL_STRING("#12e800 255", rc("rgb(18 91% none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lch(none 50 0% 4.8rad)"));
+    TEST_ASSERT_EQUAL_STRING("#46001e 255", rc("color(xyz-d65 0.156 none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hsl(none 472.995 88.628% 100%)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, hsla(120, 50%, 50%, none), lab(92.9178 none none) 64%)"));
 }
 
 static void test_l102_none_30(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, hsla(120, 50%, 50%, none), lab(92.9178 none none) 64%)"));
     TEST_ASSERT_EQUAL_STRING("#000e40 255", rc("hwb(227 none 75)"));
     TEST_ASSERT_EQUAL_STRING("#a6ff00 255", rc("rgba(166 100% none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, 23.2489% hsla(306.9, 59%, 41%, 150%), hwb(none none 59%/none)), hsl(none none 0.15% / none))"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("color-mix(in srgb, rgb(99 105 153 / 0), hwb(36 11% 77%/none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color(none xyz-d65 0 0.431 0.87 /120%)"));
     TEST_ASSERT_EQUAL_STRING("#00b580 255", rc("RGB(none 181 50%)"));
-    TEST_ASSERT_EQUAL_STRING("#b74f4f 255", rc("color-mix(in srgb, hsl(-114.748 none 31% / 1) 40.9%, color(xyz 0.514 none none))"));
+    TEST_ASSERT_EQUAL_STRING("#684f4f 255", rc("color-mix(in srgb, hsl(-114.748 none 31% / 1) 40.9%, color(xyz 0.514 none none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hwb(none, 10%, 10%)"));
     TEST_ASSERT_EQUAL_STRING("#6c9359 68", rc("color-mix(in srgb, #1142, 36% color-mix(in srgb, rgb(204.42 none none/0.5), 96.5% color(srgb-linear 0.3 0.64 0.123 /none)))"));
     TEST_ASSERT_EQUAL_STRING("#e700a8 128", rc("RGB(231 none 66% /0.5)"));
     TEST_ASSERT_EQUAL_STRING("#aaaaa0 191", rc("color-mix(in srgb, ivory, 50% hsl(none 50% none /50%))"));
+    TEST_ASSERT_EQUAL_STRING("#e1e1e1 255", rc("oklch(90.98% 0 -0.8turn)"));
 }
 
 static void test_l102_none_31(void) {
-    TEST_ASSERT_EQUAL_STRING("#e1e1e1 255", rc("oklch(90.98% 0 -0.8turn)"));
     TEST_ASSERT_EQUAL_STRING("-", rc(" oklch(10% none 667.126deg /0) x"));
-    TEST_ASSERT_EQUAL_STRING("#990015 255", rc("color(xyz-d50 10.1% none none)"));
+    TEST_ASSERT_EQUAL_STRING("#23000e 255", rc("color(xyz-d50 10.1% none none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 161", rc("color(display-p3 none none none/0.63)"));
     TEST_ASSERT_EQUAL_STRING("#8afffb 128", rc("hwb(-182deg 54% none/0.5)"));
     TEST_ASSERT_EQUAL_STRING("#959595 255", rc("oklab(67% 0 none)"));
-    TEST_ASSERT_EQUAL_STRING("#fed8fc 191", rc("color-mix(in srgb, oklch( 1 0.2192 -399deg ), hsla(1turn 56.6% 98% / 0.5))"));
+    TEST_ASSERT_EQUAL_STRING("#fefcfc 191", rc("color-mix(in srgb, oklch( 1 0.2192 -399deg ), hsla(1turn 56.6% 98% / 0.5))"));
     TEST_ASSERT_EQUAL_STRING("#761173 85", rc("color-mix(in srgb, oklab(0.9 -0.61 none/0) 33%, rgb(118 17 115 / 50%))"));
-    TEST_ASSERT_EQUAL_STRING("#160000 255", rc("color-mix(in srgb, oklch(none 114.2% none), color(xyz-d50 0 none none))"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color-mix(in srgb, oklch(none 114.2% none), color(xyz-d50 0 none none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, lab(none 56 -82.3% -68.08%), oklab(none -0.1004 none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hwb(none 31 9 40)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("RGB(none 68% 183 64%)"));
+    TEST_ASSERT_EQUAL_STRING("#7d7d7d 0", rc("hwb(none 87% 90% /none)"));
 }
 
 static void test_l102_none_32(void) {
-    TEST_ASSERT_EQUAL_STRING("#7d7d7d 0", rc("hwb(none 87% 90% /none)"));
     TEST_ASSERT_EQUAL_STRING("#2f9b29 232", rc("color-mix(in srgb, rgb(none 152.18 5%), #2fa6ada4 25%)"));
     TEST_ASSERT_EQUAL_STRING("#7abfff 0", rc("hwb(209 48% none/none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hsla(none 720deg 100% 100%))"));
     TEST_ASSERT_EQUAL_STRING("#ff1c1c 255", rc("hwb(none 11% none /1)"));
-    TEST_ASSERT_EQUAL_STRING("#247743 173", rc("color-mix(in srgb, oklab(none none 0.4407), 50% color-mix(in srgb, transparent 64%, hsl(3.1416rad, 96%, 76%)))"));
+    TEST_ASSERT_EQUAL_STRING("#244343 173", rc("color-mix(in srgb, oklab(none none 0.4407), 50% color-mix(in srgb, transparent 64%, hsl(3.1416rad, 96%, 76%)))"));
     TEST_ASSERT_EQUAL_STRING("#00ff17 255", rc("RGB(none 100% 9%)"));
-    TEST_ASSERT_EQUAL_STRING("#a60039 255", rc("color(a98-rgb none -0.98 none /1.5) "));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(a98-rgb none -0.98 none /1.5) "));
     TEST_ASSERT_EQUAL_STRING("#8000ed 255", rc("color(display-p3 0.4573 none 0.893)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hsla(120, 50%, 50%, none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, lab(50 none), 100% color-mix(in srgb, hwb(30 none none / none), lab(89.15  -99.4371  -30.336)))"));
     TEST_ASSERT_EQUAL_STRING("#8c8c8c 0", rc("hsl(329 none 55% / none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("oklab(none 0.1902 -0.4036)"));
 }
 
 static void test_l102_none_33(void) {
-    TEST_ASSERT_EQUAL_STRING("#300081 255", rc("oklab(none 0.1902 -0.4036)"));
     TEST_ASSERT_EQUAL_STRING("#ffffff 0", rc("lch(100% none 360 / none)"));
     TEST_ASSERT_EQUAL_STRING("#532b2b 255", rc(" hsl(none 31% 24.7%) !important"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(a98-rgb none none -0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, oklch(none none none none) 50%, 70% RGB(100% none 255 /none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, khaki, lab(none 0 50% -7))"));
     TEST_ASSERT_EQUAL_STRING("-", rc(" rgb(59.1 none none))"));
-    TEST_ASSERT_EQUAL_STRING("#007800 255", rc("color(xyz none 0.1 none)"));
+    TEST_ASSERT_EQUAL_STRING("#006334 255", rc("color(xyz none 0.1 none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, RGB(none none none/none), rgb(none 0 0 / none / 1) 100%)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("hsla(122.5deg 31.9716% none)"));
-    TEST_ASSERT_EQUAL_STRING("#00ff01 255", rc("color-mix(in srgb, color(display-p3 -13% none 0) 100%, hwb(108 none none))"));
+    TEST_ASSERT_EQUAL_STRING("#00ff00 255", rc("color-mix(in srgb, color(display-p3 -13% none 0) 100%, hwb(108 none none))"));
     TEST_ASSERT_EQUAL_STRING("#ffeded 255", rc("hwb(none 93 none)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, rgb(none 0) 82.68%, oklab(none none -0.3372/none))"));
 }
 
 static void test_l102_none_34(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, rgb(none 0) 82.68%, oklab(none none -0.3372/none))"));
     TEST_ASSERT_EQUAL_STRING("#e0fffc 255", rc("lab(99.335 -13.8 none)"));
-    TEST_ASSERT_EQUAL_STRING("#000300 255", rc("oklch(none 0.2219 205grad)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("oklch(none 0.2219 205grad)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, lab(50 none), rgba(10, none, 0, 0.5))"));
     TEST_ASSERT_EQUAL_STRING("#0d1a00 255", rc("hwb(90deg none 90%/120%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, 77% color-mix(in srgb, lab(none 61.825 151.866 -87.2%), #6a90ea), lch(41.39% 205.6 103 / 1) 100%)"));
-    TEST_ASSERT_EQUAL_STRING("#663c11 255", rc("color-mix(in srgb, lab(7.33	34%	134), #772)"));
+    TEST_ASSERT_EQUAL_STRING("#4b4311 255", rc("color-mix(in srgb, lab(7.33	34%	134), #772)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("oklab(none 0 none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("hsl(-60deg 75.5% none/none)"));
     TEST_ASSERT_EQUAL_STRING("#000065 255", rc("rgb(none none 101)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("oklch(0 none none);"));
     TEST_ASSERT_EQUAL_STRING("#009100 0", rc("RGB(none 145.2 none /none)"));
+    TEST_ASSERT_EQUAL_STRING("#00c500 0", rc("rgb(none 197 none / none)"));
 }
 
 static void test_l102_none_35(void) {
-    TEST_ASSERT_EQUAL_STRING("#00c500 0", rc("rgb(none 197 none / none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, 85% color-mix(in srgb, color(prophoto-rgb 0 0.2 0.02), #e6b0), color-mix(in srgb, 24.1% hsla(30 none 74.4215%/1.5), oklch(none none none none)))"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color-mix(in srgb, oklab(none 0 none /none), hsl(none none none))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("oklch(none none none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hwb(none 239 58 20)"));
     TEST_ASSERT_EQUAL_STRING("#ffaa4b 255", rc("color-mix(in srgb, rgb(100% 180 27% / none) 50%, rgb(none 63% 82))"));
     TEST_ASSERT_EQUAL_STRING("#ffae00 128", rc("rgb(100% 174 none/0.5)"));
-    TEST_ASSERT_EQUAL_STRING("#11c0c4 255", rc("color-mix(in srgb, color(rec2020	0.493	0.8	1.6953), #2a8)"));
+    TEST_ASSERT_EQUAL_STRING("#69c4c4 255", rc("color-mix(in srgb, color(rec2020	0.493	0.8	1.6953), #2a8)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("color(prophoto-rgb none none none /none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("RGB(56% none 24% / none) x"));
     TEST_ASSERT_EQUAL_STRING("#e00000 255", rc("rgba(224.14 none none)"));
-    TEST_ASSERT_EQUAL_STRING("#007600 255", rc("color(xyz-d50 none 0.094 none)"));
+    TEST_ASSERT_EQUAL_STRING("#006032 255", rc("color(xyz-d50 none 0.094 none)"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color(rec2020 0.5 0.3927 none), hsl(nonedeg 10% 10%))"));
 }
 
 static void test_l102_none_36(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color(rec2020 0.5 0.3927 none), hsl(nonedeg 10% 10%))"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("lab(none none none / none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("hsla(31 42% none)"));
-    TEST_ASSERT_EQUAL_STRING("#cba000 0", rc("color(rec2020 0.697 0.6 none / none)"));
+    TEST_ASSERT_EQUAL_STRING("#c9a100 0", rc("color(rec2020 0.697 0.6 none / none)"));
     TEST_ASSERT_EQUAL_STRING("#1a0000 128", rc("RGB(26.09 none none/0.5)"));
-    TEST_ASSERT_EQUAL_STRING("#ba0000 255", rc("color(xyz-d50 none none -1)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("color(xyz-d50 none none -1)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, hwb(none, 10%, 10%), hsla(none 180 19.98% 36.22% / -0.5))"));
     TEST_ASSERT_EQUAL_STRING("#737373 128", rc("hsla(none 0% 45%/50%)"));
     TEST_ASSERT_EQUAL_STRING("#ff0049 0", rc(" hwb(702.87deg none none/none);"));
     TEST_ASSERT_EQUAL_STRING("#004042 0", rc("RGB(none 64.15 26%/0)"));
     TEST_ASSERT_EQUAL_STRING("#0000a6 255", rc("rgb(none none 166/1.5)"));
     TEST_ASSERT_EQUAL_STRING("#79829c 255", rc("color-mix(in srgb, hwb(-495.6 8% 65 /none), hsl(210 none 87%))"));
+    TEST_ASSERT_EQUAL_STRING("#c200bb 255", rc("color(rec2020 0.62 none 71.6%)"));
 }
 
 static void test_l102_none_37(void) {
-    TEST_ASSERT_EQUAL_STRING("#cd00c7 255", rc("color(rec2020 0.62 none 71.6%)"));
     TEST_ASSERT_EQUAL_STRING("#d10000 255", rc("color(a98-rgb 0.7 none 0)"));
     TEST_ASSERT_EQUAL_STRING("#405d00 0", rc("color(srgb 0.25 0.3641 none /0)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("hsl(93 67% none/none)"));
@@ -605,40 +604,41 @@ static void test_l102_none_37(void) {
     TEST_ASSERT_EQUAL_STRING("#00ff04 255", rc("hwb(121 none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("oklab(none 93.9% 1E-1 0.2115 / 1.5);"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("lch(none none 553.1deg)"));
-    TEST_ASSERT_EQUAL_STRING("#1a0000 0", rc("lab(none none 39 / none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("lab(none none 39 / none)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("hsla(none none none/-0.5)"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("color(xyz-d50 0 none none / 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, color(none display-p3 0.31 0.7 0.884), color(srgb 9.2% 0.1 -0.064)), color-mix(in srgb, hwb(none none none/-0.5), oklab(none none none)))"));
+    TEST_ASSERT_EQUAL_STRING("#007cb5 0", rc("hwb(199 none 29/none)"));
 }
 
 static void test_l102_none_38(void) {
-    TEST_ASSERT_EQUAL_STRING("#007cb5 0", rc("hwb(199 none 29/none)"));
     TEST_ASSERT_EQUAL_STRING("#0e0000 255", rc("RGB(14 none none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, rgb(160 none 45%) 0%, lab(106.6% 2.5e-2 -72.52%))"));
     TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in srgb, color-mix(in srgb, rgb(nonee 0 0), 100% color( xyz-d50  0.72  0.4656  10%)), color-mix(in srgb, hsl(209 75% 68%), lch(-0 +0.5 8.983rad)))"));
-    TEST_ASSERT_EQUAL_STRING("#007500 64", rc("color-mix(in srgb, color-mix(in srgb, 25% oklch(none 16% none), 0% lightgrey), color(prophoto-rgb none 0.8 none/none))"));
+    TEST_ASSERT_EQUAL_STRING("#006700 64", rc("color-mix(in srgb, color-mix(in srgb, 25% oklch(none 16% none), 0% lightgrey), color(prophoto-rgb none 0.8 none/none))"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("RGB(none -10 none/1)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("hsl(60.94deg 86.975% none) x"));
     TEST_ASSERT_EQUAL_STRING("#000000 255", rc("oklch(none none 1.543rad)"));
     TEST_ASSERT_EQUAL_STRING("#ff00ff 0", rc("hwb(-60deg none none / none)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("oklch(1e1 none 16grad)"));
     TEST_ASSERT_EQUAL_STRING("#150303 255", rc("hsl(none 72% 4.7%)"));
-    TEST_ASSERT_EQUAL_STRING("#00f100 0", rc(" color(display-p3 none 93% none /none);"));
+    TEST_ASSERT_EQUAL_STRING("#00ea22 0", rc(" color(display-p3 none 93% none /none);"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("hwb(none -60deg 89% 95%)"));
 }
 
 static void test_l102_none_39(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("hwb(none -60deg 89% 95%)"));
-    TEST_ASSERT_EQUAL_STRING("#00fc00 54", rc("color(xyz-d50 none 0.51 none/21%)"));
+    TEST_ASSERT_EQUAL_STRING("#00cd79 54", rc("color(xyz-d50 none 0.51 none/21%)"));
     TEST_ASSERT_EQUAL_STRING("#f87a00 255", rc("rgb(248 48% none)"));
-    TEST_ASSERT_EQUAL_STRING("#010000 0", rc("oklch(0 0.0892 none/0)"));
-    TEST_ASSERT_EQUAL_STRING("#00ffff 0", rc("Oklch(97.1% 0.3962 564.7deg /none)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 0", rc("oklch(0 0.0892 none/0)"));
+    TEST_ASSERT_EQUAL_STRING("#bbffff 0", rc("Oklch(97.1% 0.3962 564.7deg /none)"));
     TEST_ASSERT_EQUAL_STRING("#360070 128", rc("hwb(269 none 56% / 0.5)"));
-    TEST_ASSERT_EQUAL_STRING("#00a800 255", rc(" color(prophoto-rgb none 0.5307 none) !important"));
+    TEST_ASSERT_EQUAL_STRING("#009540 255", rc(" color(prophoto-rgb none 0.5307 none) !important"));
     TEST_ASSERT_EQUAL_STRING("#000000 0", rc("hsl(271 14.67% -17.6% / none)"));
     TEST_ASSERT_EQUAL_STRING("#9d2559 0", rc("lch(36.7904 51.95 none /none)"));
     TEST_ASSERT_EQUAL_STRING("#e0ce00 0", rc("hwb(55 none 12% / none)"));
     TEST_ASSERT_EQUAL_STRING("#aeca91 187", rc("color-mix(in srgb, lab(91.9% -14.2% 57.086) 48.4%, color-mix(in srgb, slategray, RGB(16% none 300 / 1)) 25%)"));
     TEST_ASSERT_EQUAL_STRING("-", rc(" hwb(206 2 98 /-0.5))"));
+    TEST_ASSERT_EQUAL_STRING("-", rc("oklch(none 0 0 72.03grad /-0.5)"));
 }
 
 static void test_l102_none_40(void) {
@@ -652,53 +652,53 @@ static void test_l102_none_40(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(0, 128, 0)", ip("color(display-p3 none 0 0)", "lime", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(128, 128, 128)", ip("lab(none 0 0)", "white", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 0, 0)", ip("color-mix(in srgb, rgb(none 0 0), rgb(none 0 0))", "red", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(40, 0, 0, 0.5001)", ip("hwb(-181.8grad 95.4% 79%)", "oklab(none 0.4031 0.0604 /0.5)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(187, 128, 126)", ip("hwb(none none none / 1)", "lab(99.732 -49.381 none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(119, 119, 119, 0.5)", ip("rgb(none 16% none/0)", "lab(50% none none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(33, 67, 57)", ip("color-mix(in srgb, color(srgb none 0.7474 none), oklab(0.43  0  -0.0633))", "oklch(none none -318.8035deg/none)", 5000, 2));
 }
 
 static void test_l102_none_41(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 0, 0, 0.0001)", ip("hwb(none none none)", "oklch(none none 211 / 0)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(153, 238, 153, 0.1951)", ip("color-mix(in srgb, transparent, 35% #9e9d)", "hsl(none 0% none / 0)", 3568, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("hwb(-441 0% 57.67% / 0)", "color-mix(in srgb, color-mix(in srgb, oklch(100% none none / 0) 25%, white 0%) 16%, 50% rgb(160.4 -10 43%/none))", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 189)", ip("color(srgb-linear -0.7 0 none)", "hwb(210 75.07% 26 / 120%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("hsla(214 none 0% / none)", "lab(none none -51.2 /none)", 6313, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(49, 27, 4)", ip("color-mix(in  srgb, black, hwb(-1turn 0% 62.8%))", "hsla(96 75% 24% / 150%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 92, 29)", ip("oklab(none none none)", "rgb(none 234.61 29%)", 3934, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(135, 152, 186)", ip("antiquewhite", "color-mix(in srgb, 50% hwb(281 104% 90.84% / 120%), #8ae)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(199, 0, 184, 0.805)", ip("color(xyz-d65 0.8 none 0.59 /74%)", "rgb(29% none 120)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(34, 52, 59)", ip("hsla(-3.8deg 75% none)", "color-mix(in srgb,100% skyblue,hwb(-602.3 99.58% 82% /120%))", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("hsl(none 91% none)", "color(xyz-d50 none none none)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(136, 136, 136)", ip("hwb(236 100% 88.1%)", "color(srgb-linear 0.35 none 0.4 / none)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(85, 85, 85, 0.2501)", ip("color(xyz-d50 none -0 0)", "color-mix(in	srgb, hwb(-278.117grad 50% 100% /50%) 50%, hsl(-1.9turn 0% 0 / 100%) 0%)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(91, 43, 90, 0.8504)", ip("hwb(-268.8551grad 19.6% 79%/85.04%)", "hsla(300 90.6127% 43.6%/none)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 191, 151)", ip("color(xyz-d50 0 0.938 0.32)", "oklch(none 0 35.91deg)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklch(none 0 none)", "color(a98-rgb none 0 none)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 191, 0)", ip("rgba(none 100% none)", "lch(none none none)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("rgb(none none none /none)", "color(rec2020 none none none / none)", 7578, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 203, 0)", ip("lch(none none 329)", "color(xyz none 50% none /none)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(32, 0, 37)", ip("oklch(none 0.1745 36.9545grad/none)", "rgb(50% none 147)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(72, 74, 0)", ip("hwb(-284.6 72% 24%)", "color-mix(in srgb, 29% rgb(98% 100% none), oklch(0  0.2578  221 / 120%))", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 44, 37)", ip("color(rec2020 none none 0.7 / none)", "oklab(25.2% -0.6 none/1)", 9710, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 69, 0)", ip("rgba(none 69.33 none)", "color(prophoto-rgb none none none)", 8815, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(97, 163, 0)", ip("color(rec2020 none 0.6353 none)", "rgb(97 none none)", 7356, 2));
 }
 
 static void test_l102_none_42(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(221, 221, 221)", ip("hwb(276.328 58% 50.4%)", "hsla(25 none 86.7%)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(242, 33, 93)", ip("rgba(none 32.87 60%)", "color(rec2020 0.8 none 0)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(204, 17, 170, 0.7333)", ip("color-mix(in srgb, #aaeefe6c, 100% #c1ab)", "rebeccapurple", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(15, 218, 228, 0.8981)", ip("oklab(1 -0.3119 none)", "#5a1c5d97", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 70, 110)", ip("rgb(none 70 43% /1)", "color(xyz 0.3 0.66 none/85%)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(228, 218, 228, 0.8981)", ip("oklab(1 -0.3119 none)", "#5a1c5d97", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(58, 70, 110)", ip("rgb(none 70 43% /1)", "color(xyz 0.3 0.66 none/85%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(75, 98, 167, 0.4135)", ip("color(a98-rgb 32.7% 0.3836 none)", "hwb(8.8019rad 94.72% 50%/-0.5)", 5865, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(255, 127, 80, 0.5)", ip("color-mix(in srgb, 0% color(prophoto-rgb 2 none 0.467), lab(61%  120.8  0 /0))", "coral", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(163, 121, 121)", ip("hwb(none 86% none)", "color-mix(in srgb, hsl(none 52% 37%), hsla(none none none))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(54, 56, 42, 0.355)", ip("color-mix(in srgb, oklab(0 none -0.4204/42%), hwb(78 none 69) 50%)", "hsl(-1.8435turn, -4.09%, 24%, 0)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(39, 56, 0, 0.355)", ip("color-mix(in srgb, oklab(0 none -0.4204/42%), hwb(78 none 69) 50%)", "hsl(-1.8435turn, -4.09%, 24%, 0)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklab(0 -0.048 none)", "color-mix(in srgb, lab(none none none/none), hsla(30 none none /1.5))", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("rgb(79 255 13 /none)", "hwb(-3.7952rad 50% 50%/-0.5)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(242, 179, 140)", ip("color-mix(in srgb, hwb(0.1turn 0% 5), hwb(282 83% 0%))", "color(xyz-d65 none none 0.247 /1)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(242, 179, 6)", ip("color-mix(in srgb, hwb(0.1turn 0% 5), hwb(282 83% 0%))", "color(xyz-d65 none none 0.247 /1)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("hsl(119 26% 19.36% /none)", "rgb(none none none /none)", 9999, 2));
 }
 
 static void test_l102_none_43(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("lch(none none none / none)", "color-mix(in srgb, hwb(none none none) 50%, lab(85.3934 none 124% / 1))", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(230, 132, 80, 0.85)", ip("color-mix(in	srgb,100% #d51c,rgb(136 38 83 / 1))", "oldlace", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(36, 36, 50)", ip("oklch(26% none none)", "color(xyz-d65 none none 0.1)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(73, 77, 91)", ip("hwb(326 30% 60)", "color(prophoto-rgb 0.0853 none none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(36, 36, 28)", ip("oklch(26% none none)", "color(xyz-d65 none none 0.1)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(71, 77, 91)", ip("hwb(326 30% 60)", "color(prophoto-rgb 0.0853 none none)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(16, 15, 1, 0.5334)", ip("color-mix(in	srgb , transparent , #fe12)", "hsla(0 none none /1.5)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(10, 129, 114)", ip("color(a98-rgb none 50% none / none)", "color-mix(in srgb, rgb(10 none 227), rgb(none none -10))", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(10, 120, 114)", ip("color(a98-rgb none 50% none / none)", "color-mix(in srgb, rgb(10 none 227), rgb(none none -10))", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(183, 183, 183)", ip("color-mix(in srgb , blue , 100% hwb(7.6rad 100% 31%))", "lab(none none none)", 574, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(217, 217, 217, 0.9995)", ip("color-mix(in	srgb, orangered, #5140 67%)", "hsla(none none 85%)", 9992, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(71, 46, 147, 0.7212)", ip("color-mix(in srgb, linen 0%, oklch(1 0.1015 none) 25%)", "color-mix(in srgb, hwb(none 3 66%), hwb(592.532 none none))", 6283, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 0, 96, 0.75)", ip("color(rec2020 none none 0.3)", "hwb(none none none /-0.5)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(71, 50, 147, 0.7212)", ip("color-mix(in srgb, linen 0%, oklch(1 0.1015 none) 25%)", "color-mix(in srgb, hwb(none 3 66%), hwb(592.532 none none))", 6283, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 0, 56, 0.75)", ip("color(rec2020 none none 0.3)", "hwb(none none none /-0.5)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 191, 6)", ip("hwb(60 3% none)", "hwb(none none none)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 25, 0)", ip("oklab(none -0.4872 none /none)", "color(display-p3 83.34% 0.4494 none)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklab(none -0.4872 none /none)", "color(display-p3 83.34% 0.4494 none)", 1, 2));
 }
 
 static void test_l102_none_44(void) {
@@ -706,230 +706,227 @@ static void test_l102_none_44(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(131, 135, 117, 0.875)", ip("color-mix(in srgb, oklab(none none none) 48%, lab(98.1% none none/none))", "color-mix(in srgb,hsl(-0.2turn, 35%, 64.828%, 0),#8aa92c 50%)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("rgb(none none none /none)", "rgba(none 300 none/none)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(64, 128, 106)", ip("oklab(none none none)", "aquamarine", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 30, 0, 0.87)", ip("color(xyz-d50 0.397 0 none/87%)", "color(xyz none 0.3255 none/none)", 1487, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(60, 0, 60, 0.98)", ip("color(xyz-d50 -15.67% none 0)", "color(prophoto-rgb 0.98 none 0.931/92%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 239, 213)", ip("oklab(none none none/0.831)", "papayawhip", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(2, 2, 7)", ip("hwb(233deg 18% 20%)", "lch(none none none)", 9673, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(136, 172, 99, 0.8399)", ip("oklab(66% none 0.0704/32.54%)", "color-mix(in srgb, #6d7c 0%, rgb(136 172 99 / 0.84))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(144, 142, 143)", ip("hwb(6rad 0% 94%)", "hwb(1turn 83% 50%/120%)", 8942, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(244, 150, 136)", ip("color(srgb 0.5521 none 0)", "hwb(none 59 none /none)", 9072, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 48)", ip("color(srgb-linear -0.08 none -0.0333)", "color(xyz-d50 none none 0.378)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(73, 139, 99)", ip("rgba(none 77% 112 /none)", "color-mix(in srgb , 60.5543% hsl(201.45deg, 14.1%, 10%, 100%) , rgb(152 164 171 / 120%))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(189, 67, 62)", ip("hwb(12.7281rad 17.6% 26%)", "rgb(none none 99% / 1.5)", 823, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(68, 153, 187, 0.0667)", ip("color(xyz-d50 none none 0.7 / none)", "#49b1", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(70, 157, 118)", ip("hwb(120 33% 19%)", "color-mix(in srgb,58% hwb(-479.4 26.61% 39%),blue 48.8%)", 2927, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(121, 108, 108)", ip("hsl(none 50% 90%)", "oklch(0 0 none/none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("hsl(none none 51.4% /none)", "rgb(none 73% none /none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(159, 159, 159)", ip("color(srgb none none none)", "hwb(1turn 83% 50%/120%)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(45, 45, 45, 0.5)", ip("hwb(none 87 2% /-0.5)", "color-mix(in srgb, color(xyz-d50 none none none), hsl(-516 none 17.501%) 80.86%)", 5000, 2));
 }
 
 static void test_l102_none_45(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(29, 0, 2)", ip("hsl(none 50% none)", "color-mix(in srgb, rgba(none none 6% / 1), hwb(none none 77/1.5) 73%)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(45, 45, 45)", ip("hsl(-516 none 17.501%)", "oklch(none none none /none)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(97, 185, 73, 0.64)", ip("color-mix(in  srgb,rgb(102 207 57 / 0.9) 50%,hsla(-232grad 23% 42.84% / 150%) 19%)", "rgb(none none none /none)", 2081, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.5001)", ip("hsla(120 19.9927% none /50%)", "color(srgb 0.708 1.39 none)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(136, 92, 0, 0.345)", ip("color-mix(in srgb, rgb(238 180 177 / 0), oklab(none none none / 69%))", "rgba(192 51% -10 / none)", 7064, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 121, 227)", ip("lch(none +0.5 2.323turn)", "color(rec2020 0.3474 +0.5 1.8976/none)", 8915, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(161, 242, 0, 0.2975)", ip("rgb(none 151.22 none / -0.5)", "hwb(80.2159deg none 5 /59.5%)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(54, 93, 0)", ip("lab(none none none)", "color(srgb 0.4234 0.7283 none /none)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 179)", ip("lch(none 100% 342.098grad)", "color-mix(in srgb, hsl(none 65.038% 50% /none), 50% hsl(none 86.577% none))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(186, 85, 211)", ip("mediumorchid", "salmon", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.894)", ip("color-mix(in  srgb,hsla(-342grad 21.5% 27.031% / 100%) 53.87%,blanchedalmond)", "lch(none none none/89.4%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(21, 3, 28, 0.9511)", ip("lab(none none none)", "color-mix(in srgb, lch(none none none), #618c)", 4888, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 97, 105, 0.8687)", ip("rgba(none 93.6 106)", "color-mix(in srgb, rgb(88 42 0 / 40.9%) 0%, 50% hwb(31 33% none /none))", 1651, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(91, 0, 170)", ip("rgb(91 none 170 / none)", "color(srgb-linear none none none)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(76, 56, 43)", ip("color-mix(in srgb, 100% hsla(-477.7 60% none), hwb(119 32.613% 57.72%) 25%)", "lightsalmon", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(214, 89, 255)", ip("hwb(-531.1 50% 10%)", "rgb(214 35% 255/none)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(231, 182, 182, 0.5)", ip("hsla(none none none /0)", "color-mix(in	srgb,#b851c1,hsla(6.2832rad 50% 81% / 100%) 100%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(29, 38, 37, 0.9731)", ip("color-mix(in srgb, color-mix(in srgb, rgb(107 169 166 / 0.5), color(srgb 0.1396 none none)), hsl(241 none 84%))", "hsl(153 2.41% none)", 7850, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(63, 90, 115, 0.9883)", ip("oklch(none none none)", "color-mix(in srgb, color-mix(in srgb, rgb(none 165.9 221), hsla(none none 50%) 1.05%) 50%, lab(8 -46.648 none) 48.8%)", 9723, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(105, 82, 116, 0.625)", ip("hsla(-0.299turn 48% 54.1% / 0.5)", "color(display-p3 none none 0)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("rgb(none 207 none /none)", "rgba(37 none 187/none)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(108, 101, 119)", ip("lab(43 none 11.63% /120%)", "rgb(none none 63% / none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(218, 125, 218, 0.875)", ip("violet", "color-mix(in srgb, hwb(-437.666 58.23% 97%), hwb(none none none / -0.5))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklch(none none 1turn/none)", "color(display-p3 none none none)", 2500, 2));
 }
 
 static void test_l102_none_46(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(224, 114, 135, 0.625)", ip("color-mix(in srgb, rebeccapurple 25%, hwb(0.9turn 73% 45.5%/0))", "hwb(none 51% none)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(146, 191, 206, 0.4734)", ip("color(xyz-d50 none none 0.44 / 49%)", "hwb(1.5708rad 39.6% 25% / 1%)", 345, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(119, 136, 153)", ip("lightslategrey", "hwb(1turn 0% 50%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("hwb(330 78% none)", "lab(none none 0)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(250, 128, 114)", ip("salmon", "hwb(none none 48%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(115, 156, 122)", ip("color-mix(in srgb, 11.282% lch(15.6%  219.319  0.5turn), rgba(none none 0 /none) 100%)", "color-mix(in srgb, rgb(21%, 35%, 72.6), lab(100%  -21.374  17.85))", 8328, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(29, 126, 178)", ip("oklch(20.7% 0.2578 none)", "lch(78.47 134.124 282.6242 / none)", 6746, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(181, 97, 147)", ip("hwb(285 38 30%)", "color(xyz-d65 0.46 none 0 / none)", 2378, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 84, 193, 0.4129)", ip("hwb(321.929 33% none / 120%)", "hwb(none none none /0)", 5871, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.21)", ip("color(display-p3 0 none 0.36/21%)", "hsl(-277.9811deg none none /none)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 20, 147, 0.9999)", ip("deeppink", "color-mix(in srgb,25% peachpuff,rgba(60.7%, 55, 31, -0.5))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(247, 247, 164, 0)", ip("hwb(none 88% none /-0.5)", "color-mix(in  srgb,#f7f7a45d,hwb(290.816 46 62/-0.5))", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(64, 17, 17)", ip("oklab(none -0.0045 0.2273)", "hwb(none 26% none)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(35, 48, 31)", ip("hwb(1.8113rad 12% 81%)", "hwb(none none 48%)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("hsl(none none none/none)", "oklab(none none 0.3510)", 3632, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(132, 97, 144)", ip("color(rec2020 none 0.3 0.6947 /120%)", "hwb(0.5turn 54 50%)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("hsl(none none none / none)", "rgb(none none none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(181, 39, 238, 0.5667)", ip("color-mix(in srgb, color( srgb 0.9 17% 1.876), #80d)", "#aae2", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(158, 178, 128, 0.528)", ip("color-mix(in srgb, 25% rgba(18, 263, 43.2%, 0.394), #ab9e7b 50.86%)", "color-mix(in srgb,25% peachpuff,rgba(60.7%, 55, 31, -0.5))", 2214, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 128, 13)", ip("hwb(-233.6642deg none none/none)", "oklab(none none none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(242, 10, 4, 0.5001)", ip("color(rec2020 0.8 none none / 50%)", "color-mix(in srgb, color-mix(in srgb, hwb(20 16% none) 18%, oklch(0 44.96% -5.8034rad)), hwb(none none none / none))", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(154, 154, 154)", ip("color-mix(in srgb,color-mix(in srgb, hsl(-4.6rad, 0%, 68%) 100%, 66% white) 100%,#80f)", "oklab(0 none none)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(72, 28, 38, 0.8587)", ip("color-mix(in srgb, lch(none 24.4701 none), #8d2520)", "color-mix(in  srgb,70.8% color-mix(in srgb, deepskyblue, 79.86% #2150),rebeccapurple)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(57, 128, 130)", ip("lch(17.93% 144 none)", "hwb(168 none none)", 5000, 2));
 }
 
 static void test_l102_none_47(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(215, 116, 116, 0.2658)", ip("oklab(none none none)", "color-mix(in  srgb, hsl(1rad -14% 52.5% / 0) 74%, #d77)", 9922, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(87, 133, 62, 0.4285)", ip("color-mix(in srgb, color-mix(in srgb, springgreen, rgba(none none 12% /none)), #5c1)", "hwb(327 none 42 /0.239)", 7510, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 4, 17)", ip("hsla(none none none /1)", "hwb(226 none 70)", 2237, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(154, 154, 154)", ip("color-mix(in srgb,color-mix(in srgb, hsl(-4.6rad, 0%, 68%) 100%, 66% white) 100%,#80f)", "oklab(0 none none)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(87, 28, 38, 0.8587)", ip("color-mix(in srgb, lch(none 24.4701 none), #8d2520)", "color-mix(in  srgb,70.8% color-mix(in srgb, deepskyblue, 79.86% #2150),rebeccapurple)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(97, 128, 129)", ip("lch(17.93% 144 none)", "hwb(168 none none)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(8, 76, 0)", ip("oklab(0 72% none)", "lch(42.3% 174 140)", 5774, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 65, 15)", ip("oklab(0 72% none)", "lch(42.3% 174 140)", 5774, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(112, 36, 32, 0.9932)", ip("color-mix(in srgb, color( rec2020 0.869 0.66 0.3445), #0a8c)", "hsl(none 60% 27%)", 9324, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.59)", ip("oklch(none 0 none/0.59)", "hsl(5rad, 0%, 58%, 1)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(137, 146, 194, 0.875)", ip("color-mix(in srgb , #64a , powderblue)", "hwb(-171grad 50% 37.7% /0.5)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(170, 225, 255)", ip("oklab(1 none -0.3441)", "color-mix(in srgb, darkgrey, hwb(136 73% none / none))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 126, 255)", ip("lab(-9 20000 none / none)", "color(xyz-d65 none 0.2475 none)", 6935, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("oklab(1 none -0.3441)", "color-mix(in srgb, darkgrey, hwb(136 73% none / none))", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(21, 56, 12, 0.8489)", ip("hwb(none 38% 32%/40%)", "color-mix(in srgb, color(display-p3 none 0.3935 none / none), hsl(300 13% none))", 7481, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(142, 142, 142)", ip("hwb(2.2245rad 63% 50%)", "color(xyz -0.9418 none 0.2912 / none)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(237, 198, 198)", ip("hsla(none 53% 85.3%)", "color-mix(in srgb, #8c033d4b, color-mix(in srgb, hwb(none 59% none), teal))", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 104, 0)", ip("color(rec2020 none 0.718 -0.8027 /1)", "color-mix(in srgb, lab(none -40.05% 26.3%/none), oklch(0.374 0.0271 none/none))", 3290, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(150, 0, 221)", ip("rgb(none none 221/none)", "color(xyz-d65 84% none none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(217, 255, 143, 0.843)", ip("hwb(80.2326deg 56% 0% /84.3%)", "oklch(none 0.4150 180)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(78, 13, 0)", ip("color(xyz-d65 0.41 none none)", "rgba(35 13 none)", 4196, 2));
 }
 
 static void test_l102_none_48(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 255, 255, 0.3741)", ip("hsl(306 none 0%/-0.5)", "hsl(-214.5376 none 124.4% /50%)", 7481, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(142, 142, 142)", ip("hwb(2.2245rad 63% 50%)", "color(xyz -0.9418 none 0.2912 / none)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(237, 198, 198)", ip("hsla(none 53% 85.3%)", "color-mix(in srgb, #8c033d4b, color-mix(in srgb, hwb(none 59% none), teal))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 136, 0)", ip("color(rec2020 none 0.718 -0.8027 /1)", "color-mix(in srgb, lab(none -40.05% 26.3%/none), oklch(0.374 0.0271 none/none))", 3290, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 0, 221)", ip("rgb(none none 221/none)", "color(xyz-d65 84% none none)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(217, 255, 143, 0.843)", ip("hwb(80.2326deg 56% 0% /84.3%)", "oklch(none 0.4150 180)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(163, 13, 0)", ip("color(xyz-d65 0.41 none none)", "rgba(35 13 none)", 4196, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("hsla(331 92.3% none)", "hwb(none none 47%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("color(xyz-d50 none none none / none)", "hsl(none none 50% /0)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(127, 127, 127)", ip("hwb(-162grad 99% 100% / 1)", "rgba(63% 176.9 70%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("rgb(75 20% none/none)", "oklch(-1.6% none none /none)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(92, 92, 92)", ip("hwb(270 54% 95)", "rgba(none -10 85%)", 1, 2));
-}
-
-static void test_l102_none_49(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 208, 241, 0.8501)", ip("rgb(none 300 none/50%)", "color(display-p3 none 0.76 0.9256 /1)", 7001, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 205, 232, 0.8501)", ip("rgb(none 300 none/50%)", "color(display-p3 none 0.76 0.9256 /1)", 7001, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(245, 0, 0)", ip("hsl(none none none)", "hwb(none none 4 / none)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(119, 136, 153)", ip("lightslategrey", "hsl(2.13rad, 75.9%, 33.67%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 149, 0)", ip("oklab(none none 0.0791)", "rgb(none 153.79 none)", 9663, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(27, 10, 10, 0.5718)", ip("color-mix(in srgb, 57.1% oklab(none none 0.3209/0), hsl(none 45.4167% 7.4%))", "rgb(none none none)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(151, 212, 249, 0.2816)", ip("color-mix(in srgb, hsl(none none 68.2% / 0), oklab(99.23% -81.9% 0.4275) 0%)", "color-mix(in srgb, color-mix(in  srgb , lightskyblue , hwb(-534.24 75.2% 0% /0.5) 0%) 48.617%, 7.7% floralwhite)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(56, 23, 122)", ip("rgb(none 62.59 50% /none)", "color-mix(in srgb, blue, 60% rgb(94 none 11%))", 6348, 2));
+}
+
+static void test_l102_none_49(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.7499)", ip("color-mix(in srgb, color(xyz none none none), color(xyz none 0 none /0.5))", "oklch(none 0 301 /3.38%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.6686)", ip("color-mix(in srgb, oklch(none 2.31% -414.1 /none), hsl(0.25turn 67.2% 84.14 / 0))", "color(a98-rgb 0 none none)", 6686, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 154, 110)", ip("coral", "color-mix(in srgb,color-mix(in	srgb , hwb(0.1turn 57% -13% /1) , rgb(109 16 145 / 35%) 0%),white)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(81, 0, 1)", ip("oklch(none 0.2675 799.3grad)", "color(a98-rgb 0.7 0% 0.034)", 3391, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(71, 0, 1)", ip("oklch(none 0.2675 799.3grad)", "color(a98-rgb 0.7 0% 0.034)", 3391, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(154, 185, 183)", ip("hwb(none 74 18)", "lightseagreen", 3095, 2));
-}
-
-static void test_l102_none_50(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(203, 203, 183, 0.9999)", ip("lch(none 50.419 none /-0.5)", "color-mix(in srgb, lightgoldenrodyellow, hsl(none none 61%))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(125, 125, 125)", ip("color-mix(in srgb, oklab(98.52% none none), hsla(-60deg 0% none))", "color-mix(in srgb, color(xyz-d50 none none none), lch(+0.5  138  360))", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(151, 24, 99)", ip("color(xyz 0.7 none 0.867 /none)", "color-mix(in srgb, 50% color( xyz-d65 0.832 0.22 15.46%), oklch(0.15 0.2803 none))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(56, 0, 24, 0.75)", ip("color-mix(in srgb, color(prophoto-rgb 0.462 0.09 0.2/50%), hsla(-60deg 0% none))", "color-mix(in srgb, color(xyz-d50 none none none), lch(+0.5  138  360))", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(223, 191, 194, 0.8125)", ip("white", "color-mix(in srgb, #2ddbf1, hwb(none none none/0.5) 75%)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(86, 74, 24)", ip("rgba(none 41% none /none)", "color-mix(in  srgb , hsla(-201.17deg 72.91% 0%) 46% , sienna)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(10, 3, 237, 0.984)", ip("hwb(12.26grad 50% 12%/-0.5)", "color-mix(in srgb,blue 82.93%,color-mix(in srgb , blue , hsl(395.69grad, 50%, 31%)))", 9840, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.0001)", ip("hwb(329 26% 84 / -0.5)", "hsla(none 50% none)", 1, 2));
+}
+
+static void test_l102_none_50(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(178, 171, 213, 0.7675)", ip("color-mix(in srgb,rgb(99 119 223 / 0.5),thistle)", "hwb(450.5113deg 63 18%)", 698, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(183, 15, 168, 0.7739)", ip("hwb(96.6deg 31 none)", "#b808abc4", 9773, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("hsl(none 75% none)", "lch(0% none -344.857)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(124, 232, 134)", ip("rgb(168.3 254 none)", "color-mix(in  srgb,#59ec9b,mediumseagreen)", 4708, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 102)", ip("color(srgb 0 none 0.4 /1)", "lab(13% 64.2 96.129 / none)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 32, 102)", ip("color(srgb 0 none 0.4 /1)", "lab(13% 64.2 96.129 / none)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(117, 117, 117)", ip("color-mix(in srgb, white, hsla(630.316, 85.7%, -10.54%, 150%))", "hsl(none none none)", 827, 2));
-}
-
-static void test_l102_none_51(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.5)", ip("rgba(none -10 none / none)", "color-mix(in srgb, hsl(215, 93.5%, 0%), transparent)", 303, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(76, 100, 101)", ip("hsl(271 none 98.27% / none)", "hwb(-537 26.8% 62.947%)", 9566, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(102, 75, 42, 0.8771)", ip("transparent", "color-mix(in srgb,color-mix(in srgb,sandybrown,darkolivegreen 25%) 50%,hsl(-0.9rad 32 0% / 1))", 8771, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklch(0.01 none none)", "hsl(none none none/none)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 118, 113, 0.5528)", ip("color(prophoto-rgb none 0.1 0.1 /-0.5)", "rgba(none 118 113)", 5528, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(14, 0, 77)", ip("color(prophoto-rgb 0.041 none 0.3 / none)", "lab(none none 149)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(41, 234, 41)", ip("darkgrey", "lime", 7593, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("lch(86 -8.358 -338.695grad / none)", "rgb(31% none none/none)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(10, 2, 0, 0.8834)", ip("oklab(none none none)", "color-mix(in srgb, lab(none -18.3% none/0.47), 78% oklch(0 0.2404 none))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(22, 159, 15)", ip("color-mix(in srgb,lime,hsl(0rad, 18%, 39%) 25%)", "oklch(none none none)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(204, 167, 255, 0.2392)", ip("color-mix(in srgb, color-mix(in srgb, hwb(none 31 none), color(xyz	0.675	1.14	0.23)), color(xyz-d50 none none 117%) 100%)", "hwb(none 50% 51% / 0)", 7608, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.0279)", ip("color-mix(in srgb, lab(5%	4.1462	109.91% / 0) 91.8%, black)", "color(srgb none none none /0)", 6598, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 7)", ip("color(prophoto-rgb 0.041 none 0.3 / none)", "lab(none none 149)", 2500, 2));
 }
 
-static void test_l102_none_52(void) {
+static void test_l102_none_51(void) {
+    TEST_ASSERT_EQUAL_STRING("rgb(41, 234, 41)", ip("darkgrey", "lime", 7593, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("lch(86 -8.358 -338.695grad / none)", "rgb(31% none none/none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.8834)", ip("oklab(none none none)", "color-mix(in srgb, lab(none -18.3% none/0.47), 78% oklch(0 0.2404 none))", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(22, 159, 15)", ip("color-mix(in srgb,lime,hsl(0rad, 18%, 39%) 25%)", "oklch(none none none)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 167, 39, 0.2392)", ip("color-mix(in srgb, color-mix(in srgb, hwb(none 31 none), color(xyz	0.675	1.14	0.23)), color(xyz-d50 none none 117%) 100%)", "hwb(none 50% 51% / 0)", 7608, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.0279)", ip("color-mix(in srgb, lab(5%	4.1462	109.91% / 0) 91.8%, black)", "color(srgb none none none /0)", 6598, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(230, 230, 250)", ip("lavender", "rgba(none none none)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(10, 56, 40)", ip("color-mix(in	srgb , hsla(200 88% 13% / 99.99%) , #1e1)", "color(xyz-d50 none -0.89 none / 1.5)", 6012, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(235, 255, 0)", ip("rgba(none none none)", "rgb(234.9 300 none)", 2513, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(39, 184, 184)", ip("oklab(0.7 none 0.3623 /none)", "color-mix(in srgb, color(xyz-d65 1.7 none none), rgb(7 192.8 212) 100%)", 8660, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(63, 79, 64)", ip("lab(none -25.38% none)", "hsl(630.21deg 22% 99.5% / 2)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(33, 187, 184)", ip("oklab(0.7 none 0.3623 /none)", "color-mix(in srgb, color(xyz-d65 1.7 none none), rgb(7 192.8 212) 100%)", 8660, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(63, 63, 64)", ip("lab(none -25.38% none)", "hsl(630.21deg 22% 99.5% / 2)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(109, 252, 3, 0.345)", ip("hwb(454.4836deg none none/45%)", "hwb(302.9deg 73% 65 /0.03)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(30, 18, 25, 0.9976)", ip("oklch(0 57% none)", "color-mix(in srgb, lch(none none 60), 50% #b48fcffa)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(139, 220, 209)", ip("hwb(200grad 71 17.95%)", "color(prophoto-rgb 0.536 1 none)", 2297, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 155, 0)", ip("lime", "oklch(none 0.3594 480.572)", 4600, 2));
+}
+
+static void test_l102_none_52(void) {
+    TEST_ASSERT_EQUAL_STRING("rgba(22, 18, 25, 0.9976)", ip("oklch(0 57% none)", "color-mix(in srgb, lch(none none 60), 50% #b48fcffa)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(161, 220, 209)", ip("hwb(200grad 71 17.95%)", "color(prophoto-rgb 0.536 1 none)", 2297, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 138, 0)", ip("lime", "oklch(none 0.3594 480.572)", 4600, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("rgb(none 50% 0/none)", "oklab(0 0 none)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 253, 255)", ip("hwb(181 none none/none)", "color(rec2020 none 1.9835 none)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("color(xyz none none 0.41)", "color(srgb-linear none none -0.28 /1)", 9999, 2));
-}
-
-static void test_l102_none_53(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(48, 9, 18)", ip("oklab(-7% none none)", "color-mix(in srgb , rgb(163 43 94 / 1) , color-mix(in srgb, rgb(222 29 46 / 120%), 0% transparent))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(171, 171, 171)", ip("color(display-p3 none 0.2 0)", "hwb(-273.4 100% 49.1812% / 1.5)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(77, 77, 36, 0.5)", ip("oklab(0.2 none none/50%)", "hsl(60 85.1768% 62.745% / none)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 240)", ip("ivory", "color(prophoto-rgb none none none/none)", 7790, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(65, 70, 96, 0.427)", ip("hwb(322.122grad 50% 100% / 36.78%)", "hwb(229 6 52% / 0.7)", 1783, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("hsl(30 none none)", "hsla(none none none)", 8015, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(31, 0, 56, 0.22)", ip("hsl(360 100% 6%/none)", "rgb(none none 225/0.22)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(100, 94, 136)", ip("lch(55 none none /none)", "darkslateblue", 5383, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 1, 0, 0.7028)", ip("rgb(0 -10 none/50%)", "oklab(none -0.205 none)", 4055, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(179, 148, 184)", ip("hwb(180 75 39 /none)", "hwb(1.81turn 50% 21.5%)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(128, 226, 128, 0.9304)", ip("hsla(none none 50% /0.5)", "color(prophoto-rgb none 0.8 none)", 8607, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(97, 196, 0, 0.9999)", ip("color(srgb-linear none 0.3 none/-0.5)", "color(srgb 0.3822 0.7671 none)", 9999, 2));
 }
 
-static void test_l102_none_54(void) {
+static void test_l102_none_53(void) {
+    TEST_ASSERT_EQUAL_STRING("rgba(31, 0, 56, 0.22)", ip("hsl(360 100% 6%/none)", "rgb(none none 225/0.22)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(100, 94, 136)", ip("lch(55 none none /none)", "darkslateblue", 5383, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.7028)", ip("rgb(0 -10 none/50%)", "oklab(none -0.205 none)", 4055, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(179, 148, 184)", ip("hwb(180 75 39 /none)", "hwb(1.81turn 50% 21.5%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(128, 200, 128, 0.9304)", ip("hsla(none none 50% /0.5)", "color(prophoto-rgb none 0.8 none)", 8607, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(97, 196, 0, 0.9999)", ip("color(srgb-linear none 0.3 none/-0.5)", "color(srgb 0.3822 0.7671 none)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(213, 213, 213, 0.75)", ip("hwb(-5.4922deg 93.8942% 18.3% /1.5)", "lch(none none none/0)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(136, 28, 30, 0.875)", ip("color-mix(in srgb, color-mix(in srgb, 50% lab(55 none none), hsl(300 none none)), hsla(none 118.25% 48.5188% / none))", "hwb(671deg 0% 95% / 0.5)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(47, 79, 79)", ip("color-mix(in srgb, lch(none none 400grad/0.5), lab(none -12000 none) 50%)", "darkslategrey", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 153, 0)", ip("color(display-p3 0 0.59 none)", "color(rec2020 none none none)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 149, 0)", ip("color(display-p3 0 0.59 none)", "color(rec2020 none none none)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(255, 191, 191, 0.6)", ip("hwb(none 75 none /none)", "color(srgb 0.7 61.3% none /0.6)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(35, 130, 35)", ip("color-mix(in srgb , 50% hwb(-237.99 39 68%) , lime)", "hsl(none 22% none)", 2500, 2));
+}
+
+static void test_l102_none_54(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(108, 91, 147, 0.83)", ip("color-mix(in srgb, rebeccapurple 50%, 16% hwb(564.9632 100% 100%))", "rgb(none 41% none)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(134, 223, 92)", ip("hwb(-599.5 none 11%)", "hsl(766.9deg, 67%, 78.2%)", 5651, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("hwb(159 92% 82% /none)", "hsla(222.1deg none 100% / none)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(37, 0, 109)", ip("oklab(none none -0.3460)", "rgb(none none none)", 8728, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(170, 170, 170)", ip("lab(none 20000 -131.14 / none)", "hwb(619grad 100% 50%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(105, 166, 55, 0.75)", ip("color-mix(in srgb, hsl(229 none 65%), color-mix(in srgb, 0% #eed7, 25% rgb(123 168 110 / 0)))", "color(xyz-d50 0 none -14.31%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklab(none none -0.3460)", "rgb(none none none)", 8728, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(141, 240, 141)", ip("color-mix(in srgb,53% hwb(-16deg 65% 38.25%),hwb(-400.41 58% 100% / 0.46))", "color(srgb-linear none 0.8705 none)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 191, 191, 0.8804)", ip("rgb(none none none)", "hwb(none 75% none /52.17%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 0, 0, 0.0001)", ip("oklab(none -0.8 0.4628 / 0)", "hwb(none none none)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(127, 112, 67, 0.5)", ip("color-mix(in srgb,color-mix(in  srgb, rgb(242 34% 95), hsl(126.4grad 59% 58% / 2)),transparent)", "hsl(30 32% none/none)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(184, 209, 116, 0.9999)", ip("color-mix(in  srgb , 0% hsla(0.1turn 52% 82.68% / 99.99%) , hsla(1.395rad 45% 67% / 99.99%))", "color(xyz-d50 none none 0.8)", 1684, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(215, 255, 255)", ip("rgb(178 none none)", "hsl(276.964, 100%, 106%)", 4758, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(144, 100, 86)", ip("color-mix(in  srgb , color-mix(in srgb,red,rgb(115, 110, 143) 50%) , hsla(475.3deg 18.634% 48%))", "hwb(16.5deg 36% 100%)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(204, 161, 183)", ip("color(rec2020 110.66% 0.445 none)", "lab(66.54% none -11.75)", 5000, 2));
 }
 
 static void test_l102_none_55(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 34, 0)", ip("color(display-p3 none 0.11 none/none)", "oklab(none none 0.3554)", 2483, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(149, 149, 149)", ip("hsl(none none 58.321%)", "dimgray", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 0, 132, 0.2001)", ip("hsla(-141.9deg 74% none)", "lch(48.67 219.9017 none / 0.2)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(142, 133, 84)", ip("hwb(-5.4rad 44% 0%)", "hsl(none 0% 25%)", 5922, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(144, 100, 86)", ip("color-mix(in  srgb , color-mix(in srgb,red,rgb(115, 110, 143) 50%) , hsla(475.3deg 18.634% 48%))", "hwb(16.5deg 36% 100%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(204, 122, 183)", ip("color(rec2020 110.66% 0.445 none)", "lab(66.54% none -11.75)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(107, 45, 103)", ip("rgba(146 none none)", "color-mix(in srgb, hwb(none none 64), slateblue)", 8266, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("lch(none none none)", "lab(none none none /none)", 7139, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(110, 0, 0)", ip("color(a98-rgb -1 none none/none)", "color(a98-rgb 0.735 none none)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(67, 52, 43)", ip("hsla(none 22.6% 50%)", "lch(none 24.4 -198.8793deg)", 5682, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(67, 43, 43)", ip("hsla(none 22.6% 50%)", "lch(none 24.4 -198.8793deg)", 5682, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(130, 122, 122, 0.8044)", ip("hwb(none none 28% / 15.6%)", "hwb(9.05rad 100% 100%)", 7682, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(113, 60, 136)", ip("rgb(16% 62% 241)", "hwb(693 none 38%)", 6176, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(99, 40, 6)", ip("hsla(none 42.6% 27.2%)", "color(xyz-d65 none none 0.2774)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(113, 113, 113)", ip("color(prophoto-rgb none none none)", "hwb(none 47% 59%)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(33, 68, 38, 0.6399)", ip("color-mix(in srgb, rgba(1 2 3) 49%, tomato)", "color(rec2020 -1 0.904 none / 0.57)", 8374, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(39, 34, 163)", ip("color-mix(in srgb, blue, red 25%)", "rgb(14 68 135 / 120%)", 5063, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(69, 0, 69)", ip("color(xyz-d50 none -18.7% none / none)", "oklch(39% none none)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(211, 206, 196, 0.9106)", ip("color-mix(in srgb, color-mix(in srgb, lab(43 122.094 -65.75 /none), oklch(none 0 none / 66%)) 97%, 87.5% white)", "hwb(91 80% 0% /1.5)", 5000, 2));
 }
 
 static void test_l102_none_56(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(99, 40, 147)", ip("hsla(none 42.6% 27.2%)", "color(xyz-d65 none none 0.2774)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(113, 113, 113)", ip("color(prophoto-rgb none none none)", "hwb(none 47% 59%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(33, 203, 38, 0.6399)", ip("color-mix(in srgb, rgba(1 2 3) 49%, tomato)", "color(rec2020 -1 0.904 none / 0.57)", 8374, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(39, 34, 163)", ip("color-mix(in srgb, blue, red 25%)", "rgb(14 68 135 / 120%)", 5063, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(69, 0, 69)", ip("color(xyz-d50 none -18.7% none / none)", "oklch(39% none none)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(214, 206, 199, 0.9106)", ip("color-mix(in srgb, color-mix(in srgb, lab(43 122.094 -65.75 /none), oklch(none 0 none / 66%)) 97%, 87.5% white)", "hwb(91 80% 0% /1.5)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(147, 93, 139)", ip("#d6cf", "hsl(223 none 33.45%)", 5470, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(128, 161, 150, 0.7311)", ip("color-mix(in	srgb , rgb(174 183 219 / 0.71) , 32.6% hsla(200grad 70.1316% 100% / 0.5))", "color-mix(in srgb, color( rec2020 -0.73 0.52 0), hsl(700.3deg none none /1.5))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(128, 135, 151, 0.7311)", ip("color-mix(in	srgb , rgb(174 183 219 / 0.71) , 32.6% hsla(200grad 70.1316% 100% / 0.5))", "color-mix(in srgb, color( rec2020 -0.73 0.52 0), hsl(700.3deg none none /1.5))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(13, 63, 192, 0.8016)", ip("color-mix(in srgb, 47.1% dodgerblue, color-mix(in srgb, lab(none none none / 120%), hsl(250 84.7% none/-0.5)))", "blue", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(177, 196, 4)", ip("hwb(126 none 23 /none)", "color(display-p3 0.8086 none 0)", 7845, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 138, 255)", ip("color(prophoto-rgb 0 none 0.9529/none)", "hwb(2rad 0% 46.02%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(16, 12, 50, 0.75)", ip("color-mix(in  srgb, hwb(269 0% 81% / 1) 87.282%, dodgerblue)", "hsl(90deg 62% none /50%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(81, 153, 134, 0.5)", ip("color(rec2020 0.1574 0.7 none / 50%)", "hwb(none 96 87 / 0.5)", 6022, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 159, 177)", ip("hsla(310 none none)", "color(srgb-linear none 0.846 1.83)", 6940, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(108, 96, 108)", ip("lch(none 79.01% 29/none)", "thistle", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(177, 175, 70, 0.7557)", ip("color-mix(in	srgb , #e4efc978 50% , 43.9% darkorange)", "color(xyz-d65 0.0496 none none)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("rgb(193 94% 41% /none)", "rgb(0 none none / none)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(45, 55, 58)", ip("color(xyz-d65 0 none 0.7666 /none)", "color-mix(in srgb, color-mix(in srgb, rebeccapurple, hwb(2turn 100% 50%)), hsl(60 none none) 50%)", 6546, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 107, 241, 0.3101)", ip("oklch(0.96 43% none)", "oklab(0.77 0.9 -0.4303 /31%)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(161, 119, 171)", ip("hwb(0rad 96.2% 74.9142% /1.5)", "mediumorchid", 4128, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(189, 152, 160, 0.795)", ip("color-mix(in srgb, color(xyz 0.8 -0.19 0.71 /0.59), oklab(93.61% -0.2590 -0.3840))", "color(srgb 1.4292 none none/none)", 5000, 2));
 }
 
 static void test_l102_none_57(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(160, 147, 218)", ip("hwb(none none none/1)", "color-mix(in srgb, 95% oklch(71.7% 0.0912 288/none), darkviolet)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.0001)", ip("hsl(none none none/120%)", "hsl(120 none 89.4% /0)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(161, 119, 171)", ip("hwb(0rad 96.2% 74.9142% /1.5)", "mediumorchid", 4128, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(175, 155, 248, 0.795)", ip("color-mix(in srgb, color(xyz 0.8 -0.19 0.71 /0.59), oklab(93.61% -0.2590 -0.3840))", "color(srgb 1.4292 none none/none)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 163, 0)", ip("color(srgb 1.72 85.1% 0 /none)", "hwb(none none none)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(158, 0, 105, 0.8796)", ip("color-mix(in srgb, rgb(62% none 105), 50% color(prophoto-rgb none none 14.2% /0.5))", "rgb(none none 46% /1)", 5183, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(158, 0, 98, 0.8796)", ip("color-mix(in srgb, rgb(62% none 105), 50% color(prophoto-rgb none none 14.2% /0.5))", "rgb(none none 46% /1)", 5183, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(42, 42, 42)", ip("hwb(240 30% 83)", "lch(none none none)", 3813, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(100, 0, 0, 0.975)", ip("rebeccapurple", "color-mix(in srgb, color(srgb-linear  0.542  0  0), hsl(241 100% none/95%))", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 8, 0)", ip("rgb(none 3% -10)", "color(xyz none none 0.9)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(64, 84, 105)", ip("hwb(210 25% 59)", "color(rec2020 none none none)", 5689, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(191, 229, 255, 0.58)", ip("hwb(-515.4 75% 0%)", "rgba(none none none/16%)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("color(a98-rgb none none none)", "color(xyz-d50 none none none)", 9057, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(33, 128, 0)", ip("lime", "color-mix(in srgb, color-mix(in srgb, hwb(none none 21%), hsl(207 100% none /none) 67.7%), rgb(none none none /1.5))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(65, 64, 66, 0.9971)", ip("color-mix(in srgb, hsl(none none 99% / 1.5) 25%, lab(none -12000 none))", "color-mix(in srgb, hwb(-6.3rad 28 37%/0.82), hsla(1.7turn, 54.2%, 61%, 99.99%))", 325, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 228, 123)", ip("bisque", "color(xyz-d50 none none 35%/none)", 4097, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(244, 132, 232, 0.8358)", ip("color(prophoto-rgb none 0.4 none)", "color-mix(in	srgb, hsla(223.2605, 36.7%, 100%, 50%), #e5d 50%)", 6570, 2));
 }
 
 static void test_l102_none_58(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(33, 128, 0)", ip("lime", "color-mix(in srgb, color-mix(in srgb, hwb(none none 21%), hsl(207 100% none /none) 67.7%), rgb(none none none /1.5))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(65, 249, 66, 0.9971)", ip("color-mix(in srgb, hsl(none none 99% / 1.5) 25%, lab(none -12000 none))", "color-mix(in srgb, hwb(-6.3rad 28 37%/0.82), hsla(1.7turn, 54.2%, 61%, 99.99%))", 325, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(178, 157, 171)", ip("hwb(320 20 none / none)", "hwb(6.8rad 84% 42.6563%)", 8958, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(175, 125, 140)", ip("#e5d", "lab(58 17.2% none/none)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(125, 0, 19)", ip("oklab(none none -0.3462 /none)", "lab(none 139.562 none)", 9606, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(196, 77, 90)", ip("color-mix(in srgb, deeppink, color-mix(in srgb,0% hwb(0.1turn 0% 0%),hsla(778.1159deg 40% 38.2%)))", "color(srgb none none 0.197)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(192, 195, 191)", ip("lab(102.8 none none)", "color-mix(in srgb, oklch(none 45.9% none), oklab(none none 0.2646))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklch(none none -0.79turn)", "oklch(none 0.3462 -219.55deg)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(121, 114, 114)", ip("hsla(none 7.6% 63.3961%/120%)", "hwb(283 40% 100%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(196, 77, 87)", ip("color-mix(in srgb, deeppink, color-mix(in srgb,0% hwb(0.1turn 0% 0%),hsla(778.1159deg 40% 38.2%)))", "rgb(none none 39.4)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(191, 191, 191)", ip("lab(102.8 none none)", "color-mix(in srgb, oklch(none 45.9% none), oklab(none none 0.2646))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(26, 73, 178)", ip("color(srgb 0.1 0.285 0.7 / none)", "color(xyz-d50 none none 0)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 175, 0)", ip("oklab(none none none)", "color(xyz none 23% none / none)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(67, 52, 144)", ip("color-mix(in srgb, 37.7% color(srgb-linear  0.38  -10.8%  1), cornflowerblue)", "color-mix(in srgb, 25% rgb(1% none 180.64), oklab(14.7% none none) 100%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 144, 0)", ip("oklab(none none none)", "color(xyz none 23% none / none)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(63, 52, 135)", ip("color-mix(in srgb, 37.7% color(srgb-linear  0.38  -10.8%  1), cornflowerblue)", "color-mix(in srgb, 25% rgb(1% none 180.64), oklab(14.7% none none) 100%)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(188, 188, 188, 0.0881)", ip("color-mix(in srgb, #ffe, 100% hwb(724.78deg 102% 35.663%/1))", "hwb(337 100% 0% / -0.5)", 9119, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(116, 107, 106)", ip("color(xyz-d50 1.472 none 0)", "hwb(none 53 73)", 9402, 2));
-}
-
-static void test_l102_none_59(void) {
+    TEST_ASSERT_EQUAL_STRING("rgb(108, 107, 105)", ip("color(xyz-d50 1.472 none 0)", "hwb(none 53 73)", 9402, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(123, 255, 0)", ip("hwb(91 none none)", "color(srgb-linear 0 none 33.7%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 247, 255)", ip("deepskyblue", "rgb(none 100% none)", 8788, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(137, 204, 68, 0.75)", ip("rgb(none none 58 /0.5)", "color-mix(in srgb, 4.773% color-mix(in srgb, hsla(265 none 100%), 50% hwb(none 63% none)), hsla(92, 57%, 53%, 150%))", 5000, 2));
+}
+
+static void test_l102_none_59(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(81, 76, 123)", ip("color(display-p3 0.159 0 0.2)", "oklab(0.67 -5.8% -0.0699 /none)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(242, 215, 119)", ip("#eed75d", "color(a98-rgb 0.851 none 0.76 /none)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(156, 148, 148, 0.775)", ip("color-mix(in srgb, 0% color(srgb	0.39	0.465	0.23), lch(31.2 none none/1) 55%)", "hwb(none 74% 21%)", 5000, 2));
@@ -939,238 +936,212 @@ static void test_l102_none_59(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(131, 205, 195, 0.9864)", ip("color-mix(in srgb, #6e7ae4, paleturquoise 95%)", "color-mix(in srgb, 89.1% color-mix(in srgb, springgreen, lch(-2.8 none none / none)), lab(none none none /0.5))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("color(xyz none 0.6977 0 /-0.5)", "hwb(none 99% 100% / none)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 0, 0)", ip("hwb(none none none / none)", "color(srgb none 0 none)", 942, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(51, 51, 51)", ip("color-mix(in srgb, 20% oklch(1  0  211), oklab(none 0% -0.2663))", "color(xyz-d50 none none none / none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(139, 87, 89, 0.875)", ip("hsla(358.2061deg 27.4% 50% / 1)", "lab(26.1% none -95.3% / 0.5)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("lch(none none none/none)", "color(srgb none 0 0.191)", 1, 2));
 }
 
 static void test_l102_none_60(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(69, 51, 111)", ip("color-mix(in srgb, 20% oklch(1  0  211), oklab(none 0% -0.2663))", "color(xyz-d50 none none none / none)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(28, 0, 0)", ip("lab(none none 44)", "hsl(none none none /none)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(128, 127, 128, 0.0701)", ip("hwb(300 50% 50% /0.07)", "hotpink", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(128, 36, 9, 0.5001)", ip("color-mix(in srgb, hsl(400grad 100% 64.06% / 2), hsl(180 100% none / none))", "rgb(none none 9 /50%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(213, 97, 0)", ip("rgb(213.49 97 none)", "color(a98-rgb 0.5 0.34 none)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 118, 180)", ip("color(a98-rgb 0.8686 none 0.59/none)", "color(a98-rgb 2 0.4589 1 / 1.5)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(182, 205, 111)", ip("rgba(none none 104.6)", "color-mix(in	srgb , #90be0e , color-mix(in srgb, color-mix(in  srgb,#94af89,#a8cc 0%), hwb(179 96% 15%) 100%))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("lch(none -10% -529.4/none)", "oklab(1 0.4058 none)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(84, 70, 65)", ip("color-mix(in srgb, white, darksalmon)", "hwb(0.5turn 0% 100%)", 6552, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(170, 104, 33, 0.75)", ip("hwb(720deg 13 none)", "color(display-p3 26.7% 95.19% none/0.5)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.2116)", ip("color-mix(in srgb, lch(none none none /none), 32.8% color(xyz 0.72 -0.4337 none /-0.5))", "rgba(none none none)", 2116, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(102, 0, 0)", ip("color(xyz 0.391 none -1)", "color(srgb 0.4 none none)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(233, 220, 255)", ip("color-mix(in srgb, 64.06% color(xyz-d50 none none none), hsla(-97deg, 100%, 93.11%, 99.99%))", "color-mix(in srgb, coral, color-mix(in	srgb, #5286b245, black))", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(117, 94, 130)", ip("oklch(none -8.8% 703.755deg)", "hwb(1.7732turn 36.7365% 49%)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(113, 51, 84)", ip("lch(50.8331 159 none)", "lch(28.8 none -680.8 / none)", 7563, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(93, 126, 126)", ip("paleturquoise", "lch(none none 441.466grad / none)", 4689, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.75)", ip("hsl(60 0% none)", "rgb(79 none none /-0.5)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(135, 76, 138)", ip("hwb(339 33% 78.22%)", "color(prophoto-rgb 0.4 none 0.5)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(61, 0, 101, 0.9239)", ip("hwb(none none 76% / 88%)", "rgb(none none 300)", 3656, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(88, 88, 88)", ip("oklch(none 0.1818 0.483rad/none)", "oklab(0.76 none none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(210, 126, 229, 0.7758)", ip("hwb(280.3082deg none 4/61.63%)", "antiquewhite", 4156, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(27, 26, 18, 0.875)", ip("oklch(none none none)", "hwb(51 50% 25.6% / 50%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("color-mix(in srgb, #56c 100%, rebeccapurple)", "lch(none none -353)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("hsl(none none none)", "color(srgb 0.78 none none/none)", 1, 2));
 }
 
 static void test_l102_none_61(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("lab(none none none)", "gold", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(253, 120, 115)", ip("hwb(none none none /none)", "linen", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(97, 65, 65, 0.7847)", ip("hwb(none none 65%)", "hwb(none 57 86% /0.7)", 7178, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(64, 23, 123, 0.8625)", ip("rgba(35 26 none)", "lch(47.4% 161 none /0.45)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("hwb(none 72 85 / 0)", "rgb(none none none /0)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("hsla(none none none)", "hwb(-316.878deg 90 36)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(2, 1, 10, 0.6667)", ip("color-mix(in srgb , color-mix(in srgb,#2f1eda,hsl(-0.5turn 50% 0 / 2)) 50% , hsl(245 100 16.43% / 0.5) 100%)", "oklch(0 none none /none)", 8941, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(85, 78, 81, 0.7975)", ip("oklab(none none none)", "color-mix(in srgb, hsl(400grad, 0%, 94.9%, 150%), rgb(155 40 88 / 0.19))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(220, 255, 255)", ip("lch(109.9% none none)", "color(srgb-linear 0.487 none none / none)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 44, 187, 0.8725)", ip("color(srgb-linear none 2 none)", "color-mix(in srgb,0% antiquewhite,84.968% #00b)", 8480, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(99, 99, 99, 0.5)", ip("hwb(573.78grad 84 22.94% / -0.5)", "hwb(573.4191deg 61.7% 97.43% /1)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(166, 162, 15, 0.9936)", ip("hwb(none none none)", "color-mix(in srgb, #9d7e 12.7%, color-mix(in srgb,19.407% rgba(232.17, 210, 37, 1),hwb(1.5708rad 0% 14)))", 7471, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(107, 0, 23)", ip("oklab(none none none)", "color(srgb 50% none 0.1076)", 8411, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(7, 7, 7)", ip("hsla(none none 58%)", "oklch(none 0 none)", 9495, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(117, 101, 108, 0.3882)", ip("color-mix(in srgb , 18.4276% hsla(336, 35.3%, 74.5%, 2) , hwb(11.732rad 6% 71.9%) 0%)", "hwb(none 34% 100/1.5)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(8, 2, 187, 0.0938)", ip("color(xyz-d65 0 0 none / none)", "color-mix(in	srgb,10.22% #4a0ebbea,transparent)", 1133, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(65, 0, 6)", ip("rgba(130 none 12)", "oklch(none 0.0066 none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(80, 13, 8)", ip("hwb(275 none 97%)", "rgb(61% 26 none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(150, 147, 0, 0.75)", ip("color-mix(in srgb, color-mix(in srgb, color(srgb 0.62 0.3275 none/50%), color(xyz-d50 0.1 none none /none)), lawngreen)", "hwb(none none none / none)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(150, 232, 0, 0.9999)", ip("hwb(360 91 none /0)", "color(a98-rgb 0.5 none -0.102)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(210, 210, 210, 0.7479)", ip("hwb(662.276 50% 62.16%)", "color-mix(in srgb, 66.8% hsl(none 1.2% 100%/none), 0% oklab(none 0.775 -0.3682))", 7592, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklab(0 0.3 none / 120%)", "navajowhite", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(102, 0, 44)", ip("lch(14 127.28% none/1)", "color(rec2020 0.4333 none -0.48)", 1873, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(150, 61, 84)", ip("seagreen", "rgb(231.3, -12, 81.76)", 5597, 2));
 }
 
 static void test_l102_none_62(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(1, 253, 219)", ip("oklch(0 0.0960 none/0.788)", "color(xyz-d50 none 0.5014 0.5849)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 0, 0)", ip("red", "darkturquoise", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(80, 29, 28, 0.0001)", ip("color-mix(in srgb, hwb(1 none 29%), hsla(none 0% 15.5%) 71.156%)", "color-mix(in srgb, hwb(15.14deg 0% 127.1%) 0%, hwb(729.7488grad 50% 79.2% / 0))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(98, 0, 8)", ip("hsla(none 104.12% 12%)", "lch(none 230 none)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 66, 0)", ip("color-mix(in srgb, lab(25.68 -147.1607 116.7287), oklab(none none 0.3268))", "color(xyz-d65 none none none)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 255, 0.8898)", ip("color(prophoto-rgb 0.5142 none 1.7)", "color(xyz-d65 none none none / 36.3%)", 1730, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.3591)", ip("lch(none none none/35.9%)", "hwb(720deg 80% 15.1%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(202, 93, 90)", ip("color(a98-rgb 0.99 -1 0 / none)", "color-mix(in  srgb,50% hsl(-304.241 53.1% 66% / 1),rgb(117.18, 42%, 101))", 5892, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(82, 0, 6)", ip("lab(none 82.6178 none)", "color-mix(in srgb, lch(102 none 605.6grad/0.5), rgba(69% none 43%))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 46, 35)", ip("hsla(-194.0308 112% 9%/none)", "color-mix(in srgb, hsla(none none 58.16% /none), color(xyz 0 0.27 none))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 255, 0)", ip("rgb(none none none)", "color(xyz none 0.779 none/none)", 6470, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(136, 68, 171)", ip("lab(none -84.401 none)", "color(display-p3 +0.5 0.28 0.65)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(176, 157, 127)", ip("color-mix(in srgb,sienna,hsla(2rad 100% 93% / 0.9999))", "hsla(none none 39%)", 1692, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(200, 239, 26, 0.0001)", ip("rgba(none 239 10%)", "hsla(none none 78.5% /-0.5)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(141, 141, 140)", ip("lab(58.53% none +0.5)", "hwb(none 86% none)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(34, 221, 102, 0.9999)", ip("#2d6", "hsla(none 81.1% none /0.2)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(174, 171, 253, 0.7059)", ip("hwb(53 0% 96.6%)", "#aeabfdb4", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(109, 203, 255, 0.75)", ip("rgb(109 none 100%)", "rgb(122 203 106 / -0.5)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(79, 109, 109)", ip("hwb(-169.5deg 28% 56.14%)", "color-mix(in srgb,rgb(0%, 69%, 151),#cb422f)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(182, 148, 131)", ip("color-mix(in srgb, color-mix(in srgb, 77.742% lemonchiffon, hsla(224.674deg none 81.637%)), hwb(none 22% 53 /none))", "color(xyz-d50 none none none)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.5)", ip("hsla(none none none /none)", "rgb(none 50% 100% / 0.5)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(64, 191, 64)", ip("color-mix(in srgb, color-mix(in srgb, color(display-p3 0.5044 1.938 0.7728), hsla(none 86% none)), lime)", "hwb(216 none 55)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 48, 76)", ip("lab(59% 115.8% 45.3%/none)", "hwb(none none none)", 3262, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 253, 89)", ip("color-mix(in srgb, red, color-mix(in	srgb,rgb(224 190 205 / 120%),#3d2 18.53%))", "hwb(60 35 none)", 9903, 2));
 }
 
 static void test_l102_none_63(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("color(xyz-d50 0.8 none none /none)", "lch(53 none 270 /none)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 255, 195)", ip("color(xyz-d65 none none 0.5)", "color(xyz-d50 none 0.841 0.5411)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(1, 6, 5, 0.8095)", ip("color-mix(in srgb, hsla(124.18deg 13.6% 2% / 0.5), color(srgb 0 none none))", "color(rec2020 none none none)", 2378, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(37, 37, 34)", ip("hsl(67, 4%, 28%)", "oklab(none none none)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("rebeccapurple", "lavender", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("oklab(none none none)", "color(xyz none none none / 1.5)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 233, 237)", ad("hwb(-0.1122rad 34.7% 50% / 1.5)", "color-mix(in srgb , hwb(1.4229turn 65% 50%) , 0% color-mix(in srgb , lawngreen , hsla(527.1619grad 62% 49%)))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(71, 37, 23)", ad("hwb(18 9% 72)", "rgb(none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(246, 246, 246)", ad("oklch(88% 0 none / 1)", "lab(26 none none / 0.5)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ad("hsla(none none none /none)", "color-mix(in srgb, 0% mintcream, transparent)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(169, 169, 169)", ad("darkgray", "hsla(655.6 54.3% none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 28, 0)", ad("hsla(none none 73% / none)", "lab(none -39.2% none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(113, 251, 0)", ip("lab(18.8% none 100%)", "color(xyz 0% 1 none)", 9797, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(229, 246, 204, 0.6705)", ip("hwb(none 85% 1/1.5)", "color-mix(in  srgb,white,rgb(139 224 38 / 0.315))", 9620, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklch(0% 0.0340 662.21deg/none)", "color(xyz-d50 none none none)", 983, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(128, 29, 29)", ip("lab(27.537 none -142.108/120%)", "hwb(none none none)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 74, 74, 0.2316)", ad("hsl(102 none none /none)", "hwb(360 29% none /23.16%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("aliceblue", "color-mix(in srgb, #ff14fe 50%, 6.2% #fe2a)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.17)", ad("hwb(none none none / none)", "color(xyz-d50 none none none / 17%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(229, 255, 240)", ad("color-mix(in srgb, lch(50% 210.5 131.3deg /none) 100%, lab(98.4% -129 none) 75.63%)", "hsl(none 13% 59% /1.5)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 215, 208)", ad("hwb(0 56 none/50%)", "color-mix(in srgb,hwb(538.42grad 100% 100%),22.8431% #f7c6a7)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 3, 4)", ad("lab(none -3% -44% / 1.5)", "color-mix(in srgb, color(prophoto-rgb none none none/none), hsl(none none none))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.13)", ad("rgba(none none none /0)", "oklch(none 0.3756 none /13%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(33, 150, 0)", ad("color(display-p3 none none none / none)", "rgb(13% 150 none)", 2));
 }
 
 static void test_l102_none_64(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(102, 51, 153)", ad("hsla(121 none 48% / 0)", "color-mix(in srgb, rgba(none none none) 50%, rebeccapurple 100%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 115, 115)", ad("hwb(none 45% none)", "hsla(148 none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(70, 144, 0)", ad("color(srgb none 50% none / 79%)", "lab(18.8% none 100%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("lab(none none none /0)", "color(a98-rgb none none none /1)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(206, 0, 32)", ad("lch(none 226 none)", "hsl(none none none /none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("hwb(360 29% none /23.16%)", "aliceblue", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(235, 147, 86)", ad("#eb9356", "hwb(none none none / none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 208, 208)", ad("hsl(none 13% 59% /1.5)", "hwb(0 56 none/50%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(155, 153, 217)", ad("color-mix(in srgb,hwb(538.42grad 100% 100%),22.8431% #f7c6a7)", "lab(none -3% -44% / 1.5)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("color-mix(in srgb, color(prophoto-rgb none none none/none), hsl(none none none))", "rgba(none none none /0)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(31, 0, 0, 0.13)", ad("oklch(none 0.3756 none /13%)", "color(display-p3 none none none / none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(33, 150, 0)", ad("rgb(13% 150 none)", "color(xyz-d65 none none none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("color-mix(in srgb, 32% color(xyz-d65  1.0289  0.5297  0.49 /0), hwb(1.789rad 100% 1%))", "white", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(169, 169, 169)", ad("color-mix(in srgb, lab(50% none none/none), oklab(89.23% none none))", "rgb(197.7 none 203/none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("color-mix(in srgb, lch(101 212.7 -394.03deg/ 120%) 0%, lab( 90.3 -45.62% 35.6 ))", "color(prophoto-rgb 1 none none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("oklch(81.42% none 1turn)", "lab(97 none none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(244, 250, 166)", ad("hwb(none none none / 22.3%)", "hsl(0.293turn, 90%, 81.7%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ad("hsl(488deg 76% none / none)", "rgb(none 50% 29 /none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(119, 136, 153)", ad("rgba(none none 39/none)", "lightslategray", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(163, 92, 98)", ad("hsl(none none none)", "color-mix(in srgb, hwb(355 7% none /94%) 31.97%, hsl(6.2832rad, 0%, 50%, 100%))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(204, 193, 222)", ad("color-mix(in srgb, #98cf, floralwhite)", "hwb(406.6 none none/none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(231, 255, 159)", ad("hwb(none 63% 67)", "olivedrab", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(172, 55, 155)", ad("hwb(2.8932turn -1% 32.57%)", "lab(18.71% -23.21% none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(180, 254, 255)", ad("rgb(none 106 255)", "color-mix(in srgb, 50% #bbfbf0, rgba(none 48 none / 0.9214))", 2));
 }
 
 static void test_l102_none_65(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(172, 212, 172)", ad("lab(none -86.9 none)", "color-mix(in srgb, 32% color(xyz-d65  1.0289  0.5297  0.49 /0), hwb(1.789rad 100% 1%))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("white", "color-mix(in srgb, lab(50% none none/none), oklab(89.23% none none))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(109, 255, 155)", ad("rgb(197.7 none 203/none)", "color-mix(in srgb, lch(101 212.7 -394.03deg/ 120%) 0%, lab( 90.3 -45.62% 35.6 ))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 0, 0)", ad("color(prophoto-rgb 1 none none)", "oklch(none 0 -187.16deg)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 246, 246)", ad("lab(97 none none)", "hwb(none none none / 22.3%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(187, 250, 166)", ad("hsl(0.293turn, 90%, 81.7%)", "hsl(488deg 76% none / none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ad("rgb(none 50% 29 /none)", "lab(none -107 none/none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(119, 136, 153)", ad("lightslategray", "hsl(none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(204, 193, 222)", ad("color-mix(in srgb, color(srgb-linear 0 1.5499 none/none) 0%, lch(none 41.97% 267grad/none))", "color-mix(in srgb, #98cf, floralwhite)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(124, 124, 124)", ad("hwb(406.6 none none/none)", "hwb(none 63% 67)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 142, 145)", ad("olivedrab", "hwb(2.8932turn -1% 32.57%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 161, 255)", ad("lab(18.71% -23.21% none)", "rgb(none 106 255)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(37, 0, 0)", ad("lch(none none none)", "color-mix(in srgb, color(rec2020 0.061 none none), hwb(none none 87))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("color(display-p3 0.8756 0.3 0.72 / none)", "rgba(none none none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(143, 168, 79, 0.7625)", ad("color-mix(in srgb, color-mix(in srgb, rgb(38 26 59 / 1), hsl(762.2deg 21% none / 0.05)), rgb(199 243 91 / 1.5))", "oklch(none none 42 /none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(2, 2, 2)", ad("oklch(0.21 none 45deg /0)", "lab(.5 none -0)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(70, 217, 208)", ad("color(xyz none 0.4287 103.79%)", "hsla(none 20% 22.9%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ad("rgba(none none 50% /none)", "rgb(300 none 300/none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(31, 28, 249, 0.9012)", ad("color-mix(in srgb, oklch(0.9	.5	355 /-0.5), hwb(none 55% 38/none) 0%)", "color-mix(in srgb,79.1% blue,color-mix(in srgb, #c9aac20e, blanchedalmond 50%))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(59, 42, 42, 0.9268)", ad("color-mix(in srgb, hsl(none none 17.94%), 14.64% hwb(none none 14 /50%))", "color(a98-rgb -0.686 none -0/none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 243, 85)", ad("color(rec2020 0.8 0.6 none)", "hwb(-160.08deg 100% 50%/50%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(121, 74, 86)", ad("rgb(none 300 50% /none)", "color-mix(in srgb, color(xyz 0.6757 0.065 0.8538), color-mix(in srgb, hsl(none none none/none), tan) 82%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 255, 255, 0.5)", ad("oklab(100% none 0.3270 / 0.5)", "hsl(60 1.0342% 95%/none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(177, 31, 72)", ad("color(prophoto-rgb 0.857 none 0/50%)", "color-mix(in  srgb,darkseagreen,rgb(98 61 78 / 50%) 100%)", 2));
 }
 
 static void test_l102_none_66(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(180, 148, 231)", ad("color-mix(in srgb, 50% #bbfbf0, rgba(none 48 none / 0.9214))", "lch(none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(37, 0, 0)", ad("color-mix(in srgb, color(rec2020 0.061 none none), hwb(none none 87))", "color(display-p3 0.8756 0.3 0.72 / none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 215, 103)", ad("oklch(none none 42 /none)", "rgba(none 215 103)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(70, 47, 47)", ad("hsla(none 20% 22.9%)", "rgba(none none 50% /none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ad("rgb(300 none 300/none)", "color-mix(in srgb, oklch(0.9	.5	355 /-0.5), hwb(none 55% 38/none) 0%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(83, 65, 255)", ad("color-mix(in srgb,79.1% blue,color-mix(in srgb, #c9aac20e, blanchedalmond 50%))", "color-mix(in srgb, hsl(none none 17.94%), 14.64% hwb(none none 14 /50%))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(237, 157, 0)", ad("color(a98-rgb -0.686 none -0/none)", "color(rec2020 0.8 0.6 none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(170, 170, 170, 0.5)", ad("hwb(-160.08deg 100% 50%/50%)", "rgb(none 300 50% /none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 94, 102)", ad("color-mix(in srgb, color(xyz 0.6757 0.065 0.8538), color-mix(in srgb, hsl(none none none/none), tan) 82%)", "color-mix(in srgb, oklch(0.6 0.3653 0.1turn) 90.2%, rgb(210.8 80% none /none))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 183, 0.5)", ad("hsl(60 1.0342% 95%/none)", "rgba(none none 183.1 /50%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 191)", ad("oklch(75.3% none none)", "color-mix(in srgb, color(display-p3 none none 0.06), 0% hsla(none none 90%))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(186, 85, 211)", ad("mediumorchid", "lab(91.4 .5 135.2201 /none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("oklab(60% 0 -0.0642)", "oklch(75.3% none none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 227)", ad("color-mix(in srgb, color(display-p3 none none 0.06), 0% hsla(none none 90%))", "mediumorchid", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ad("lab(91.4 .5 135.2201 /none)", "color(xyz none 0.1842 none / none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(131, 202, 204)", ad("hsl(none none none)", "color-mix(in srgb, hwb(3.1416rad 50% 20%) 87.3%, rgb(156.2 187 none /none))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 136, 0, 0.9069)", ad("oklab(0 0 0.0333/none)", "rgb(none 135.5 none /90.69%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 165, 32)", ad("hwb(none none none)", "goldenrod", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(101, 81, 214)", ad("color-mix(in srgb , color-mix(in	srgb,hsla(10.622rad 88.91% 50% / 100%),rgb(155 147 73%)) 100% , hsla(-1rad -3.28% 14.4%))", "oklab(none none none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(227, 0, 110)", ad("hwb(331 none 11)", "color(srgb none none none/30%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(37, 50, 0, 0.95)", ad("color-mix(in srgb, hwb(75 none 59 / 90%), color-mix(in srgb, oklch(none none none /none), oklch(none 0.1098 none)))", "lab(none none 52.7%/none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(222, 255, 128)", ad("color(srgb-linear none 0.7 0)", "hwb(none 50% 13)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(82, 141, 253, 0.8333)", ad("rgb(-10 none 247/none)", "color-mix(in srgb,#48ff,#cbe5 25%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(73, 213, 73)", ad("rgb(none 55% none)", "color-mix(in srgb, 93% hwb(4.85rad 40% 100%), color(display-p3 none none none))", 2));
 }
 
 static void test_l102_none_67(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("color(xyz none 0.1842 none / none)", "hsl(none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(131, 202, 204)", ad("color-mix(in srgb, hwb(3.1416rad 50% 20%) 87.3%, rgb(156.2 187 none /none))", "oklab(0 0 0.0333/none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 123, 0)", ad("rgb(none 135.5 none /90.69%)", "hwb(none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 246, 246)", ad("goldenrod", "color-mix(in srgb , color-mix(in	srgb,hsla(10.622rad 88.91% 50% / 100%),rgb(155 147 73%)) 100% , hsla(-1rad -3.28% 14.4%))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(227, 0, 110)", ad("oklab(none none none)", "hwb(331 none 11)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(36, 47, 0)", ad("color(srgb none none none/30%)", "color-mix(in srgb, hwb(75 none 59 / 90%), color-mix(in srgb, oklch(none none none /none), oklch(none 0.1098 none)))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 218, 0)", ad("lab(none none 52.7%/none)", "color(srgb-linear none 0.7 0)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("hsla(-0.957turn 63.4% 128.47% / 1)", "color(prophoto-rgb none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(68, 255, 211)", ad("color-mix(in srgb,#48ff,#cbe5 25%)", "rgb(none 55% none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 148)", ad("color(xyz-d65 0.18 none -1)", "hwb(154.75deg none none/120%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 219, 255)", ad("color-mix(in srgb, rgb(100% 5% 100%), rgb(236 209 207 / 120%))", "color-mix(in srgb, lab(86.42 .5 none), hwb(179 none none / 0))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 0, 0)", ad("hwb(none none none)", "rgb(-10 300 255/none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(5, 195, 1)", ad("color-mix(in srgb, lab(none 29.5 none), color(srgb-linear none 1 none) 76.6%)", "color(xyz-d65 0.18 none -1)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(246, 255, 255)", ad("hwb(154.75deg none none/120%)", "color-mix(in srgb, rgb(100% 5% 100%), rgb(236 209 207 / 120%))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(225, 224, 224)", ad("color-mix(in srgb, lab(86.42 .5 none), hwb(179 none none / 0))", "hwb(-155.6 72.7% 86.973%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 37, 37)", ad("rgb(-10 300 255/none)", "lab(17 none -92.5)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(204, 152, 84)", ad("color-mix(in srgb, rgb(none none 37), hwb(120 89% 83%))", "color-mix(in srgb,hwb(-265.797deg 0% 84%) 50%,25% red)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(152, 0, 77)", ad("color(xyz 0.8621 none 0)", "rgb(none 130 none/-0.5)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 233, 99)", ad("color(rec2020 none 0.9615 -14%)", "lab(none -144 none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 136, 76)", ad("color(xyz-d50 none none -1)", "color(xyz none 0.201 none/1)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(4, 2, 255)", ad("color-mix(in srgb, 0% oklch(none 0 none), color(srgb none none 1))", "color-mix(in srgb, hsl(none none none), hwb(30 none 98%) 86%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("color(a98-rgb none none none)", "hsl(none 87% none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 137, 255)", ad("color-mix(in	srgb, hsl(237.509, 50%, 50%, 0.5), #e134d08c 50%)", "hotpink", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("oklab(none none none)", "rgba(none none none)", 2));
 }
 
 static void test_l102_none_68(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(132, 184, 255)", ad("lab(17 none -92.5)", "color-mix(in srgb, rgb(none none 37), hwb(120 89% 83%))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 20, 62)", ad("color-mix(in srgb,hwb(-265.797deg 0% 84%) 50%,25% red)", "color(xyz 0.8621 none 0)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 255, 0)", ad("rgb(none 130 none/-0.5)", "color(rec2020 none 0.9615 -14%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(186, 52, 0)", ad("lab(none -144 none)", "color(xyz-d50 none none -1)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 165, 0)", ad("color(xyz none 0.201 none/1)", "hsl(180 100% none/none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(4, 2, 0)", ad("color-mix(in srgb, hsl(none none none), hwb(30 none 98%) 86%)", "color(a98-rgb none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(78, 32, 105)", ad("hsl(none 87% none)", "color-mix(in	srgb, hsl(237.509, 50%, 50%, 0.5), #e134d08c 50%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 105, 180)", ad("hotpink", "oklab(none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(250, 250, 250)", ad("oklch(none none 6.2832rad / none)", "hsla(243 none 98%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 255, 255)", ad("green", "oklab(105.1% -0.4853 none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 255, 0)", ad("color(xyz-d50 none 0.9 none)", "rgba(168 none 255 /none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(144, 41, 41)", ad("oklch(none none 309)", "color-mix(in srgb, rgba(70% none none /none), oklch(0.28 none -272.5grad) 24.9527%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(250, 255, 250)", ad("hsla(243 none 98%)", "green", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("oklab(105.1% -0.4853 none)", "color(xyz-d50 none 0.9 none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("rgba(168 none 255 /none)", "oklch(none none 309)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 226, 255)", ad("color-mix(in srgb, rgba(70% none none /none), oklch(0.28 none -272.5grad) 24.9527%)", "color-mix(in srgb, oklab(0.8032	-37%	-0.4258 /1) 84%, hsla(60 26.9717% 39% /none))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(128, 214, 0)", ad("rgb(50% 213.65 none)", "hsla(none none none /50%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(247, 189, 0)", ad("oklab(24.37% -0.3012 none /none)", "color(prophoto-rgb 0.8 0.7 none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.5)", ad("oklch(none 0.0602 none /0.5)", "rgb(none none none / none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(152, 180, 190)", ad("rgb(none none none)", "color-mix(in srgb , #bea , hsl(597.18 50% 64% / 1))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(187, 187, 176)", ad("color-mix(in srgb, 100% hwb(416 69% 26.5669% / 120%), linen)", "lch(none 22 3.1416rad / 1)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(175, 255, 192)", ad("rgb(none 135 none)", "color(xyz-d65 0.2551 1 none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(135, 68, 0)", ad("hwb(30 none 47%)", "color(display-p3 none none none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 44, 46)", ad("oklab(none -0.9 -0.0809 / none)", "color(xyz-d50 none none 1.58 / 1.5)", 2));
 }
 
 static void test_l102_none_69(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(148, 255, 226)", ad("color-mix(in srgb, oklab(0.8032	-37%	-0.4258 /1) 84%, hsla(60 26.9717% 39% /none))", "rgb(50% 213.65 none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.5)", ad("hsla(none none none /50%)", "oklab(24.37% -0.3012 none /none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(253, 187, 0)", ad("color(prophoto-rgb 0.8 0.7 none)", "oklch(none 0.0602 none /0.5)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("rgb(none none none / none)", "rgb(none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(187, 255, 176)", ad("rgb(none 122.02 none)", "color-mix(in srgb, 100% hwb(416 69% 26.5669% / 120%), linen)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 151, 0)", ad("lch(none 22 3.1416rad / 1)", "rgb(none 135 none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(135, 255, 0)", ad("color(xyz-d65 0.2551 1 none)", "hwb(30 none 47%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("color(display-p3 none none none)", "oklab(none -0.9 -0.0809 / none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 65, 255)", ad("color(xyz-d50 none none 1.58 / 1.5)", "oklch(none none -549.9/120%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 187, 190, 0.453)", ad("color-mix(in srgb, #ffbbbee7, hsl(-0.7turn, 50%, 73.43%, 0))", "color(display-p3 0.3 0.18 0.2118 /none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("hsl(150 none none)", "rgb(none 151 none / none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(141, 255, 255)", ad("color-mix(in  srgb , hwb(516.2deg 0% 100% /0.025) 1.42% , color-mix(in srgb , skyblue , hsl(0.2turn 1% 59%)))", "lab(109.4 none -122.8)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(227, 255, 243)", ad("oklch(none none -549.9/120%)", "hwb(155.013 89% none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(2, 0, 0)", ad("oklch(0.05 0.4225 69)", "oklch(none 0.2901 326.1deg / none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 187, 190, 0.453)", ad("hwb(none none none /none)", "color-mix(in srgb, #ffbbbee7, hsl(-0.7turn, 50%, 73.43%, 0))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("color(display-p3 0.3 0.18 0.2118 /none)", "hsl(150 none none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(143, 179, 192, 0.9862)", ad("rgb(none 151 none / none)", "color-mix(in  srgb , hwb(516.2deg 0% 100% /0.025) 1.42% , color-mix(in srgb , skyblue , hsl(0.2turn 1% 59%)))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(98, 128, 13)", ad("rgb(none none none)", "hwb(2.21turn 5 50%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("oklch(none none none)", "hsla(211.3481 0% none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(206, 255, 54)", ad("color-mix(in srgb, 25% rgb(12, 65, 84%), lab(none 45.9% none / 0) 12.84%)", "hwb(-287.77deg none none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ad("darkgray", "hwb(1.5708rad 38.5% 50% /120%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(188, 183, 0)", ad("lab(none 87.7944 59.28)", "rgb(188 182.8 none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(165, 165, 165)", ad("hwb(119 80.9% 44.1%)", "lab(none none 1%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(24, 165, 255)", ad("oklch(21.04% none 12.39rad)", "hwb(-513 none none)", 2));
 }
 
 static void test_l102_none_70(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(98, 128, 13)", ad("hwb(2.21turn 5 50%)", "oklch(none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(3, 16, 54)", ad("hsla(211.3481 0% none)", "color-mix(in srgb, 25% rgb(12, 65, 84%), lab(none 45.9% none / 0) 12.84%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 169)", ad("hwb(-287.77deg none none)", "darkgray", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(205, 128, 98)", ad("hwb(1.5708rad 38.5% 50% /120%)", "lab(none 87.7944 59.28)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(25, 24, 24)", ad("lab(none none 1%)", "oklch(21.04% none 12.39rad)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(29, 169, 255)", ad("hwb(-513 none none)", "color-mix(in srgb, color(srgb-linear 0 0 none), color-mix(in srgb, 13.5% color(xyz none none 0.98), lab(24 none none /none)))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(4, 0, 252)", ad("oklch(none 0.4451 6.2832rad /9%)", "color-mix(in srgb, oklch(none none none), 100% color-mix(in srgb, rgb(none none 252.2) 0%, rgba(none none none)))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(148, 33, 255)", ad("hwb(271 13% none)", "color(xyz-d50 61% -8.1% none / none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(189, 189, 189)", ad("color-mix(in  srgb, #060, 100% hwb(426.5795grad 27 84.4109%))", "color-mix(in  srgb, hwb(71.198deg 100.4% -6%), hsla(-60.758deg, 50%, 0%, 150%))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("color(xyz-d65 none 0.225 none /-0.5)", "hsl(none none none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 234)", ad("color-mix(in srgb, papayawhip 100%, color(xyz-d50 none none 92%) 0%)", "color-mix(in srgb, 80% maroon, 37% lch(54.9 none -26.94deg/0.5))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ad("color(srgb none none -0.4874)", "color(xyz-d65 none none none / -0.5)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(252, 254, 52)", ad("color-mix(in srgb, color(srgb-linear 0 0 none), color-mix(in srgb, 13.5% color(xyz none none 0.98), lab(24 none none /none)))", "color(xyz-d65 0.562 0.6949 none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(148, 33, 255)", ad("color-mix(in srgb, oklch(none none none), 100% color-mix(in srgb, rgb(none none 252.2) 0%, rgba(none none none)))", "hwb(271 13% none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 235)", ad("hwb(30 68 none /1)", "color-mix(in  srgb, #060, 100% hwb(426.5795grad 27 84.4109%))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.5)", ad("hsl(none none none / 0.5)", "color(xyz-d65 none 0.225 none /-0.5)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 239, 213)", ad("hsl(none none none)", "color-mix(in srgb, papayawhip 100%, color(xyz-d50 none none 92%) 0%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(108, 21, 21)", ad("color-mix(in srgb, 80% maroon, 37% lch(54.9 none -26.94deg/0.5))", "color(srgb none none -0.4874)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ad("color(xyz-d65 none none none / -0.5)", "rgb(none 19% none /none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.5)", ad("color-mix(in srgb, 25% rgb(255 119 none / none), hsla(none 100% none / none))", "lch(none none none /0.5)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(174, 169, 90)", ad("oklab(97% none 0.1836 /52%)", "color-mix(in srgb, hwb(61 0% 78), color-mix(in srgb, oklab(none none none/0.15) 6.31%, oklab(none 0.0185 none/1)) 25%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 134, 0)", ad("rgb(none 134 none)", "hwb(236 17% 97 / none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(150, 255, 61)", ad("color-mix(in srgb, oklab(0.5  0  -0.0570 /120%), 54% hwb(52.7071deg -11.8% 19.951%))", "color-mix(in srgb, color(prophoto-rgb none 49.7% none), rgb(none none none))", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 93)", ad("hwb(2.8448turn 7% 61.3%)", "hwb(59 none none)", 2));
 }
 
 static void test_l102_none_71(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ad("rgb(none 19% none /none)", "color-mix(in srgb, 25% rgb(255 119 none / none), hsla(none 100% none / none))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 122, 122)", ad("lch(none none none /0.5)", "hwb(none 48% none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 128)", ad("color-mix(in srgb , blue , black)", "hsl(289.4 28.3% none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(41, 176, 0)", ad("color-mix(in srgb, hwb(61 0% 78), color-mix(in srgb, oklab(none none none/0.15) 6.31%, oklab(none 0.0185 none/1)) 25%)", "rgb(none 134 none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(150, 142, 61)", ad("hwb(236 17% 97 / none)", "color-mix(in srgb, oklab(0.5  0  -0.0570 /120%), 54% hwb(52.7071deg -11.8% 19.951%))", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(99, 18, 93)", ad("hsla(486.894 94.5% none)", "hwb(2.8448turn 7% 61.3%)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 0)", ad("hwb(59 none none)", "color(prophoto-rgb 0.196 0.4 none)", 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(233, 240, 122)", ad("darksalmon", "color-mix(in srgb, lch(none none none/none), 80% color(xyz-d65 none 0.087 none))", 2));
-    TEST_ASSERT_EQUAL(1, mt("hwb(none none none)"));
-    TEST_ASSERT_EQUAL(0, mt("rgb(none 0 0 / none / 1)"));
-    TEST_ASSERT_EQUAL(0, mt("hwb(none, 10%, 10%)"));
-    TEST_ASSERT_EQUAL(0, mt("hsl(nonedeg 10% 10%)"));
+    TEST_ASSERT_EQUAL_STRING("rgb(233, 255, 122)", ad("color(prophoto-rgb 0.196 0.4 none)", "darksalmon", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 247, 74, 0.5)", ad("hwb(417.28 29 0%/0.5)", "oklch(none none none/none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(132, 162, 101)", ad("hwb(-344.2deg 61.75% 94%)", "hwb(90 none 76%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(205, 92, 92)", ad("black", "indianred", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(19, 61, 72)", ad("color-mix(in srgb,transparent,#257990)", "lab(none none 139.39)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ad("color(a98-rgb none -10.7% none / none)", "oklch(none 0 none/none)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(179, 255, 252)", ad("color-mix(in srgb, #6e1, color(srgb -18.3% none 0.9 / none))", "hwb(-4.022rad 50% 47.4%)", 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 189, 189)", ad("oklab(none none 0.3423/90%)", "hwb(none 74% none /1.5)", 2));
+    TEST_ASSERT_EQUAL(1, mt("rgba(76% none none)"));
+    TEST_ASSERT_EQUAL(1, mt("oklch(18% none 343deg /1)"));
+    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, rgb(140 210.06 35.6), hwb(none 63 45%))"));
+    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, lab(none none none), hwb(0 none 87))"));
 }
 
 static void test_l102_none_72(void) {
-    TEST_ASSERT_EQUAL(0, mt("hwb(none 149 42% 52%/-0.5)"));
-    TEST_ASSERT_EQUAL(0, mt("hwb(none 240 91 89)"));
-    TEST_ASSERT_EQUAL(1, mt("hsla(119 none 50% /none)"));
-    TEST_ASSERT_EQUAL(0, mt("oklch(none 100% 0 245 / 0)"));
-    TEST_ASSERT_EQUAL(1, mt("rgba(none none none)"));
-    TEST_ASSERT_EQUAL(1, mt("color(xyz-d65 0 none none/none)"));
-    TEST_ASSERT_EQUAL(1, mt("color(srgb 96.2% 0.7 none)"));
-    TEST_ASSERT_EQUAL(0, mt("rgb(none, 0, 0)"));
-    TEST_ASSERT_EQUAL(1, mt("color(xyz 0.88 none 0.49/none)"));
-    TEST_ASSERT_EQUAL(1, mt("rgb(none none none /120%)"));
-    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, 25% color-mix(in srgb, rgb(163 93 38 / 0.5), hsl(-0.5turn, 65.315%, 92.3%)), hsl(771deg none 30.4283%))"));
-    TEST_ASSERT_EQUAL(1, mt("color(display-p3 none none 0.01 / none)"));
-}
-
-static void test_l102_none_73(void) {
-    TEST_ASSERT_EQUAL(1, mt("hwb(-60deg 10% none/none)"));
-    TEST_ASSERT_EQUAL(1, mt("color(xyz 66% none none)"));
-    TEST_ASSERT_EQUAL(1, mt("color(prophoto-rgb none 92% none / 0.1667)"));
-    TEST_ASSERT_EQUAL(1, mt("hwb(31 25 none)"));
-    TEST_ASSERT_EQUAL(0, mt("rgb(none 0)"));
-    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, color-mix(in srgb, hwb(none none none / none), hwb(240 9% 63%) 100%), 47.13% oklch(8.6% 0.2089 1.5turn))"));
-    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, hsl(720deg none none) 100%, color(rec2020 0.4324 0.2 0.1))"));
-    TEST_ASSERT_EQUAL(1, mt("lch(none -7.843 none /none)"));
-    TEST_ASSERT_EQUAL(1, mt("rgba(none none none/-0.5)"));
-    TEST_ASSERT_EQUAL(1, mt("color(display-p3 0.717 0.9 0.0622)"));
-    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, hwb(none 59% none) 100%, hwb(0 none 87))"));
     TEST_ASSERT_EQUAL(1, mt("color(xyz-d50 none 0.7 none / 0.6806)"));
-}
-
-static void test_l102_none_74(void) {
     TEST_ASSERT_EQUAL(1, mt("color(xyz-d65 none none none)"));
     TEST_ASSERT_EQUAL(0, mt("hsl(none, 10%, 20%)"));
     TEST_ASSERT_EQUAL(0, mt("color(srgb none none)"));
     TEST_ASSERT_EQUAL(1, mt("color(display-p3 none none none)"));
+    TEST_ASSERT_EQUAL(0, mt("rgb(none 0 0 / none / 1)"));
     TEST_ASSERT_EQUAL(1, mt("color(display-p3 none -1 0.843/0.5)"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, color-mix(in srgb, hwb(none none 54%), rgb(42%, 90, 43)), color(display-p3 none none 0.5/none) 25%)"));
     TEST_ASSERT_EQUAL(1, mt("hsl(none 50% 46%)"));
     TEST_ASSERT_EQUAL(0, mt("rgb(nonee 0 0)"));
-    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, 25% hsla(369.06 1% 44%), color(prophoto-rgb 18.7% 0.5 none /none))"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, lab(none 0 1%), oklch(0.501 none 146.152 /0.5872))"));
     TEST_ASSERT_EQUAL(1, mt("oklab(-0 0.0031 -0.2810 /none)"));
-    TEST_ASSERT_EQUAL(1, mt("lch(3 73 168/1)"));
 }
 
-static void test_l102_none_75(void) {
+static void test_l102_none_73(void) {
+    TEST_ASSERT_EQUAL(0, mt("rgb(none, 0, 0)"));
+    TEST_ASSERT_EQUAL(1, mt("lch(3 73 168/1)"));
     TEST_ASSERT_EQUAL(1, mt("color(srgb-linear 0.055 none 1.104)"));
     TEST_ASSERT_EQUAL(1, mt("hwb(179 none none)"));
     TEST_ASSERT_EQUAL(1, mt("hsl(none none 0%)"));
-    TEST_ASSERT_EQUAL(1, mt("lch(none 112 none / none)"));
     TEST_ASSERT_EQUAL(1, mt("color(a98-rgb none 0 0.7539)"));
     TEST_ASSERT_EQUAL(1, mt("lab(22.95% none none / 1)"));
     TEST_ASSERT_EQUAL(0, mt("color(none xyz-d65 1e-1 0.696 0.9915/15%)"));
@@ -1178,10 +1149,10 @@ static void test_l102_none_75(void) {
     TEST_ASSERT_EQUAL(1, mt("color(rec2020 29.98% none 0.248 / 120%)"));
     TEST_ASSERT_EQUAL(0, mt("hsl(none 60 21% 50%)"));
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, 0% rgb(none 0), oklab(100%  0  0.2555))"));
-    TEST_ASSERT_EQUAL(1, mt("oklch(none none 119 / 36%)"));
 }
 
-static void test_l102_none_76(void) {
+static void test_l102_none_74(void) {
+    TEST_ASSERT_EQUAL(1, mt("oklch(none none 119 / 36%)"));
     TEST_ASSERT_EQUAL(0, mt("hsla(120, 50%, 50%, none)"));
     TEST_ASSERT_EQUAL(0, mt("lch(56.42% 1e-1 none /120%)"));
     TEST_ASSERT_EQUAL(1, mt("oklab(none none none)"));
@@ -1191,12 +1162,13 @@ static void test_l102_none_76(void) {
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, hwb(584.79deg 43% 72%), 8.78% hwb(none 701 65 83))"));
     TEST_ASSERT_EQUAL(0, mt("color(srgb 1e1 0 0.285)"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, white, oklab( 38.4%  -0.8287  -0.1376 /97.82% ))"));
+    TEST_ASSERT_EQUAL(0, mt("rgb(none 0)"));
     TEST_ASSERT_EQUAL(1, mt("oklch(none none -460.782 /none)"));
-    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, 14.7% hsl(-0.49turn 112.8 33.1 / 150%), color-mix(in srgb, #31c67cec, transparent))"));
-    TEST_ASSERT_EQUAL(1, mt("rgb(none 300 none)"));
 }
 
-static void test_l102_none_77(void) {
+static void test_l102_none_75(void) {
+    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, 14.7% hsl(-0.49turn 112.8 33.1 / 150%), color-mix(in srgb, #31c67cec, transparent))"));
+    TEST_ASSERT_EQUAL(1, mt("rgb(none 300 none)"));
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, rgb(none 0 0 none) 23.67%, 25% color(display-p3 1.73 41.4% 0.541))"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, 79% oklab(none -0.4537 none), lab(none 12.96 -149.5))"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, hsl(597.62deg none none/none), rgb(none 46.98 none /none))"));
@@ -1207,11 +1179,11 @@ static void test_l102_none_77(void) {
     TEST_ASSERT_EQUAL(0, mt("rgba(none 52% 252 29% /-0.5)"));
     TEST_ASSERT_EQUAL(1, mt("rgb(146 26 none)"));
     TEST_ASSERT_EQUAL(1, mt("hsl(none none none / 0)"));
-    TEST_ASSERT_EQUAL(0, mt("rgb(none 0 0 none)"));
-    TEST_ASSERT_EQUAL(1, mt("hsla(299 100% 97.6%/none)"));
 }
 
-static void test_l102_none_78(void) {
+static void test_l102_none_76(void) {
+    TEST_ASSERT_EQUAL(0, mt("rgb(none 0 0 none)"));
+    TEST_ASSERT_EQUAL(1, mt("hsla(299 100% 97.6%/none)"));
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, color(srgb-linear none 0.76 1), hsl(none 657deg 63.404% 49% /-0.5))"));
     TEST_ASSERT_EQUAL(1, mt("color(srgb none none none)"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, hwb(none 90% none / 34%), rgb(none -10 none/none))"));
@@ -1222,26 +1194,26 @@ static void test_l102_none_78(void) {
     TEST_ASSERT_EQUAL(1, mt("hwb(720deg none none)"));
     TEST_ASSERT_EQUAL(1, mt("rgb(none none none / 0.5)"));
     TEST_ASSERT_EQUAL(1, mt("hwb(300 8 4/none)"));
-    TEST_ASSERT_EQUAL(1, mt("rgba(none none none / 50%)"));
-    TEST_ASSERT_EQUAL(1, mt("rgb(none 115 -10 / none)"));
 }
 
-static void test_l102_none_79(void) {
+static void test_l102_none_77(void) {
+    TEST_ASSERT_EQUAL(1, mt("rgba(none none none / 50%)"));
+    TEST_ASSERT_EQUAL(1, mt("rgb(none 115 -10 / none)"));
     TEST_ASSERT_EQUAL(1, mt("color(rec2020 0 none none/none)"));
     TEST_ASSERT_EQUAL(1, mt("color(srgb 0.6 0.3 none / -0.5)"));
     TEST_ASSERT_EQUAL(0, mt("hsl(none 104 83.7% 50%)"));
     TEST_ASSERT_EQUAL(1, mt("hwb(59 99% none)"));
     TEST_ASSERT_EQUAL(1, mt("color(srgb none none 0)"));
     TEST_ASSERT_EQUAL(1, mt("color(xyz 0 0.2522 1.1 /none)"));
-    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, hsl(1.5708rad 30.963% 95.8% / 2), oklab(+0.5 none 0.4552))"));
     TEST_ASSERT_EQUAL(1, mt("oklab(104% 0 -0.0718)"));
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, color(srgb none none), oklch(none none none none))"));
     TEST_ASSERT_EQUAL(1, mt("rgba(none 67 -10/none)"));
     TEST_ASSERT_EQUAL(1, mt("lch(-0 112.2% none)"));
-    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, oklch(0 none none / none), 81% color-mix(in srgb, lab(103 94% 98.7781/0.7), hwb(-306grad 0% 12 / 50%)))"));
 }
 
-static void test_l102_none_80(void) {
+static void test_l102_none_78(void) {
+    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, oklch(0 none none / none), 81% color-mix(in srgb, lab(103 94% 98.7781/0.7), hwb(-306grad 0% 12 / 50%)))"));
+    TEST_ASSERT_EQUAL(1, mt("color(display-p3 0.9 none 0.97)"));
     TEST_ASSERT_EQUAL(1, mt("hsl(61 0% none /none)"));
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, rgba(10, none, 0, 0.5), oklch(none 63.4% 0.3801 444.1deg))"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, lch(none none 1turn), hwb(277.3 100% 16.95%))"));
@@ -1252,11 +1224,11 @@ static void test_l102_none_80(void) {
     TEST_ASSERT_EQUAL(0, mt("color(none 1 0 0)"));
     TEST_ASSERT_EQUAL(1, mt("lch(none none 50deg / 0.5)"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, rgb(none none 231.2 / 0) 95.6%, hsl(-224deg 10.8% none / -0.5))"));
-    TEST_ASSERT_EQUAL(1, mt("hsl(none none none)"));
-    TEST_ASSERT_EQUAL(1, mt("color(display-p3 1.47 none none)"));
 }
 
-static void test_l102_none_81(void) {
+static void test_l102_none_79(void) {
+    TEST_ASSERT_EQUAL(1, mt("hsl(none none none)"));
+    TEST_ASSERT_EQUAL(1, mt("color(display-p3 1.47 none none)"));
     TEST_ASSERT_EQUAL(1, mt("hsl(none none none /0.577)"));
     TEST_ASSERT_EQUAL(1, mt("color(srgb-linear none +0.5 none)"));
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, hsla(none 683.4554deg 100% 87%) 50%, color(none 1 0 0))"));
@@ -1267,11 +1239,11 @@ static void test_l102_none_81(void) {
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, oklab(none none 0.1611 / 1.5), lch(none 1e-1 -0.26rad))"));
     TEST_ASSERT_EQUAL(1, mt("rgb(67.88 none none)"));
     TEST_ASSERT_EQUAL(1, mt("color(xyz-d65 0 none 0.779 /1.5)"));
-    TEST_ASSERT_EQUAL(1, mt("hsl(337 27.6% none / none)"));
-    TEST_ASSERT_EQUAL(1, mt("color(srgb none none 0.6297 /none)"));
 }
 
-static void test_l102_none_82(void) {
+static void test_l102_none_80(void) {
+    TEST_ASSERT_EQUAL(1, mt("hsl(337 27.6% none / none)"));
+    TEST_ASSERT_EQUAL(1, mt("color(srgb none none 0.6297 /none)"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, 33.15% oklch(0 none none), lab(83.75	-117%	-46.6491))"));
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, rgb(51, 42, 155), hwb(none, 10%, 10%) 32%)"));
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, hwb(-434 none none) 25%, hsl(none, 10%, 20%) 0%)"));
@@ -1281,16 +1253,44 @@ static void test_l102_none_82(void) {
     TEST_ASSERT_EQUAL(1, mt("lch(none none none /none)"));
     TEST_ASSERT_EQUAL(1, mt("lch(none none none / 0)"));
     TEST_ASSERT_EQUAL(1, mt("rgb(none none none)"));
-    TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, color(xyz-d50 1 0.28 none) 25%, hsl(nonedeg 10% 10%))"));
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, rgb(none 0 0 none), oklch(0.4 0 0.089turn /none))"));
-    TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, color-mix(in srgb, rgb(none 55% 77.49 /none), 50% hsl(none, 10%, 20%)), lch(4.85 86% 3.1416rad))"));
 }
 
-static void test_l102_none_83(void) {
+static void test_l102_none_81(void) {
+    TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb, color-mix(in srgb, rgb(none 55% 77.49 /none), 50% hsl(none, 10%, 20%)), lch(4.85 86% 3.1416rad))"));
     TEST_ASSERT_EQUAL(1, mt("rgba(1% 255 none)"));
     TEST_ASSERT_EQUAL(0, mt("color(none srgb 2 0.4444 0.629)"));
     TEST_ASSERT_EQUAL(1, mt("rgb(none 19% 52%)"));
     TEST_ASSERT_EQUAL(1, mt("rgba(175.5 none none)"));
+    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, 100% hsl(none none none), color-mix(in srgb, 57.2% rgb(82 211 178 / 0.88), rgb(100 230 235 / 0.5)))"));
+    TEST_ASSERT_EQUAL(1, mt("rgb(165 none -10/0)"));
+    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, oklab(none -0 0.0825), oklab(none none -0.2074 / 1) 29%)"));
+    TEST_ASSERT_EQUAL(1, mt("hsla(none 68% 33%)"));
+    TEST_ASSERT_EQUAL(1, mt("lab(none none none)"));
+    TEST_ASSERT_EQUAL(1, mt("hsla(none 86.2819% 18%)"));
+    TEST_ASSERT_EQUAL(1, mt("hwb(none 95 74%)"));
+}
+
+static void test_l102_none_82(void) {
+    TEST_ASSERT_EQUAL(1, mt("hwb(60 none 27)"));
+    TEST_ASSERT_EQUAL(1, mt("lch(none none none)"));
+    TEST_ASSERT_EQUAL(1, mt("rgb(173 none 17)"));
+    TEST_ASSERT_EQUAL(1, mt("color(display-p3 none 0 none /93%)"));
+    TEST_ASSERT_EQUAL(0, mt("oklab(none 8% -0.2267 -0.2183)"));
+    TEST_ASSERT_EQUAL(1, mt("color(rec2020 none 0.6 20%)"));
+    TEST_ASSERT_EQUAL(1, mt("lch(none 108 428.1239deg /50%)"));
+    TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, rebeccapurple, color(xyz-d65 26.8% 0.3 none / 120%))"));
+    TEST_ASSERT_EQUAL(1, mt("color(xyz-d65 0.973 0.331 none /none)"));
+    TEST_ASSERT_EQUAL(1, mt("rgba(none 40% 94)"));
+    TEST_ASSERT_EQUAL(1, mt("color(xyz 0.4618 0.8 none /none)"));
+    TEST_ASSERT_EQUAL(1, mt("lch(none 84.9 0turn)"));
+}
+
+static void test_l102_none_83(void) {
+    TEST_ASSERT_EQUAL(1, mt("hwb(373.0642deg 83% none)"));
+    TEST_ASSERT_EQUAL(1, mt("lab(50 147.898 none / none)"));
+    TEST_ASSERT_EQUAL(1, mt("hsl(none 87% 75.4568%)"));
+    TEST_ASSERT_EQUAL(0, mt("color(none prophoto-rgb 0.142 0.1 0.0473)"));
 }
 
 int main(void) {

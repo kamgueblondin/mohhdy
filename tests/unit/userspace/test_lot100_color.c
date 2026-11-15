@@ -716,7 +716,7 @@ static void test_l100_color_45(void) {
 }
 
 static void test_l100_color_46(void) {
-    TEST_ASSERT_EQUAL_STRING("-", rc("color-mix(in hsl, white, rgb(26 55 43 / 1.5))"));
+    TEST_ASSERT_EQUAL_STRING("#81a797 255", rc("color-mix(in hsl, white, rgb(26 55 43 / 1.5))"));
     TEST_ASSERT_EQUAL_STRING("#d8bfd8 255", rc("thistle"));
     TEST_ASSERT_EQUAL_STRING("#87ff55 255", rc("hwb(513.5639grad 33.3% 0%)"));
     TEST_ASSERT_EQUAL_STRING("#adff2f 255", rc("greenyellow"));

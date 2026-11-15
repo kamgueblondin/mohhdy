@@ -285,8 +285,12 @@ int wf_cssprop_rgb24(const char *v, int n, unsigned int *rgb);
  * 148 named colours of CSS Color 4, transparent, rgb(), rgba(), hsl(),
  * hsla(), hwb() or color-mix(in srgb, ...) (four color-mix() levels at
  * most, the outer one included), Lot 101: lab(), lch(), oklab(), oklch()
- * and color() (CSS Color 4, clipped to sRGB), with
- * the conversions wf_cssprop_interp uses. 1, *rgb (0xRRGGBB) and *alpha
+ * and color() (CSS Color 4; Lot 103: gamut-mapped to sRGB by CSS Color 4
+ * 13.2.2 instead of clipped), Lot 103: color-mix() in srgb-linear,
+ * display-p3, a98-rgb, prophoto-rgb, rec2020, lab, oklab, xyz, xyz-d50,
+ * xyz-d65, hsl, hwb, lch and oklch (the last four with shorter, longer,
+ * increasing or decreasing hue), with the conversions wf_cssprop_interp
+ * uses. 1, *rgb (0xRRGGBB) and *alpha
  * (0..255, both rounded half away from zero), else 0. currentcolor is
  * not taken (it has no value of its own) unless wf_cssprop_set_current
  * gave it one (Lot 101). */
