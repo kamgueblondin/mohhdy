@@ -7,6 +7,18 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 103 (15 November 2026, base aaca718, PR 260 merged)
+
+US-031 partial, phase3_complete=false. The reader gamut-maps colours
+outside sRGB (CSS Color 4 OKLCh chroma reduction) instead of clipping
+them, mixes colours in every CSS Color 5 interpolation space with the
+four hue methods and powerless hues, and carries missing components by
+analogous sets. View timelines stay inactive (no layout geometry in the
+reader). A QEMU page (`make qemu-lot103`, CI job lot103-reader-gamut)
+checks the mapped and mixed colours. US-068/073, US-076, US-080 and
+US-081 stay partial. US-078 and US-097 stay simule. See
+docs/lot103_plan.md.
+
 ### Lot 102 (15 November 2026, base 440a644, PR 259 merged)
 
 US-031 partial, phase3_complete=false. The reader takes none
