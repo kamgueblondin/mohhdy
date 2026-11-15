@@ -89,6 +89,7 @@ int wf_html_sitecss_vars(char *out, int cap) { return wf_site_vars_text(&g_site,
 int wf_html_sitecss_props(char *out, int cap) { return wf_site_props_text(&g_site, out, cap); }
 int wf_html_sitecss_anim(char *out, int cap) { return wf_site_anim_text(&g_site, out, cap); }
 void wf_html_set_csstime(int ms) { wf_site_set_time(ms); }
+void wf_html_set_cssscroll(int pm) { wf_site_set_scroll(pm); }
 
 static void ob_style(ob_t *b, int offset) {
     /* Lot 88: five more properties can be passed on; Lot 90: six long

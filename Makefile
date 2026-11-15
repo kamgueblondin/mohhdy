@@ -1680,6 +1680,13 @@ qemu-lot99: $(OS_IMAGE) pack-initrd disk
 qemu-lot100: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot100.py
 
+# Lot 101: lab(), oklch() and color() painted by the reader, currentcolor
+# in color-mix(), a keyframes colour on the named scroll timeline of the
+# root (tests/scripts/test_qemu_lot101.py)
+.PHONY: qemu-lot101
+qemu-lot101: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot101.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

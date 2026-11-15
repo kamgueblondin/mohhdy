@@ -101,6 +101,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       a CSS Color 4 name, a name in the background
                       shorthand, a keyframes colour and an @starting-style
                       colour transition
+  /lot101/space.html  Lot 101: lab(), oklch() and color() painted,
+                      currentcolor in color-mix(), a keyframes colour on
+                      the named scroll timeline of the root, a view
+                      timeline left idle
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -549,6 +553,30 @@ LOT100_PAGES = {
 }
 
 
+# Lot 101: reader page (tests/scripts/test_qemu_lot101.py); the guest sets
+# the reader scroll position first (web-css scroll N)
+LOT101_PAGES = {
+    "/lot101/space.html": (
+        "<!doctype html><html><head><title>Lot 101 spaces</title><style>"
+        "@keyframes k101 { from { color: #000000 } to { color: #ffffff } }\n"
+        "html { scroll-timeline: --page101 }\n"
+        "#l101 { color: lab(50 0 0) }\n"
+        "#o101 { background-color: oklch(0.5 0 0) }\n"
+        "#a101 { color: color(a98-rgb 0.5 0.5 0.5) }\n"
+        "#u101 { color: red; background-color: color-mix(in srgb, currentcolor 25%, blue) }\n"
+        "#s101 { animation: k101 1000ms linear; animation-timeline: --page101 }\n"
+        "#v101 { view-timeline: --v101; animation: k101 1000ms linear; animation-timeline: --v101 }\n"
+        "</style></head><body><h1>Spaces 101</h1>"
+        "<div id=\"l101\"><p>lkeep101</p></div>"
+        "<div id=\"o101\"><p>okeep101</p></div>"
+        "<div id=\"a101\"><p>akeep101</p></div>"
+        "<div id=\"u101\"><p>ukeep101</p></div>"
+        "<div id=\"s101\"><p>skeep101</p></div>"
+        "<div id=\"v101\"><p>vkeep101</p></div>"
+        "<p>fin101</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -756,6 +784,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT100_PAGES:
             self._send(200, LOT100_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT101_PAGES:
+            self._send(200, LOT101_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

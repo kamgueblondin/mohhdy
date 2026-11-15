@@ -53,6 +53,9 @@ static int g_anim_ms;
 static int g_starting;
 
 void wf_site_set_time(int ms) { g_anim_ms = ms < 0 ? 0 : ms > WF_CSSANIM_MS_MAX ? WF_CSSANIM_MS_MAX : ms; }
+/* Lot 101: the reader scroll position (0..10000 of the root scroll range) */
+static int g_scroll_pm;
+void wf_site_set_scroll(int pm) { g_scroll_pm = pm < 0 ? 0 : pm > 10000 ? 10000 : pm; }
 
 static int vname_index(const wf_site_t *d, const char *name) {
     int k;
@@ -511,6 +514,19 @@ static int parse_color(const char *s, int n, uint32_t *out) {
     return 1;
 }
 
+/* Lot 101: parse_color, or a colour that names currentcolor (alone in a
+ * background, or inside color-mix()): its text goes to the long value
+ * pool and *lidx gets its index + 1 (0 for a plain colour); 0 when it
+ * is no colour or the pool is full */
+static int parse_color_cur(const void *dv, const char *s, int n, uint32_t *out, uint8_t *lidx) {
+    *lidx = 0;
+    if (parse_color(s, n, out)) return 1;
+    if (!wf_cssprop_color_cur(s, n)) return 0;
+    *out = 0;
+    *lidx = (uint8_t)long_intern((wf_site_t *)dv, s);    /* the sheet is never a const object */
+    return *lidx != 0;
+}
+
 static int nth_match(const wf_site_part_t *pt, int index) {
     int a = (int)pt->nth_a, b = pt->nth_b;
     if (pt->nth_b_neg) b = -b;
@@ -937,7 +953,7 @@ static void reset_kind(wf_site_node_t *nd, int kind) {
     case 1: nd->disp = 0; nd->disp_imp = 0; break;
     case 2: nd->weight = 0; nd->weight_imp = 0; break;
     case 3: nd->align = 0; nd->align_imp = 0; break;
-    case 4: nd->color = 0; nd->color_set = 0; nd->color_imp = 0; break;
+    case 4: nd->color = 0; nd->color_set = 0; nd->color_imp = 0; nd->color_cur = 0; nd->color_inh = 0; break;
     case 5: for (k = 0; k < 4; k++) nd->margin[k] = 0; nd->margin_set = 0; break;
     case 6: for (k = 0; k < 4; k++) nd->pad[k] = 0; nd->pad_set = 0; break;
     case WF_SITE_K_STYLE: nd->italic = 0; break;
@@ -945,7 +961,7 @@ static void reset_kind(wf_site_node_t *nd, int kind) {
     case WF_SITE_K_VIS: nd->vis = 0; break;
     case WF_SITE_K_TRANSFORM: nd->transform = 0; break;
     case WF_SITE_K_WS: nd->ws = 0; break;
-    case WF_SITE_K_BG: nd->bg = 0; nd->bg_set = 0; break;
+    case WF_SITE_K_BG: nd->bg = 0; nd->bg_set = 0; nd->bg_cur = 0; break;
     case WF_SITE_K_LIST: case WF_SITE_K_FSIZE: case WF_SITE_K_INDENT: case WF_SITE_K_LSPACE:
         nd->tok[kind - WF_SITE_K_LIST][0] = 0;
         nd->tok_val[kind - WF_SITE_K_LIST] = 0;
@@ -985,7 +1001,14 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
         if (rank < *rr) return;
         *(bg ? &nd->sbg : &nd->scolor) = bg && r->val != 2 ? 0xff000000u : r->color;
         *(bg ? &nd->sbg_set : &nd->scolor_set) = 1;
+        *(bg ? &nd->sbg_cur : &nd->scolor_cur) = r->lidx;     /* Lot 101 */
         *rr = rank;
+        return;
+    }
+    if (r->kind >= WF_SITE_K_TL0 && r->kind < WF_SITE_K_TL0 + WF_SITE_TLS) {
+        /* Lot 101: per timeline longhand, the strongest list wins */
+        int t = r->kind - WF_SITE_K_TL0;
+        if (rank >= nd->tlrank[t]) { nd->tl[t] = r->lidx; nd->tlrank[t] = rank; }
         return;
     }
     if (r->kind == WF_SITE_K_ANIM || r->kind == WF_SITE_K_TRANS ||
@@ -1021,7 +1044,10 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
     } else if (r->kind == 3) {
         if (rank >= nd->align_rank) { nd->align = r->val; nd->align_imp = r->imp; nd->align_rank = rank; }
     } else if (r->kind == 4) {
-        if (rank >= nd->color_rank) { nd->color = r->color; nd->color_set = 1; nd->color_imp = r->imp; nd->color_rank = rank; }
+        if (rank >= nd->color_rank) {
+            nd->color = r->color; nd->color_set = 1; nd->color_imp = r->imp; nd->color_rank = rank;
+            nd->color_cur = r->lidx;     /* Lot 101 (reset_kind clears color_inh) */
+        }
     } else if (r->kind == 5 || r->kind == 6) {
         uint8_t *side = r->kind == 5 ? nd->margin : nd->pad;
         uint8_t *flag = r->kind == 5 ? &nd->margin_set : &nd->pad_set;
@@ -1046,7 +1072,10 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
     } else if (r->kind == WF_SITE_K_WS) {
         if (rank >= nd->ws_rank) { nd->ws = r->val; nd->ws_rank = rank; }
     } else if (r->kind == WF_SITE_K_BG) {
-        if (rank >= nd->bg_rank) { nd->bg = r->color; nd->bg_set = (uint8_t)(r->val == 2); nd->bg_rank = rank; }
+        if (rank >= nd->bg_rank) {
+            nd->bg = r->color; nd->bg_set = (uint8_t)(r->val == 2); nd->bg_rank = rank;
+            nd->bg_cur = r->lidx;        /* Lot 101 */
+        }
     } else if (r->kind >= WF_SITE_K_LIST && r->kind <= WF_SITE_K_LSPACE) {
         int t = r->kind - WF_SITE_K_LIST;
         if (rank >= nd->tok_rank[t]) {
@@ -1905,13 +1934,14 @@ static int bg_short(const wf_site_t *d, const char *val, wf_site_rule_t *proto) 
     static const int kinds[6] = { WF_SITE_K_BGIMG, WF_SITE_K_BGPOS, WF_SITE_K_BGSIZE, WF_SITE_K_BGREP,
                                   WF_SITE_K_BGCLIP, WF_SITE_K_BGORIGIN };
     uint32_t c = 0;
+    uint8_t li = 0;
     int k;
     if (!wf_cssbg_shorthand(val, &bg)) return 0;
     proto->kind = WF_SITE_K_BG;
     proto->box_n = 0;
     proto->lidx = 0;
     if (!bg.color[0] || eq(bg.color, "transparent")) { proto->val = 1; proto->color = 0; }
-    else if (parse_color(bg.color, slen(bg.color), &c)) { proto->val = 2; proto->color = c; }
+    else if (parse_color_cur(d, bg.color, slen(bg.color), &c, &li)) { proto->val = 2; proto->color = c; }
     else return 0;                    /* a colour the reader does not keep: dropped as in lot 88 */
     g_nmore = 0;
     for (k = 0; k < 6; k++) {
@@ -1924,6 +1954,7 @@ static int bg_short(const wf_site_t *d, const char *val, wf_site_rule_t *proto) 
         if (!long_proto(d, kinds[k], norm, given, m)) { g_nmore = 0; return 0; }
         g_nmore++;
     }
+    proto->lidx = li;     /* Lot 101: after the copies (each layer kind has its own) */
     return 1;
 }
 
@@ -2065,6 +2096,38 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             continue;
         }
         {
+            /* Lot 101: the scroll and view timeline names and axes, kept
+             * as written; a shorthand gives its two lists */
+            static const char *const tn[6] = {
+                "scroll-timeline-name", "scroll-timeline-axis", "view-timeline-name", "view-timeline-axis",
+                "scroll-timeline", "view-timeline"};
+            static wf_csstl_t tt[WF_CSSANIM_MAX];
+            static char tx[2][WF_SITE_LONG];
+            int q, c, kind;
+            for (q = 0; q < 6 && !eq(prop, tn[q]); q++) {}
+            if (q < 6) {
+                int ini = eq(val, "initial") || eq(val, "unset");
+                kind = WF_SITE_K_TL0 + (q < 4 ? q : (q - 4) * 2);
+                if (q < 4) {
+                    if (ini) { (void)long_proto(d, kind, val, 0, proto); return 1; }
+                    c = wf_csstl_parse(q & 1 ? WF_CSSTL_AXES : WF_CSSTL_NAMES, val, tt, WF_CSSANIM_MAX);
+                    if (c > 0 && long_proto(d, kind, val, 1, proto)) return 1;
+                } else {
+                    c = ini ? 1 : wf_csstl_parse(WF_CSSTL_SHORT, val, tt, WF_CSSANIM_MAX);
+                    if (c > 0 && (ini || (wf_csstl_text(tt, c, 0, tx[0], WF_SITE_LONG) &&
+                                          wf_csstl_text(tt, c, 1, tx[1], WF_SITE_LONG)))) {
+                        g_more[0] = *proto;
+                        if (long_proto(d, kind, tx[0], !ini, proto) && long_proto(d, kind + 1, tx[1], !ini, &g_more[0])) {
+                            g_nmore = 1;
+                            return 1;
+                        }
+                    }
+                }
+                if (i < n && body[i] == ';') i++;
+                continue;
+            }
+        }
+        {
             /* Lot 98: the longhands, kept as written like the shorthands */
             static const char *const lnames[WF_SITE_ALONGS] = {
                 "animation-name", "animation-duration", "animation-timing-function", "animation-delay",
@@ -2158,7 +2221,18 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             if (v) { proto->kind = 3; proto->val = (uint8_t)v; return 1; }
         } else if (eq(prop, "color")) {
             uint32_t c = 0;
-            if (parse_color(val, slen(val), &c)) { proto->kind = 4; proto->color = c; proto->val = 1; return 1; }
+            uint8_t li = 0;
+            if (eq(val, "currentcolor")) {
+                /* Lot 101: currentcolor in color is inherit (CSS Color 4) */
+                proto->kind = 4;
+                proto->revert = WF_SITE_RV_INHERIT;
+                proto->val = 0;
+                return 1;
+            }
+            if (parse_color_cur(d, val, slen(val), &c, &li)) {
+                proto->kind = 4; proto->color = c; proto->val = 1; proto->lidx = li;
+                return 1;
+            }
         } else if (eq(prop, "margin") || eq(prop, "padding")) {
             if (parse_box(val, proto)) { proto->kind = (uint8_t)(eq(prop, "margin") ? 5 : 6); return 1; }
         } else if (eq(prop, "font-style")) {
@@ -2180,7 +2254,11 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             /* Lot 88: a colour, or transparent */
             uint32_t c = 0;
             if (eq(val, "transparent")) { proto->kind = WF_SITE_K_BG; proto->val = 1; proto->color = 0; return 1; }
-            if (parse_color(val, slen(val), &c)) { proto->kind = WF_SITE_K_BG; proto->val = 2; proto->color = c; return 1; }
+            uint8_t li = 0;
+            if (parse_color_cur(d, val, slen(val), &c, &li)) {
+                proto->kind = WF_SITE_K_BG; proto->val = 2; proto->color = c; proto->lidx = li;
+                return 1;
+            }
         } else if (eq(prop, "background")) {
             /* Lot 90: the colour and the four layer lists (wf_cssbg.c);
              * Lot 88 kept the colour only when it was the whole value */
@@ -3643,7 +3721,11 @@ static void copy_kind(wf_site_node_t *nd, const wf_site_node_t *par, int kind) {
     case 1: nd->disp = par->disp; nd->disp_imp = par->disp_imp; break;
     case 2: nd->weight = par->weight; nd->weight_imp = par->weight_imp; break;
     case 3: nd->align = par->align; nd->align_imp = par->align_imp; break;
-    case 4: nd->color = par->color; nd->color_set = par->color_set; nd->color_imp = par->color_imp; break;
+    case 4:
+        nd->color = par->color; nd->color_set = par->color_set; nd->color_imp = par->color_imp;
+        nd->color_cur = 0;
+        nd->color_inh = 1;      /* Lot 101: the parent's final colour, once resolved */
+        break;
     case 5: for (k = 0; k < 4; k++) nd->margin[k] = par->margin[k]; nd->margin_set = par->margin_set; break;
     case 6: for (k = 0; k < 4; k++) nd->pad[k] = par->pad[k]; nd->pad_set = par->pad_set; break;
     case WF_SITE_K_STYLE: nd->italic = par->italic; break;
@@ -3651,7 +3733,7 @@ static void copy_kind(wf_site_node_t *nd, const wf_site_node_t *par, int kind) {
     case WF_SITE_K_VIS: nd->vis = par->vis; break;
     case WF_SITE_K_TRANSFORM: nd->transform = par->transform; break;
     case WF_SITE_K_WS: nd->ws = par->ws; break;
-    case WF_SITE_K_BG: nd->bg = par->bg; nd->bg_set = par->bg_set; break;
+    case WF_SITE_K_BG: nd->bg = par->bg; nd->bg_set = par->bg_set; nd->bg_cur = par->bg_cur; break;
     case WF_SITE_K_LIST: case WF_SITE_K_FSIZE: case WF_SITE_K_INDENT: case WF_SITE_K_LSPACE:
         scopy(nd->tok[kind - WF_SITE_K_LIST], WF_SITE_TOK, par->tok[kind - WF_SITE_K_LIST],
               slen(par->tok[kind - WF_SITE_K_LIST]));
@@ -3943,13 +4025,43 @@ static int kf_compose(const wf_cssprop_t *p, int c, const char *under, const cha
 /* the value of animation a (keyframes kf) for property name at the reader clock,
  * under the value below (base: the element's own value): 1 and out, 0
  * when it gives none */
+/* Lot 101: the time of animation a on node i. auto: the reader clock
+ * (1). A <dashed-ident>: the nearest element, i or an ancestor (no
+ * timeline-scope), whose scroll-timeline-name, else view-timeline-name,
+ * has the name (the last one of its list); a scroll timeline runs only on
+ * the root element (the scroller of the reader viewport) with axis block
+ * or y, at the scroll position (2, wf_cssanim_scroll_ms). 0: no effect
+ * (none, a name no element has, a view timeline: the reader has no
+ * layout, an inline or x axis, another scroller) */
+static int anim_clock(const wf_site_t *d, int i, const wf_cssanim_t *a, int *ms) {
+    static wf_csstl_t tl[WF_CSSANIM_MAX];
+    int q, s, n, k;
+    *ms = d->anim_ms;
+    if (a->timeline == WF_CSSANIM_TL_AUTO) return 1;
+    if (a->timeline != WF_CSSANIM_TL_NAMED) return 0;
+    for (q = i; q >= 0; q = d->node[q].parent) {
+        const wf_site_node_t *nd = &d->node[q];
+        for (s = 0; s < 2; s++) {
+            int e = nd->tl[2 * s], x = nd->tl[2 * s + 1];
+            if (!e) continue;
+            n = wf_csstl_coord(d->lpool[e - 1], x ? d->lpool[x - 1] : 0, tl, WF_CSSANIM_MAX);
+            for (k = n - 1; k >= 0 && !eq(tl[k].name, a->tlname); k--) {}
+            if (k < 0) continue;
+            if (s || nd->parent >= 0 || !eq(nd->tag, "html") || (tl[k].axis != WF_CSSTL_BLOCK && tl[k].axis != WF_CSSTL_Y))
+                return 0;
+            return wf_cssanim_scroll_ms(a, d->scroll_pm, ms) ? 2 : 0;
+        }
+    }
+    return 0;
+}
+
 static int anim_value(const wf_site_t *d, const wf_cssanim_t *a, const wf_site_kf_t *kf, const char *name, const wf_cssprop_t *p,
                       const wf_cssprop_fctx_t *fc, const char *base, const char *under, char *out, int cap,
-                      int *composed) {
+                      int *composed, int ms) {
     static kf_frames_t f;
     int prog, before, j, x, m;
     const wf_cssease_t *e;
-    if (!wf_cssanim_progress(a, d->anim_ms, &prog, &before)) return 0;
+    if (!wf_cssanim_progress(a, ms, &prog, &before)) return 0;
     kf_collect(d, kf, name, p, fc, &f);
     if (!f.n) return 0;
     /* Lot 98: add and accumulate put each keyframe value on the value
@@ -4067,7 +4179,7 @@ static int anim_pass(wf_site_t *d) {
     static uint8_t orig[WF_SITE_NODES][WF_SITE_VNAMES];
     static char cur[WF_CSSPROP_VAL], val[WF_CSSPROP_VAL], base[WF_CSSPROP_VAL];
     static wf_cssanim_t al[WF_CSSANIM_MAX];
-    int i, k, changed = 0;
+    int i, k, changed = 0, ms[WF_CSSANIM_MAX];
     for (i = 0; i < d->nnodes; i++) for (k = 0; k < d->nvnames; k++) orig[i][k] = d->node[i].vbind[k];
     for (i = 0; i < d->nnodes; i++) {
         wf_site_node_t *nd = &d->node[i];
@@ -4077,7 +4189,7 @@ static int anim_pass(wf_site_t *d) {
         na = node_lists(d, nd, 1, al);
         /* Lot 99: an animation without a timeline (none, or a name no
          * timeline has here) has no effect */
-        for (j = 0; j < na; j++) if (al[j].timeline != WF_CSSANIM_TL_AUTO && kf_find(d, al[j].name)) d->anim_idle++;
+        for (j = 0; j < na; j++) if (!anim_clock(d, i, &al[j], &ms[j]) && kf_find(d, al[j].name)) d->anim_idle++;
         for (k = 0; k < d->nvnames; k++) {
             const wf_cssprop_t *p = kprop(d, k);
             int b, animated = 0, e, composed = 0;
@@ -4097,8 +4209,8 @@ static int anim_pass(wf_site_t *d) {
             scopy(base, WF_CSSPROP_VAL, cur, slen(cur));
             if (nd->vrank[k] < (1 << 30))
                 for (j = 0; j < na; j++) {
-                    const wf_site_kf_t *kf = al[j].timeline == WF_CSSANIM_TL_AUTO ? kf_find(d, al[j].name) : 0;
-                    if (kf && anim_value(d, &al[j], kf, d->vname[k], p, &fc, base, cur, val, (int)sizeof(val), &composed)) {
+                    const wf_site_kf_t *kf = anim_clock(d, i, &al[j], &ms[j]) ? kf_find(d, al[j].name) : 0;
+                    if (kf && anim_value(d, &al[j], kf, d->vname[k], p, &fc, base, cur, val, (int)sizeof(val), &composed, ms[j])) {
                         scopy(cur, WF_CSSPROP_VAL, val, slen(val));
                         animated = 1;
                     }
@@ -4137,22 +4249,62 @@ static void col_text(uint32_t c, char *out, int cap) {
     app_hex(out, cap, 0, c);
 }
 
+/* Lot 101: the colour currentcolor stands for, from a colour as
+ * parse_color keeps it */
+static void cur_set(uint32_t c) { wf_cssprop_set_current(1, c & 0xffffffu, 255 - (int)(c >> 24)); }
+
+/* Lot 101: the final colour of node i for its descendants and its own
+ * currentcolor: its own, else the nearest ancestor's, black at the top */
+static uint32_t eff_color(const wf_site_t *d, int i) {
+    while (i >= 0 && !d->node[i].color_set) i = d->node[i].parent;
+    return i >= 0 ? d->node[i].color : 0;
+}
+
+/* Lot 101: currentcolor resolved, parents first (node order): in color
+ * it is the parent's final colour, in background-color the element's
+ * own; a color given by inherit (or unset, or currentcolor) takes the
+ * parent's final colour */
+static void cur_pass(wf_site_t *d) {
+    int i;
+    for (i = 0; i < d->nnodes; i++) {
+        wf_site_node_t *nd = &d->node[i];
+        /* the texts were checked as colours with a current colour: they
+         * parse (a colour with a text is set, copy_kind takes both) */
+        if (nd->color_inh && nd->parent >= 0) nd->color = d->node[nd->parent].color;
+        if (nd->color_cur) {
+            cur_set(eff_color(d, nd->parent));
+            (void)parse_color(d->lpool[nd->color_cur - 1], slen(d->lpool[nd->color_cur - 1]), &nd->color);
+            d->cur_resolved++;
+        }
+        if (nd->bg_cur) {
+            cur_set(eff_color(d, i));
+            (void)parse_color(d->lpool[nd->bg_cur - 1], slen(d->lpool[nd->bg_cur - 1]), &nd->bg);
+            d->cur_resolved++;
+        }
+    }
+    /* col_pass, which comes next, sets it off at its end */
+}
+
 static void col_pass(wf_site_t *d) {
     static wf_cssanim_t al[WF_CSSANIM_MAX];
     static char base[WF_CSSPROP_VAL], cur[WF_CSSPROP_VAL], val[WF_CSSPROP_VAL];
     const wf_cssprop_t *p = col_prop();
-    int i, w, j, na;
+    int i, w, j, na, ms[WF_CSSANIM_MAX];
     for (i = 0; i < d->nnodes; i++) {
         wf_site_node_t *nd = &d->node[i];
         wf_cssprop_fctx_t fc;
         fc.vw = d->vw; fc.vh = d->vh; fc.em = d->fs[i]; fc.rem = d->root_fs;
         na = node_lists(d, nd, 1, al);
+        /* Lot 101: the animations a scroll timeline drives */
+        for (j = 0; j < na; j++) if (anim_clock(d, i, &al[j], &ms[j]) == 2 && kf_find(d, al[j].name)) d->anim_scroll++;
         for (w = 0; w < 2; w++) {
             const char *name = w ? "background-color" : "color";
             uint32_t *slot = w ? &nd->bg : &nd->color, c;
             uint8_t *set = w ? &nd->bg_set : &nd->color_set;
             int rank = w ? nd->bg_rank : nd->color_rank, animated = 0, composed = 0, q = nd->parent;
             const wf_csstrans_t *t;
+            /* Lot 101: currentcolor in keyframes and starting values */
+            cur_set(eff_color(d, w ? i : nd->parent));
             if (*set) col_text(*slot, base, (int)sizeof(base));
             else if (w) scopy(base, WF_CSSPROP_VAL, "transparent", 11);
             else {
@@ -4164,8 +4316,8 @@ static void col_pass(wf_site_t *d) {
             scopy(cur, WF_CSSPROP_VAL, base, slen(base));
             if (rank < (1 << 30))
                 for (j = 0; j < na; j++) {
-                    const wf_site_kf_t *kf = al[j].timeline == WF_CSSANIM_TL_AUTO ? kf_find(d, al[j].name) : 0;
-                    if (kf && anim_value(d, &al[j], kf, name, p, &fc, base, cur, val, (int)sizeof(val), &composed)) {
+                    const wf_site_kf_t *kf = anim_clock(d, i, &al[j], &ms[j]) ? kf_find(d, al[j].name) : 0;
+                    if (kf && anim_value(d, &al[j], kf, name, p, &fc, base, cur, val, (int)sizeof(val), &composed, ms[j])) {
                         scopy(cur, WF_CSSPROP_VAL, val, slen(val));
                         animated = 1;
                     }
@@ -4174,8 +4326,10 @@ static void col_pass(wf_site_t *d) {
             if (animated) d->col_animated++;
             else {
                 uint32_t sc = w ? nd->sbg : nd->scolor;
+                int sl = w ? nd->sbg_cur : nd->scolor_cur;
                 if (!(w ? nd->sbg_set : nd->scolor_set) || !(t = trans_of(d, nd, name))) continue;
-                col_text(sc, val, (int)sizeof(val));
+                if (sl) scopy(val, WF_CSSPROP_VAL, d->lpool[sl - 1], slen(d->lpool[sl - 1]));
+                else col_text(sc, val, (int)sizeof(val));
                 scopy(base, WF_CSSPROP_VAL, val, slen(val));
                 if (!trans_run(d, t, p, base, cur, val, (int)sizeof(val))) continue;
                 scopy(cur, WF_CSSPROP_VAL, val, slen(val));
@@ -4184,6 +4338,7 @@ static void col_pass(wf_site_t *d) {
             if (parse_color(cur, slen(cur), &c)) { *slot = c; *set = 1; }
         }
     }
+    wf_cssprop_set_current(0, 0, 0);
 }
 
 int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
@@ -4216,6 +4371,13 @@ int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
     if (d->anim_idle) {
         n = app(out, cap, n, " idle ");
         n = app_u(out, cap, n, (unsigned)d->anim_idle);
+    }
+    if (d->anim_scroll) {
+        /* Lot 101 */
+        n = app(out, cap, n, " scroll ");
+        n = app_u(out, cap, n, (unsigned)d->anim_scroll);
+        n = app(out, cap, n, " pos ");
+        n = app_u(out, cap, n, (unsigned)d->scroll_pm);
     }
     if (d->col_animated || d->col_transitioned) {
         n = app(out, cap, n, " color ");
@@ -4288,6 +4450,7 @@ int wf_site_apply(wf_site_t *d) {
     /* Lot 97: font-relative, animated and transitioned registered values,
      * then the reader properties again when one changed (var() reads it) */
     d->anim_ms = g_anim_ms;
+    d->scroll_pm = g_scroll_pm;
     if (d->nprops && anim_pass(d)) {
         int k;
         /* the animation and transition lists come out the same (same
@@ -4297,6 +4460,7 @@ int wf_site_apply(wf_site_t *d) {
         cascade_props(d);
         d->recascades = 1;
     }
+    cur_pass(d);
     col_pass(d);
     d->ready = 1;
     return 0;

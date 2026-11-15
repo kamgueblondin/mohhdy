@@ -44,7 +44,7 @@ static void test_l100_anim_0(void) {
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     prep("@keyframes k { 33.33% { background-color: currentcolor; color: hwb(1turn 100% 0%) } } @keyframes j { 0% { color: var(--c); background-color: rgb(a, 2, 3) } 60% { background-color: color-mix(in  srgb,color-mix(in  srgb , rgb(126 230 32%) , #efbe4f),hsl(0.8turn, 76%, 81.7%)); color: hwb(-60deg 100% 100%) } } #o { color: hwb(300.5deg 50% 89.44% /0) !important; animation: k 2000ms linear, none 500ms steps(4) }", 1307);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5b5b5b00\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5b5b5b00;background-color:#00000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);
@@ -161,7 +161,7 @@ static void test_l100_anim_4(void) {
 
 static void test_l100_anim_5(void) {
     prep("@keyframes k { 25% { color: darkgreen } 33.33% { background-color: hwb(60 0% 100%); color: currentcolor } } #o { animation: k 2000ms linear; animation-composition: accumulate, add }", 750);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000ef\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000000ef\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);
@@ -437,7 +437,7 @@ static void test_l100_anim_15(void) {
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     prep("@keyframes k { 60% { animation-composition: replace; color: rgb(119 254 178 / 0) } 75% { color: rgb(63 167 8 / 0.5) } } @keyframes j { 25% { color: hwb(438.2389grad 97 46.592%) } } #o { color: hsl(166.4332grad 33.03% 11.9%); background-color: currentcolor; animation-composition: add, accumulate; animation: none 500ms steps(4) }", 500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#14281e\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#14281e;background-color:#14281e\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);
@@ -1043,7 +1043,7 @@ static void test_l100_anim_37(void) {
     TEST_ASSERT_EQUAL(1, g_d.col_transitioned);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     prep("@keyframes k { 60% { color: rgb(169 72 105.5); animation-composition: add; background-color: currentcolor } } @keyframes j { 0% { color: nosuch } 100% { color: red; animation-composition: add; background-color: #12e } } #o { color: lime; animation-composition: accumulate, add; animation-timeline: --t; animation: k 1000ms linear, none 1000ms linear }", 750);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6aff42\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6aff42;background-color:#6aff429f\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);
@@ -1604,7 +1604,7 @@ static void test_l100_anim_58(void) {
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     prep("@keyframes k { 33.33% { color: currentcolor } } #o { color: hwb(-44.1deg 0% 42%); animation: k 2000ms; animation-composition: accumulate; animation-iteration-count: infinite }", 1519);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff00da\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#f500d0\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);
@@ -2375,7 +2375,7 @@ static void test_l100_anim_86(void) {
 
 static void test_l100_anim_87(void) {
     prep("@keyframes k { 33.33% { background-color: black; color: hwb(-0.07turn 83 100%) } 50% { background-color: black; color: currentcolor } 75% { background-color: hwb(1turn 9 39%); color: blue } } @starting-style { #o { color: brown } } #o { color: hsla(-200.5grad, 50.8%, 51%, 99.99%); animation-composition: add; animation: k 2000ms steps(4), j 1000ms steps(4); transition: color 1s, background-color 500ms linear }", 750);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#b7ffff;background-color:#000000\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#9af0f0;background-color:#000000\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);

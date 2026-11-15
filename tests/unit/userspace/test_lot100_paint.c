@@ -165,7 +165,7 @@ static void test_l100_paint_8(void) {
     prep("#o { color: BISQUE; background-color: #fc65 }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ffe4c4;background-color:#ffcc6655\"", style_of("o"));
     prep("#o { background-color: blue } #o { background-color: color-mix(in srgb, currentcolor, deeppink) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#800a4a\"", style_of("o"));
 }
 
 static void test_l100_paint_9(void) {
@@ -431,7 +431,7 @@ static void test_l100_paint_25(void) {
     prep("#o { background-color: blue } #o { background-color: hsla(-2.3rad 56.6% 19% / 1) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#15204c\"", style_of("o"));
     prep("#o { background-color: blue } #o { background-color: currentcolor }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#0000ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#000000\"", style_of("o"));
     prep("#o { color: mediumvioletred; background-color: hwb(110 43 0% /120%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#c71585;background-color:#86ff6e\"", style_of("o"));
     prep("#o { color: hsla(223.0731 89% 35.2%/31%) }", 0);
@@ -945,7 +945,7 @@ static void test_l100_paint_58(void) {
     prep("#o { background-color: blue } #o { background: rgb(1,2,3 }", 0);
     TEST_ASSERT_NOT_NULL(strstr(style_of("o"), "background-color:#0000ff"));
     prep("#o { color: blue } #o { color: color-mix(in srgb, currentcolor, hwb(-337.66grad 0% 50%)) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0000ff\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#403c00\"", style_of("o"));
     prep("#o { color: hwb(187 35% 100%); background-color: hwb(143.448grad 100% 20%/79%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#424242;background-color:#d5d5d5c9\"", style_of("o"));
     prep("#o { background-color: blue } #o { background: no-repeat color-mix(in  srgb,rgb(29.2% 15 171),hwb(-210.06grad 26 100%)) }", 0);

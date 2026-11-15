@@ -1161,8 +1161,12 @@ static int cp_color(const char *v) {
     }
     /* Lot 100: every named colour */
     if (cp_eqn(v, n, "transparent") || cp_eqn(v, n, "currentcolor") || cp_named_at(v, n) >= 0) return 1;
-    /* Lot 100: hwb() and color-mix() are matched by their conversion */
-    if ((n > 4 && cp_eqn(v, 4, "hwb(")) || (n > 10 && cp_eqn(v, 10, "color-mix("))) return cp_rgba(v, &t);
+    /* Lot 100: hwb() and color-mix() are matched by their conversion;
+     * Lot 101: lab(), lch(), oklab(), oklch() and color() too */
+    if ((n > 4 && (cp_eqn(v, 4, "hwb(") || cp_eqn(v, 4, "lab(") || cp_eqn(v, 4, "lch("))) ||
+        (n > 6 && (cp_eqn(v, 6, "oklab(") || cp_eqn(v, 6, "oklch(") || cp_eqn(v, 6, "color("))) ||
+        (n > 10 && cp_eqn(v, 10, "color-mix(")))
+        return cp_rgba(v, &t);
     for (k = 0; fns[k]; k++) {
         int m = cp_len(fns[k]), i, depth = 0;
         if (n <= m || !cp_eqn(v, m, fns[k])) continue;
@@ -1882,6 +1886,156 @@ static void cp_hwb_rgb(long long h, long long w, long long b, long long *c) {
     }
 }
 
+/* ---- Lot 101: lab(), lch(), oklab(), oklch() and color() (CSS Color 4)
+ * The components are taken to 1/2^40 (CP_Q), converted to linear sRGB
+ * by the CSS Color 4 matrices (products of them, rounded to 1/2^40 once),
+ * clipped to 0..1 (no gamut mapping) and gamma-encoded with cp_ln and
+ * cp_exp style series at 1/2^62; each channel is then rounded half away
+ * from zero to 1/10000 like every other colour of this reader. */
+#define CP_Q (1LL << 40)
+enum { CP_SP_LAB, CP_SP_OKLAB, CP_SP_D65, CP_SP_D50, CP_SP_P3, CP_SP_A98, CP_SP_PRO, CP_SP_2020, CP_SP_LIN };
+/* to linear sRGB, row by row, in 1/2^40: lab (XYZ D50 / white D50),
+ * oklab (LMS), XYZ D65, XYZ D50, display-p3, a98-rgb, prophoto-rgb and
+ * rec2020 (each from its linear values) */
+static const long long cp_mat[8][9] = {
+    {3322981042554LL, -1778334711423LL, -445134703355LL, -1037772121500LL, 2106943969724LL, 30339779552LL,
+     76291015004LL, -251762609907LL, 1274983222679LL},
+    {4482424832304LL, -3636867298743LL, 253954094215LL, -1394662300740LL, 2869458551216LL, -375284622700LL,
+     -4613634506LL, -773416949615LL, 1877542211896LL},
+    {3563484136397LL, -1690370680086LL, -548228328676LL, -1065694648239LL, 2062648081238LL, 45690268812LL,
+     61165919481LL, -224275038097LL, 1162152470138LL},
+    {3446018813293LL, -1778334711423LL, -539488813904LL, -1076197007688LL, 2106943969724LL, 36770828159LL,
+     79115790799LL, -251762609907LL, 1545238287121LL},
+    {1346835967150LL, -247324339374LL, 0LL, -46242110732LL, 1145753738508LL, 0LL, -21591719613LL, -86461246445LL,
+     1207564593834LL},
+    {1537508400252LL, -437996772476LL, 0LL, 0LL, 1099511627776LL, 0LL, 0LL, -47200922898LL, 1146712550674LL},
+    {2236825399369LL, -800044011819LL, -337269759774LL, -251596552665LL, 1354315246465LL, -3207066024LL,
+     -9410531768LL, -168518521152LL, 1277440680696LL},
+    {1825729164636LL, -646118265058LL, -80099271802LL, -136944694982LL, 1245636609996LL, -9180287239LL,
+     -19956975362LL, -110587667869LL, 1230056271006LL}};
+/* OKLab to LMS' (CSS Color 4), in 1/2^40 */
+static const long long cp_okl[9] = {1099511627776LL, 435777994752LL,   237278740480LL,
+                                    1099511627776LL, -116065927168LL,  -70208405504LL,
+                                    1099511627776LL, -98388893696LL,   -1420003377152LL};
+
+/* v (1/10000) in 1/2^40; a percentage of the reference rn / rd */
+static long long cp_q40(long long v, int pct, long long rn, long long rd) {
+    if (pct) return (long long)cp_wdiv(cp_wmul(cp_wmul(cp_w(v), rn), CP_Q), 1000000LL * rd, 0).lo;
+    return (long long)cp_wdiv(cp_wmul(cp_w(v), CP_Q), 10000, 0).lo;
+}
+
+/* a * b in 1/2^40 */
+static long long cp_qmul(long long a, long long b) { return (long long)cp_wshr(cp_wmul(cp_w(a), b), 40).lo; }
+
+/* ln(x / 2^40) for x > 0, in 1/2^62: x / 2^40 = m 2^k, m in [1/2, 1) */
+static cp_w_t cp_lnq(long long x) {
+    int bl = 0;
+    long long m, s;
+    while (bl < 63 && (x >> bl)) bl++;
+    m = x << (62 - bl);
+    s = (long long)cp_wdivu(cp_wmul(cp_w(m - CP_ONE), CP_ONE), (unsigned long long)m + (unsigned long long)CP_ONE, 0).lo;
+    return cp_wadd(cp_wmul(cp_w(CP_LN2), bl - 40), cp_w(2 * cp_oddser(s, 0)));
+}
+
+/* exp(t) for t in 1/2^62 (at most 12), in 1/2^40 */
+static long long cp_expq(cp_w_t t) {
+    long long r, e = CP_ONE, term = CP_ONE;
+    int k, j;
+    if (cp_wlt(t, cp_wmul(cp_w(CP_ONE), -60))) return 0;
+    k = (int)(long long)cp_wdiv(t, CP_LN2, 0).lo;
+    r = (long long)cp_wsub(t, cp_wmul(cp_w(CP_LN2), k)).lo;
+    for (j = 1; j <= 30 && term; j++) {
+        term = cp_div(cp_xmul(term, r), j, 0);
+        e += term;
+    }
+    return (long long)cp_wshr(cp_w(e), 22 - k).lo;
+}
+
+/* x^(num / den) for x > 0 in 1/2^40 */
+static long long cp_powq(long long x, long long num, long long den) {
+    return cp_expq(cp_wdiv(cp_wmul(cp_lnq(x), num), den, 0));
+}
+
+/* the linear value of a gamma-encoded component v (1/2^40) of space sp,
+ * odd around 0 (CSS Color 4) */
+static long long cp_decode(int sp, long long v) {
+    long long a = v < 0 ? -v : v, r;
+    if (sp == CP_SP_P3) {
+        /* sRGB curve: v / 12.92 up to 0.04045, else ((v + 0.055) / 1.055)^2.4 */
+        if (!cp_wlt(cp_wmul(cp_w(CP_Q), 4045), cp_wmul(cp_w(a), 100000))) r = cp_div(a * 25, 323, 0);
+        else r = cp_powq(cp_div((a + cp_div(CP_Q * 11, 200, 0)) * 200, 211, 0), 12, 5);
+    } else if (sp == CP_SP_A98) r = a ? cp_powq(a, 563, 256) : 0;
+    else if (sp == CP_SP_PRO) {
+        /* v / 16 up to 16 / 512, else v^1.8 */
+        if (a * 32 <= CP_Q) r = cp_div(a, 16, 0);
+        else r = cp_powq(a, 9, 5);
+    } else if (sp == CP_SP_2020) {
+        /* alpha 1.09929682680944, beta 0.018053968510807: v / 4.5 under
+         * 4.5 beta, else ((v + alpha - 1) / alpha)^(1 / 0.45) */
+        if (a < 89327467373LL) r = cp_div(a * 2, 9, 0);
+        else r = cp_powq((long long)cp_wdiv(cp_wmul(cp_w(a + 109178015678LL), CP_Q), 1208689643454LL, 0).lo, 20, 9);
+    } else r = a;
+    return v < 0 ? -r : r;
+}
+
+/* a linear sRGB value (1/2^40) clipped to 0..1 and encoded, as a channel
+ * in 1/10000 of 0..255: 12.92 v up to 0.0031308, else 1.055 v^(1/2.4) -
+ * 0.055 */
+static long long cp_encode(long long v) {
+    if (v <= 0) return 0;
+    if (v >= CP_Q) return 255 * CP_S;
+    if (!cp_wlt(cp_wmul(cp_w(31308), CP_Q), cp_wmul(cp_w(v), 10000000)))
+        return (long long)cp_wshr(cp_wmul(cp_w(v), 32946000), 40).lo;
+    return (long long)cp_wshr(cp_wmul(cp_w(211 * cp_powq(v, 5, 12) - 11 * CP_Q), 12750), 40).lo;
+}
+
+/* x (three values in 1/2^40 of space sp) as sRGB channels c[] */
+static void cp_space_rgb(int sp, long long *x, long long *c) {
+    long long l[3];
+    int i, k;
+    if (sp == CP_SP_LAB) {
+        /* L a b to the D50 XYZ / white ratios: fy = (L + 16) / 116, fx =
+         * fy + a / 500, fz = fy - b / 200; f^3 above 216 / 24389, else
+         * (116 f - 16) / (24389 / 27); for y, L / (24389 / 27) up to L 8 */
+        long long f[3], y = x[0];
+        f[1] = cp_div(x[0] + 16 * CP_Q, 116, 0);
+        f[0] = f[1] + cp_div(x[1], 500, 0);
+        f[2] = f[1] - cp_div(x[2], 200, 0);
+        for (k = 0; k < 3; k++) {
+            long long cube = cp_qmul(cp_qmul(f[k], f[k]), f[k]);
+            if (k == 1) x[k] = y > 8 * CP_Q ? cube : cp_div(y * 27, 24389, 0);
+            else x[k] = cp_wlt(cp_wmul(cp_w(CP_Q), 216), cp_wmul(cp_w(cube), 24389)) ? cube
+                        : cp_div((116 * f[k] - 16 * CP_Q) * 27, 24389, 0);
+        }
+    } else if (sp == CP_SP_OKLAB) {
+        long long m[3];
+        for (k = 0; k < 3; k++) {
+            m[k] = 0;
+            for (i = 0; i < 3; i++) m[k] += cp_qmul(cp_okl[3 * k + i], x[i]);
+        }
+        for (k = 0; k < 3; k++) x[k] = cp_qmul(cp_qmul(m[k], m[k]), m[k]);
+    } else
+        for (k = 0; k < 3; k++) x[k] = cp_decode(sp, x[k]);
+    for (k = 0; k < 3; k++) {
+        if (sp == CP_SP_LIN) { l[k] = x[k]; continue; }
+        l[k] = 0;
+        for (i = 0; i < 3; i++) l[k] += cp_qmul(cp_mat[sp][3 * k + i], x[i]);
+    }
+    for (k = 0; k < 3; k++) c[k] = cp_encode(l[k]);
+}
+
+/* cos and sin of h (1/10000 deg, any value: the quadrant is k mod 4) in
+ * 1/2^40 */
+static void cp_cossin(long long h, long long *c, long long *s) {
+    long long k = cp_div(h + 450000, 900000, 1), r, sn, cs, t;
+    int q = (int)(k & 3);
+    r = (long long)cp_wdiv(cp_wmul(cp_w(h - k * 900000), CP_PIO2), 900000, 0).lo;
+    cp_sincos(r, &sn, &cs);
+    for (; q > 0; q--) { t = sn; sn = cs; cs = -t; }
+    *c = (long long)cp_wshr(cp_w(cs), 22).lo;
+    *s = (long long)cp_wshr(cp_w(sn), 22).lo;
+}
+
 static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth);
 
 /* s[*a..*b) without the spaces around it */
@@ -1966,10 +2120,26 @@ static int cp_mix(const char *v, int n, cp_rgba_t *o, int depth) {
 
 static int cp_rgba(const char *v, cp_rgba_t *o) { return cp_rgba_d(v, o, 0); }
 
+/* Lot 101: the colour currentcolor stands for, when one is set */
+static int cp_cur_on;
+static cp_rgba_t cp_cur;
+
+void wf_cssprop_set_current(int on, unsigned int rgb, int alpha) {
+    int k;
+    cp_cur_on = on;
+    for (k = 0; k < 3; k++) cp_cur.c[k] = (long long)((rgb >> (16 - 8 * k)) & 255u) * CP_S;
+    cp_cur.a = cp_div((long long)alpha * CP_S, 255, 0);
+}
+
 static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
     int n = cp_len(v), k;
     o->a = CP_S;
     if (cp_eqn(v, n, "transparent")) { o->c[0] = o->c[1] = o->c[2] = 0; o->a = 0; return 1; }
+    if (cp_eqn(v, n, "currentcolor")) {
+        /* Lot 101: the colour set by wf_cssprop_set_current, else none */
+        *o = cp_cur;
+        return cp_cur_on;
+    }
     k = cp_named_at(v, n);      /* Lot 100: every named colour */
     if (k >= 0) {
         for (n = 0; n < 3; n++) o->c[n] = (long long)((cp_named[k].rgb >> (16 - 8 * n)) & 255u) * CP_S;
@@ -2037,6 +2207,65 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
             o->a = cp_clampll(pct ? cp_div(x, 100, 0) : x, 0, CP_S);
         }
         cp_hwb_rgb(h, wb[0], wb[1], o->c);
+        return 1;
+    }
+    if ((n > 5 && (cp_eqn(v, 4, "lab(") || cp_eqn(v, 4, "lch("))) ||
+        (n > 7 && (cp_eqn(v, 6, "oklab(") || cp_eqn(v, 6, "oklch(")))) {
+        /* Lot 101: lab(L a b [/ A]), lch(L C H [/ A]) and their OK forms,
+         * spaces only; L clamped to 0..100 (0..1), C to 0 and over; a
+         * percentage of L is of 100 (1), of a and b of 125 (0.4), of C of
+         * 150 (0.4); a, b and C are kept within 10000 (10) */
+        int ok = cp_low(v[0]) == 'o', lch = cp_low(v[ok ? 4 : 2]) == 'h', pct;
+        int ta[4], tb[4], got = cp_color_toks(v, n, ok ? 6 : 4, ta, tb);
+        long long x[3], y, cs, sn, lim = ok ? 10 * CP_Q : 10000 * CP_Q;
+        cp_q_t q;
+        if ((got != 3 && got != 4) || cp_comma_after(v, tb[0], n)) return 0;
+        for (k = 0; k < 3; k++) {
+            if (k == 2 && lch) {
+                if (!cp_hue(v, ta[2], tb[2], &q)) return 0;
+                cp_cossin(q.v, &cs, &sn);
+                x[2] = cp_qmul(x[1], sn);
+                x[1] = cp_qmul(x[1], cs);
+                continue;
+            }
+            if (!cp_tok_num(v, ta[k], tb[k], &y, &pct)) return 0;
+            if (!k) x[0] = cp_clampll(cp_q40(y, pct, ok ? 1 : 100, 1), 0, ok ? CP_Q : 100 * CP_Q);
+            else if (k == 1 && lch) x[1] = cp_clampll(cp_q40(y, pct, ok ? 2 : 150, ok ? 5 : 1), 0, lim);
+            else x[k] = cp_clampll(cp_q40(y, pct, ok ? 2 : 125, ok ? 5 : 1), -lim, lim);
+        }
+        if (got == 4) {
+            if (!cp_tok_num(v, ta[3], tb[3], &y, &pct)) return 0;
+            o->a = cp_clampll(pct ? cp_div(y, 100, 0) : y, 0, CP_S);
+        }
+        cp_space_rgb(ok ? CP_SP_OKLAB : CP_SP_LAB, x, o->c);
+        return 1;
+    }
+    if (n > 7 && cp_eqn(v, 6, "color(")) {
+        /* Lot 101: color(space c1 c2 c3 [/ A]); a percentage is of 1;
+         * the components are kept within 100 */
+        static const char *const sn[] = {"srgb", "srgb-linear", "display-p3", "a98-rgb", "prophoto-rgb",
+                                          "rec2020", "xyz", "xyz-d65", "xyz-d50", 0};
+        static const int sc[] = {-1, CP_SP_LIN, CP_SP_P3, CP_SP_A98, CP_SP_PRO, CP_SP_2020, CP_SP_D65, CP_SP_D65,
+                                 CP_SP_D50};
+        int i = 6, a0, ta[4], tb[4], got, pct, sp = -2;
+        long long x[3], y;
+        while (i < n - 1 && cp_sp(v[i])) i++;
+        a0 = i;
+        while (i < n - 1 && !cp_sp(v[i])) i++;
+        for (k = 0; sn[k]; k++) if (cp_eqn(v + a0, i - a0, sn[k])) sp = sc[k];
+        if (sp == -2) return 0;
+        got = cp_color_toks(v, n, i, ta, tb);
+        if ((got != 3 && got != 4) || cp_comma_after(v, tb[0], n)) return 0;
+        for (k = 0; k < 3; k++) {
+            if (!cp_tok_num(v, ta[k], tb[k], &y, &pct)) return 0;
+            if (sp < 0) o->c[k] = cp_clampll(pct ? cp_div(y * 255, 100, 0) : y * 255, 0, 255 * CP_S);
+            else x[k] = cp_clampll(cp_q40(y, pct, 1, 1), -100 * CP_Q, 100 * CP_Q);
+        }
+        if (got == 4) {
+            if (!cp_tok_num(v, ta[3], tb[3], &y, &pct)) return 0;
+            o->a = cp_clampll(pct ? cp_div(y, 100, 0) : y, 0, CP_S);
+        }
+        if (sp >= 0) cp_space_rgb(sp, x, o->c);
         return 1;
     }
     if (n > 11 && cp_eqn(v, 10, "color-mix(")) return cp_mix(v, n, o, depth);
@@ -2304,6 +2533,16 @@ int wf_cssprop_rgb24(const char *v, int n, unsigned int *rgb) {
     if ((!cp_eqn(buf, 4, "hsl(") && !cp_eqn(buf, 5, "hsla(")) || !cp_rgba(buf, &c) || c.a != CP_S) return 0;
     *rgb = (unsigned int)((cp_div(c.c[0], CP_S, 0) << 16) | (cp_div(c.c[1], CP_S, 0) << 8) | cp_div(c.c[2], CP_S, 0));
     return 1;
+}
+
+/* Lot 101: a colour once currentcolor has a value (see wf_cssprop.h) */
+int wf_cssprop_color_cur(const char *v, int n) {
+    int on = cp_cur_on, ok, alpha;
+    unsigned int rgb;
+    cp_cur_on = 1;
+    ok = wf_cssprop_color(v, n, &rgb, &alpha);
+    cp_cur_on = on;
+    return ok;
 }
 
 /* Lot 100: any colour the reader paints (see wf_cssprop.h) */
@@ -2876,5 +3115,86 @@ int wf_cssanim_progress(const wf_cssanim_t *a, int ms, int *p, int *before) {
         (dir == WF_CSSANIM_ALT_REVERSE && !(it & 1)))
         simple = CP_S - simple;
     *p = (int)simple;
+    return 1;
+}
+
+/* ---- Lot 101: scroll and view timeline names (CSS Scroll-driven
+ * Animations 1) ---- */
+static const char *const cp_tl_axes[] = { "block", "inline", "x", "y", 0 };
+
+/* one name: none (an empty name) or a <dashed-ident> as animation-timeline
+ * takes it */
+static int cp_tl_name(const char *w, int l, wf_csstl_t *o) {
+    int k;
+    if (cp_eqn(w, l, "none")) { o->name[0] = 0; return 1; }
+    if (l < 3 || w[0] != '-' || w[1] != '-' || !cp_is_ident(w, l) || l >= WF_CSSPROP_NAME) return 0;
+    for (k = 0; k < l; k++) o->name[k] = w[k];
+    o->name[l] = 0;
+    return 1;
+}
+
+static int cp_tl_one(int which, const char *v, int a, int b, wf_csstl_t *o) {
+    int i = a, x, y, k;
+    o->name[0] = 0;
+    o->axis = WF_CSSTL_BLOCK;
+    if (which == WF_CSSTL_SHORT) {
+        if (!cp_next_tok(v, b, &i, &x, &y) || !cp_tl_name(v + x, y - x, o)) return 0;
+        if (!cp_next_tok(v, b, &i, &x, &y)) return 1;
+        k = cp_kw(v + x, y - x, cp_tl_axes);
+        if (!k) return 0;
+        o->axis = (unsigned char)(k - 1);
+        return !cp_next_tok(v, b, &i, &x, &y);
+    }
+    if (!cp_one_tok(v, a, b, &x, &y)) return 0;
+    if (which == WF_CSSTL_NAMES) return cp_tl_name(v + x, y - x, o);
+    k = cp_kw(v + x, y - x, cp_tl_axes);
+    if (!k) return 0;
+    o->axis = (unsigned char)(k - 1);
+    return 1;
+}
+
+int wf_csstl_parse(int which, const char *v, wf_csstl_t *out, int max) {
+    int ia[WF_CSSANIM_MAX], ib[WF_CSSANIM_MAX], c, k;
+    if (!v || !out || which < WF_CSSTL_NAMES || which > WF_CSSTL_SHORT) return -1;
+    if (max > WF_CSSANIM_MAX) max = WF_CSSANIM_MAX;
+    c = cp_list_items(v, ia, ib, max);     /* max < 1: no list fits */
+    for (k = 0; k < c; k++) if (!cp_tl_one(which, v, ia[k], ib[k], &out[k])) return -1;
+    return c;
+}
+
+int wf_csstl_coord(const char *names, const char *axes, wf_csstl_t *out, int max) {
+    static wf_csstl_t ax[WF_CSSANIM_MAX];
+    int n, a = 0, k;
+    n = wf_csstl_parse(WF_CSSTL_NAMES, names, out, max);     /* -1 for a null names or out */
+    if (n < 1) return 0;
+    if (axes) a = wf_csstl_parse(WF_CSSTL_AXES, axes, ax, WF_CSSANIM_MAX);
+    for (k = 0; k < n; k++) out[k].axis = a > 0 ? ax[k % a].axis : (unsigned char)WF_CSSTL_BLOCK;
+    return n;
+}
+
+int wf_csstl_text(const wf_csstl_t *t, int n, int axes, char *out, int cap) {
+    int k, m = 0, j;
+    const char *s;
+    if (!out || cap <= 0) return 0;
+    out[0] = 0;
+    if (!t) return 0;
+    for (k = 0; k < n; k++) {
+        s = axes ? cp_tl_axes[t[k].axis & 3] : t[k].name[0] ? t[k].name : "none";
+        if (k) { if (m + 2 >= cap) { out[0] = 0; return 0; } out[m++] = ','; out[m++] = ' '; }
+        for (j = 0; s[j]; j++) { if (m + 1 >= cap) { out[0] = 0; return 0; } out[m++] = s[j]; }
+    }
+    out[m] = 0;
+    return m;
+}
+
+int wf_cssanim_scroll_ms(const wf_cssanim_t *a, int prog, int *ms) {
+    long long s;
+    if (!a || !ms) return 0;
+    *ms = 0;
+    if (a->iters < 0 || prog < 0 || prog > (int)CP_S) return 0;
+    /* the start delay and the active duration in 1/10000 ms */
+    s = (long long)a->delay * CP_S + (long long)a->dur * a->iters;
+    if (s <= 0 || s > (long long)WF_CSSANIM_MS_MAX * CP_S) return 0;
+    *ms = (int)cp_div(s * prog, CP_S * CP_S, 1);
     return 1;
 }
