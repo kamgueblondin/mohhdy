@@ -1694,6 +1694,13 @@ qemu-lot101: $(OS_IMAGE) pack-initrd disk
 qemu-lot102: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot102.py
 
+# Lot 103: gamut-mapped colours, color-mix() in oklch, lch and hsl with a
+# hue method and missing components, a keyframes colour from a mapped
+# display-p3 green (tests/scripts/test_qemu_lot103.py)
+.PHONY: qemu-lot103
+qemu-lot103: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot103.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

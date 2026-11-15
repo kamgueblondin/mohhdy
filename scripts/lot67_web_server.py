@@ -109,6 +109,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       in color-mix()), scroll() and scroll(root) with
                       animation-range, a named timeline hidden by
                       timeline-scope, view() left idle
+  /lot103/gamut.html  Lot 103: out-of-sRGB colours gamut-mapped (CSS
+                      Color 4), color-mix() in oklch, lch and hsl with a
+                      hue method and missing components, a keyframes
+                      colour from a gamut-mapped display-p3 green
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -606,6 +610,32 @@ LOT102_PAGES = {
 }
 
 
+# Lot 103: reader page (tests/scripts/test_qemu_lot103.py)
+LOT103_PAGES = {
+    "/lot103/gamut.html": (
+        "<!doctype html><html><head><title>Lot 103 gamut</title><style>"
+        "@keyframes k103 { from { color: color(display-p3 0 1 0) } to { color: #000000 } }\n"
+        "#g103 { color: color(display-p3 1 0 0) }\n"
+        "#o103 { background-color: oklch(0.7 0.4 30) }\n"
+        "#m103 { color: color-mix(in oklch, red, blue) }\n"
+        "#l103 { color: color-mix(in hsl longer hue, red, blue) }\n"
+        "#n103 { background-color: color-mix(in lch, lch(50 40 none), lch(70 60 240)) }\n"
+        "#h103 { color: color-mix(in hsl, hsl(none 50% 50%), hsl(120 100% 50%)) }\n"
+        "#b103 { color: color-mix(in srgb longer hue, red, blue) }\n"
+        "#a103 { animation: k103 1000ms linear }\n"
+        "</style></head><body><h1>Gamut 103</h1>"
+        "<div id=\"g103\"><p>gkeep103</p></div>"
+        "<div id=\"o103\"><p>okeep103</p></div>"
+        "<div id=\"m103\"><p>mkeep103</p></div>"
+        "<div id=\"l103\"><p>lkeep103</p></div>"
+        "<div id=\"n103\"><p>nkeep103</p></div>"
+        "<div id=\"h103\"><p>hkeep103</p></div>"
+        "<div id=\"b103\"><p>bkeep103</p></div>"
+        "<div id=\"a103\"><p>akeep103</p></div>"
+        "<p>fin103</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -819,6 +849,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT102_PAGES:
             self._send(200, LOT102_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT103_PAGES:
+            self._send(200, LOT103_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
