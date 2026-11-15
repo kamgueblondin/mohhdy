@@ -2050,6 +2050,59 @@ static void test_lot74_gui_fragment(void) {
 }
 
 
+/* Lot 104: after the first layout of a network page, its geometry goes
+ * back to the shell (page_geom: the laid out document) and the page it
+ * returns is laid out once more; 0 keeps the first layout */
+static int g_l104_calls, g_l104_ret, g_l104_saw;
+static int l104_fetch(const char *url, char *src, int src_max, char *final_url, int url_max, char *status, int st_max) {
+    (void)url_max; (void)st_max;
+    snprintf(final_url, 64, "%s", url);
+    snprintf(status, 64, "osui web fetch ok fake");
+    return snprintf(src, (size_t)src_max, "<html><head><title>G</title></head><body><p id=wg1>first</p></body></html>");
+}
+/* a page over the engine's node budget: its render fails */
+static int l104_fetch_big(const char *url, char *src, int src_max, char *final_url, int url_max, char *status, int st_max) {
+    int n, i;
+    (void)url_max; (void)st_max;
+    snprintf(final_url, 64, "%s", url);
+    snprintf(status, 64, "osui web fetch ok fake");
+    n = snprintf(src, (size_t)src_max, "<html><body><p id=wg1>first</p>");
+    for (i = 0; i < 400 && n < src_max - 32; i++) n += snprintf(src + n, (size_t)(src_max - n), "<p>x</p>");
+    return n + snprintf(src + n, (size_t)(src_max - n), "</body></html>");
+}
+static int l104_geom(const void *doc, char *src, int src_max) {
+    g_l104_calls++;
+    g_l104_saw = doc == (const void *)osui_gui_web_doc() && we_find_id((const we_doc_t *)doc, "wg1") >= 0;
+    if (!g_l104_ret) return 0;
+    return snprintf(src, (size_t)src_max, "<html><head><title>G</title></head><body><p id=wg1 style=\"color:#808080\">"
+                    "first</p><p id=second>2</p></body></html>");
+}
+static void test_lot104_page_geom(void) {
+    static const osui_web_page_ops_t ops = { .page_geom = l104_geom };
+    setup();
+    osui_gui_set_web_fetch(l104_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    g_l104_calls = g_l104_saw = 0;
+    g_l104_ret = 1;
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/g", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(1, g_l104_calls);
+    TEST_ASSERT_EQUAL(1, g_l104_saw);
+    TEST_ASSERT(we_find_id(osui_gui_web_doc(), "second") >= 0);
+    /* 0: the first layout stays */
+    g_l104_ret = 0;
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/g", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(2, g_l104_calls);
+    TEST_ASSERT_EQUAL(-1, we_find_id(osui_gui_web_doc(), "second"));
+    TEST_ASSERT(we_find_id(osui_gui_web_doc(), "wg1") >= 0);
+    /* a failed render is not handed to the op (mutation witness) */
+    osui_gui_set_web_fetch(l104_fetch_big);
+    g_l104_ret = 1;
+    (void)osui_gui_web_command("web-open https://ex.am/big", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(2, g_l104_calls);
+    osui_gui_set_web_page_ops(0);
+    osui_gui_set_web_fetch(0);
+}
+
 /* Lot 90: a value picked from the list and kept is accepted: the store is
  * told (page_offer_touch) so it dates that value today. Down with one
  * value, a click on a row, and Down / Up then leaving the field (Tab,
@@ -2169,6 +2222,7 @@ int main(void) {
     RUN_TEST(test_lot87_offer_click);
     RUN_TEST(test_lot87_offer_delete);
     RUN_TEST(test_lot74_gui_fragment);
+    RUN_TEST(test_lot104_page_geom);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
