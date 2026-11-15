@@ -208,8 +208,11 @@ static void test_l100_mix(void) {
     TEST_ASSERT_EQUAL_STRING("#1000ef 255", rc(nest(4)));
     TEST_ASSERT_EQUAL(123, (int)strlen(nest(5)));
     TEST_ASSERT_EQUAL_STRING("-", rc(nest(5)));
-    /* interpolated as a registered <color> (premultiplied sRGB) */
-    TEST_ASSERT_EQUAL_STRING("rgb(191, 0, 64)", ip("color-mix(in srgb, red, red)", "hwb(240 0% 0%)", 2500));
+    /* interpolated as a registered <color>; Lot 106 (converted, was
+     * rgb(191, 0, 64) in premultiplied sRGB): color-mix() is not a legacy
+     * sRGB form, so the interpolation is in Oklab (CSS Color 4 12.1) */
+    TEST_ASSERT_EQUAL_STRING("rgb(198, 73, 109)", ip("color-mix(in srgb, red, red)", "hwb(240 0% 0%)", 2500));
+    TEST_ASSERT_EQUAL_STRING("rgb(191, 0, 64)", ip("red", "hwb(240 0% 0%)", 2500));     /* both legacy: sRGB */
     /* a colour part of 128 bytes or more is not taken (the item buffer):
      * the interpolation flips */
     {
@@ -222,7 +225,7 @@ static void test_l100_mix(void) {
         TEST_ASSERT_EQUAL_STRING("red", out);
         TEST_ASSERT_EQUAL(2, wf_cssprop_interp(&g_p, "color-mix(in srgb, rgb(1, 2, 3), red)", "red", 5000, out,
                                                (int)sizeof(out)));
-        TEST_ASSERT_EQUAL_STRING("rgb(192, 1, 1)", out);
+        TEST_ASSERT_EQUAL_STRING("rgb(189, 1, 1)", out);     /* Lot 106: Oklab (converted, was rgb(192, 1, 1)) */
         /* the <color> match takes any length: the 160-byte item is refused
          * by the item buffer bound */
         TEST_ASSERT(!wf_cssprop_match(WF_CSSPROP_COLOR, v));
@@ -350,7 +353,7 @@ static void test_l100_keyframes(void) {
      * dropped; after the end with no fill the own colour is back */
     prep("@keyframes k { 0% { color: hwb(0 0% 0%) } 100% { color: color-mix(in srgb, blue, blue) } 50% { color: 1px } }"
          " #o { animation: k 1s linear }", 750);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4000bf\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#5147d2\"", style_of("o"));     /* Lot 106: Oklab, was #4000bf */
     prep("@keyframes k { to { color: blue } } #o { color: red; animation: k 1s linear }", 1500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff0000\"", style_of("o"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);

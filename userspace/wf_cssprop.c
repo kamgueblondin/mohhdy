@@ -1152,8 +1152,12 @@ static int cp_named_at(const char *v, int n) {
  * the channels (red, green, blue), bit 3 the alpha. Lot 103: the other
  * analogous sets of CSS Color 4 (12.2): bit 4 lightness, 5 colourfulness
  * (chroma, saturation), 6 hue, 7 opponent a, 8 opponent b; lin, when
- * lin_ok, the linear sRGB values before gamut mapping (1/2^40) */
-typedef struct { long long c[3], a; int miss; long long lin[3]; int lin_ok; } cp_rgba_t;
+ * lin_ok, the linear sRGB values before gamut mapping (1/2^40). Lot 106:
+ * ok, when ok_ok, the exact OKLab values (1/2^40) of an oklab() or
+ * oklch() colour or of a mix in oklab or oklch: the mix in Oklab takes
+ * them as they are, the way back from linear sRGB losing precision near
+ * a cone response of 0 (an OKLab L near 0) */
+typedef struct { long long c[3], a; int miss; long long lin[3]; int lin_ok; long long ok[3]; int ok_ok; } cp_rgba_t;
 static int cp_rgba(const char *v, cp_rgba_t *o);
 
 static int cp_color(const char *v) {
@@ -2313,6 +2317,7 @@ static void cp_lin_of(const cp_rgba_t *x, long long *l) {
  * (bit 6 into *miss) */
 static void cp_mix_comps(int m, const cp_rgba_t *x, long long *v, int *miss) {
     long long l[3];
+    int k;
     if (cp_mixs[m] == -2) {
         long long r = x->c[0], g = x->c[1], b = x->c[2], u = 255 * CP_S;
         long long mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
@@ -2330,8 +2335,11 @@ static void cp_mix_comps(int m, const cp_rgba_t *x, long long *v, int *miss) {
         }
         return;
     }
-    cp_lin_of(x, l);
-    cp_lin_space(cp_mixs[m], l, v);
+    if (cp_mixs[m] == CP_SP_OKLAB && x->ok_ok) for (k = 0; k < 3; k++) v[k] = x->ok[k];   /* Lot 106 */
+    else {
+        cp_lin_of(x, l);
+        cp_lin_space(cp_mixs[m], l, v);
+    }
     if (cp_mixh[m] == 2) {
         long long a = v[1], b = v[2];
         v[1] = (long long)cp_isqrt(cp_wadd(cp_wmul(cp_w(a), a), cp_wmul(cp_w(b), b)));
@@ -2352,9 +2360,11 @@ static void cp_mix_comps(int m, const cp_rgba_t *x, long long *v, int *miss) {
  * powerless hue) takes the other's value, the hue is not premultiplied,
  * and the result is converted back (gamut-mapped); the missing
  * components of both stay missing */
+static int cp_mix_core(int m, int hm, cp_rgba_t *x, const long long *p, cp_rgba_t *o);
+
 static int cp_mix(const char *v, int n, cp_rgba_t *o, int depth) {
-    int pa[3], pb[3], ha[4], hb[4], k, m = -1, hm = 0, nh, mi[2];
-    long long p[2], cv[2][3], an, sum;
+    int pa[3], pb[3], ha[4], hb[4], k, m = -1, hm = 0, nh;
+    long long p[2], sum;
     cp_rgba_t x[2];
     if (depth > 3 || cp_split(v, 10, n - 1, ',', pa, pb, 3) != 3) return 0;
     /* "in", the space, then a hue method and "hue" for a polar space */
@@ -2373,6 +2383,18 @@ static int cp_mix(const char *v, int n, cp_rgba_t *o, int depth) {
     else if (p[1] < 0) p[1] = 100 * CP_S - p[0];
     sum = p[0] + p[1];
     if (sum <= 0) return 0;
+    return cp_mix_core(m, hm, x, p, o);
+}
+
+/* Lot 106: the mix of x[0] and x[1] with weights p (1/10000 %, sum S
+ * over 0) in mix space m with hue method hm: cp_mix after its parsing
+ * (Lot 100 and Lot 103). A weight may be negative (an interpolation past
+ * its ends, wf_cssprop_interp): the weighted alpha sum is then kept in
+ * 0..S, as the sRGB interpolation keeps its alpha in 0..1 */
+static int cp_mix_core(int m, int hm, cp_rgba_t *x, const long long *p, cp_rgba_t *o) {
+    int k, mi[2];
+    long long cv[2][3], an, sum = p[0] + p[1];
+    o->ok_ok = 0;
     if (!m) {     /* o->lin_ok is 0 (cp_rgba_d) */
         cp_carry(&x[0], &x[1]);     /* Lot 102: a component missing in both stays missing */
         o->miss = x[0].miss & x[1].miss & 15;
@@ -2405,7 +2427,7 @@ static int cp_mix(const char *v, int n, cp_rgba_t *o, int depth) {
         } else if (m0) *q0 = *q1;
         else if (m1) *q1 = *q0;
     }
-    an = x[0].a * p[0] + x[1].a * p[1];
+    an = cp_clampll(x[0].a * p[0] + x[1].a * p[1], 0, sum * CP_S);
     for (k = 0; k < 3; k++) {
         if (k == cp_mixh[m]) {
             /* CSS Color 4 12.4: the hue method, then the weighted mean
@@ -2435,6 +2457,10 @@ static int cp_mix(const char *v, int n, cp_rgba_t *o, int depth) {
         cv[0][1] = cp_qmul(c, cs);
         cv[0][2] = cp_qmul(c, sn);
     }
+    if (cp_mixs[m] == CP_SP_OKLAB) {
+        for (k = 0; k < 3; k++) o->ok[k] = cv[0][k];
+        o->ok_ok = 1;
+    }
     cp_space_rgb(cp_mixs[m], cv[0], o->c, o->lin);
     o->lin_ok = 1;
     return 1;
@@ -2458,6 +2484,7 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
     o->a = CP_S;
     o->miss = 0;
     o->lin_ok = 0;
+    o->ok_ok = 0;
     if (cp_eqn(v, n, "transparent")) { o->c[0] = o->c[1] = o->c[2] = 0; o->a = 0; return 1; }
     if (cp_eqn(v, n, "currentcolor")) {
         /* Lot 101: the colour set by wf_cssprop_set_current, else none */
@@ -2575,6 +2602,8 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
             else x[k] = cp_clampll(cp_q40(y, pct, ok ? 2 : 125, ok ? 5 : 1), -lim, lim);
         }
         if (got == 4 && !cp_alpha_tok(v, ta[3], tb[3], o)) return 0;
+        for (k = 0; k < 3; k++) o->ok[k] = x[k];
+        o->ok_ok = ok;
         cp_space_rgb(ok ? CP_SP_OKLAB : CP_SP_LAB, x, o->c, o->lin);
         o->lin_ok = 1;
         return 1;
@@ -2628,22 +2657,51 @@ static int cp_put_u(char *out, int *len, int cap, long long v) {
 /* the interpolated colour text, -1 when a value is not a colour taken
  * here, -2 when cap is short. Lot 98: add sums the premultiplied colours
  * (the alpha clamped to 1, then the channels to 0..255) */
+/* Lot 106: one of the legacy sRGB colour formats of CSS Color 4 12.1
+ * (hex, named colours with transparent, rgb(), rgba(), hsl(), hsla() and
+ * hwb(), in either syntax); currentcolor is one too here, as the reader
+ * keeps it as an sRGB colour (wf_cssprop_set_current) */
+static int cp_legacy(const char *v) {
+    int n = cp_len(v);
+    static const char *const f[] = {"rgb(", "rgba(", "hsl(", "hsla(", "hwb(", 0};
+    int k;
+    if (v[0] == '#' || cp_named_at(v, n) >= 0 || cp_eqn(v, n, "transparent") || cp_eqn(v, n, "currentcolor")) return 1;
+    for (k = 0; f[k]; k++) if (n > cp_len(f[k]) && cp_eqn(v, cp_len(f[k]), f[k])) return 1;
+    return 0;
+}
+
 static int cp_interp_color(const char *a, const char *b, int t, int add, char *out, int cap) {
     cp_rgba_t x, y;
     long long an, ch[3];
     int k, len = 0, alpha;
     if (!cp_rgba(a, &x) || !cp_rgba(b, &y)) return -1;
-    /* Lot 102: missing components, when interpolating (add takes the
-     * values as they convert) */
-    if (!add) cp_carry(&x, &y);
-    /* alpha * 10^8: Aa 10^4 + (Ab - Aa) t, or (Aa + Ab) 10^4 */
-    an = cp_clampll(add ? (x.a + y.a) * CP_S : x.a * CP_S + (y.a - x.a) * t, 0, CP_S * CP_S);
-    for (k = 0; k < 3; k++) {
-        long long pa = x.c[k] * x.a, pb = y.c[k] * y.a;
-        long long pn = add ? (pa + pb) * CP_S : pa * CP_S + (pb - pa) * t;
-        ch[k] = an ? cp_clampll(cp_div(pn, an * CP_S, 0), 0, 255) : 0;
+    if (!add && (!cp_legacy(a) || !cp_legacy(b))) {
+        /* Lot 106: CSS Color 4 12.1: Oklab unless both colours are
+         * legacy sRGB ones: color-mix(in oklab, a (100 - t)%, b t%)
+         * (premultiplied, missing components carried by analogous set,
+         * gamut-mapped back to sRGB), each channel rounded half away from
+         * zero to 0..255 */
+        cp_rgba_t xy[2], o;
+        long long p[2];
+        xy[0] = x; xy[1] = y;
+        p[0] = (CP_S - t) * 100; p[1] = (long long)t * 100;
+        (void)cp_mix_core(7, 0, xy, p, &o);
+        for (k = 0; k < 3; k++) ch[k] = cp_clampll(cp_div(o.c[k], CP_S, 0), 0, 255);
+        alpha = (int)o.a;
+    } else {
+        /* Lot 102: missing components, when interpolating (add takes the
+         * values as they convert: CSS Color 4 4.4, a missing component is
+         * 0 outside interpolation) */
+        if (!add) cp_carry(&x, &y);
+        /* alpha * 10^8: Aa 10^4 + (Ab - Aa) t, or (Aa + Ab) 10^4 */
+        an = cp_clampll(add ? (x.a + y.a) * CP_S : x.a * CP_S + (y.a - x.a) * t, 0, CP_S * CP_S);
+        for (k = 0; k < 3; k++) {
+            long long pa = x.c[k] * x.a, pb = y.c[k] * y.a;
+            long long pn = add ? (pa + pb) * CP_S : pa * CP_S + (pb - pa) * t;
+            ch[k] = an ? cp_clampll(cp_div(pn, an * CP_S, 0), 0, 255) : 0;
+        }
+        alpha = (int)cp_div(an, CP_S, 0);
     }
-    alpha = (int)cp_div(an, CP_S, 0);
     if (!cp_put(out, &len, cap, alpha == CP_S ? "rgb(" : "rgba(", alpha == CP_S ? 4 : 5)) return -2;
     for (k = 0; k < 3; k++) {
         if (k && !cp_put(out, &len, cap, ", ", 2)) return -2;

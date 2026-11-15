@@ -33,224 +33,224 @@ static int mt(const char *v) {
 }
 
 static void test_l101_mix_0(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(191, 96, 118)", ip("hwb(356 50% 31%)", "oklch(0.5882 0.2528 -346.4)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(194, 109, 118)", ip("hwb(356 50% 31%)", "oklch(0.5882 0.2528 -346.4)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(35, 65, 63, 0.875)", ip("lch(-6.329 61.6% 225)", "color-mix(in	srgb , hwb(-397.164grad 14% 85.1%) , rgb(17 237 229 / 0.5) 25%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(81, 50, 64)", ip("hsla(170 128% 7% / 100%)", "color(prophoto-rgb	100%	0	0.355/ 1)", 3159, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(213, 147, 127, 0.75)", ip("color-mix(in srgb, hsla(320.844grad, 7%, 50%, 0), color(xyz-d50 0.7 0.481 0.59))", "color-mix(in srgb, color(display-p3 0.5912 0.9027 0), color(xyz-d65  0.76  0.26  0.31))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(113, 35, 55)", ip("hsla(170 128% 7% / 100%)", "color(prophoto-rgb	100%	0	0.355/ 1)", 3159, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(212, 150, 133, 0.75)", ip("color-mix(in srgb, hsla(320.844grad, 7%, 50%, 0), color(xyz-d50 0.7 0.481 0.59))", "color-mix(in srgb, color(display-p3 0.5912 0.9027 0), color(xyz-d65  0.76  0.26  0.31))", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(26, 0, 13, 0.2746)", ip("transparent", "oklch(0.1312  0.2355  -6.5092rad)", 2746, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(62, 119, 55)", ip("lab(36 -58.05% 49.8)", "color-mix(in srgb, color(a98-rgb 0.9 0.463 0.1), hsl(623.57deg, 22%, 95%))", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(254, 112, 93)", ip("color-mix(in srgb, lab(102.6	-15.7%	50%) 25%, color(srgb 1.672 0 -1))", "color(a98-rgb  1.8869  -0.5412  0)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(26, 128, 21)", ip("lab(36 -58.05% 49.8)", "color-mix(in srgb, color(a98-rgb 0.9 0.463 0.1), hsl(623.57deg, 22%, 95%))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 130, 114)", ip("color-mix(in srgb, lab(102.6	-15.7%	50%) 25%, color(srgb 1.672 0 -1))", "color(a98-rgb  1.8869  -0.5412  0)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(207, 255, 250, 0.25)", ip("oklab(0.6904 -0.0338 -0.3993/0)", "lab(101.806	-48.98%	0%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 117, 123, 0.875)", ip("lab(54	-131.883	-66.5)", "oklch(-3.1% 0.2484 604grad / 50%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(174, 170, 170, 0.75)", ip("color-mix(in srgb, color( xyz 0.8 0.42 0.3 / 0), oklch(9% 90.63% 2.02turn))", "white", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 111, 116, 0.875)", ip("lab(54	-131.883	-66.5)", "oklch(-3.1% 0.2484 604grad / 50%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(167, 155, 155, 0.75)", ip("color-mix(in srgb, color( xyz 0.8 0.42 0.3 / 0), oklch(9% 90.63% 2.02turn))", "white", 5000, 2));
 }
 
 static void test_l101_mix_1(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(137, 89, 0, 0.9687)", ip("oklch(0 0 326.096deg/98%)", "lch(73%  85.1  -0.8turn /0.96)", 5656, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(112, 70, 0, 0.9687)", ip("oklch(0 0 326.096deg/98%)", "lch(73%  85.1  -0.8turn /0.96)", 5656, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(104, 69, 179, 0.86)", ip("color-mix(in srgb, lab(30.58 54 0 /0.72), lch(48% 158.39 -60deg))", "grey", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(247, 180, 252)", ip("color(srgb 0.749 1 0.132)", "color( xyz-d65 0.7251 0.5967 100%)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.7499)", ip("lch(105.76% 96 -63.5deg /0)", "color-mix(in	srgb, 25% transparent, black)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 55, 8)", ip("lab(20.08 -76% 47)", "color( xyz-d50	0	0	0.705)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(52, 152, 129, 0.3409)", ip("color( prophoto-rgb	0.5	0.72	0.8911 / 22%)", "oklab(47.4%  -3.82%  0.4170)", 1550, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 120, 111, 0.9775)", ip("color(xyz-d50  -0.2  0.387  0.702)", "lch(62.58%	172.92	295grad/0.91)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(130, 151, 0, 0.3409)", ip("color( prophoto-rgb	0.5	0.72	0.8911 / 22%)", "oklab(47.4%  -3.82%  0.4170)", 1550, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 116, 104, 0.9956)", ip("color(xyz-d50  -0.2  0.387  0.702)", "lch(62.58%	172.92	295grad/0.91)", 494, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(230, 230, 255, 0.0001)", ip("color-mix(in srgb, hwb(239 90% 0%), lch(28 55.42 1.327turn / 0))", "color(prophoto-rgb -0.969 0 0.214 /0)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(219, 90, 71, 0.75)", ip("lab(45  81%  141 /1)", "lab(107.9 -42 35% / 0.5)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(171, 150, 167, 0.7375)", ip("color-mix(in srgb, hwb(5.759 77 13%/95%), white)", "oklab(0.19 0.4622 -0.4367 /0.5)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(254, 105, 0, 0.75)", ip("lab(45  81%  141 /1)", "lab(107.9 -42 35% / 0.5)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(206, 96, 235, 0.7375)", ip("color-mix(in srgb, hwb(5.759 77 13%/95%), white)", "oklab(0.19 0.4622 -0.4367 /0.5)", 5000, 2));
 }
 
 static void test_l101_mix_2(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(255, 176, 177, 0.7263)", ip("color(srgb-linear 1.62 0.26 31.36%)", "oklch(0.49 0.0823 -509.19 /0)", 2737, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(54, 54, 55)", ip("oklab(0	-0.9488	0.1173)", "hwb(595.4468 85.31% 14%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(50, 0, 239, 0.2551)", ip("color(a98-rgb 0.713 0.7695 0.5)", "color-mix(in srgb, lch( 24.32% 29% 2.7238turn/0 ), color( display-p3  0.1771  0  0.9 /0.51))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(55, 8, 103, 0.935)", ip("color-mix(in srgb, #71d 87%, color(xyz-d50	-0.933	0.394	0/0))", "oklab(0 -0.4760 -0.2582)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 36, 24)", ip("oklab(0	-0.9488	0.1173)", "hwb(595.4468 85.31% 14%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(50, 1, 239, 0.2551)", ip("color(a98-rgb 0.713 0.7695 0.5)", "color-mix(in srgb, lch( 24.32% 29% 2.7238turn/0 ), color( display-p3  0.1771  0  0.9 /0.51))", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 33, 55, 0.935)", ip("color-mix(in srgb, #71d 87%, color(xyz-d50	-0.933	0.394	0/0))", "oklab(0 -0.4760 -0.2582)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(99, 70, 255, 0.1379)", ip("lab(36.466 102.58% -156.1/ 13.78%)", "lab(12  -40%  50%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(43, 0, 16)", ip("lch(4 28.5983 -2turn)", "color-mix(in srgb,black 25%,hsla(104.96deg 13.68% 50% / 100%))", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(170, 99, 229)", ip("color-mix(in srgb, lch(68.2096 54% 5.2893rad), darkorchid)", "oklab(0.63 0 0.4249 /0.5)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(145, 24, 14, 0.4785)", ip("oklab(0.34 -0.2316 0.3493/ 0.357)", "color-mix(in srgb, transparent 40%, color(display-p3	0.74	0	0.12))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(80, 184, 189, 0.6952)", ip("color(xyz 0.211 0.37 0.996/ 46%)", "color-mix(in srgb, hwb(-318 100% 0%), color(xyz-d50 -0.973 0.6254 0.8))", 4356, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklch(-8.6% 0.2661 -431)", "oklch(0 0.3543 -443.1292)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(121, 78, 0, 0.4785)", ip("oklab(0.34 -0.2316 0.3493/ 0.357)", "color-mix(in srgb, transparent 40%, color(display-p3	0.74	0	0.12))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 192, 208, 0.6952)", ip("color(xyz 0.211 0.37 0.996/ 46%)", "color-mix(in srgb, hwb(-318 100% 0%), color(xyz-d50 -0.973 0.6254 0.8))", 4356, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(44, 0, 81)", ip("oklch(-8.6% 0.2661 -431)", "rgb(241 112 169)", 3201, 2));
 }
 
 static void test_l101_mix_3(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(16, 0, 15)", ip("lch(1.99 129 99)", "oklch(0.16	0.1786	-388.09deg /1)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(64, 46, 46)", ip("color-mix(in srgb, color(srgb 1.2533 0 0.44), hwb(2.4turn 0% 28%))", "lab(-8% -53 51.36%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(2, 0, 0)", ip("lch(1.99 129 99)", "oklch(0.16	0.1786	-388.09deg /1)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(6, 24, 0)", ip("color-mix(in srgb, color(srgb 1.2533 0 0.44), hwb(2.4turn 0% 28%))", "lab(-8% -53 51.36%)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(23, 35, 90, 0.375)", ip("color-mix(in srgb, oklab(28.24% 0 -0.1006/ 120%), hwb(0.342turn 64.488% 100% / -0.5))", "lch(98.162  138.9%  0.505turn/-0.5)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(224, 224, 224, 0.5001)", ip("color-mix(in srgb, rgb(27 123 252 / 120%), hwb(0.1turn 58 50%) 100%)", "hwb(-447.4 88% 12%/0.5)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(140, 140, 140, 0.9659)", ip("color-mix(in srgb, rgb(27 123 252 / 120%), hwb(0.1turn 58 50%) 100%)", "hwb(-447.4 88% 12%/0.5)", 682, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("lab(-0.62	-160	83)", "lch(4% 153% 60/1)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(62, 4, 43, 0.8125)", ip("oklab(21.98% 0.4210 -0.0764)", "color-mix(in srgb, mediumspringgreen 0%, rebeccapurple 25%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(19, 68, 134, 0.8669)", ip("color-mix(in srgb , color-mix(in  srgb, rgb(68 109 192 / 0), hsla(6.2832rad, 30%, 126.7%, 0)) , hwb(1turn 94% 115%))", "color( rec2020	0.039	0	0.75)", 7337, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(13, 14, 124)", ip("lch(9.227 35.6 96.74)", "color( srgb  0  -1  1.2533)", 4877, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(230, 255, 255, 0.5022)", ip("color(xyz-d50 88.3% 1 100%/ 50.22%)", "color(srgb-linear 1 1.3% 22.37%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(124, 141, 232, 0.55)", ip("lab(60.65%	53.1%	-34%/0.4)", "lch(74.8	136	-133.475grad)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(65, 0, 40, 0.8125)", ip("oklab(21.98% 0.4210 -0.0764)", "color-mix(in srgb, mediumspringgreen 0%, rebeccapurple 25%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(15, 94, 168, 0.6519)", ip("color-mix(in srgb , color-mix(in  srgb, rgb(68 109 192 / 0), hsla(6.2832rad, 30%, 126.7%, 0)) , hwb(1turn 94% 115%))", "color( rec2020	0.039	0	0.75)", 3037, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 66, 50)", ip("lch(9.227 35.6 96.74)", "color( srgb  0  -1  1.2533)", 4877, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 129, 175, 0.7649)", ip("color(xyz-d50 88.3% 1 100%/ 50.22%)", "color(srgb-linear 1 1.3% 22.37%)", 5277, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 176, 255, 0.55)", ip("lab(60.65%	53.1%	-34%/0.4)", "lch(74.8	136	-133.475grad)", 2500, 2));
 }
 
 static void test_l101_mix_4(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(93, 93, 93, 0.5008)", ip("color-mix(in srgb , white 50% , blue)", "color-mix(in srgb, hwb(-187.73 35 39/0), hwb(19.5deg 57% 100%))", 9984, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(35, 90, 140)", ip("color(xyz-d65  0  0.3937  0.12)", "color( xyz-d65 0.198 0 1 /1.5)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 114, 149)", ip("color(xyz-d65  0  0.3937  0.12)", "color( xyz-d65 0.198 0 1 /1.5)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(41, 41, 41)", ip("hwb(580.23deg 19 107.6%)", "lab(50.8% 88.3% 54%/ 74%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(200, 230, 5, 0.0194)", ip("oklch(58.1% 0.2024 -46.928/0)", "color-mix(in  srgb,#cceb05e2,black 1.717%)", 218, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(22, 113, 113)", ip("oklch(53% 0.0299 -299.849 /1.5)", "lab(45%  -115.7712  -37.94)", 8147, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(214, 125, 171, 0.9805)", ip("oklch(48.36% 0.2029 360)", "color-mix(in srgb, oklab(105% 0.4869 -0.0810/0.922), white)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(167, 245, 107, 0.6335)", ip("oklch(1  0.0772  0turn)", "color(display-p3 0.55 0.922 0.181 /0.5)", 7330, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(80, 255, 179, 0.8)", ip("color( xyz  0.094  0.9308  0.11/ 80%)", "color-mix(in srgb, color(srgb-linear	0	0.8	1) 78.8%, lch(35 90% 60))", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 117, 119)", ip("oklch(53% 0.0299 -299.849 /1.5)", "lab(45%  -115.7712  -37.94)", 8147, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(224, 142, 167, 0.9805)", ip("oklch(48.36% 0.2029 360)", "color-mix(in srgb, oklab(105% 0.4869 -0.0810/0.922), white)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 244, 245, 0.9298)", ip("oklch(1  0.0772  0turn)", "color(display-p3 0.55 0.922 0.181 /0.5)", 1405, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(79, 255, 179, 0.8)", ip("color( xyz  0.094  0.9308  0.11/ 80%)", "color-mix(in srgb, color(srgb-linear	0	0.8	1) 78.8%, lch(35 90% 60))", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(239, 239, 239, 0.308)", ip("oklab(9.4%  0  -0.1465 /0)", "hwb(90deg 100% 6.87%)", 3080, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(119, 65, 32)", ip("oklab(0.4846 0.1383 0.3349)", "color(srgb-linear	0	0%	0.62 / 1.5)", 1548, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(137, 72, 0)", ip("oklab(0.4846 0.1383 0.3349)", "color(srgb-linear	0	0%	0.62 / 1.5)", 1548, 2));
 }
 
 static void test_l101_mix_5(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(18, 21, 244, 0.555)", ip("color( a98-rgb 0.7319 0.825 0.56 / 11%)", "blue", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(102, 241, 187, 0.8784)", ip("color-mix(in srgb , white 27% , #59cb0baa)", "color( srgb  0.2626  1.24  1.528)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 63, 248, 0.555)", ip("color( a98-rgb 0.7319 0.825 0.56 / 11%)", "blue", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(112, 242, 193, 0.8784)", ip("color-mix(in srgb , white 27% , #59cb0baa)", "color( srgb  0.2626  1.24  1.528)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 152, 158)", ip("oklab(0.6088 -0.2547 -0.0864)", "color-mix(in srgb,hsl(0.947turn 0% 61.3%),hsla(200grad 8.798% -13.6% / 0.9999))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(211, 227, 26, 0.835)", ip("color(xyz-d65	0.503	0.66	0)", "oklab(1 92.17% -0.3450 / 34%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(223, 222, 58, 0.835)", ip("color(xyz-d65	0.503	0.66	0)", "oklab(1 92.17% -0.3450 / 34%)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(37, 140, 173, 0.9999)", ip("oklab(0  80.2%  -0.0138 /0%)", "color(srgb 0.146 0.55 0.68)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 43, 51, 0.4225)", ip("hwb(241 -6.5% 80% /0.23)", "color-mix(in srgb, hsla(-6.547rad, 11%, 0%, 100%), oklab(0.57 -0.24 0.0506))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 45, 55, 0.4225)", ip("hwb(241 -6.5% 80% /0.23)", "color-mix(in srgb, hsla(-6.547rad, 11%, 0%, 100%), oklab(0.57 -0.24 0.0506))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(146, 156, 201)", ip("oklch(70.1%	0.0674	306grad)", "lab(27.06% -121.88% 46%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(72, 0, 106)", ip("oklab(0.4  0.4939  0.1622)", "hwb(-120deg -4.2% 29)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 255, 255, 0.0197)", ip("oklab(108.6% 0 -0.2285)", "oklab(0.48 0.1058 0.1551/-0.5)", 9803, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(124, 0, 77)", ip("oklab(0.4  0.4939  0.1622)", "hwb(-120deg -4.2% 29)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(228, 246, 255)", ip("oklab(108.6% 0 -0.2285)", "rgb(223 234 18)", 3255, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 31)", ip("hwb(130.7grad 97.3% 7)", "color(srgb 0% 0 0.12)", 9999, 2));
 }
 
 static void test_l101_mix_6(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(141, 171, 153, 0.625)", ip("color-mix(in srgb, oklab(0.64  0  -0.2155), lch(69.9% 50% 228/0))", "color-mix(in srgb, color( srgb-linear	0.6777	0.9	-0.151) 100%, lch( 5.6% 0% -99deg ))", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(67, 128, 99)", ip("color-mix(in srgb, oklab(0  0.2078  -0.2875) 58.1277%, red)", "color( srgb  10.5%  2  0.773)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(132, 179, 201, 0.625)", ip("color-mix(in srgb, oklab(0.64  0  -0.2155), lch(69.9% 50% 228/0))", "color-mix(in srgb, color( srgb-linear	0.6777	0.9	-0.151) 100%, lch( 5.6% 0% -99deg ))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(128, 136, 97)", ip("color-mix(in srgb, oklab(0  0.2078  -0.2875) 58.1277%, red)", "color( srgb  10.5%  2  0.773)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 244, 108, 0.9999)", ip("color( display-p3  0  0.97  0.4)", "hsla(-651, 33%, 0%, 0)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("beige", "oklch(-3.4%  +0.5  100grad)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(212, 186, 96)", ip("beige", "oklch(-3.4%  +0.5  100grad)", 1764, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(74, 0, 184, 0.9999)", ip("hsla(693.502grad 100% 36% / 99.99%)", "lab(93 -60.091 -52%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.5001)", ip("oklab(0 -0.0240 0.1531 / 50%)", "lab(90.931  -0  142)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 40, 40, 0.5001)", ip("color(xyz 0.4 1.96 0.7647/ 1.5)", "lab( 15%	-44%	-119%/ 0.5 )", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(48, 70, 72)", ip("oklch(12% 0.1808 330 / 1)", "color-mix(in srgb, hsla(-0.15turn, 8%, 34.7674%, 99.99%), color( xyz-d50	-0.593	0.2	0.2956))", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(241, 243, 246, 0.9999)", ip("color( srgb-linear	0.883	0.9	0.921)", "oklab(104.2% -1 -0.0506 /0)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(188, 193, 73, 0.8195)", ip("color-mix(in srgb, #c6a, lab(109 41.9% -59.21/27.8%))", "oklch(0.85 0.4865 125)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(176, 207, 0, 0.8195)", ip("color-mix(in srgb, #c6a, lab(109 41.9% -59.21/27.8%))", "oklch(0.85 0.4865 125)", 5000, 2));
 }
 
 static void test_l101_mix_7(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(115, 154, 48, 0.9625)", ip("hsl(100grad 72.2% 37% / 150%)", "color( srgb-linear 0.5 0.2 0.2/85%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(58, 8, 2, 0.9075)", ip("oklch(11.93%	0.2835	150)", "color-mix(in srgb, color(srgb 0.8 0 0), oklch(15.3% 0 60/ 63%))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(27, 55, 115, 0.55)", ip("lab( 26.305 8 -41.2673 )", "lab(-2.975 48 109 /0.1)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("oklab(0 16.6% -0.2296/ 1)", "oklab(1 0 0.0179)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(80, 73, 72)", ip("color-mix(in srgb, oklch(0.1  0.1359  0rad), lab(9% .5 3.9))", "color(prophoto-rgb  2  0.85  0.5998)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(105, 160, 41, 0.9866)", ip("hsl(100grad 72.2% 37% / 150%)", "color( srgb-linear 0.5 0.2 0.2/85%)", 894, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(23, 36, 0, 0.9075)", ip("oklch(11.93%	0.2835	150)", "color-mix(in srgb, color(srgb 0.8 0 0), oklch(15.3% 0 60/ 63%))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(64, 38, 99, 0.55)", ip("lab( 26.305 8 -41.2673 )", "lab(-2.975 48 109 /0.1)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 242)", ip("oklab(0 16.6% -0.2296/ 1)", "oklab(1 0 0.0179)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(134, 42, 44)", ip("color-mix(in srgb, oklch(0.1  0.1359  0rad), lab(9% .5 3.9))", "color(prophoto-rgb  2  0.85  0.5998)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(104, 97, 53, 0.0231)", ip("color(srgb-linear	0.53	0.18	0.16/ -0.5)", "color-mix(in srgb, hwb(2.09turn 11% 97/0), lab(41%  -2  26/ 0.05))", 9234, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(5, 154, 0)", ip("color(srgb-linear 0 0.367 0)", "lch(19.677 100% 67)", 819, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(39, 82, 63, 0.4901)", ip("color-mix(in	srgb,color-mix(in	srgb, 83% #feebd4b1, crimson 56.8%) 1%,hsla(499.0377 50% 13.2% / 50%) 86%)", "color-mix(in srgb, rgba(119, 242, 224, 0.78), cadetblue)", 1148, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(69, 150, 0)", ip("color(srgb-linear 0 0.367 0)", "lch(19.677 100% 67)", 819, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(37, 79, 59, 0.4901)", ip("color-mix(in	srgb,color-mix(in	srgb, 83% #feebd4b1, crimson 56.8%) 1%,hsla(499.0377 50% 13.2% / 50%) 86%)", "color-mix(in srgb, rgba(119, 242, 224, 0.78), cadetblue)", 1148, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(226, 208, 0)", ip("oklab(108.1% 0.711 -0.1020)", "oklab(0.844 -0.0747 0.2937/ 1.5)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(112, 37, 89)", ip("lch(27	108	6rad / 1)", "hwb(145 39% 87.01%)", 4632, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(140, 0, 98)", ip("lch(27	108	6rad / 1)", "hwb(145 39% 87.01%)", 4632, 2));
 }
 
 static void test_l101_mix_8(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(91, 115, 113, 0.7434)", ip("color-mix(in srgb, color(srgb-linear	0.4	0.8061	35% / 20%), hsl(-0.23turn, 36%, 56%, 100%))", "color-mix(in  srgb, color-mix(in srgb, #657c, #076e26) 89%, color-mix(in srgb,rgb(35% 127 22 / 0.56),50% lime))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.8818)", ip("color-mix(in srgb, oklch(0	0	-0.4931turn /51%), #f6d0)", "oklch(0  0.1007  364 / 1.5)", 8414, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(235, 163, 94)", ip("color(srgb 0.9981 0.89 0.11)", "palevioletred", 5534, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(94, 212, 203, 0.6541)", ip("#7ed9", "oklch(50% 0.2931 212)", 1353, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(236, 176, 250, 0.822)", ip("color( xyz-d50	0.751	0.6	0.8957)", "oklch(63.1% 25% -427.3673/28.81%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(96, 118, 113, 0.7434)", ip("color-mix(in srgb, color(srgb-linear	0.4	0.8061	35% / 20%), hsl(-0.23turn, 36%, 56%, 100%))", "color-mix(in  srgb, color-mix(in srgb, #657c, #076e26) 89%, color-mix(in srgb,rgb(35% 127 22 / 0.56),50% lime))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(76, 67, 2, 0.5686)", ip("color-mix(in srgb, oklch(0	0	-0.4931turn /51%), #f6d0)", "rgb(117 104 4)", 4210, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(236, 166, 121)", ip("color(srgb 0.9981 0.89 0.11)", "palevioletred", 5534, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 217, 217, 0.6541)", ip("#7ed9", "oklch(50% 0.2931 212)", 1353, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(239, 173, 255, 0.822)", ip("color( xyz-d50	0.751	0.6	0.8957)", "oklch(63.1% 25% -427.3673/28.81%)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(70, 0, 32, 0.9608)", ip("lab(6.2916 134.63 0%)", "color(xyz-d65	0	1	0 / 0)", 392, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 5, 0, 0.9999)", ip("lch(2.64 53.3598 -598)", "lch(100%	138.99%	332.03grad /20%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(143, 111, 151, 0.75)", ip("color(srgb 88.1% 0.9 0.58/0.5)", "rebeccapurple", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(81, 103, 117)", ip("oklch(0  0.0127  -589.868)", "oklch(83% 0.0601 235)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(135, 112, 19)", ip("lch(2.64 53.3598 -598)", "rgb(198 135 114)", 7779, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(139, 114, 160, 0.75)", ip("color(srgb 88.1% 0.9 0.58/0.5)", "rebeccapurple", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(58, 79, 87)", ip("oklch(0  0.0127  -589.868)", "oklch(83% 0.0601 235)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 4, 3, 0.84)", ip("lch(74.7381	30%	220)", "lch(3.114 50% -174.9grad /0.84)", 9999, 2));
 }
 
 static void test_l101_mix_9(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 17, 21)", ip("color( srgb  0.807  0.65  1.5)", "oklab(15.37% -1 -0.4569)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("color-mix(in srgb, aqua, lch(20.6812 45.5 2.7turn))", "oklab(107.13%  0  -0.3262)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 28, 33)", ip("color( srgb  0.807  0.65  1.5)", "oklab(15.37% -1 -0.4569)", 9315, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(250, 255, 255)", ip("color-mix(in srgb, aqua, lch(20.6812 45.5 2.7turn))", "oklab(107.13%  0  -0.3262)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(37, 0, 51)", ip("lch(2	212.5	181.236grad/1)", "oklab(0.1861 0.3375 -0.3215)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 113, 51)", ip("lab(63.99 -69.1 43.1%)", "lab(26	4.549	-102.43%)", 5417, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(167, 25, 179)", ip("color-mix(in srgb, teal 39.0254%, color(xyz 0.5 0 0.3 / 1.5))", "fuchsia", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 107, 102)", ip("lab(63.99 -69.1 43.1%)", "lab(26	4.549	-102.43%)", 5417, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(164, 51, 176)", ip("color-mix(in srgb, teal 39.0254%, color(xyz 0.5 0 0.3 / 1.5))", "fuchsia", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(226, 234, 218, 0.9822)", ip("color-mix(in srgb, #cdb 92.86%, oklch(100%  0.1508  -300.85deg /0.5))", "color-mix(in srgb, lab(42.1% -36.85% 17.7) 0%, whitesmoke)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("oklab(0	0.0962	0.1625)", "color-mix(in srgb, lch(108% 219.27 12.15rad) 100%, lch(99.3 146.5% 200grad))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(177, 233, 156)", ip("color(display-p3 0.1 -1 0.77)", "color(srgb-linear	0.5	0.93	0.38 /1.5)", 9417, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(172, 203, 186)", ip("color(display-p3 0.1 -1 0.77)", "color(srgb-linear	0.5	0.93	0.38 /1.5)", 9417, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(7, 6, 0)", ip("lab(0% -66 -82%/1.5)", "oklch(12%  0.3246  8.2rad)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(69, 30, 104)", ip("oklab(0.28 22.3% -0.4436)", "color( srgb 0.752 0.5977 0.013)", 1978, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(60, 0, 179)", ip("oklab(0.28 22.3% -0.4436)", "color( srgb 0.752 0.5977 0.013)", 1978, 2));
 }
 
 static void test_l101_mix_10(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(97, 255, 255)", ip("color(xyz	0.539	0.885	1.43)", "color(display-p3 0.457 79.6% 0.9196)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(166, 166, 166, 0.5001)", ip("color(srgb-linear 0.5809 62.7% 0)", "color-mix(in srgb, oklch(0.724  0  -186.005deg/ 120%), rgb(115 248 163 / 0))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(203, 21, 193)", ip("color(rec2020 0.602 0.2 0.7888)", "lab(46.802  123.46%  -0)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(180, 148, 36)", ip("oklab(67.9% 0% 0.2673)", "lch(64	4.96%	127deg)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(10, 2, 7, 0.7463)", ip("color-mix(in srgb,color-mix(in srgb,black,color-mix(in srgb,fuchsia,tomato) 25%) 32.47%,transparent)", "lab(0  94.5%  130.5)", 6243, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(26, 186, 103)", ip("color-mix(in	srgb, 74% green, hsl(253, 2.6%, 80%))", "color( xyz-d50 0 0.6391 0.1)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(64, 167, 65, 0.8956)", ip("lch(38.391 42% 60/79.12%)", "color(prophoto-rgb  -0  100%  0)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 14, 28, 0.863)", ip("oklch(56.93% 0.4962 1.696turn /43%)", "oklch(0 59.45% 245.02grad)", 7596, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(128, 188, 247, 0.925)", ip("lch(78  147.06  -83.09)", "oklab(0.5254	0.0278	-0.1905/0.7)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 255, 255, 0.5)", ip("lab(21.35 51.73 67.97 /0)", "oklab(1 0.4172 -0.4026)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(217, 0, 187)", ip("color(rec2020 0.602 0.2 0.7888)", "lab(46.802  123.46%  -0)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(189, 147, 0)", ip("oklab(67.9% 0% 0.2673)", "lch(64	4.96%	127deg)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.7463)", ip("color-mix(in srgb,color-mix(in srgb,black,color-mix(in srgb,fuchsia,tomato) 25%) 32.47%,transparent)", "lab(0  94.5%  130.5)", 6243, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 195, 122)", ip("color-mix(in	srgb, 74% green, hsl(253, 2.6%, 80%))", "color( xyz-d50 0 0.6391 0.1)", 5875, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 186, 0, 0.8956)", ip("lch(38.391 42% 60/79.12%)", "color(prophoto-rgb  -0  100%  0)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 1, 6, 0.863)", ip("oklch(56.93% 0.4962 1.696turn /43%)", "oklch(0 59.45% 245.02grad)", 7596, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(24, 137, 255, 0.7897)", ip("lch(78  147.06  -83.09)", "oklab(0.5254	0.0278	-0.1905/0.7)", 7009, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(203, 122, 158, 0.0452)", ip("lab(21.35 51.73 67.97 /0)", "rgb(203 122 158)", 452, 2));
 }
 
 static void test_l101_mix_11(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(1, 92, 173)", ip("color(prophoto-rgb 0 0.5 0.98)", "color(srgb	0.0128	0	0.86)", 3234, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(247, 219, 206)", ip("color-mix(in srgb, color(display-p3 0.2 0.026 0.163) 4%, oklab(0.95	0.0681	0.0614/1.5))", "oklch(0.71	0.1764	230)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 231, 246, 0.75)", ip("color-mix(in srgb, oklch(1 0.0702 68 / 1) 100%, rgb(211 44% 71% / 120%))", "color( xyz-d50 0.8026 0.63 0.6249/0.5)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(127, 127, 127)", ip("oklab(0 0 -0.4404)", "color-mix(in srgb, color(a98-rgb	1.8819	0.79	0.9427), oklch(0  0.1711  -3rad))", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 117, 144)", ip("color(prophoto-rgb 0 0.5 0.98)", "color(srgb	0.0128	0	0.86)", 3234, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(101, 195, 238)", ip("color-mix(in srgb, color(display-p3 0.2 0.026 0.163) 4%, oklab(0.95	0.0681	0.0614/1.5))", "oklch(0.71	0.1764	230)", 6763, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 234, 248, 0.7836)", ip("color-mix(in srgb, oklch(1 0.0702 68 / 1) 100%, rgb(211 44% 71% / 120%))", "color( xyz-d50 0.8026 0.63 0.6249/0.5)", 4329, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(127, 127, 128)", ip("oklab(0 0 -0.4404)", "color-mix(in srgb, color(a98-rgb	1.8819	0.79	0.9427), oklch(0  0.1711  -3rad))", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(181, 161, 93, 0.75)", ip("lch(10	-3	6.2832rad/0.92)", "color-mix(in srgb, tan 50%, color(srgb-linear  0.2  0.2  0 / 0.5))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(192, 146, 139)", ip("oklch(0.88 54.3% -332.9735/1)", "lch(0.0099 1.2% 1turn/ 120%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(241, 92, 92)", ip("oklch(0.88 54.3% -332.9735/1)", "lch(0.0099 1.2% 1turn/ 120%)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(103, 103, 233)", ip("color-mix(in srgb, hsl(-31.446 0% 59% / 0.5), color(a98-rgb 112.32% 0.006 1.7523))", "rgb(103, 40.2%, 233)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(235, 235, 124)", ip("color-mix(in srgb, color(xyz-d65 0.59 0.7239 0), lch(105% 0 3.1416rad))", "color( xyz-d65	-0.78	0	-1/120%)", 305, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(128, 128, 128)", ip("white", "lab(3  56.681  156.8922 / 120%)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(65, 123, 14, 0.871)", ip("oklch( 50.9% 63.7% -226.451deg )", "lch(62 .5 81.31deg/ 0.39)", 2115, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(211, 234, 105)", ip("color-mix(in srgb, color(xyz-d65 0.59 0.7239 0), lch(105% 0 3.1416rad))", "color( xyz-d65	-0.78	0	-1/120%)", 305, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(182, 0, 45)", ip("white", "lab(3  56.681  156.8922 / 120%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(59, 125, 0, 0.871)", ip("oklch( 50.9% 63.7% -226.451deg )", "lch(62 .5 81.31deg/ 0.39)", 2115, 2));
 }
 
 static void test_l101_mix_12(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(190, 0, 70)", ip("oklch(.5	0.4400	10)", "oklch(0.96 0.3284 180)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(24, 14, 29)", ip("lch(4 193.917 120)", "color-mix(in srgb, oklab(43% 64.5% -0.1727), lab(42	-17.9%	7/1))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("lch(4 193.917 120)", "color-mix(in srgb, oklab(43% 64.5% -0.1727), lab(42	-17.9%	7/1))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(165, 42, 42)", ip("brown", "oklch(0	0.2251	-172.76)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(229, 0, 76, 0.6899)", ip("color(prophoto-rgb	0	0	0% / 0.1)", "lch(44.7 182 30 / 69%)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(28, 23, 36)", ip("color-mix(in srgb, hsl(686grad 47.48 50% / 99.99%) 88%, color( a98-rgb 0.6 0.434 0.5205/ 50%))", "hwb(265 9.0443% 86%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(34, 0, 100)", ip("darkblue", "color-mix(in srgb, color(xyz  0.4513  0  0.895/ 1), oklch(0  56%  0.5turn))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 34, 50)", ip("oklch(27% 0.4178 585.9915)", "color-mix(in srgb, oklch(51% 0 19) 1.6%, lch(3%  100%  166.379deg))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(42, 16, 99)", ip("darkblue", "color-mix(in srgb, color(xyz  0.4513  0  0.895/ 1), oklch(0  56%  0.5turn))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 32, 50)", ip("oklch(27% 0.4178 585.9915)", "color-mix(in srgb, oklch(51% 0 19) 1.6%, lch(3%  100%  166.379deg))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 115, 0, 0.5)", ip("lab(43% -118.5% 138)", "lab(15.95% -80% -84 / 0)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(70, 124, 140)", ip("color-mix(in srgb, color(srgb-linear 0 0% 1), color(rec2020	0.6	0.6875	34.3%))", "color( display-p3 0.4109 0.799 0.32)", 2744, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(72, 128, 153)", ip("color-mix(in srgb, color(srgb-linear 0 0% 1), color(rec2020	0.6	0.6875	34.3%))", "color( display-p3 0.4109 0.799 0.32)", 2744, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("lch( 94 97.16% 315 / 0 )", "lch(0% 27.2 240/ 0)", 1, 2));
 }
 
 static void test_l101_mix_13(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(55, 173, 166)", ip("rosybrown", "lightseagreen", 8497, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(148, 242, 221)", ip("color(xyz-d65  57.02%  75.1%  0.8)", "lab(48.73 -147.7 48.4%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(204, 9, 44, 0.875)", ip("color( prophoto-rgb	0.693	0	0)", "color-mix(in srgb, lab(26.9	33.94%	126.5% / 1), lab(105  61  104.45/ 0))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(212, 0, 39, 0.875)", ip("color( prophoto-rgb	0.693	0	0)", "color-mix(in srgb, lab(26.9	33.94%	126.5% / 1), lab(105  61  104.45/ 0))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(36, 111, 191, 0.875)", ip("color( prophoto-rgb  0.03  1.678  -0.6267/ 120%)", "color-mix(in srgb, color(xyz 1.976 0.48 1/ 50%) 25%, oklab(0.4896 -0.1804 -0.4640))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 17, 13)", ip("lch(20.8% 160 0.5turn)", "oklab(1% 0 0.1302)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(90, 97, 88)", ip("oklab(0 0 -0.3691)", "color(srgb-linear  0.8361  0.981  0.79)", 3835, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 8, 4)", ip("lch(20.8% 160 0.5turn)", "oklab(1% 0 0.1302)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(22, 31, 178)", ip("oklab(0 0 -0.3691)", "color(srgb-linear  0.8361  0.981  0.79)", 3835, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(255, 111, 90, 0.9999)", ip("hwb(-287.993 39% -18% /-0.5)", "lab(65 91.6% 125%)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(69, 73, 0, 0.2719)", ip("oklab(0.34 0.0235 0.2055 / 0)", "lab(29.31 0 118.22)", 2719, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(54, 0, 26)", ip("lab( 20.061 74.03 0% )", "oklch(0	0	207.09grad)", 5071, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(40, 0, 14)", ip("lab( 20.061 74.03 0% )", "oklch(0	0	207.09grad)", 5071, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(90, 104, 166, 0.745)", ip("color-mix(in srgb, rgb(9, 61, 168), lch(83	117.853	52 / 0.49))", "color(xyz 0 0 0.8)", 1, 2));
 }
 
 static void test_l101_mix_14(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(83, 203, 32, 0.6866)", ip("color(srgb 0.27 0.9 0 / 62%)", "hwb(-6.8299rad 95.1% 100% /1.5)", 1752, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(216, 174, 70)", ip("tan", "color(prophoto-rgb  0.6932  0.6034  0)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(97, 203, 73, 0.6866)", ip("color(srgb 0.27 0.9 0 / 62%)", "hwb(-6.8299rad 95.1% 100% /1.5)", 1752, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(218, 174, 74)", ip("tan", "color(prophoto-rgb  0.6932  0.6034  0)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(6, 0, 1)", ip("color-mix(in srgb, color(rec2020 0 -1 1.296), oklab(9%  104%  -0.0209))", "color(xyz 0.2932 55.34% 0%/ 1.5)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(120, 124, 105)", ip("color-mix(in  srgb,hsl(-542.11, 50%, 107%),hwb(1turn 113% 39%) 50%)", "oklab(0.25 -0.1984 0.3615)", 5227, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(107, 126, 0)", ip("color-mix(in  srgb,hsl(-542.11, 50%, 107%),hwb(1turn 113% 39%) 50%)", "oklab(0.25 -0.1984 0.3615)", 5227, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(155, 155, 155, 0.7478)", ip("oklab(1 0.0151 -0.4134 / 0.27)", "color-mix(in srgb,hsla(85.063 50% 99.75% / 0.5),dimgray)", 9954, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(73, 1, 11)", ip("lch(0.9% 10.41% 10.6rad)", "color( display-p3 50% 0 0.1 /1)", 5203, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(48, 15, 14, 0.9323)", ip("color-mix(in srgb, oklab(0.159 0.3994 -0.0339) 100%, oklab(103%  0  0.0514))", "color( xyz  0.4379  59%  -0.68 / 50%)", 1354, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 39, 32)", ip("lch(0.9% 10.41% 10.6rad)", "color( display-p3 50% 0 0.1 /1)", 5203, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(44, 19, 0, 0.9323)", ip("color-mix(in srgb, oklab(0.159 0.3994 -0.0339) 100%, oklab(103%  0  0.0514))", "color( xyz  0.4379  59%  -0.68 / 50%)", 1354, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 96, 48)", ip("oklab(42% -0.9068 0.3750)", "color(a98-rgb	43.02%	1.4115	0.32)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(54, 143, 112, 0.3738)", ip("oklch(0.617 0.0606 2turn /0.165)", "oklab(0.6 -0.7003 0.2095 /120%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(181, 91, 128)", ip("color-mix(in srgb, lab(41.7 -103.63% 42.3%), oklch(1 0 -172.41deg))", "lab(50%  64%  12.37%/ 120%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 157, 101, 0.3738)", ip("oklch(0.617 0.0606 2turn /0.165)", "oklab(0.6 -0.7003 0.2095 /120%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(198, 123, 127)", ip("color-mix(in srgb, lab(41.7 -103.63% 42.3%), oklch(1 0 -172.41deg))", "lab(50%  64%  12.37%/ 120%)", 5000, 2));
 }
 
 static void test_l101_mix_15(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(255, 192, 179)", ip("color(display-p3  0.2  0.4  0.483 / 120%)", "color(rec2020 1.33 0.36 0)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(130, 148, 147, 0.8425)", ip("color-mix(in srgb, color(xyz-d50  -16.62%  0.1527  0.98/ 37%), lch(109	94.82	-135deg))", "hwb(0.3787rad 74.4% 113.9%)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(178, 183, 233, 0.982)", ip("color-mix(in srgb , #719ac9eb , hwb(250.6984 100% 0% /1) 54%)", "color-mix(in srgb, hsl(-74.7713grad 93% 60% / 1), lch(94.793 93.818 173.701))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(140, 88, 139)", ip("color-mix(in srgb, rgb(15 81 120 / 120%) 50%, oklch(0.7145	126%	-60deg))", "color-mix(in srgb, color(xyz-d65 0.958 0.95 0.3237) 0%, color( srgb 99.5 0.17 0))", 2576, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.0001)", ip("oklab(0 0 -0.3098)", "lab(72.578 -156 115.9 / 0)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(130, 147, 146, 0.8425)", ip("color-mix(in srgb, color(xyz-d50  -16.62%  0.1527  0.98/ 37%), lch(109	94.82	-135deg))", "hwb(0.3787rad 74.4% 113.9%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(177, 183, 234, 0.982)", ip("color-mix(in srgb , #719ac9eb , hwb(250.6984 100% 0% /1) 54%)", "color-mix(in srgb, hsl(-74.7713grad 93% 60% / 1), lch(94.793 93.818 173.701))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(144, 103, 156)", ip("color-mix(in srgb, rgb(15 81 120 / 120%) 50%, oklch(0.7145	126%	-60deg))", "color-mix(in srgb, color(xyz-d65 0.958 0.95 0.3237) 0%, color( srgb 99.5 0.17 0))", 2576, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(31, 0, 100)", ip("oklab(0 0 -0.3098)", "rgb(188 61 252)", 3696, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 111, 112)", ip("lch(101 23.2% 1.5708rad)", "oklch(73.3% 0.4256 22.5435deg)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(135, 128, 128)", ip("grey", "lab( 67.6%	130	115 )", 543, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(144, 126, 124)", ip("grey", "lab( 67.6%	130	115 )", 543, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.75)", ip("color(xyz-d50  0.713  -0.6  0.832)", "color( xyz 0.4218 -1 0.06 / 50%)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(152, 142, 142)", ip("oklab(0 0.1536 0.3935)", "color-mix(in srgb, hwb(0.5turn 100% 36.7%/120%), hsl(2turn 23.86 40% / 150%) 25%)", 8889, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(81, 8, 104)", ip("oklch(6.5% 0.3067 -44deg)", "color(a98-rgb 0.6 0.1 0.868)", 4441, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(165, 131, 105)", ip("oklab(0 0.1536 0.3935)", "color-mix(in srgb, hwb(0.5turn 100% 36.7%/120%), hsl(2turn 23.86 40% / 150%) 25%)", 8889, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(73, 0, 97)", ip("oklch(6.5% 0.3067 -44deg)", "color(a98-rgb 0.6 0.1 0.868)", 4441, 2));
 }
 
 static void test_l101_mix_16(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(203, 170, 212)", ip("color(xyz-d65  1.6  0.984  0.1)", "rgb(150 84 169 / 1.5)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(24, 37, 32, 0.8252)", ip("color(rec2020 0 1.2 0.7 / 0.4)", "lch(4.2% 196.4866 -3.143rad)", 7086, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 147, 155)", ip("color(xyz-d65  1.6  0.984  0.1)", "rgb(150 84 169 / 1.5)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 27, 19, 0.8252)", ip("color(rec2020 0 1.2 0.7 / 0.4)", "lch(4.2% 196.4866 -3.143rad)", 7086, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(247, 0, 131)", ip("oklab(68.01% -0.2682 -0.3605)", "lab(50% 118.8% 0%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(234, 164, 0, 0.9215)", ip("#fa0d", "color(xyz 0.376 0.37 0)", 4108, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(235, 164, 0, 0.9215)", ip("#fa0d", "color(xyz 0.376 0.37 0)", 4108, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(241, 139, 0)", ip("color(rec2020 0.85 0.5 -0.2027)", "oklab( 60% -0.0109 -0.0750 )", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 242, 2, 0.997)", ip("color-mix(in srgb, oklab(50%  -0.3908  -0.0744) 0%, lime)", "color-mix(in srgb, oklab(50% -89% 0.2490/92.3%), lab(63.6296	-12000	-37.3%))", 778, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(29, 15, 36, 0.5001)", ip("teal", "oklch(0.2 0.0453 1.87turn / 50%)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 235, 13, 0.9956)", ip("color-mix(in srgb, oklab(50%  -0.3908  -0.0744) 0%, lime)", "color-mix(in srgb, oklab(50% -89% 0.2490/92.3%), lab(63.6296	-12000	-37.3%))", 1138, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(23, 113, 116, 0.8903)", ip("teal", "oklch(0.2 0.0453 1.87turn / 50%)", 2195, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(155, 0, 76, 0.256)", ip("oklch(0.433  0.2162  6.2832rad / 0.5)", "oklch(1  4%  -124.816/ -0.5)", 4881, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(203, 168, 126)", ip("color(srgb-linear 0.6 0.39 0.21)", "oklch(0.3  0.3524  3.1416rad)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(121, 111, 191)", ip("hwb(1.7turn 45 0%)", "lab(39.4  -96  115.8%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(82, 140, 137)", ip("hwb(1.7turn 45 0%)", "lab(39.4  -96  115.8%)", 2500, 2));
 }
 
 static void test_l101_mix_17(void) {
@@ -259,191 +259,191 @@ static void test_l101_mix_17(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(246, 250, 241)", ip("oklch(1	0	-1turn)", "color-mix(in srgb, lab(62.1  -40.7  70.0252), color( xyz 95.2% 1.5508 0))", 1117, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.557)", ip("oklab(0 0.639 -0.0297 / 0.557)", "color( srgb	0.067	0	0)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 6, 0, 0.1538)", ip("color(srgb-linear  -1  -0.234  0/0)", "lab(5.6 -53% 60)", 1538, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(53, 57, 0)", ip("oklab(-6% 0 -0.3381/120%)", "lch(87.534 80.5% 461.432deg)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 206)", ip("lab(96 28.03% -125.5%)", "color(srgb-linear  1  1  0.335)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 105)", ip("oklab(-6% 0 -0.3381/120%)", "lch(87.534 80.5% 461.432deg)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(239, 255, 255)", ip("lab(96 28.03% -125.5%)", "color(srgb-linear  1  1  0.335)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(47, 112, 57)", ip("oklab( 56.6% 0.4962 -0.2466 )", "lab(42% -31.303 19.17%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(101, 3, 128, 0.61)", ip("lab(27  117%  -49.24%/0.48)", "color-mix(in srgb, oklab(0.3196 -0.0023 -0.4219/ 120%) 79.4%, oklch(0.28 0 157))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(118, 0, 122, 0.61)", ip("lab(27  117%  -49.24%/0.48)", "color-mix(in srgb, oklab(0.3196 -0.0023 -0.4219/ 120%) 79.4%, oklch(0.28 0 157))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(96, 96, 174)", ip("hwb(237 50% 42.52%/1)", "blue", 2500, 2));
 }
 
 static void test_l101_mix_18(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(99, 164, 157, 0.6274)", ip("lch(81.45% 226.993 9.2rad/ 65%)", "color-mix(in srgb, oklch(92.3%	0.3494	-60deg/50%) 76.569%, oklch(0  0  0.9428turn))", 6877, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(223, 229, 255)", ip("oklch(55%	0.2659	296.77grad)", "color(display-p3  1.9  0.9003  1.6)", 8474, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 184, 143, 0.6274)", ip("lch(81.45% 226.993 9.2rad/ 65%)", "color-mix(in srgb, oklch(92.3%	0.3494	-60deg/50%) 76.569%, oklch(0  0  0.9428turn))", 6877, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("oklch(55%	0.2659	296.77grad)", "color(display-p3  1.9  0.9003  1.6)", 8474, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(93, 68, 0)", ip("oklch(0.4  36%  1.5708rad)", "rgb(75 168 16 / 50%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(75, 151, 124)", ip("lch(28	77	1.455turn)", "color-mix(in srgb, color(xyz-d50 0.347 0.1931 0.215) 35%, oklab(73% -0.19 0.0819))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(47, 43, 44)", ip("color(xyz 0 0 0.95)", "hwb(-2turn 48% 27)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 49, 51)", ip("color(xyz 0 0 0.95)", "hwb(-2turn 48% 27)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 189, 192)", ip("color(a98-rgb 0 0.771 0.8)", "hsl(2.3754turn 80.841 104.91%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("color( srgb 1 -4.5% 0.667)", "oklab(1 -0.1657 -0.0459)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(188, 197, 253)", ip("oklab(56.1% -0 -0.2311)", "lch(100%  113.41%  -4.92rad / 120%)", 6374, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(230, 255, 255)", ip("color( srgb 1 -4.5% 0.667)", "oklab(1 -0.1657 -0.0459)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(243, 192, 147)", ip("oklab(56.1% -0 -0.2311)", "lch(100%  113.41%  -4.92rad / 120%)", 6374, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(141, 123, 126, 0.8154)", ip("color(srgb 0.9 0% 0%/0)", "color-mix(in srgb , rgb(247 10 229 / 1.5) 30.5394% , hsl(-246deg 49.6% 50% / 1) 51.01%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(79, 134, 165, 0.8397)", ip("color-mix(in srgb , color-mix(in srgb,black,color-mix(in srgb,dodgerblue,50% blanchedalmond) 44.8%) , 25% #fbf4)", "#4eadd3dc", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(83, 133, 163, 0.8397)", ip("color-mix(in srgb , color-mix(in srgb,black,color-mix(in srgb,dodgerblue,50% blanchedalmond) 44.8%) , 25% #fbf4)", "#4eadd3dc", 5000, 2));
 }
 
 static void test_l101_mix_19(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(160, 74, 123, 0.7219)", ip("hwb(80 86 95.27% /50%)", "color-mix(in srgb , rgb(228 9 72 / 1.5) , rgb(80 142 204 / 0.64))", 6935, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(135, 125, 84)", ip("color-mix(in srgb, lab(62.15 100% 74.02), lch(106.83 185.5883 174))", "color-mix(in srgb, lch(-8%  -0  124.0241), color(rec2020	0.43	0.676	-1))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(139, 82, 174, 0.75)", ip("rgb(133 34 133 / 1.5)", "oklab(0.7809 0 -0.1998/ 0.5)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(125, 118, 121, 0.5111)", ip("hwb(80 86 95.27% /50%)", "color-mix(in srgb , rgb(228 9 72 / 1.5) , rgb(80 142 204 / 0.64))", 347, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(132, 124, 90)", ip("color-mix(in srgb, lab(62.15 100% 74.02), lch(106.83 185.5883 174))", "color-mix(in srgb, lch(-8%  -0  124.0241), color(rec2020	0.43	0.676	-1))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(143, 85, 189, 0.75)", ip("rgb(133 34 133 / 1.5)", "oklab(0.7809 0 -0.1998/ 0.5)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(255, 165, 76, 0.0001)", ip("lch(-0.86%  144  222 / -0.5)", "oklch(80.99%  0.3946  7.3rad)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(255, 243, 223, 0.9968)", ip("color(prophoto-rgb  0.192  0.622  0.215/ 0)", "oklab(0.981  0.2141  0.3750/ 1)", 9968, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("color( srgb	0.9493	0.93	0.634)", "color-mix(in srgb, lch(.5 230 30) 25%, lch(.5	150%	121))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(142, 144, 195)", ip("oklab(0.31	0	-0.1677/120%)", "white", 5156, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(128, 146, 199)", ip("oklab(0.31	0	-0.1677/120%)", "white", 5156, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(78, 42, 25, 0.1016)", ip("color-mix(in srgb, rgb(78 42 25 / 20.3%) 50%, color(xyz 0.1297 0.3 0.6159/-0.5))", "color-mix(in srgb, oklab(1	+0.5	-0.1717), color( display-p3	0.342	0.91	0.8189))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 39, 12)", ip("oklch(0 0.4179 0)", "color(display-p3  0  0.611  18.6%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(65, 155, 183, 0.6511)", ip("color-mix(in srgb , #d8a , hwb(261 10 50%))", "oklab(79.9%	-0.7808	-0.1525 /0.5)", 6978, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(33, 0, 6)", ip("oklch(0 0.4179 0)", "color(display-p3  0  0.611  18.6%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 175, 179, 0.6511)", ip("color-mix(in srgb , #d8a , hwb(261 10 50%))", "oklab(79.9%	-0.7808	-0.1525 /0.5)", 6978, 2));
 }
 
 static void test_l101_mix_20(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(131, 46, 81)", ip("color-mix(in srgb, hsl(37.653grad 100% 67.4%), color( xyz-d65	0.8	0	-1))", "color-mix(in srgb, color(xyz 0 0 -8.22%) 0%, lch(23.76 147.6665 -0.4701rad))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(8, 45, 36)", ip("color( srgb-linear  0.0161  0.51  0.3)", "color(a98-rgb  0  0  0)", 7613, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(211, 174, 178, 0.9075)", ip("color(xyz-d50 0.7 0.6424 0.4957)", "lch(24.76	3.04%	547.21/63%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 106, 40, 0.219)", ip("oklch(0  85.73%  23)", "color(rec2020 0.44 0.8003 0.35 / 12%)", 8875, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(132, 63, 88)", ip("color-mix(in srgb, hsl(37.653grad 100% 67.4%), color( xyz-d65	0.8	0	-1))", "color-mix(in srgb, color(xyz 0 0 -8.22%) 0%, lch(23.76 147.6665 -0.4701rad))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(1, 20, 13)", ip("color( srgb-linear  0.0161  0.51  0.3)", "color(a98-rgb  0  0  0)", 7613, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(208, 172, 176, 0.9075)", ip("color(xyz-d50 0.7 0.6424 0.4957)", "lch(24.76	3.04%	547.21/63%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(101, 49, 0, 0.219)", ip("oklch(0  85.73%  23)", "color(rec2020 0.44 0.8003 0.35 / 12%)", 8875, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.843)", ip("lch(-1.401 24% -224.3/ 0.788)", "oklab(0  0  -0.0759 /99%)", 2722, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(126, 141, 172, 0.7596)", ip("color-mix(in srgb, oklch(0.2176  0.0098  -398.66deg), oklab(0.6994	0	-0.1418))", "color(srgb-linear -0.49 1.6759 0.369 / 50%)", 4809, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(74, 0, 65)", ip("oklch(27% 0.3486 12.126rad)", "color-mix(in  srgb , 50% gainsboro , rgb(143 144 79 / 19.6%) 75%)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(36, 160, 153, 0.7596)", ip("color-mix(in srgb, oklch(0.2176  0.0098  -398.66deg), oklab(0.6994	0	-0.1418))", "color(srgb-linear -0.49 1.6759 0.369 / 50%)", 4809, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(200, 184, 183, 0.5364)", ip("oklch(27% 0.3486 12.126rad)", "color-mix(in  srgb , 50% gainsboro , rgb(143 144 79 / 19.6%) 75%)", 9610, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(227, 255, 255, 0.78)", ip("lch(109 13.0808 -147.451/ 78%)", "color-mix(in srgb, oklab(104.42%	0	0.2578) 97.02%, rgb(38 173 185 / 0.5))", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(179, 146, 156, 0.7138)", ip("oklch(.5 76% 0turn)", "color-mix(in	srgb,#7a0e2f6d,hwb(0.1turn 128% 25.8%))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(129, 2, 84)", ip("oklab(59.1% 0.1235 -0.2786)", "lch(21.3378	100%	-369.688)", 9620, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(132, 0, 82)", ip("oklab(59.1% 0.1235 -0.2786)", "lch(21.3378	100%	-369.688)", 9620, 2));
 }
 
 static void test_l101_mix_21(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.0602)", ip("color(a98-rgb	0.6104	0.2146	+0.5 / 0)", "oklch(0% 89.4% 1.5708rad /74%)", 814, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(92, 205, 113, 0.6165)", ip("color(xyz 0.996 0.27 1 / 0.233)", "color(a98-rgb  0.54  0.9107  0.4)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 9, 1, 0.5)", ip("lab(12 -118.69% 124/0.5)", "oklch( 0 0 9 / 0.5 )", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(75, 9, 76, 0.9088)", ip("color( a98-rgb 0.21 0 0.18)", "color-mix(in srgb, blueviolet, color(xyz-d50 0.5916 0.1136 2/27%))", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(64, 179, 165)", ip("color(xyz-d50 1% 0.283 35.91%)", "lch(106.7605 7.7% 80)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(117, 0, 110)", ip("color(xyz	0.26	0%	0.73 /1)", "color( xyz-d65	0.7158	-0	0.4025/ 1)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(32, 32, 32, 0.875)", ip("color-mix(in srgb , hwb(140grad 16% 93%) , hwb(11.346rad 54.6% 0%) 0%)", "color-mix(in srgb, oklab(0  0.24  0.0357/ 1), color(a98-rgb 0% 0 0.212 / 0))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(63, 3, 46, 0.7982)", ip("color(a98-rgb	0.6104	0.2146	+0.5 / 0)", "rgb(63 3 46)", 7982, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(179, 200, 138, 0.6165)", ip("color(xyz 0.996 0.27 1 / 0.233)", "color(a98-rgb  0.54  0.9107  0.4)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 6, 0, 0.5)", ip("lab(12 -118.69% 124/0.5)", "oklch( 0 0 9 / 0.5 )", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(74, 9, 72, 0.9088)", ip("color( a98-rgb 0.21 0 0.18)", "color-mix(in srgb, blueviolet, color(xyz-d50 0.5916 0.1136 2/27%))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 188, 173)", ip("color(xyz-d50 1% 0.283 35.91%)", "lch(106.7605 7.7% 80)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(118, 0, 107)", ip("color(xyz	0.26	0%	0.73 /1)", "color( xyz-d65	0.7158	-0	0.4025/ 1)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(28, 28, 28, 0.875)", ip("color-mix(in srgb , hwb(140grad 16% 93%) , hwb(11.346rad 54.6% 0%) 0%)", "color-mix(in srgb, oklab(0  0.24  0.0357/ 1), color(a98-rgb 0% 0 0.212 / 0))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(75, 0, 130, 0.9999)", ip("indigo", "oklab(0.1099	0	0.2624/-0.5)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(236, 235, 134)", ip("lch(96 59 -342grad)", "color(display-p3 0.831 0.9 0.082)", 4023, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 227, 145)", ip("lch(96 59 -342grad)", "color(display-p3 0.831 0.9 0.082)", 4023, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("color( rec2020	0.9578	0.48	-1)", "color(srgb-linear  0  -1  .5 / 1.5)", 9999, 2));
 }
 
 static void test_l101_mix_22(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 226, 234, 0.7206)", ip("hwb(343.59 72.1184% 0% / 51.58%)", "oklab(1 0 -0.1108)", 4230, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(240, 227, 255, 0.7206)", ip("hwb(343.59 72.1184% 0% / 51.58%)", "oklab(1 0 -0.1108)", 4230, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(221, 167, 139)", ip("lch(58.471	122.3	748deg)", "color-mix(in srgb , #ea9 85% , color-mix(in  srgb, hwb(743.0638deg 46% 0%), 50% green))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(117, 110, 113)", ip("oklab(0.92 0.1566 -0.2148 / 1.5)", "oklch(0.2 0.0630 120)", 5584, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(110, 170, 0)", ip("color(a98-rgb	0.17	-1	1.05 /1.5)", "color(rec2020  0.588  78.1%  0)", 8117, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(44, 91, 82, 0.2001)", ip("color-mix(in srgb, color( srgb  0.1  0.2  -1%/ 0.26), rgba(79, 165.8, 233, 14%))", "lab(56.364  160  -30.659)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(85, 80, 86, 0.6)", ip("oklch(0.4827 0 540.2deg)", "color-mix(in srgb , 100% color-mix(in srgb , 0% firebrick , rgb(40 11 43 / 0.2)) , hwb(260 41% 100%))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(215, 184, 136)", ip("color-mix(in srgb, color( srgb-linear 1.5619 1.303 0/ 120%), darkkhaki)", "oklch(57%	0.3720	51.523)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(191, 223, 212)", ip("color(a98-rgb	0.557	2	0.89/ 1.5)", "color-mix(in srgb, color(rec2020  0  0  0.4) 43%, color(rec2020 0 0.8 0))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(118, 91, 141)", ip("oklab(0.92 0.1566 -0.2148 / 1.5)", "oklch(0.2 0.0630 120)", 5584, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(103, 84, 142)", ip("color(a98-rgb	0.17	-1	1.05 /1.5)", "color(rec2020  0.588  78.1%  0)", 8117, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(45, 91, 82, 0.2001)", ip("color-mix(in srgb, color( srgb  0.1  0.2  -1%/ 0.26), rgba(79, 165.8, 233, 14%))", "lab(56.364  160  -30.659)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(74, 63, 75, 0.4039)", ip("oklch(0.4827 0 540.2deg)", "color-mix(in srgb , 100% color-mix(in srgb , 0% firebrick , rgb(40 11 43 / 0.2)) , hwb(260 41% 100%))", 7451, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(244, 175, 103)", ip("color-mix(in srgb, color( srgb-linear 1.5619 1.303 0/ 120%), darkkhaki)", "oklch(57%	0.3720	51.523)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("color(a98-rgb	0.557	2	0.89/ 1.5)", "color-mix(in srgb, color(rec2020  0  0  0.4) 43%, color(rec2020 0 0.8 0))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 151, 149)", ip("oklab(60.18%  -1  -0.2377)", "lch(25.85 221 -6.584rad/0.67)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(128, 128, 128)", ip("oklch(0 0.4124 60)", "oklch(1 0.2070 -62.526deg)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(177, 41, 28)", ip("oklch(0 0.4124 60)", "oklch(1 0.2070 -62.526deg)", 5000, 2));
 }
 
 static void test_l101_mix_23(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(180, 254, 242)", ip("lch( 12.4	31	1.73turn )", "lch(108	120.4	538.1deg)", 9941, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(88, 73, 107, 0.475)", ip("color-mix(in srgb, oklab(0.12 0 0.0134), #66d6)", "color-mix(in srgb, rgb(240 185 224 / 0.5), rgb(111 79 112 / 0))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(89, 232, 229, 0.9878)", ip("color-mix(in	srgb , 28% color-mix(in srgb,gray,50% rgb(181 85 10 / 0.5)) , ghostwhite)", "color( display-p3 0.47 0.91 0.9)", 8253, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(53, 12, 47)", ip("color(prophoto-rgb 0.99 -0.59 0.747 / 120%)", "lch(15 130.6% 180)", 6572, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(96, 96, 191)", ip("color-mix(in srgb, blue, lab(100%	28.5	94))", "oklch(-0 0.1053 -60deg/120%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(191, 121, 144)", ip("lch(75% 123.212 -717/ 1.5)", "color-mix(in srgb, lch(.5 201 416.7478deg / 1.5), oklch(0% 70.1% 71deg))", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(155, 73, 64, 0.7767)", ip("color( srgb-linear	1.1697	0.0754	0.7541 / 0.5)", "oklch(42.3% 0.4677 79.49grad)", 5533, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(173, 255, 242)", ip("lch( 12.4	31	1.73turn )", "lch(108	120.4	538.1deg)", 9941, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(82, 70, 104, 0.475)", ip("color-mix(in srgb, oklab(0.12 0 0.0134), #66d6)", "color-mix(in srgb, rgb(240 185 224 / 0.5), rgb(111 79 112 / 0))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(108, 233, 229, 0.9878)", ip("color-mix(in	srgb , 28% color-mix(in srgb,gray,50% rgb(181 85 10 / 0.5)) , ghostwhite)", "color( display-p3 0.47 0.91 0.9)", 8253, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 30, 26)", ip("color(prophoto-rgb 0.99 -0.59 0.747 / 120%)", "lch(15 130.6% 180)", 8342, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(89, 78, 186)", ip("color-mix(in srgb, blue, lab(100%	28.5	94))", "oklch(-0 0.1053 -60deg/120%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(248, 0, 123)", ip("lch(75% 123.212 -717/ 1.5)", "color-mix(in srgb, lch(.5 201 416.7478deg / 1.5), oklch(0% 70.1% 71deg))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(162, 77, 0, 0.7767)", ip("color( srgb-linear	1.1697	0.0754	0.7541 / 0.5)", "oklch(42.3% 0.4677 79.49grad)", 5533, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(235, 159, 0)", ip("color( xyz  0.462  0.423  0.0216)", "color(xyz	0.266	0	1.8306)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(82, 48, 62)", ip("lab(+0.5  74.1818  -0)", "lab(82 106.41 -16.2%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(99, 0, 53)", ip("lab(+0.5  74.1818  -0)", "lab(82 106.41 -16.2%)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(83, 93, 68)", ip("lch(38.0768 15.6 121)", "oklab(23.33% 0 -0.3182)", 1, 2));
 }
 
 static void test_l101_mix_24(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(87, 100, 115, 0.6932)", ip("color-mix(in srgb, color(srgb 0 0.0179 0.0607) 33.6626%, color(xyz-d50 0.8939 .5 1.28 /-0.5))", "slategrey", 5375, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(8, 21, 34, 0.3777)", ip("color-mix(in srgb, color(srgb 0 0.0179 0.0607) 33.6626%, color(xyz-d50 0.8939 .5 1.28 /-0.5))", "slategrey", 619, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("color(prophoto-rgb	0.238	70.78%	0.5/ 0.5)", "white", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(19, 29, 32, 0.5677)", ip("lab(29	105.44%	97/13.54%)", "color(prophoto-rgb 0 0 0.987)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(13, 212, 185, 0.5801)", ip("hwb(70 50% 100%/48.77%)", "color(a98-rgb 0.2 0.967 0.8021 / 0.6)", 8226, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 39, 41, 0.5677)", ip("lab(29	105.44%	97/13.54%)", "color(prophoto-rgb 0 0 0.987)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 214, 184, 0.5801)", ip("hwb(70 50% 100%/48.77%)", "color(a98-rgb 0.2 0.967 0.8021 / 0.6)", 8226, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(168, 94, 114)", ip("color-mix(in srgb, oklab(.5 0.7 -0.4541), #aabc3a)", "color(a98-rgb  1.0882  0  0)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 42, 69, 0.1517)", ip("oklch(1	0.3112	-180.2 / -0.5)", "oklch(0.2659  0.4363  -127deg/120%)", 1517, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(129, 108, 121, 0.3184)", ip("color-mix(in srgb, hsl(0rad 22% 12.3%), #dcc0da)", "oklab(0 0 0.4520 / -0.5)", 6816, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(191, 191, 191)", ip("lch(103.22  150.83  454.9grad)", "oklab( 0	0.2673	-0.1406 )", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 134, 126)", ip("lch(103.22  150.83  454.9grad)", "oklab( 0	0.2673	-0.1406 )", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(255, 255, 224, 0.9999)", ip("lightyellow", "oklab(0.114	0	-0.2051/ -0.5)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(94, 55, 55, 0.9858)", ip("color(display-p3	-1	0.9247	0.5)", "color-mix(in srgb, lab(-10  100%  -13.3/ 0.9) 25%, color( a98-rgb  0.7  0.1  14.59%))", 5664, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 108, 87, 0.9858)", ip("color(display-p3	-1	0.9247	0.5)", "color-mix(in srgb, lab(-10  100%  -13.3/ 0.9) 25%, color( a98-rgb  0.7  0.1  14.59%))", 5664, 2));
 }
 
 static void test_l101_mix_25(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(64, 46, 64)", ip("oklab(0.01 0.3364 -0.0303)", "plum", 2885, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(65, 0, 35)", ip("oklab(0.01 0.3364 -0.0303)", "plum", 2885, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(144, 255, 121, 0.75)", ip("lch(94 68.7% 8.6rad)", "color( srgb-linear	-0.8	1	0.6 /0)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(18, 0, 26)", ip("color( a98-rgb 0.6 0 100%)", "oklch(0 0.1916 59)", 8996, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(171, 171, 171)", ip("oklch(91.9%	0	471grad)", "oklab(0 0 -0.0318)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(12, 170, 193)", ip("color-mix(in srgb, color(a98-rgb  0.185  116.1%  0.1), lightslategrey)", "lch(62.6 108.69 -1.36turn)", 8900, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(137, 92, 180, 0.6206)", ip("oklch(66.8%  0.1114  11.96rad/0.5)", "color-mix(in srgb, color(srgb-linear	0	0.09	0.8), hwb(-52.28 0% 50%))", 2411, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(16, 13, 33, 0.9375)", ip("color(rec2020  41.9%  -1  0.4886)", "color-mix(in srgb,rgb(32 14 143 / 50%),color-mix(in srgb, tan, mediumblue))", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(8, 243, 8)", ip("lab(94.5787 85.99% 0%)", "color(srgb-linear  0  0.9  0)", 9699, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(98, 98, 98, 0.9569)", ip("lch( -3.1  26.3  -0.0677turn /0.2 )", "oklch(50%	0	180)", 9461, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(4, 0, 0)", ip("color( a98-rgb 0.6 0 100%)", "oklch(0 0.1916 59)", 8996, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(153, 155, 160)", ip("oklch(91.9%	0	471grad)", "oklab(0 0 -0.0318)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 171, 199)", ip("color-mix(in srgb, color(a98-rgb  0.185  116.1%  0.1), lightslategrey)", "lch(62.6 108.69 -1.36turn)", 8900, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(133, 97, 182, 0.6206)", ip("oklch(66.8%  0.1114  11.96rad/0.5)", "color-mix(in srgb, color(srgb-linear	0	0.09	0.8), hwb(-52.28 0% 50%))", 2411, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.9375)", ip("color(rec2020  41.9%  -1  0.4886)", "color-mix(in srgb,rgb(32 14 143 / 50%),color-mix(in srgb, tan, mediumblue))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(68, 242, 34)", ip("lab(94.5787 85.99% 0%)", "color(srgb-linear  0  0.9  0)", 9699, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(99, 97, 98, 0.9569)", ip("lch( -3.1  26.3  -0.0677turn /0.2 )", "oklch(50%	0	180)", 9461, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 109, 159)", ip("oklab(0.5 -0.4361 0.0891/50%)", "oklch(+0.5 109.2% 233)", 9999, 2));
 }
 
 static void test_l101_mix_26(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(138, 120, 10)", ip("lab(86%  10.6209  93.5)", "color(xyz 0 0 1.234)", 4579, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(63, 56, 66)", ip("oklch(0.37 0 -2turn)", "color(prophoto-rgb 0.22 -10.9% 0.4)", 1216, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 0, 175)", ip("color-mix(in srgb, red 25%, oklab(0.7 0.4298 -0.1988))", "color( prophoto-rgb  0  +0.5  0.667)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 134, 128)", ip("lab(86%  10.6209  93.5)", "color(xyz 0 0 1.234)", 4579, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(67, 55, 74)", ip("oklch(0.37 0 -2turn)", "color(prophoto-rgb 0.22 -10.9% 0.4)", 1216, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 142, 156)", ip("color-mix(in srgb, red 25%, oklab(0.7 0.4298 -0.1988))", "color( prophoto-rgb  0  +0.5  0.667)", 8086, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(3, 4, 0, 0.9028)", ip("oklch(0.5 0.3651 60 / 0)", "oklch(0.1	0.3840	2rad /98.66%)", 9151, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(191, 183, 128)", ip("color-mix(in srgb, white, oklch(0.45  0  269))", "lch(89.68%  60.5%  89)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(252, 142, 195, 0.3623)", ip("oklch(0	50%	-518.6096)", "oklab(0.8 0.4531 -0.0485/36%)", 9964, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(125, 118, 111, 0.397)", ip("hwb(700.2deg 100% 0% /23%)", "oklab(0.17 0% 0.4204/89.8%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(192, 184, 150)", ip("color-mix(in srgb, white, oklch(0.45  0  269))", "lch(89.68%  60.5%  89)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(215, 0, 144, 0.4418)", ip("oklch(0	50%	-518.6096)", "oklab(0.8 0.4531 -0.0485/36%)", 8722, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(136, 103, 0, 0.397)", ip("hwb(700.2deg 100% 0% /23%)", "oklab(0.17 0% 0.4204/89.8%)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 123, 175)", ip("color-mix(in srgb,hsl(0.6605turn, 37.6432%, 40%, 100%),hsla(2rad 15% 100%))", "lab(70.3%  50%  0)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(226, 228, 29)", ip("color(prophoto-rgb  0.8  84%  -0.2)", "lch(100%  135.6%  242/1)", 1126, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(132, 254, 53)", ip("color(prophoto-rgb  0.8  84%  -0.2)", "lch(100%  135.6%  242/1)", 1126, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 2, 0, 0.788)", ip("color-mix(in srgb, lch(-8.6011 146.05 149), oklch(9.67%	0.1035	150/ 57.6%))", "oklch( 0 0 670.53grad )", 1, 2));
 }
 
 static void test_l101_mix_27(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(223, 180, 144)", ip("sandybrown", "hwb(365.5437 120% 28.342%)", 4717, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(85, 205, 17, 0.75)", ip("lch(94 127 211)", "color-mix(in srgb, lab(64.815 66.8% 100%/50%), lime)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(119, 119, 119, 0.75)", ip("color-mix(in srgb, lch(40 76.72 50/-0.5), color(prophoto-rgb	0	-0.5	0.314))", "oklch(76.6% 0 1turn)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(146, 146, 137, 0.4101)", ip("hwb(300 63.3% 50%/0.4)", "color(rec2020  0.933  0.93  -0.5549)", 168, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(102, 102, 102, 0.75)", ip("color-mix(in srgb, lch(40 76.72 50/-0.5), color(prophoto-rgb	0	-0.5	0.314))", "oklch(76.6% 0 1turn)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(146, 147, 134, 0.4101)", ip("hwb(300 63.3% 50%/0.4)", "color(rec2020  0.933  0.93  -0.5549)", 168, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(65, 46, 0, 0.75)", ip("lab(18.88 60.9352 100%)", "color(xyz-d50  0  0.63  -0.1/0)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(126, 161, 207, 0.9)", ip("color-mix(in srgb, oklab(0.95 -0.2177 -0.4093), lab( 37.207  -16%  -0 ))", "color(srgb  0.485  0.5913  0.9885 / 0.8)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(125, 163, 208, 0.9)", ip("color-mix(in srgb, oklab(0.95 -0.2177 -0.4093), lab( 37.207  -16%  -0 ))", "color(srgb  0.485  0.5913  0.9885 / 0.8)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 27, 26, 0.78)", ip("lab(14.194 -58.98% -74/78%)", "color-mix(in srgb, lch(59.3131 100% -338.7grad), color(prophoto-rgb 0.57 0 0))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(161, 153, 152)", ip("color-mix(in srgb, oklab(0 -0.0527 0.4858), lch( 92.6% 121 30 ))", "lab(109.26 -27% -100.2%)", 2633, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(41, 3, 41, 0.9425)", ip("lab( 100.21 20.26 37.5%/0.18 )", "lab(-5% 69.32% -54)", 9299, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(73, 46, 200, 0.8338)", ip("color(a98-rgb 0.5 39% 78% / 0.5)", "color-mix(in	srgb , 7% hwb(-105.2324grad 81% 77%) , color-mix(in  srgb , rebeccapurple , 50% blue))", 6675, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(75, 165, 212)", ip("color-mix(in srgb, oklab(0 -0.0527 0.4858), lch( 92.6% 121 30 ))", "lab(109.26 -27% -100.2%)", 2633, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(43, 0, 42, 0.9425)", ip("lab( 100.21 20.26 37.5%/0.18 )", "lab(-5% 69.32% -54)", 9299, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(57, 34, 199, 0.9879)", ip("color(a98-rgb 0.5 39% 78% / 0.5)", "color-mix(in	srgb , 7% hwb(-105.2324grad 81% 77%) , color-mix(in  srgb , rebeccapurple , 50% blue))", 9757, 2));
 }
 
 static void test_l101_mix_28(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(191, 191, 191)", ip("oklch(100% 0 0)", "oklch(0 0.4417 59)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(188, 154, 111, 0.9821)", ip("color-mix(in srgb, color(xyz-d50 0 0.427 0.117/89.8%), oklab(0.46  0  0.1553))", "color(xyz-d50  0.91  .5  0)", 6481, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(253, 248, 250)", ip("lch(109.1%	142	329)", "color-mix(in srgb, lch(96.89  150.129  720deg), oklch(50% 51.5% 367.8))", 561, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(84, 27, 112, 0.3886)", ip("hwb(60 0% 100%/49%)", "color-mix(in  srgb, darkorchid, rgb(178 113 106 / 0) 66.83%)", 6405, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(239, 197, 164)", ip("oklch(100% 0 0)", "oklch(0 0.4417 59)", 1485, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 120, 0, 0.9821)", ip("color-mix(in srgb, color(xyz-d50 0 0.427 0.117/89.8%), oklab(0.46  0  0.1553))", "color(xyz-d50  0.91  .5  0)", 6481, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("lch(109.1%	142	329)", "color-mix(in srgb, lch(96.89  150.129  720deg), oklch(50% 51.5% 367.8))", 561, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(64, 16, 88, 0.3886)", ip("hwb(60 0% 100%/49%)", "color-mix(in  srgb, darkorchid, rgb(178 113 106 / 0) 66.83%)", 6405, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("color-mix(in srgb, lime, oklch(50%	0.3352	30))", "oklab( -5%	-0.2191	-0.4727 )", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(42, 198, 161, 0.8502)", ip("color-mix(in srgb , rgb(142 75 50 / -0.5) , #7ea)", "color( srgb 0.1 0.7444 0.6261)", 7003, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(93, 221, 167, 0.6081)", ip("color-mix(in srgb , rgb(142 75 50 / -0.5) , #7ea)", "color( srgb 0.1 0.7444 0.6261)", 2161, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(136, 103, 0, 0.848)", ip("mediumslateblue", "oklab(53% 0 0.1669/0.848)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(12, 252, 87)", ip("color-mix(in srgb, lab(77.192 84% 56.9) 25%, color( srgb-linear 0.21 0.8494 0.47 / 1.5))", "color(xyz  0.278  0.7762  0.05)", 9263, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 255, 78)", ip("color-mix(in srgb, lab(77.192 84% 56.9) 25%, color( srgb-linear 0.21 0.8494 0.47 / 1.5))", "color(xyz  0.278  0.7762  0.05)", 9263, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(221, 128, 175, 0.0225)", ip("lch(-7.0183 133.36% 167.8/0)", "color-mix(in srgb, oklch(0.5 0.2361 1turn), oklch(1  0.4587  681.31))", 225, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(173, 0, 158)", ip("color(xyz 0.8 0 1.585)", "lch( 98 71.063 -477 )", 1, 2));
 }
 
 static void test_l101_mix_29(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(225, 223, 236)", ip("oklab(1 -70% -0.2398 / 1.5)", "color(rec2020  48.59%  0.457  0.6541)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(156, 238, 255)", ip("oklab(1 -70% -0.2398 / 1.5)", "color(rec2020  48.59%  0.457  0.6541)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(142, 127, 145, 0.5794)", ip("color-mix(in srgb, #476c 65.77%, color( prophoto-rgb  0.9316  0.5  0.8))", "color( prophoto-rgb 0.7 0.8608 0.16/ -0.5)", 3329, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(233, 254, 159)", ip("lch(94.1 -4.69% 102.9647)", "color( xyz-d65 0.6 1 -0.34)", 9548, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(173, 32, 53)", ip("brown", "color( display-p3 0.7148 1% 0.33)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(232, 255, 151)", ip("lch(94.1 -4.69% 102.9647)", "color( xyz-d65 0.6 1 -0.34)", 9548, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(194, 0, 77)", ip("brown", "color( display-p3 0.7148 1% 0.33)", 8284, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(198, 245, 150)", ip("hwb(100grad 59% 4%)", "color(prophoto-rgb -0.6 0.043 8.15%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 52, 55, 0.3951)", ip("color(a98-rgb	0	0.0004	1.36/0)", "color-mix(in srgb, oklch(0.3298	0.0660	-4rad/ 0), lab(19 53.33% -130.72 /1.5))", 7902, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(23, 114, 49, 0.3164)", ip("lab(37.286 2.46% -102.82%/ 25.52%)", "oklab(63.8% -102.04% 0.3799/ 0.5)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 113, 102, 0.3164)", ip("lab(37.286 2.46% -102.82%/ 25.52%)", "oklab(63.8% -102.04% 0.3799/ 0.5)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(189, 255, 192, 0.4601)", ip("lch(100% 133% 132/46%)", "lab(46% .5 +0.5 / 1.5)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(173, 126, 177, 0.1434)", ip("color(xyz-d65	0	-0.66	-0.4/0.05)", "#eaaaf06c", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 230, 235)", ip("oklab(102.66% -0.0909 -0.1765)", "pink", 3896, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(131, 0, 98, 0.1434)", ip("color(xyz-d65	0	-0.66	-0.4/0.05)", "#eaaaf06c", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(218, 240, 255)", ip("oklab(102.66% -0.0909 -0.1765)", "pink", 3896, 2));
 }
 
 static void test_l101_mix_30(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(9, 20, 16, 0.933)", ip("color-mix(in srgb, oklab(0.424 0 0.3966), lab(50% -102.82% -115.65%/ 0.155))", "oklch(14%  0.2457  -158)", 8415, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(204, 117, 169)", ip("lab(5.93 -116% -89.4%)", "color(xyz 0.478 0.35 .5)", 9024, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 20, 23, 0.933)", ip("color-mix(in srgb, oklab(0.424 0 0.3966), lab(50% -102.82% -115.65%/ 0.155))", "oklch(14%  0.2457  -158)", 8415, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(135, 147, 187)", ip("lab(5.93 -116% -89.4%)", "color(xyz 0.478 0.35 .5)", 9024, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(198, 255, 192, 0.5)", ip("hwb(353.37deg 32.01% 59%/74%)", "color(xyz  0.4  1  0/50%)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 237, 114)", ip("color(prophoto-rgb 0.121 0.9471 12%)", "color(prophoto-rgb  0  -0  0.9)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(203, 40, 125)", ip("color(a98-rgb  0  2  0.1)", "lch(38.8 119 1turn/ 1.5)", 8424, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(76, 79, 41)", ip("color-mix(in srgb, color( display-p3 0.559 0.5873 0.0003), hwb(0.2rad 100% 55.2%))", "lch(0 101 -0.61turn)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(167, 183, 137, 0.5938)", ip("color(xyz  0.6  0.871  0.609 / 50%)", "color-mix(in srgb,firebrick,25% hwb(0.1turn 50% 0% /50%))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(238, 255, 223)", ip("color(a98-rgb  0  2  0.1)", "lch(38.8 119 1turn/ 1.5)", 4280, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 48, 0)", ip("color-mix(in srgb, color( display-p3 0.559 0.5873 0.0003), hwb(0.2rad 100% 55.2%))", "lch(0 101 -0.61turn)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(188, 193, 134, 0.5938)", ip("color(xyz  0.6  0.871  0.609 / 50%)", "color-mix(in srgb,firebrick,25% hwb(0.1turn 50% 0% /50%))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(228, 255, 186)", ip("color(xyz-d65 0.1 1.128 -1)", "lab(109	106.51	15.24)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(120, 0, 135)", ip("color(prophoto-rgb  0.2157  1.96  0.9525/1.5)", "oklab(0.4 +0.5 -0.3808)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("lab(83  158.73  84.8%)", "oklch(100%	0	-186.741grad)", 9999, 2));
 }
 
 static void test_l101_mix_31(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(44, 67, 84, 0.7415)", ip("color-mix(in srgb, color(srgb 0 0.5 0.9/50%), hsla(9.8rad, 2%, 128%, 50%))", "lch(+0.5 73 0.5turn)", 4830, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(185, 170, 167, 0.6363)", ip("color-mix(in srgb , hsl(8.2571, 50%, 90%, 0.5) 98% , color-mix(in srgb,100% #f6cfca9e,hwb(-4.7rad 99.1% 50% / 50%)) 14%)", "hwb(0.1turn 58.9% 100%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 52, 39, 0.7415)", ip("color-mix(in srgb, color(srgb 0 0.5 0.9/50%), hsla(9.8rad, 2%, 128%, 50%))", "lch(+0.5 73 0.5turn)", 4830, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(182, 168, 165, 0.6363)", ip("color-mix(in srgb , hsl(8.2571, 50%, 90%, 0.5) 98% , color-mix(in srgb,100% #f6cfca9e,hwb(-4.7rad 99.1% 50% / 50%)) 14%)", "hwb(0.1turn 58.9% 100%)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 20, 36, 0.5)", ip("lab(65.28 -146.2419 102.53%/ 50%)", "oklab( 17.58% -52% -0.2314/ 0.5 )", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(73, 204, 255, 0.9999)", ip("color( prophoto-rgb 0.78 2 0.599 / 0.1)", "oklab(0.8 -58% -0.3273)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(108, 229, 255, 0.4671)", ip("color( prophoto-rgb 0.78 2 0.599 / 0.1)", "oklab(0.8 -58% -0.3273)", 4079, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(128, 90, 0)", ip("hwb(2.1182turn 0% 50%)", "hwb(366.548 58.27% 50%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(223, 50, 100)", ip("color-mix(in srgb , #fa0a59 , yellow 3.9%)", "lch(59.4% -7% 8.656rad)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(228, 79, 101)", ip("color-mix(in srgb , #fa0a59 , yellow 3.9%)", "lch(59.4% -7% 8.656rad)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(188, 143, 143)", ip("color-mix(in srgb, ivory 25%, oklab(109.4%  -0.2611  0.3176/84%))", "rosybrown", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(95, 147, 128)", ip("hwb(0turn 36 64%)", "color(xyz-d65  0  1  0.174)", 3386, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 164, 108)", ip("hwb(0turn 36 64%)", "color(xyz-d65  0  1  0.174)", 3386, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(231, 127, 230)", ip("color( rec2020 0.777 .5 0.8608)", "color-mix(in srgb, oklab(0.3263 -0.4709 0.0984) 72%, color(srgb-linear 63.48% 0.654 -0/ 0))", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 118, 106, 0.1592)", ip("oklab( 70.57% 0 -0.2927/ -0.5 )", "color(rec2020 0.158 0.4 0.365 /17%)", 9364, 2));
 }
@@ -451,131 +451,131 @@ static void test_l101_mix_31(void) {
 static void test_l101_mix_32(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(224, 255, 255)", ip("lab(109.3% -15 -5.5%)", "oklch(46%  0.1066  8)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(224, 10, 115, 0.9999)", ip("color(rec2020 0 0.3 0.6154 /44%)", "color(srgb 0.879 0.0391 0.45)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(226, 191, 191)", ip("lch(102.02 0% 781.3573grad)", "color-mix(in srgb, darkred, color(srgb-linear	93.4%	2	0))", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(170, 123, 81, 0.9897)", ip("color-mix(in srgb, color(prophoto-rgb 0.5 0.2 0 / 1), color(xyz-d50 0.2661 0 0.3))", "color-mix(in srgb, color(srgb	0.513	1.41	-0.729), #f2a3def6)", 5835, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 34, 37)", ip("oklab( 0.057 -0.3748 0.2458 )", "lab(59.71	-87.6	-106.1742)", 2165, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(228, 190, 189)", ip("lch(102.02 0% 781.3573grad)", "color-mix(in srgb, darkred, color(srgb-linear	93.4%	2	0))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(180, 135, 80, 0.9897)", ip("color-mix(in srgb, color(prophoto-rgb 0.5 0.2 0 / 1), color(xyz-d50 0.2661 0 0.3))", "color-mix(in srgb, color(srgb	0.513	1.41	-0.729), #f2a3def6)", 5835, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 25, 9)", ip("oklab( 0.057 -0.3748 0.2458 )", "lab(59.71	-87.6	-106.1742)", 2165, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(98, 122, 150)", ip("oklab(0 0 0.2263)", "lch(50%  18.576  0.721turn)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(128, 0, 128)", ip("color(srgb  0.13  0.415  0.5636)", "color-mix(in srgb, maroon, color(srgb	.5	-3%	1.3941))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(106, 119, 20)", ip("color-mix(in srgb, oklab(0.1003 -0.4839 0.3519), #c9de2a)", "color(srgb 100% 2 0)", 328, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(105, 118, 21)", ip("color-mix(in srgb, oklab(0.1003 -0.4839 0.3519), #c9de2a)", "color(srgb 100% 2 0)", 328, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(94, 0, 68, 0.5)", ip("lch(11.96%  146.2  -379.095 /0.5)", "hwb(-471.7 75% 92% / 50%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(10, 79, 68)", ip("color( xyz-d65  0  0.9  0.68)", "lab(-2 50% -2.7%)", 6908, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 111, 95)", ip("color( xyz-d65  0  0.9  0.68)", "lab(-2 50% -2.7%)", 5194, 2));
 }
 
 static void test_l101_mix_33(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(181, 201, 124, 0.813)", ip("color(srgb-linear 0.46 0.581 20.3% / 81.3%)", "color-mix(in srgb, lime, oklch( 0.0342 0.0683 1.4097turn ))", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(209, 255, 241)", ip("lch(107.616	195	148)", "color(xyz-d50  0  119.94%  0.39)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(170, 187, 0, 0.25)", ip("color(srgb 0 0 0/0)", "#ab0f", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(158, 0, 159, 0.675)", ip("color(rec2020 0.7 0 1/35%)", "lch( 29%	59%	691.2623 )", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(158, 0, 157, 0.675)", ip("color(rec2020 0.7 0 1/35%)", "lch( 29%	59%	691.2623 )", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(61, 0, 25)", ip("oklch(0.22 0.2976 720deg)", "lab( 26.749 75.66% -12.99%/ 0.5 )", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(81, 104, 121, 0.5578)", ip("lch( 54 148 191.2087 )", "oklch(.5	0.0374	300/ 50%)", 8845, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(127, 74, 136, 0.8132)", ip("color-mix(in srgb, lch( 9.4552 23.14% 240 ), hsla(-2turn, 16%, 78.25%, 50%))", "lab(60% 111.43% -70)", 2526, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(91, 91, 91)", ip("lch(74	-0.5%	116 / 1)", "oklab( -0 0.3099 0.4012 )", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 227, 205)", ip("oklab(94.2%  0.3232  0.3911)", "oklab( 1  -0.3737  0.1490/ 1 )", 633, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(240, 253, 251)", ip("color(rec2020	115.21%	1.69	0.6389)", "color( xyz-d65  0  67.7%  0.753)", 585, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 131, 131, 0.7513)", ip("lch( 54 148 191.2087 )", "oklch(.5	0.0374	300/ 50%)", 4975, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(236, 0, 212, 0.9098)", ip("color-mix(in srgb, lch( 9.4552 23.14% 240 ), hsla(-2turn, 16%, 78.25%, 50%))", "lab(60% 111.43% -70)", 6392, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(116, 42, 0)", ip("lch(74	-0.5%	116 / 1)", "oklab( -0 0.3099 0.4012 )", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 228, 202)", ip("oklab(94.2%  0.3232  0.3911)", "oklab( 1  -0.3737  0.1490/ 1 )", 633, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("color(rec2020	115.21%	1.69	0.6389)", "color( xyz-d65  0  67.7%  0.753)", 585, 2));
 }
 
 static void test_l101_mix_34(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(255, 255, 255, 0.9999)", ip("color(xyz 1.9 0.838 -19.62%)", "color( rec2020  0.5632  0  -0.4/ 38.8%)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(141, 246, 255)", ip("color(xyz-d65	0.969	1.067	0.856)", "lab(92 -68 -58)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(99, 94, 95, 0.6672)", ip("color-mix(in srgb, hwb(2.99turn 0% 98%/0.5) 50%, oklch(0.8 0.0094 1turn))", "color-mix(in srgb, oklch(0 0.0417 -495 /50%) 100%, lch(17.4151 37% -0.95turn))", 3314, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(88, 83, 84, 0.6672)", ip("color-mix(in srgb, hwb(2.99turn 0% 98%/0.5) 50%, oklch(0.8 0.0094 1turn))", "color-mix(in srgb, oklch(0 0.0417 -495 /50%) 100%, lch(17.4151 37% -0.95turn))", 3314, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(197, 127, 23, 0.5001)", ip("lab(53.6% 113 -0 /1.5)", "color( srgb 0.7711 0.5 0.09/50%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(36, 249, 26, 0.875)", ip("lime", "color-mix(in srgb, color(rec2020	1.1	0.7794	0.45), hsl(4.3rad 18 100% / 0))", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(99, 251, 66, 0.875)", ip("lime", "color-mix(in srgb, color(rec2020	1.1	0.7794	0.45), hsl(4.3rad 18 100% / 0))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 0, 66)", ip("oklab(62% 0.3947 0.1312)", "color-mix(in srgb,palevioletred 0%,black)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(65, 5, 47, 0.1658)", ip("lab(-5.48% -45.76% -109.449/ 0.5)", "color(xyz	0.317	0	0.139/ 12%)", 8794, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(23, 23, 23)", ip("oklab(0  -0.4164  0.2650)", "lch(18.5% 0 -66.9883deg)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(54, 0, 93, 0.1658)", ip("lab(-5.48% -45.76% -109.449/ 0.5)", "color(xyz	0.317	0	0.139/ 12%)", 8794, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 18, 0)", ip("oklab(0  -0.4164  0.2650)", "lch(18.5% 0 -66.9883deg)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(106, 115, 112, 0.1415)", ip("lab( 6.9% -123% -4% /0 )", "color-mix(in srgb, dimgrey 50%, rgb(116 189 162 / 13.2%))", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(46, 0, 52)", ip("color-mix(in srgb, color(prophoto-rgb 0.9 -16.04% -0.3), #4157)", "lab(1 91 -63.01)", 9999, 2));
 }
 
 static void test_l101_mix_35(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(3, 51, 42)", ip("color( prophoto-rgb	0	0.11	66%)", "color( display-p3 0.2 0.442 0.3)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(110, 180, 64)", ip("color(display-p3	0.34	0.6	0)", "oklch( 1  0.3689  693.7059deg )", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 39, 39)", ip("color( prophoto-rgb	0	0.11	66%)", "color( display-p3 0.2 0.442 0.3)", 1102, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(159, 165, 110)", ip("color(display-p3	0.34	0.6	0)", "oklch( 1  0.3689  693.7059deg )", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.9999)", ip("lab(-10	-8	144.675)", "lch(71% 141 232.282grad /0)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(26, 26, 26, 0.3079)", ip("oklab(0% -0.2321 0.2511 /0.3)", "oklab(1 0 0.4180 / 0.4)", 793, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(148, 128, 131)", ip("color( xyz-d50 0.7606 0.327 1)", "color-mix(in srgb, oklch(0.181  0.0713  735.433deg), oklab(1 0 0.3571))", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(1, 5, 0, 0.3079)", ip("oklab(0% -0.2321 0.2511 /0.3)", "oklab(1 0 0.4180 / 0.4)", 793, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 36, 255)", ip("color( xyz-d50 0.7606 0.327 1)", "color-mix(in srgb, oklch(0.181  0.0713  735.433deg), oklab(1 0 0.3571))", 1545, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(41, 58, 58)", ip("color-mix(in srgb, color(srgb-linear  0.3563  0.8  0.8) 25.25%, black)", "color-mix(in srgb, oklch(39.6% 0 91) 67%, lab( -6.1995 -62.34 -35.92% ))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(113, 135, 80, 0.9095)", ip("color(rec2020 0.5751 0 -0.18)", "color-mix(in srgb, color(xyz  0.8  0.8  1 /0) 0%, #41fae2c7)", 4120, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(220, 166, 110)", ip("lab(89.323 1.2% 55.67)", "lab(21.6	100%	-50.8492/ 1.5)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(182, 120, 0, 0.9095)", ip("color(rec2020 0.5751 0 -0.18)", "color-mix(in srgb, color(xyz  0.8  0.8  1 /0) 0%, #41fae2c7)", 4120, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(241, 139, 136)", ip("lab(89.323 1.2% 55.67)", "lab(21.6	100%	-50.8492/ 1.5)", 3077, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(74, 138, 74)", ip("color-mix(in srgb, lime 25%, oklch(50% 0 331))", "color(srgb 0.09 0.31 0.28)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(219, 44, 216)", ip("lch(94 200.5087 307)", "color(display-p3  0.762  -0  0.7903)", 8268, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(230, 0, 255)", ip("lch(94 200.5087 307)", "color(display-p3  0.762  -0  0.7903)", 8268, 2));
 }
 
 static void test_l101_mix_36(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(107, 86, 86)", ip("hwb(1turn 50% 38.768%)", "color-mix(in srgb, color( prophoto-rgb	-0.868	0.1	94.9%) 49.1%, lch(0% 57.4 2turn))", 3283, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(166, 0, 204, 0.875)", ip("color(display-p3	0.6934	0	0.9)", "oklch(-6.32%  0  -60deg/0.5)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(162, 42, 42, 0.9138)", ip("brown", "lab(9.806 0% -23 /17%)", 1038, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(141, 149, 0)", ip("oklab(0.9  -0.3031  0.4724)", "color( display-p3	0.37	0.2826	0 /1)", 5546, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(0, 64, 228)", ip("color(srgb -17.74% 0 1)", "hwb(1.43turn 0% 0%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(101, 76, 78)", ip("hwb(1turn 50% 38.768%)", "color-mix(in srgb, color( prophoto-rgb	-0.868	0.1	94.9%) 49.1%, lch(0% 57.4 2turn))", 3283, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(152, 0, 187, 0.8584)", ip("color(display-p3	0.6934	0	0.9)", "oklch(-6.32%  0  -60deg/0.5)", 2833, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(126, 47, 52, 0.4606)", ip("brown", "lab(9.806 0% -23 /17%)", 6499, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(133, 148, 0)", ip("oklab(0.9  -0.3031  0.4724)", "color( display-p3	0.37	0.2826	0 /1)", 5546, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 115, 226)", ip("color(srgb -17.74% 0 1)", "hwb(1.43turn 0% 0%)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(255, 147, 45, 0.9999)", ip("lch(72.5  151.57%  7.5431rad)", "hwb(-5.69rad 30% 50% /3%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(153, 16, 64, 0.884)", ip("hwb(0.5turn 87 87% / 0.5)", "color-mix(in srgb, hwb(-2turn 0% 32.85% /98%), color(xyz-d50	0.6441	0	0.5))", 7837, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(143, 47, 18, 0.95)", ip("color-mix(in srgb, color(rec2020  0.2  0.1493  0 /0.9) 100%, hsla(-0.4rad 50% 37%))", "lab(45.97% 49.7% 47)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(177, 59, 136, 0.7567)", ip("color(srgb-linear	0.261	0	0.39)", "color( srgb-linear 102.46% 0.4734 0.06/ 50%)", 4866, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(87, 106, 34, 0.875)", ip("lab(36.6% 0% 59.8)", "oklab(0.84 -0.3 -0.0806 / 0.5)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(156, 36, 64, 0.884)", ip("hwb(0.5turn 87 87% / 0.5)", "color-mix(in srgb, hwb(-2turn 0% 32.85% /98%), color(xyz-d50	0.6441	0	0.5))", 7837, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(195, 46, 32, 0.9924)", ip("color-mix(in srgb, color(rec2020  0.2  0.1493  0 /0.9) 100%, hsla(-0.4rad 50% 37%))", "lab(45.97% 49.7% 47)", 9239, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(174, 87, 153, 0.7567)", ip("color(srgb-linear	0.261	0	0.39)", "color( srgb-linear 102.46% 0.4734 0.06/ 50%)", 4866, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(88, 111, 38, 0.875)", ip("lab(36.6% 0% 59.8)", "oklab(0.84 -0.3 -0.0806 / 0.5)", 2500, 2));
 }
 
 static void test_l101_mix_37(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(46, 62, 63)", ip("lch(13.4%	196.7536	-60deg)", "oklch(0.39  0  2.34turn)", 6605, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(17, 6, 4)", ip("lab(4.1%	54%	89)", "oklch(0.13	0%	230)", 5000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(128, 132, 133)", ip("color( xyz-d65 0 0 0.52)", "lch(100% 83 730.94deg/1.5)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 71, 74)", ip("lch(13.4%	196.7536	-60deg)", "oklch(0.39  0  2.34turn)", 6605, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(24, 4, 0)", ip("lab(4.1%	54%	89)", "oklch(0.13	0%	230)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 140, 148)", ip("color( xyz-d65 0 0 0.52)", "lch(100% 83 730.94deg/1.5)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(41, 41, 41)", ip("hwb(174.36grad 19% 100%)", "oklch(0	16.5%	-1.8turn / 0.5)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(194, 127, 0)", ip("color(xyz 0.596 0.2 0.57)", "color(srgb	0.759	.5	0)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(110, 96, 55)", ip("oklch(0.4 0.3234 -363.39 /1.5)", "color-mix(in srgb, hwb(180 63 93.01%), oklch(0.55  0.1460  -602))", 8518, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(243, 57, 133, 0.6345)", ip("color(xyz 94.46% 9% 0.39)", "color(xyz-d65 75% 0.3 0.1 /50%)", 7310, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(124, 97, 58)", ip("oklch(0.4 0.3234 -363.39 /1.5)", "color-mix(in srgb, hwb(180 63 93.01%), oklch(0.55  0.1460  -602))", 8518, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 0, 141, 0.6345)", ip("color(xyz 94.46% 9% 0.39)", "color(xyz-d65 75% 0.3 0.1 /50%)", 7310, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(99, 114, 128)", ip("color-mix(in srgb, lch(25.4978  197  -0.0513turn/0.5) 0%, color(srgb 10.5% +0.5 0.21))", "color-mix(in  srgb, lightslategrey, hsla(-4.71rad 81% -5% / 0.9999) 16.4418%)", 9976, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(61, 126, 103, 0.4278)", ip("color-mix(in srgb, rgb(14, 165, 91%) 25%, lab(55.8 -51.3878 -109.8274 /0))", "color-mix(in srgb, color(xyz-d65	0.503	45.5%	-1), oklch(0	0.0380	111/120%))", 2371, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(241, 242, 249, 0.378)", ip("color-mix(in srgb,78.5% rgb(156 204 147 / -0.5),42.34% hsl(200grad 71% 100% / 150%))", "color(prophoto-rgb	+0.5	0.4754	0.7/1.5)", 425, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(83, 129, 120, 0.4278)", ip("color-mix(in srgb, rgb(14, 165, 91%) 25%, lab(55.8 -51.3878 -109.8274 /0))", "color-mix(in srgb, color(xyz-d65	0.503	45.5%	-1), oklch(0	0.0380	111/120%))", 2371, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(240, 242, 249, 0.378)", ip("color-mix(in srgb,78.5% rgb(156 204 147 / -0.5),42.34% hsl(200grad 71% 100% / 150%))", "color(prophoto-rgb	+0.5	0.4754	0.7/1.5)", 425, 2));
 }
 
 static void test_l101_mix_38(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(153, 34, 59, 0.4578)", ip("color-mix(in srgb, oklch(70.37%  0.1613  120), oklab(0  0.068  -0.0823))", "color( xyz-d65  0.7  0.07  0/34%)", 8215, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(185, 0, 69, 0.4578)", ip("color-mix(in srgb, oklch(70.37%  0.1613  120), oklab(0  0.068  -0.0823))", "color( xyz-d65  0.7  0.07  0/34%)", 8215, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 176)", ip("oklab(80.52%  -0.4518  -0.0759)", "color(a98-rgb 0% 0 0.67 /120%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(228, 112, 155)", ip("color-mix(in srgb, color(xyz-d65	0	0.1407	0.177) 21%, hsl(206deg, 78%, 127.1%, 99.99%))", "color( xyz  0.51  0.21  0.078)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 133, 148)", ip("color-mix(in srgb, color(xyz-d65	0	0.1407	0.177) 21%, hsl(206deg, 78%, 127.1%, 99.99%))", "color( xyz  0.51  0.21  0.078)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(67, 0, 63)", ip("color( srgb  0.6  60.63%  0.821)", "oklch(25.4% 0.1410 331 / 120%)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(172, 0, 150)", ip("color(xyz-d65	0.7944	0	1.4)", "color-mix(in srgb, hwb(9rad 53% 40) 50%, color(xyz-d50 79.01% 0.219 0.96))", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(200, 0, 180)", ip("color(xyz-d65	0.7944	0	1.4)", "color-mix(in srgb, hwb(9rad 53% 40) 50%, color(xyz-d50 79.01% 0.219 0.96))", 5376, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(238, 232, 245, 0.845)", ip("color-mix(in srgb, 100% rgb(50 110 64 / 1), hwb(63 51.9% 79))", "color-mix(in srgb, oklab(92.8% 68.4% -0.4705/ 0.69), oklch(0.95 0 211))", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 22, 23, 0.3)", ip("lab(+0.5	-123%	-119%/ 0.3)", "color-mix(in srgb, hwb(203 39 68%) 36.81%, color(prophoto-rgb 0.549 0.8 0.3/0.6))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(63, 235, 73, 0.7306)", ip("lab(-4	154.27	-128.5%/1.12%)", "color-mix(in srgb , 32% #a9df2c , #0ef257)", 7275, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(51, 236, 76, 0.7306)", ip("lab(-4	154.27	-128.5%/1.12%)", "color-mix(in srgb , 32% #a9df2c , #0ef257)", 7275, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 90, 180)", ip("lch(31  97%  299)", "oklab(59% 0 -0.1374)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(102, 51, 153, 0.9999)", ip("color-mix(in srgb,100% rebeccapurple,81.82% rebeccapurple)", "color(a98-rgb  0.3  4.7%  0.5197/-0.5)", 1, 2));
 }
 
 static void test_l101_mix_39(void) {
-    TEST_ASSERT_EQUAL_STRING("rgba(176, 104, 105, 0.5753)", ip("color-mix(in srgb, lightcoral, color(display-p3 0.4216 -0.9 0.2 / 40.4%))", "lab(92.37 13 -67.13 /19.51%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(157, 95, 119, 0.6564)", ip("lch(74.912  93.11  -1/ 0.54)", "oklch( 0 0 37grad )", 2531, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(22, 88, 201, 0.78)", ip("color(a98-rgb	0	0.07	0.8)", "color-mix(in srgb, rgb(38 224 178 / 120%), lch(98.2% 134.3% 59/ 12%))", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(184, 140, 180, 0.3731)", ip("color-mix(in srgb, lightcoral, color(display-p3 0.4216 -0.9 0.2 / 40.4%))", "lab(92.37 13 -67.13 /19.51%)", 6488, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(191, 41, 110, 0.6387)", ip("lch(74.912  93.11  -1/ 0.54)", "oklch( 0 0 37grad )", 2145, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 116, 207, 0.78)", ip("color(a98-rgb	0	0.07	0.8)", "color-mix(in srgb, rgb(38 224 178 / 120%), lch(98.2% 134.3% 59/ 12%))", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(241, 128, 255, 0.2501)", ip("hwb(653.6deg 50% 0%/25%)", "oklab(57%  -0.4985  -0.2123)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(34, 58, 29, 0.2114)", ip("hwb(-0.1803turn 22% 0% / 0)", "color-mix(in srgb,color-mix(in  srgb,black,hwb(613deg 100% 100%)),100% hsl(-277.1697grad 33 17.2% / 0.9999))", 2114, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(100, 141, 200, 0.4216)", ip("color-mix(in srgb, lch( 61 50% -108deg ), #f66e9caf)", "color(display-p3 0.38 0.52 0/ -0.5)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklab(-0  0.2090  0.0013)", "lch(14.32 158.73% -183.3deg/120%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(240, 122, 231)", ip("color(srgb  1.8194  0.5897  0.94)", "color(display-p3 0.7 0.2112 0.7811)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(240, 127, 232)", ip("color(srgb  1.8194  0.5897  0.94)", "color(display-p3 0.7 0.2112 0.7811)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(118, 209, 191, 0.0601)", ip("oklch(0.8 0.0926 179/ 0.06)", "color-mix(in srgb,#96eb,0% rgb(203 35% 202 / -0.5))", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(52, 83, 16)", ip("lch(29  116.3  90deg)", "color( rec2020	0.008	42%	0.12 / 120%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(69, 81, 0)", ip("lch(29  116.3  90deg)", "color( rec2020	0.008	42%	0.12 / 120%)", 2500, 2));
 }
 
 static void test_l101_mix_40(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(96, 157, 142, 0.75)", ip("lab(61% -62.53 -128.6046)", "color-mix(in srgb, rgb(90 192 119 / 120%), hsla(-0.3turn 42% 54% / 0.5))", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(225, 90, 132)", ip("color-mix(in  srgb , 20% rgb(125 12% 14%) , color-mix(in  srgb,red,darkolivegreen 50%))", "color(rec2020 0.9539 0.36 0.677)", 6779, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(250, 61, 136)", ip("color-mix(in  srgb , 20% rgb(125 12% 14%) , color-mix(in  srgb,red,darkolivegreen 50%))", "color(rec2020 0.9539 0.36 0.677)", 6779, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(56, 23, 190, 0.9999)", ip("oklab(0.4 0.0288 -0.2276)", "oklch(0.583  63%  -0.55turn / 0.21)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(57, 88, 0)", ip("color( xyz-d50 56.3% 0.83 0.0841 / 1)", "oklch(0 0.0138 -369.7deg)", 6543, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(11, 14, 0)", ip("color( xyz-d50 56.3% 0.83 0.0841 / 1)", "oklch(0 0.0138 -369.7deg)", 8308, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(8, 5, 0, 0.75)", ip("lab(6.054 -58.89 155)", "oklch(0  0  -544.3216/0)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("color(display-p3 0.1683 1.5 0.5237 /120%)", "lab(4.344  53.8754  26%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(31, 83, 99, 0.75)", ip("color-mix(in srgb, lab(72.291 0 50%/0) 50%, oklch(0.3  0.2184  357))", "color(xyz-d50  0.0164  0.2  0.6899 / 120%)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 102, 104, 0.75)", ip("color-mix(in srgb, lab(72.291 0 50%/0) 50%, oklch(0.3  0.2184  357))", "color(xyz-d50  0.0164  0.2  0.6899 / 120%)", 5000, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 174, 78, 0.96)", ip("color( prophoto-rgb 0 64.57% 0 /96%)", "color(xyz-d50 0 29.61% 0)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(72, 92, 53, 0.8725)", ip("color( a98-rgb 0.25 0.18 0/89%)", "color(xyz-d65 0.254 0.928 0.811/ 82%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(57, 44, 49)", ip("oklab(0.21  -0.2947  -0.0199)", "oklch(0.422 0.0835 5)", 5000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(40, 101, 48, 0.8725)", ip("color( a98-rgb 0.25 0.18 0/89%)", "color(xyz-d65 0.254 0.928 0.811/ 82%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(0, 62, 54)", ip("oklab(0.21  -0.2947  -0.0199)", "oklch(0.422 0.0835 5)", 5000, 2));
 }
 
 static void test_l101_mix_41(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(41, 0, 0)", ip("color(rec2020  0.06  0  0)", "lch(107 7.3% 263 / 1)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 197, 255)", ip("color-mix(in srgb , 0% hsl(-334grad 80.2% 18.555% / 1) , hwb(-553.82 0% 100%))", "color(rec2020 0.956 0.774 0.985)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(168, 166, 168, 0.58)", ip("hwb(-1rad 65 34.146% /58%)", "oklch(58.88%	0.1486	-252.2761deg/ 59%)", 1, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("color(xyz-d65	0.6	0.7	0)", "oklch(100.4%	0.1904	766.47grad)", 9999, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(255, 249, 255)", ip("color(xyz-d65	0.6	0.7	0)", "oklch(100.4%	0.1904	766.47grad)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(49, 33, 0)", ip("color( a98-rgb  0.5522  96%  -0.368 /50%)", "oklab(26% 0 0.3893 / 1)", 9999, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(205, 208, 205, 0.8175)", ip("oklab(1 0 0.4464 /0.7566)", "hwb(126 36 60.5%)", 2500, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(255, 255, 255, 0.0501)", ip("oklab(1	10%	0.2186/5%)", "lch(14 +0.5 701.2deg)", 1, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(251, 197, 0, 0.8175)", ip("oklab(1 0 0.4464 /0.7566)", "hwb(126 36 60.5%)", 2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 252, 224, 0.0501)", ip("oklab(1	10%	0.2186/5%)", "lch(14 +0.5 701.2deg)", 1, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(150, 240, 235)", ip("color(xyz-d65  0.269  0.359  0.9724/ 1)", "color(prophoto-rgb 0.73 0.8934 0.9)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(180, 202, 255, 0.3398)", ip("color( prophoto-rgb 0.175 0.5 1.9 /-0.5)", "oklab(0.846 0 -0.2246)", 3398, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(85, 109, 211)", ip("lab(75%  128  53.34%)", "oklab(50%	-0.0601	-0.2877 / 120%)", 6657, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(148, 101, 216)", ip("lab(75%  128  53.34%)", "oklab(50%	-0.0601	-0.2877 / 120%)", 6657, 2));
 }
 
 static void test_l101_mix_42(void) {

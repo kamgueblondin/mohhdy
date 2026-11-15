@@ -1259,7 +1259,7 @@ static void test_l100_anim_45(void) {
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);
     TEST_ASSERT_EQUAL(2, g_d.prop_composed);
     prep("@keyframes k { 25% { color: color-mix(in  srgb,hsl(-1.245turn, 100%, 17%, 1),hsla(373.5deg, 26.1%, 3%, 1)) } 33.33% { background-color: color-mix(in srgb, 50% #eeec, hwb(-400 100% 50%)); color: hwb(88 99.6% 96); animation-timing-function: linear } 75% { color: color-mix(in  srgb,100% orchid,papayawhip) } } #o { color: hwb(0.1turn 0% 100%); background-color: rgba(211, 8, 81, 0); animation: k 1000ms steps(4), k 2000ms linear; animation-composition: replace; animation-timeline: --t, auto }", 750);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b808a;background-color:#c8c8c8d7\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8b818a;background-color:#c8c8c8d7\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);
@@ -2429,7 +2429,7 @@ static void test_l100_anim_88(void) {
 
 static void test_l100_anim_89(void) {
     prep("@keyframes k { 25% { color: color-mix(in srgb , color-mix(in srgb , 48.643% color-mix(in srgb,white,hsla(156.111grad 38% 26% / 0.5)) , hwb(-386.757grad 50% 0%) 0%) , hsla(0.3604turn 0% 96%) 4.8422%) } 75% { background-color: rebeccapurple; color: color-mix(in srgb , #44f7b2ab , hsla(-6rad 68.201% 65% / 150%)) } } #o { color: hwb(-460 27% 46 / 0.89); background-color: color-mix(in	srgb, blueviolet, hsla(204.4289deg, 16.1%, 50%, 150%) 0%); animation-duration: 2s; animation-timing-function: linear; animation-iteration-count: infinite; animation-name: k }", 750);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7e7c88dc;background-color:#782fbe\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#7c7c8ddc;background-color:#782fbe\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.col_transitioned);

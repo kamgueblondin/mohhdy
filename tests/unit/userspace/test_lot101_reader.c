@@ -204,8 +204,11 @@ static void test_l101_color_fn(void) {
     TEST_ASSERT(wf_cssprop_match_prop(&g_p, "color(display-p3 1 0 0 / 0.5)"));
     TEST_ASSERT(!wf_cssprop_match_prop(&g_p, "lab(50, 0, 0)"));
     TEST_ASSERT(wf_cssprop_match_prop(&g_p, "currentcolor"));        /* a keyword there (Lot 97) */
-    TEST_ASSERT_EQUAL_STRING("rgb(187, 187, 187)", ip("lab(50 0 0)", "white", 5000));
-    TEST_ASSERT_EQUAL_STRING("rgb(128, 0, 128)", ip("color(srgb 1 0 0)", "color(srgb 0 0 1)", 5000));
+    /* Lot 106 (converted, were rgb(187, 187, 187) and rgb(128, 0, 128) in
+     * sRGB): lab() and color() are not legacy forms, interpolated in Oklab */
+    TEST_ASSERT_EQUAL_STRING("rgb(185, 185, 185)", ip("lab(50 0 0)", "white", 5000));
+    TEST_ASSERT_EQUAL_STRING("rgb(140, 83, 162)", ip("color(srgb 1 0 0)", "color(srgb 0 0 1)", 5000));
+    TEST_ASSERT_EQUAL_STRING("rgb(128, 0, 128)", ip("rgb(255 0 0)", "rgb(0 0 255)", 5000));
 }
 
 /* currentcolor in wf_cssprop: only while the reader sets it */

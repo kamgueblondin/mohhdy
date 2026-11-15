@@ -494,6 +494,11 @@ def rgba97(v):
 
 
 def interp_colour(a, b, t):
+    # Lot 106, converted: Oklab unless both are legacy sRGB colours
+    # (scripts/lot106_model.py)
+    import lot106_model as L106
+    if L106.OKLAB and not (L106.legacy(a) and L106.legacy(b)):
+        return L106.oklab_interp(a, b, t)
     # Lot 102, converted: missing components (scripts/lot102_model.py)
     import lot102_model as L102
     xy = L102.carried(a, b)
