@@ -160,6 +160,61 @@ static void test_find_across_sections(void) {
     TEST_ASSERT_EQUAL(-1, wf_section_find(g_red, m, &g_s, "<p>", 0, &cnt)); /* markup is not text */
 }
 
+/* Lot 107: the reader writes the body's own style on <body>: the page is
+ * still indexed and every section keeps the body tag as it is */
+static void test_body_with_style(void) {
+    static const char *bt = "<body style=\"color:#808080\">";
+    int n = 0, i, m;
+    n += sprintf(g_page + n, "<html><head><title>Corps</title></head>%s<h1>A</h1>", bt);
+    m = n;
+    n += sprintf(g_page + n, "<p>x</p></body></html>");
+    TEST_ASSERT_EQUAL(1, wf_section_index(g_page, n, &g_s));
+    TEST_ASSERT_EQUAL((int)(strstr(g_page, "<h1>") - g_page), g_s.body_start);
+    TEST_ASSERT_EQUAL((int)(strstr(g_page, "<body") - g_page), g_s.body_tag);
+    TEST_ASSERT_EQUAL(m - 10, g_s.off[0]);
+    TEST_ASSERT_EQUAL(5, g_s.title_end - g_s.title_start);
+    TEST_ASSERT_TRUE(wf_section_render(g_page, n, &g_s, 0, 0, g_sec, (int)sizeof(g_sec)) > 0);
+    TEST_ASSERT_TRUE(strstr(g_sec, "<title>Corps</title></head><body style=\"color:#808080\"><h1>A</h1><p>x</p>") != 0);
+    /* a tag whose name only starts with body is not the body */
+    n = sprintf(g_page, "<html><head><title>T</title></head><bodyx><body><p>y</p></body></html>");
+    TEST_ASSERT_EQUAL(1, wf_section_index(g_page, n, &g_s));
+    TEST_ASSERT_EQUAL((int)(strstr(g_page, "<body>") - g_page) + 6, g_s.body_start);
+    TEST_ASSERT_TRUE(wf_section_render(g_page, n, &g_s, 0, 0, g_sec, (int)sizeof(g_sec)) > 0);
+    TEST_ASSERT_TRUE(strstr(g_sec, "</head><body><p>y</p>") != 0);
+    TEST_ASSERT_TRUE(strstr(g_sec, "bodyx") == 0);
+    n = sprintf(g_page, "<html><head><title>T</title></head><bodyx><p>y</p></html>");
+    TEST_ASSERT_EQUAL(-1, wf_section_index(g_page, n, &g_s));
+    /* a body tag that is not closed */
+    n = sprintf(g_page, "<html><head><title>T</title></head><body style=\"color:red\"");
+    TEST_ASSERT_EQUAL(-1, wf_section_index(g_page, n, &g_s));
+    /* the body tag name at the very end of the source: nothing is read
+     * past it (an exact global buffer, ASan) */
+    {
+        static char e[11];
+        memcpy(e, "<html><body", 11);
+        TEST_ASSERT_EQUAL(-1, wf_section_index(e, 11, &g_s));
+    }
+    {
+        static char e2[12];
+        memcpy(e2, "<bodyx><body", 12);
+        TEST_ASSERT_EQUAL(-1, wf_section_index(e2, 12, &g_s));
+    }
+    n = sprintf(g_page, "<html><body>");
+    TEST_ASSERT_EQUAL(-1, wf_section_index(g_page, n - 1, &g_s));
+    TEST_ASSERT_EQUAL(1, wf_section_index(g_page, n, &g_s));
+    TEST_ASSERT_EQUAL(6, g_s.body_tag);
+    TEST_ASSERT_EQUAL(n, g_s.body_start);
+    /* a long page: later sections reopen the body with its style */
+    n = sprintf(g_page, "<html><head><title>L</title></head>%s", bt);
+    for (i = 0; i < 400; i++) n += sprintf(g_page + n, "<p>ligne %03d</p>", i);
+    n += sprintf(g_page + n, "</body></html>");
+    m = wf_section_index(g_page, n, &g_s);
+    TEST_ASSERT_TRUE(m > 1);
+    TEST_ASSERT_TRUE(wf_section_render(g_page, n, &g_s, m - 1, 0, g_sec, (int)sizeof(g_sec)) > 0);
+    TEST_ASSERT_TRUE(strstr(g_sec, "</title></head><body style=\"color:#808080\"><p>[section ") != 0);
+    TEST_ASSERT_TRUE(strstr(g_sec, "ligne 399") != 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_long_page_sections);
@@ -167,6 +222,7 @@ int main(void) {
     RUN_TEST(test_short_page_one_section);
     RUN_TEST(test_placeholders);
     RUN_TEST(test_one_huge_paragraph);
+    RUN_TEST(test_body_with_style);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

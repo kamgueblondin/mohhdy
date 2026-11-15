@@ -1722,6 +1722,13 @@ qemu-lot105: $(OS_IMAGE) pack-initrd disk
 qemu-lot106: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot106.py
 
+# Lot 107: relative heights and max-height on box scrollers, view()
+# insets from the root's scroll-padding, the body's own style, legacy
+# interpolation past the end (tests/scripts/test_qemu_lot107.py)
+.PHONY: qemu-lot107
+qemu-lot107: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot107.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

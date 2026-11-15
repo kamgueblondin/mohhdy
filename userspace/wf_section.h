@@ -25,6 +25,7 @@
 typedef struct {
     int n;                                   /* sections */
     int body_start, body_end;                /* body content in the source */
+    int body_tag;                            /* Lot 107: the body start tag (to body_start) */
     int title_start, title_end;              /* title text in the source */
     int off[WF_SECTION_MAX + 1];             /* section k is [off[k], off[k+1]) */
     uint8_t depth[WF_SECTION_MAX + 1];       /* open elements at off[k] */

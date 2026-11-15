@@ -136,7 +136,15 @@ def height_val(v):
 
 def sc_cascade(decls):
     """the scroller slots [ox, oy, hpx] of one element from its
-    declarations [(rank, prop, value)] (rank: a tuple, larger wins)"""
+    declarations [(rank, prop, value)] (rank: a tuple, larger wins).
+    Lot 107, converted: max-height and the heights that are not absolute
+    lengths are kept too (scripts/lot107_model.py)"""
+    import lot107_model as L107
+    return L107.sc_cascade(decls)
+
+
+def sc_cascade_lot105(decls):
+    """the Lot 105 cascade (absolute heights only)"""
     best = [None, None, None]
     val = [0, 0, 0]
     for rank, prop, v in decls:
@@ -189,7 +197,14 @@ def scroller_of(nodes, i):
 
 def passed(nodes, i, scr):
     """the style text the reader adds for node i (a box scroller it
-    passes on), or "" """
+    passes on), or "". Lot 107, converted: relative heights and
+    max-height (scripts/lot107_model.py)"""
+    import lot107_model as L107
+    return L107.passed(nodes, i, scr)
+
+
+def passed_lot105(nodes, i, scr):
+    """the Lot 105 style text (absolute heights only)"""
     if i not in scr or not nodes[i]["sc"][2]:
         return ""
     y = box_scroller(nodes, i)

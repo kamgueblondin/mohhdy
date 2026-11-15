@@ -126,6 +126,11 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       geometry record), html's view timeline inactive,
                       keyframes colours in Oklab (a color() frame) and
                       in sRGB (legacy frames)
+  /lot107/box.html    Lot 107: a box scroller 10em high at a 10 px font
+                      size and one with max-height: 5em (scroll(nearest)
+                      inside), view() with the auto insets from the root's
+                      scroll-padding, the body's own animated colour, a
+                      legacy pair past the end (cubic-bezier overshoot)
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -728,6 +733,34 @@ LOT106_PAGES = {
 }
 
 
+# Lot 107: reader page with relative heights, max-height, scroll-padding
+# insets and the body's own style (tests/scripts/test_qemu_lot107.py)
+LOT107_BOX = "".join("<p>box107 %d</p>" % i for i in range(8))
+LOT107_FILL = "".join("<p>line107 %d</p>" % i for i in range(12))
+LOT107_PAGES = {
+    "/lot107/box.html": (
+        "<!doctype html><html><head><title>Lot 107 box</title><style>"
+        "@keyframes k107 { from { color: #000000 } to { color: #ffffff } }\n"
+        "@keyframes e107 { from { color: transparent } to { color: palegoldenrod } }\n"
+        "html { scroll-padding-block: 100px 50px }\n"
+        "body { animation: k107 1000ms linear; font-size: 20px }\n"
+        "#o107 { overflow-y: auto; height: 10em; font-size: 10px }\n"
+        "#i107 { animation: k107 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "#m107 { overflow: auto; max-height: 5em }\n"
+        "#n107 { animation: k107 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "#v107 { animation: k107 1000ms linear; animation-timeline: view() }\n"
+        "#e107 { animation: e107 1000ms cubic-bezier(0.5, 1.5, 0.5, 1.5) }\n"
+        "</style></head><body><main><h1>Box 107</h1>"
+        "<div id=\"o107\"><p id=\"i107\">ikeep107</p>" + LOT107_BOX + "</div>"
+        "<div id=\"m107\"><p id=\"n107\">nkeep107</p>" + LOT107_BOX + "</div>"
+        + "".join("<p>line107 %d</p>" % i for i in range(24)) +  # one section (< 120 nodes)
+        "<p id=\"v107\">vkeep107</p>"
+        "<p id=\"e107\">ekeep107</p>"
+        + LOT107_FILL +
+        "<p>fin107</p></main></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -953,6 +986,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT106_PAGES:
             self._send(200, LOT106_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT107_PAGES:
+            self._send(200, LOT107_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

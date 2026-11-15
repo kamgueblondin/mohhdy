@@ -30,8 +30,8 @@ static void test_l98_sheet_0(void) {
     TEST_ASSERT_EQUAL(1, g_d.prop_animated + g_d.prop_transitioned > 0);
     TEST_ASSERT_EQUAL(1, g_d.prop_composed);
     prep("@property --p { syntax: '<color>'; inherits: true; initial-value: rgba(211, 170, 18, 0.1) } @keyframes k { 75% { --p: hsla(37 , 87.251% , 85.6% , 0) } } #o { animation-duration: 1s, 2s; animation-name: k, j; animation-play-state: paused, add replace; animation-delay: 0s; animation-iteration-count: 1.5; animation-fill-mode: backwards; animation-timing-function: cubic-bezier(0.8565, -1.5, 0.3, -2), cubic-bezier(0.123, -0.7, 0.2444, 1.5), steps(5, jump-none), cubic-bezier(0.52,-0.197,0.53,1.4341); --p: rgb(151, 114, 48) } div { animation: none 1000ms steps(4), k 500ms linear; animation-play-state: running, paused, running, paused; animation-timing-function: cubic-bezier(0.3,-2.96,0.7911,-2.6) }", 173);
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 121)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 121)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("rgb(151, 114, 48)", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("rgb(151, 114, 48)", nv("i"));
     TEST_ASSERT_EQUAL(1, g_d.prop_animated + g_d.prop_transitioned > 0);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     prep("@property --p { syntax: '<number>'; inherits: true; initial-value: -693.11 } #o { --p: 58.2228; transition-delay: 5513ms , 0s , 0s , -2.652s } @starting-style { #o { --p: 372.5216 } }", 0);

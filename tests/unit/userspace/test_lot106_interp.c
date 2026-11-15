@@ -46,7 +46,7 @@ static void test_l106_interp_0(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(25, 128, 128, 0.8334)", ip("currentcolor", "hwb(16 50% 50% / 50%)", 3333, 2));   /* srgb */
     TEST_ASSERT_EQUAL_STRING("rgb(37, 0, 0)", ip("oklab(0 0.2430 0.2353)", "hsl(none 100% 50%)", 2500, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(102, 52, 152)", ip("lab(none 0 0)", "rebeccapurple", 9900, 2));   /* oklab */
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("rebeccapurple", "transparent", 12500, 2));   /* srgb */
+    TEST_ASSERT_EQUAL_STRING("rgba(102, 51, 153, 0)", ip("rebeccapurple", "transparent", 12500, 2));   /* srgb */
     TEST_ASSERT_EQUAL_STRING("rgb(232, 47, 238)", ip("color-mix(in oklch, red, blue)", "lab(66.86 none none)", 7500, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(59, 107, 0)", ip("color-mix(in hwb, lch(80.57 16.19 80.18), lab(93.74 10.23 none))", "hwb(81.9 13 50%)", 12500, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(224, 162, 115)", ip("hwb(30 10% 20%)", "oklab(1 0 0)", 3333, 2));   /* oklab */
@@ -228,7 +228,7 @@ static void test_l106_interp_12(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(152, 236, 145)", ip("lime", "lab(none 0 0)", 5000, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(0, 255, 0)", ip("maroon", "lime", 12500, 2));   /* srgb */
     TEST_ASSERT_EQUAL_STRING("rgb(86, 255, 0)", ip("hwb(2.9turn 99.7% 50%)", "#80ff00", 20000, 2));   /* srgb */
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("#123", "transparent", 12500, 2));   /* srgb */
+    TEST_ASSERT_EQUAL_STRING("rgba(17, 34, 51, 0)", ip("#123", "transparent", 12500, 2));   /* srgb */
     TEST_ASSERT_EQUAL_STRING("rgba(200, 99, 19, 0.505)", ip("rgba(200, 100, 0, 0.5)", "color-mix(in oklch, red, blue)", 100, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(170, 114, 153)", ip("color(xyz 0.3 0.3 0.3)", "lime", -2500, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(255, 0, 0)", ip("hsl(none 100% 50%)", "rgb(10 20 30)", -10000, 2));   /* srgb */
@@ -278,7 +278,7 @@ static void test_l106_interp_15(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(133, 108, 170)", ip("color-mix(in lab, white 30%, navy)", "lab(50 20 -30)", 9999, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgba(125, 154, 81, 0.4367)", ip("transparent", "lch(60 40 120)", 4367, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgba(124, 188, 0, 0)", ip("color(srgb-linear 0.2 0.5 none)", "transparent", 12051, 2));   /* oklab */
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("rgb(none 128 255)", "hwb(0turn 80% 68.1% /0)", -10000, 2));   /* srgb */
+    TEST_ASSERT_EQUAL_STRING("rgb(138, 128, 255)", ip("rgb(none 128 255)", "hwb(0turn 80% 68.1% /0)", -10000, 2));   /* srgb */
 }
 
 static void test_l106_interp_16(void) {
@@ -587,7 +587,7 @@ static void test_l106_interp_36(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(0, 255, 0)", ip("lime", "color-mix(in srgb, color(a98-rgb 38.75% none 0.647), color(srgb-linear .5 29.5% none/50%))", 1, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(0, 87, 74)", ip("lab(30 -40 50 / none)", "blue", 2500, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(124, 147, 57)", ip("color-mix(in srgb, color(srgb 1.34 0.5888 0.4), darkturquoise)", "lch(60 40 120)", 12500, 2));   /* oklab */
-    TEST_ASSERT_EQUAL_STRING("rgb(152, 150, 159)", ip("hwb(-187.5deg 103.3% 100%)", "rgb(61 75 1 / 50%)", -2500, 2));   /* srgb */
+    TEST_ASSERT_EQUAL_STRING("rgb(135, 133, 142)", ip("hwb(-187.5deg 103.3% 100%)", "rgb(61 75 1 / 50%)", -2500, 2));   /* srgb */
     TEST_ASSERT_EQUAL_STRING("rgba(160, 148, 169, 0.9)", ip("color-mix(in  srgb,hsla(8.9226rad, 100%, 64%, 2),mistyrose 50%)", "hsla(300, 100%, 25%, 0.8)", 5000, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(171, 255, 212)", ip("color(srgb-linear 0.12 0.8 42.57%)", "color-mix(in  srgb,15% hsl(200grad, 100%, 50%),black 27.5%)", -10000, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgba(237, 118, 101, 0.0001)", ip("oklch(0.7 0.15 30)", "transparent", 9999, 2));   /* oklab */
@@ -710,7 +710,7 @@ static void test_l106_interp_44(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(119, 119, 119)", ip("hsl(120 50% 50%)", "color-mix(in srgb, oklch(0.5 0 30) 0%, lch(50 0 120))", 9999, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(134, 41, 20)", ip("color-mix(in srgb, red, blue)", "oklab(none 0.1 0.1)", 8659, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0)", ip("oklch(0 none 1/none)", "olive", -2500, 2));   /* oklab */
-    TEST_ASSERT_EQUAL_STRING("rgb(182, 255, 255)", ip("hwb(9.4103rad 57.132% 0%)", "hwb(3.685rad 24% 17.37% / -0.5)", -2500, 2));   /* srgb */
+    TEST_ASSERT_EQUAL_STRING("rgb(146, 255, 253)", ip("hwb(9.4103rad 57.132% 0%)", "hwb(3.685rad 24% 17.37% / -0.5)", -2500, 2));   /* srgb */
     TEST_ASSERT_EQUAL_STRING("rgba(255, 73, 79, 0.625)", ip("transparent", "color(rec2020 1 0 0 / 0.5)", 12500, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(94, 217, 0)", ip("#80ff00", "oklab(1 0 0)", -10000, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(68, 194, 165)", ip("rgba(30%, 78%, 162.6, 1.5)", "rgb(111 217 154 / 1)", -2500, 2));   /* srgb */
@@ -738,8 +738,8 @@ static void test_l106_interp_46(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(0, 132, 121, 0.6875)", ip("color-mix(in	srgb , rgb(21 16 35 / 50%) , rgb(6.2% 70% 79%))", "color-mix(in oklch, red, blue)", -2500, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(210, 0, 218)", ip("#00000080", "color-mix(in oklch, red, blue)", 12500, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(185, 177, 194)", ip("color-mix(in display-p3, lch(none none 155.5), #cae)", "oklab(1 0 0)", 5639, 2));   /* oklab */
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("red", "transparent", 12500, 2));   /* srgb */
-    TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("transparent", "palegoldenrod", 20000, 2));   /* srgb */
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 0, 0, 0)", ip("red", "transparent", 12500, 2));   /* srgb */
+    TEST_ASSERT_EQUAL_STRING("rgb(238, 232, 170)", ip("transparent", "palegoldenrod", 20000, 2));   /* srgb */
     TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("white", "lab(50 20 -30)", -2500, 2));   /* oklab */
     TEST_ASSERT_EQUAL_STRING("rgb(169, 200, 104)", ip("rgb(none 128 255)", "darkgrey", 17572, 2));   /* srgb */
     TEST_ASSERT_EQUAL_STRING("rgba(237, 60, 0, 0.75)", ip("color(srgb 1 0 0)", "rgba(200, 100, 0, 0.5)", 5000, 2));   /* oklab */
@@ -845,7 +845,7 @@ static void test_l106_interp_53(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(183, 127, 0) rgba(0, 238, 0, 0.7825) rgb(144, 111, 111)", ipl("oklab( 0.7 0 0.2404 ) color(display-p3 0 1 0) hwb(207.29 68.66% 50%)", "rebeccapurple oklch(0  0.3992  12.7797rad / 13%) hwb(-1 none 47%)", 2500, 2));
     TEST_ASSERT_EQUAL_STRING("black color(none rec2020 0.77 -2% 0)", ipl("black color(none rec2020 0.77 -2% 0)", "palegoldenrod salmon", 1, 1));
     TEST_ASSERT_EQUAL_STRING("rgb(124, 187, 9) rgb(0, 251, 41)", ipl("color(srgb-linear 0.2 0.5 none) color(display-p3 0 1 0)", "lab(none 0 0) color(display-p3 0 1 0)", 100, 2));
-    TEST_ASSERT_EQUAL_STRING("rgb(228, 0, 0) rgb(255, 184, 184)", ipl("color(srgb 1 0 0) indianred", "hwb(233.514grad 80.47% 51%) #00000080", -10000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(228, 0, 0) rgb(255, 123, 123)", ipl("color(srgb 1 0 0) indianred", "hwb(233.514grad 80.47% 51%) #00000080", -10000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(211, 106, 0) rgb(255, 200, 68)", ipl("hwb(30 10% 20%) #eaa069", "color(xyz 0.3 0.3 0.3) blue", -2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 0) rgb(255, 116, 71)", ipl("color(xyz 0.3 0.3 0.3) lab(50 20 -30)", "black oklch(0.7 0.15 30)", 12500, 2));
     TEST_ASSERT_EQUAL_STRING("color(srgb 0.9033 85% 0) hwb(2.7rad 85% 24.4%/0.5) rgb(11% 73.8 30%/none)", ipl("currentcolor lab(-7.9395 1e-1 -65%) hwb(433deg 89.1% 55.7%)", "color(srgb 0.9033 85% 0) hwb(2.7rad 85% 24.4%/0.5) rgb(11% 73.8 30%/none)", 9900, 1));
@@ -871,7 +871,7 @@ static void test_l106_interp_55(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(0, 0, 255) rgba(255, 73, 79, 0.5001)", ipl("hwb(0.928turn 50% 100%/0.5) lch( 26% 120% 100grad )", "blue color(rec2020 1 0 0 / 0.5)", 9999, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255) rgb(72, 0, 102)", ipl("rgb(186 114 180 / 1) color(xyz 0.177 1 0.8291)", "color(display-p3 0 1 0) rgb(none 128 255)", 20000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(221, 240, 106) rgb(133, 0, 0) rgb(204, 102, 0)", ipl("color(srgb  0.8733  0  0.4782/1.5) lightcoral rgb(none 128 255)", "darksalmon color(srgb  0.839  0  -1) hwb(30 10% 20%)", 20000, 2));
-    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0) rgb(255, 255, 255) rgb(120, 193, 0)", ipl("white oklab(0.7274 -0.172 -0.3321 /50%) hwb(149 78.4845% 50%/50%)", "transparent hsl(none none 100%) color(srgb-linear 0.2 0.5 none)", 20000, 2));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 255, 255, 0) rgb(255, 255, 255) rgb(120, 193, 0)", ipl("white oklab(0.7274 -0.172 -0.3321 /50%) hwb(149 78.4845% 50%/50%)", "transparent hsl(none none 100%) color(srgb-linear 0.2 0.5 none)", 20000, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(64, 0, 83) rgb(255, 111, 110)", ipl("oklab( 25.7% 0.4165 -0.3817 /120% ) hwb(none 43 none)", "color(xyz-d50 0.54 1 0.2036) lch(91% 35.7% 466.8972grad)", 100, 2));
     TEST_ASSERT_EQUAL_STRING("color(rec2020 45% 1e-1 0.3658) color(xyz-d65 0 4.62% 0/ 0)", ipl("color( srgb-linear	0.93	0.5	0.6) white", "color(rec2020 45% 1e-1 0.3658) color(xyz-d65 0 4.62% 0/ 0)", 7500, 1));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 0, 31) rgb(26, 0, 9)", ipl("color(srgb 1 0 0) color(xyz-d50 0.4 none 0)", "lch(60 40 120) oklch(0.7 0.15 30)", -2500, 2));
@@ -927,7 +927,7 @@ static void test_l106_interp_58(void) {
 }
 
 static void test_l106_interp_59(void) {
-    TEST_ASSERT_EQUAL_STRING("rgb(251, 113, 94) rgb(46, 239, 75)", ipl("oklch(0.7 0.15 30) hsl(120 50% 50%)", "hwb(101 91 79.3%/65%) hwb(-6.43rad 0% 4.6%/55%)", -2500, 2));
+    TEST_ASSERT_EQUAL_STRING("rgb(251, 113, 94) rgb(42, 215, 67)", ipl("oklch(0.7 0.15 30) hsl(120 50% 50%)", "hwb(101 91 79.3%/65%) hwb(-6.43rad 0% 4.6%/55%)", -2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255) rgb(238, 111, 93) rgb(0, 0, 0)", ipl("hwb(350 100% 0%) oklch(0.7 0.15 30) oklch(0 0.2 100)", "hsl(none 100% 50%) oklch(0.9 0.05 200 / 0.25) lightcoral", -2500, 2));
     TEST_ASSERT_EQUAL_STRING("rgba(111, 168, 130, 0.25) rgba(94, 68, 118, 0.892)", ipl("lch(64.227  29.5137  152) rgb(none 128 255)", "lch(+0.5 155% 1turn /-0.5) rgb(94 45 65 / 85.6%)", 7500, 2));
     TEST_ASSERT_EQUAL_STRING("rgb(18, 34, 51) rgba(127, 71, 240, 0.995) rgb(236, 119, 101)", ipl("#123 color(srgb-linear 0.2234 0.063 0.8717) oklch(0.7 0.15 30)", "hwb(677 41.1697% 86) oklab(0	-0.8	-0.3855 /0.5) hwb(2rad 52.3% 27%)", 100, 2));
