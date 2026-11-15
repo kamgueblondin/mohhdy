@@ -1239,7 +1239,8 @@ static int tok_px(const wf_site_t *d, const char *t, int em, int root, int *ok);
  * 1 with *v in px (*pct 0) or in % of the containing block (*pct 1, the
  * integer part), both at most WF_SITE_HMAX; a font or viewport length or
  * a math function in px against the element's font size, the root's and
- * the viewport (a negative math result is 0); 0 when it passes none */
+ * the viewport (a negative math result is 0, wf_css_math_px resolves
+ * at most 10000 px); 0 when it passes none */
 static int box_len(const wf_site_t *d, const wf_site_node_t *nd, int mx, int *v, int *pct) {
     int px = mx ? nd->mpx : nd->hpx, r, ok, k;
     const char *t = mx ? nd->mtok : nd->htok;
@@ -1255,9 +1256,8 @@ static int box_len(const wf_site_t *d, const wf_site_node_t *nd, int mx, int *v,
     if (t[0] != '~' && t[0] != '=') return 0;
     r = tok_px(d, t[0] == '~' ? t + 1 : t, d->fs[nd - d->node], d->root_fs, &ok);
     if (!ok) return 0;
-    if (r < 0) r = 0;
-    r /= 1000;
-    *v = r > WF_SITE_HMAX ? WF_SITE_HMAX : r;
+    /* at most 10000 px (WF_CSSMATH_MAX), under WF_SITE_HMAX */
+    *v = r < 0 ? 0 : r / 1000;
     return 1;
 }
 
@@ -2337,8 +2337,10 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             /* Lot 105: overflow (one or two keywords: x then y),
              * overflow-x, overflow-y and height, what makes a box
              * scroller; initial and unset give visible (auto); a height
-             * the reader does not pass on (auto, a percentage, a font or
-             * viewport unit, calc() of them) still wins the cascade */
+             * the reader does not pass on (auto, the content keywords, a
+             * unit or a math function it does not resolve) still wins
+             * the cascade (Lot 107: percentages, font and viewport units
+             * and math functions without a percentage are passed) */
             int sh = eq(prop, "overflow"), q = sh ? 0 : eq(prop, "overflow-x") ? 1 : eq(prop, "overflow-y") ? 2 :
                                                      eq(prop, "height") ? 3 : eq(prop, "max-height") ? 4 : -1;
             if (q >= 0) {

@@ -28,8 +28,12 @@ REL = ("em", "rem", "vw", "vh", "vmin", "vmax")
 TOK = 12            # WF_SITE_TOK
 
 
-class Unsure(Exception):
-    """a value the exact model cannot place against the C's rounding"""
+import lot105_model as _M5  # noqa: E402
+
+
+class Unsure(_M5.Unsure):
+    """a value the exact model cannot place against the C's rounding (a
+    lot105_model.Unsure, so the Lot 105 and 106 generators leave it out)"""
 
 
 # ------------------------------------------------------------ lengths
@@ -295,3 +299,209 @@ def passed(nodes, i, scr):
         if h is not None:
             t += ";%s:%d%s" % (name, h[0], "%" if h[1] else "px")
     return t
+
+
+# ------------------------------------------------------------ scroll-padding
+SP_LONG = {"scroll-padding-block-start": 0, "scroll-padding-block-end": 1, "scroll-padding-inline-start": 2,
+           "scroll-padding-inline-end": 3, "scroll-padding-top": 0, "scroll-padding-bottom": 1,
+           "scroll-padding-left": 2, "scroll-padding-right": 3}
+
+
+def sp_val(v):
+    """a scroll-padding side: ("auto",), ("abs", px) for an absolute length,
+    a height slot ("tok", ...) or ("kept",) (auto then), None when invalid"""
+    if v == "auto":
+        return ("auto",)
+    nu = num_unit(v)
+    if nu is not None and (nu[1] in ABS or (nu[1] == "" and F(nu[0]) == 0)):
+        px = F(nu[0]) * ABS.get(nu[1], F(1))
+        if px < 0:
+            return None
+        if px > 100000:
+            raise Unsure()
+        return ("abs", px)
+    if v in ("min-content", "max-content", "fit-content", "none") or v.startswith("fit"):
+        return None
+    return height_val(v, False)
+
+
+def split_vals(v):
+    out, w, depth = [], "", 0
+    for ch in v:
+        if ch == " " and not depth:
+            if w:
+                out.append(w)
+            w = ""
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")" and depth:
+            depth -= 1
+        w += ch
+    if w:
+        out.append(w)
+    return out
+
+
+def sp_decl(prop, v):
+    """[(side, slot)] a scroll-padding declaration sets, None (dropped)"""
+    n = {"scroll-padding": 4, "scroll-padding-block": 2, "scroll-padding-inline": 2}.get(prop)
+    if n is None and prop not in SP_LONG:
+        return None
+    if v in ("initial", "unset"):
+        vals = [("auto",)]
+    else:
+        ws = split_vals(v)
+        if not ws or len(ws) > (n or 1):
+            return None
+        vals = [sp_val(w) for w in ws]
+        if any(x is None for x in vals):
+            return None
+    if n is None:
+        return [(SP_LONG[prop], vals[0])]
+    if n == 2:
+        base = 2 if prop == "scroll-padding-inline" else 0
+        return [(base, vals[0]), (base + 1, vals[1] if len(vals) > 1 else vals[0])]
+    t = vals[0]
+    r = vals[1] if len(vals) > 1 else t
+    b = vals[2] if len(vals) > 2 else t
+    lf = vals[3] if len(vals) > 3 else r
+    return [(0, t), (1, b), (2, lf), (3, r)]
+
+
+def sp_cascade(decls):
+    """the four scroll-padding sides of an element from [(rank, prop, v)]"""
+    best, val = [None] * 4, [("auto",)] * 4
+    for rank, prop, v in decls:
+        got = sp_decl(prop, v)
+        if got is None:
+            continue
+        for side, slot in got:
+            if best[side] is None or rank >= best[side]:
+                best[side], val[side] = rank, slot
+    return val
+
+
+def sp_inset(slot, em, rem):
+    """the view timeline inset (lot104_model form) an auto inset takes from
+    a scroll-padding side"""
+    if slot[0] == "abs":
+        q = slot[1] * 10000
+        if q != math_floor(q):
+            raise Unsure()
+        return ("len", math_floor(q))
+    if slot[0] != "tok":
+        return ("auto", 0)
+    if slot[1] == "%":
+        return ("pct", math_floor(F(slot[2] or "0") * 10000))
+    px = math_px(slot[2], em, rem)
+    if px is None:
+        return ("auto", 0)
+    if px < 0:
+        return ("len", 0)
+    t = px * 1000
+    if t != math_floor(t):
+        raise Unsure()
+    return ("len", math_floor(t) * 10)
+
+
+def html_of(nodes):
+    for k, nd in enumerate(nodes):
+        if nd["parent"] < 0 and nd["tag"] == "html":
+            return k
+    return -1
+
+
+def view_clock(a, nodes, q, axis, ins, c):
+    """lot106_model.view_clock with the auto insets taken from the
+    scroll-padding of the scroller (the root element for the root)"""
+    import lot105_model as M5
+    import lot106_model as M6
+    ins = list(ins)
+    if ins[0][0] == "auto" or ins[1][0] == "auto":
+        b = M6.box_of(nodes, q, c.geom)
+        if b and not (nodes[q]["parent"] < 0 and nodes[q]["tag"] == "html"):
+            s = M5.scroller_of(nodes, q)
+            useb = axis == "block" or (axis == "y" and b["bvert"]) or (axis == "x" and not b["bvert"])
+            sn = s if s >= 0 else html_of(nodes)
+            if sn >= 0:
+                sp = nodes[sn].get("sp", [("auto",)] * 4)
+                em, rem = nodes[sn].get("fs", 16), nodes[sn].get("rem", 16)
+                for e in (0, 1):
+                    if ins[e][0] == "auto":
+                        ins[e] = sp_inset(sp[(0 if useb else 2) + e], em, rem)
+    return M6.view_clock(a, nodes, q, axis, tuple(ins), c)
+
+
+def clock(a, nodes, i, ms, c):
+    """lot106_model.clock with this view_clock"""
+    import lot104_model as M4
+    import lot105_model as M5
+    tl = a.get("timeline", "auto")
+    if tl == "auto":
+        return ("auto", ms)
+    nd = nodes[i]
+    if isinstance(tl, tuple):
+        if tl[0] == "view":
+            return view_clock(a, nodes, i, tl[1], tl[2], c)
+        _, src, axis = tl
+        if axis not in ("block", "y"):
+            return None
+        if src == "self":
+            s = M5.scroll_src(nodes, i)
+        elif src == "nearest":
+            s = -2 if nd["parent"] < 0 else M5.scroller_of(nodes, i)
+        else:
+            s = -1
+        return None if s < -1 else M5.scroll_clock(a, s, c)
+    if tl == "none":
+        return None
+    q = i
+    while q >= 0:
+        d = M4.defines(nodes, q, tl)
+        if d:
+            if d[0] == 2:
+                return view_clock(a, nodes, q, d[1], d[2], c)
+            s = M5.scroll_src(nodes, q)
+            if s < -1 or d[1] not in ("block", "y"):
+                return None
+            return M5.scroll_clock(a, s, c)
+        if M4.scoped_at(nodes, q, tl):
+            return None
+        q = nodes[q]["parent"]
+    return None
+
+
+def stack(alts, anims, kfs, under, ms, nodes, i, c):
+    import lot98_animmodel as M98b
+    animated = composed = False
+    base = under
+    for a in anims:
+        if not a["name"] or a["name"] not in kfs:
+            continue
+        r = clock(a, nodes, i, ms, c)
+        if r is None:
+            continue
+        v, cp = M98b.anim_value(alts, a, kfs[a["name"]], under, r[1], base)
+        if v is not None:
+            under, animated = v, True
+            composed = composed or cp
+    return under, animated, composed
+
+
+def counts(anims, names, nodes, i, ms, c):
+    sc = vw = bx = idle = 0
+    for a in anims:
+        if not a["name"] or a["name"] not in names:
+            continue
+        r = clock(a, nodes, i, ms, c)
+        if r is None:
+            idle += 1
+            continue
+        if r[0] in ("scroll", "box"):
+            sc += 1
+        if r[0] in ("view", "boxview"):
+            vw += 1
+        if r[0] in ("box", "boxview"):
+            bx += 1
+    return sc, vw, bx, idle
