@@ -57,6 +57,16 @@ static void test_l106_geom_body(void) {
     lay(&g_doc, "<html><body style='height:100px;overflow:auto'><div style='height:300px'></div></body></html>", 480);
     (void)we_geom_feed(&g_doc, "wg", &g_g);
     TEST_ASSERT_EQUAL(1, g_g.body.root);
+    /* a body that is not a child of the root element is not the body */
+    lay(&g_doc, "<html><div><body><div style='height:50px'></div></body></div></html>", 480);
+    memset(&g_g, 0x5a, sizeof(g_g));
+    (void)we_geom_feed(&g_doc, "wg", &g_g);
+    TEST_ASSERT_EQUAL_STRING("none", body_box());
+    /* no root element: no body */
+    lay(&g_doc, "", 480);
+    memset(&g_g, 0x5a, sizeof(g_g));
+    (void)we_geom_feed(&g_doc, "wg", &g_g);
+    TEST_ASSERT_EQUAL_STRING("none", body_box());
     /* we_geom_feed without a prefix leaves everything zero */
     memset(&g_g, 0x5a, sizeof(g_g));
     TEST_ASSERT_EQUAL(0, we_geom_feed(&g_doc, "", &g_g));

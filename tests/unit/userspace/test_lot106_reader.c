@@ -56,6 +56,11 @@ static void test_l106_interp_space(void) {
     TEST_ASSERT_EQUAL_STRING("rgb(255, 255, 255)", ip("oklab(none none none)", "white", 5000));
     TEST_ASSERT_EQUAL_STRING("rgb(211, 77, 82)", ip("lch(50 30 none)", "red", 5000));
     TEST_ASSERT_EQUAL_STRING("rgb(74, 32, 11)", ip("rgb(none 0 0)", "oklab(0.6 0.1 0.1)", 5000));
+    /* a mix in oklch near L 0 keeps its exact OKLab values (the way back
+     * from linear sRGB gives 117 in the blue channel) */
+    TEST_ASSERT_EQUAL_STRING("rgb(118, 118, 118)",
+                             ip("color-mix(in oklch, oklab(0.00161 0.00299 0.00299), oklch(0.00075 0.00094 26) 90%)",
+                                "oklab(1 0 0)", 5644));
     /* the ends give the values as written */
     TEST_ASSERT_EQUAL_STRING("lab(50 0 0)", ip("lab(50 0 0)", "red", 0));
     TEST_ASSERT_EQUAL_STRING("red", ip("lab(50 0 0)", "red", 10000));
@@ -84,6 +89,13 @@ static void test_l106_overshoot(void) {
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.25)", ip("oklab(0.4 0 0 / 0.5)", "oklab(0.8 0 0)", -5000));
     TEST_ASSERT_EQUAL_STRING("rgba(255, 255, 255, 0.0001)", ip("oklab(0.9 0 0 / 0.2)", "oklab(0.1 0 0)", -2499));
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0.0001)", ip("oklab(0.1 0 0 / 0.2)", "oklab(0.9 0 0)", -2499));
+    /* an alpha sum just below 0 far past an end: L is about -1.2e7
+     * (black) or 8.4e6 (white), kept within +-32 so it does not wrap;
+     * the alpha is clamped to 0 */
+    TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)",
+                             ip("oklab(0.7893 0.2902 -0.0485 / 0.8839)", "oklab(0.5118 -0.2537 0.2913 / 0.9835)", -88745));
+    TEST_ASSERT_EQUAL_STRING("rgba(255, 255, 255, 0)",
+                             ip("oklab(0.2502 -0.0485 0.0304 / 0.7319)", "oklab(0.0109 0.2690 -0.2628 / 0.7048)", 270074));
     /* the alpha sum 0 exactly: no colour */
     TEST_ASSERT_EQUAL_STRING("rgba(0, 0, 0, 0)", ip("oklab(0.9 0 0 / 0.2)", "oklab(0.1 0 0)", -2500));
     /* legacy pairs keep the Lot 97 sRGB path */
@@ -227,6 +239,52 @@ static void test_l106_body_subject(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#808080\"", style_of("i"));
 }
 
+static void prep_raw(const char *html, const wf_geom_t *g) {
+    snprintf(g_html, sizeof(g_html), "%s", html);
+    wf_site_set_geom(g);
+    wf_site_set_scroll(5000);
+    TEST_ASSERT_EQUAL(0, wf_site_prepare_ext(&g_d, g_html, (int)strlen(g_html), 640, 480, 0, 0));
+    wf_site_set_scroll(0);
+    wf_site_set_geom(0);
+}
+
+#define NAMED(sel) "<style>" KF sel " { view-timeline: --b } #i { animation: k 1000ms linear; animation-timeline: --b }</style>"
+
+/* which element is the body, which one is the inactive root */
+static void test_l106_body_which(void) {
+    int a;
+    /* a top-level body without html is the body: it reads the body record */
+    body_rec(1, 1);
+    prep_raw(NAMED("body") "<body><p id=i>i</p></body>", &g_g);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#bdbdbd\"", style_of("i"));
+    /* a top-level div is not the body, and its view timeline is active
+     * (only the html root is inactive): it reads its box by index */
+    prep_raw(NAMED("#a") "<div id=a><p id=i>i</p></div>", &g_g);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.geom_need);
+    a = node("a");
+    TEST_ASSERT_TRUE(a >= 0);
+    g_g.box[a] = g_g.body;
+    g_g.body.ok = 0;
+    prep_raw(NAMED("#a") "<div id=a><p id=i>i</p></div>", &g_g);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#bdbdbd\"", style_of("i"));
+    /* a body under a top-level div is not the body */
+    body_rec(1, 1);
+    prep_raw(NAMED("body") "<div><body id=x><p id=i>i</p></body></div>", &g_g);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    /* nor a body under an html that is not the root */
+    prep_raw(NAMED("body") "<div><html><body id=x><p id=i>i</p></body></html></div>", &g_g);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.geom_need);
+    /* an html that is not the root is a subject like any element */
+    prep_raw(NAMED("#y") "<div><html id=y><p id=i>i</p></html></div>", &g_g);
+    TEST_ASSERT_EQUAL_STRING("", style_of("i"));
+    TEST_ASSERT_EQUAL(1, g_d.geom_need);
+    g_g.box[node("y")] = g_g.body;
+    prep_raw(NAMED("#y") "<div><html id=y><p id=i>i</p></html></div>", &g_g);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#bdbdbd\"", style_of("i"));
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_l106_interp_space);
@@ -234,6 +292,7 @@ int main(void) {
     RUN_TEST(test_l106_add_srgb);
     RUN_TEST(test_l106_keyframes);
     RUN_TEST(test_l106_body_subject);
+    RUN_TEST(test_l106_body_which);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

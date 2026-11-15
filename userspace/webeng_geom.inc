@@ -34,13 +34,13 @@ static int geom_root_el(const we_doc_t *d) {
     return -1;
 }
 
-/* Lot 106: the body element (an element child of the root element named
- * body, the first one), or -1 */
+/* Lot 106: the body element (a child of the root element named body, the
+ * first one), or -1. A text node has an empty tag, and without a root
+ * element (h -1) only the document node has parent -1 (empty tag) */
 static int geom_body_el(const we_doc_t *d) {
     int h = geom_root_el(d), i;
-    if (h < 0) return -1;
     for (i = 0; i < (int)d->nnodes; i++)
-        if (d->nodes[i].parent == h && !d->nodes[i].is_text && w_eq(d->nodes[i].tag, "body")) return i;
+        if (d->nodes[i].parent == h && w_eq(d->nodes[i].tag, "body")) return i;
     return -1;
 }
 
