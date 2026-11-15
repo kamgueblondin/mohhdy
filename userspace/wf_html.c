@@ -90,12 +90,28 @@ int wf_html_sitecss_props(char *out, int cap) { return wf_site_props_text(&g_sit
 int wf_html_sitecss_anim(char *out, int cap) { return wf_site_anim_text(&g_site, out, cap); }
 void wf_html_set_csstime(int ms) { wf_site_set_time(ms); }
 void wf_html_set_cssscroll(int pm) { wf_site_set_scroll(pm); }
+/* Lot 104: geometry marks and the layout geometry of the reader */
+static int g_geommarks;
+void wf_html_set_geommarks(int on) { g_geommarks = on ? 1 : 0; }
+void wf_html_set_cssgeom(const wf_geom_t *g) { wf_site_set_geom(g); }
+int wf_html_sitecss_geom_need(void) { return g_site.ready ? g_site.geom_need : 0; }
 
 static void ob_style(ob_t *b, int offset) {
     /* Lot 88: five more properties can be passed on; Lot 90: six long
      * values (backgrounds, list images) of up to 127 bytes each */
     static char sty[1280];
     if (!g_sitecss) return;
+    if (g_geommarks) {
+        /* Lot 104: id="wgN" on a view timeline subject (reader node N),
+         * so the layout can hand its box back (we_geom_feed) */
+        int k = wf_site_geom_subject(&g_site, offset), p = 1000;
+        if (k >= 0 && k < WF_GEOM_MAX) {
+            ob_s(b, " id=\"wg");
+            while (p > 1 && k < p) p /= 10;
+            for (; p >= 1; p /= 10) ob_c(b, (char)('0' + (k / p) % 10));
+            ob_c(b, '"');
+        }
+    }
     if (wf_site_style_attr(&g_site, offset, sty, (int)sizeof(sty)) > 0) ob_s(b, sty);
 }
 

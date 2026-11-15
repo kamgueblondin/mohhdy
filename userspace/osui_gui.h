@@ -99,6 +99,10 @@ typedef struct {
      * value, a click on a row, or the field left / submitted while it
      * still holds the value picked): the store dates it today. May be 0. */
     int (*page_offer_touch)(const char *url, const char *name, const char *value);
+    /* Lot 104: after the first layout of a network page, its geometry
+     * (doc, the we_doc_t) back to the reader; the page source again in
+     * src (laid out once more), 0 when nothing waited for it. May be 0. */
+    int (*page_geom)(const void *doc, char *src, int src_max);
 } osui_web_page_ops_t;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops);
 /* Lot 90: remembered values accepted from the list so far (page_offer_touch

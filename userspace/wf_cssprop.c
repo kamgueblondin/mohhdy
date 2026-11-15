@@ -3257,23 +3257,30 @@ static const char *const cp_scrollers[] = {"nearest", "root", "self", 0};
 static const char *const cp_ranges[] = {"cover", "contain", "entry", "exit", "entry-crossing", "exit-crossing",
                                         "scroll", 0};
 
-/* Lot 102: an inset of view(): auto, a length, a percentage or 0 */
-static int cp_inset_tok(const char *s, int a, int b) {
+/* Lot 102: an inset of view(): auto, a length, a percentage or 0. Lot
+ * 104: its kind (WF_CSSTL_I_*) and value (1/10000 px or %) into *k, *v;
+ * a length is absolute (the leaf has no font or viewport context here),
+ * within +-100000px (CP_LIM) */
+static int cp_inset_tok(const char *s, int a, int b, unsigned char *k, int *v) {
     char item[32];
     cp_q_t q;
     cp_mp_t m;
-    if (cp_eqn(s + a, b - a, "auto")) return 1;
+    if (cp_eqn(s + a, b - a, "auto")) { *k = WF_CSSTL_I_AUTO; *v = 0; return 1; }
     if (cp_copy_item(item, (int)sizeof(item), s, a, b) < 0) return 0;
     m.s = item; m.i = 0; m.depth = 0;
     cp_mleaf(&m, &q);
     if (item[m.i] || !q.ok) return 0;
-    return q.t == WF_CSSPROP_LENGTH || q.t == WF_CSSPROP_PERCENT || (q.t == WF_CSSPROP_NUMBER && !q.v);
+    *v = (int)q.v;
+    if (q.t == WF_CSSPROP_PERCENT) { *k = WF_CSSTL_I_PCT; return 1; }
+    *k = WF_CSSTL_I_LEN;
+    return q.t == WF_CSSPROP_LENGTH || (q.t == WF_CSSPROP_NUMBER && !q.v);
 }
 
 /* Lot 102: scroll(...) or view(...) at w[0..l) into o: 1, 0 when it is
  * not valid, -1 when w is neither function */
 static int cp_anon_tl(const char *w, int l, wf_cssanim_t *o) {
-    int view, i, x, y, k, src = -1, axis = -1, inset = 0, closed = 0;
+    int view, i, x, y, k, src = -1, axis = -1, inset = 0, closed = 0, iv[2] = {0, 0};
+    unsigned char ik[2] = {WF_CSSTL_I_AUTO, WF_CSSTL_I_AUTO};
     if (l >= 8 && cp_eqn(w, 7, "scroll(")) { view = 0; i = 7; }
     else if (l >= 6 && cp_eqn(w, 5, "view(")) { view = 1; i = 5; }
     else return -1;
@@ -3292,7 +3299,7 @@ static int cp_anon_tl(const char *w, int l, wf_cssanim_t *o) {
             src = k - 1;
             continue;
         }
-        if (closed || inset >= 2 || !cp_inset_tok(w, x, y)) return 0;
+        if (closed || inset >= 2 || !cp_inset_tok(w, x, y, &ik[inset], &iv[inset])) return 0;
         inset++;
     }
     /* a stray ')' stops the tokens early */
@@ -3302,6 +3309,11 @@ static int cp_anon_tl(const char *w, int l, wf_cssanim_t *o) {
     o->tlsrc = (unsigned char)(src < 0 ? WF_CSSANIM_SC_NEAREST : src);
     o->tlaxis = (unsigned char)(axis < 0 ? WF_CSSTL_BLOCK : axis);
     o->tlname[0] = 0;
+    /* Lot 104: one inset is both */
+    for (k = 0; k < 2; k++) {
+        o->vik[k] = ik[inset == 1 ? 0 : k];
+        o->viv[k] = iv[inset == 1 ? 0 : k];
+    }
     return 1;
 }
 
@@ -3312,44 +3324,61 @@ static int cp_range_pct(const char *v, int x, int y, long long *p) {
     return pct || !*p;
 }
 
+/* Lot 104: an absolute length at [x, y) (+-100000px): 1 and *p (1/10000
+ * px); auto and percentages are other kinds */
+static int cp_range_len(const char *v, int x, int y, long long *p) {
+    unsigned char k;
+    int iv;
+    if (!cp_inset_tok(v, x, y, &k, &iv) || k != WF_CSSTL_I_LEN) return 0;
+    *p = iv;
+    return 1;
+}
+
 /* Lot 102: one animation-range edge from the tokens of v at *i (before
  * b): 1 into *kind and *p, 0 when there is none or it is not valid; a
- * range name alone is at 0% for a start, 100% for an end */
-static int cp_range_edge(const char *v, int b, int *i, int end, unsigned char *kind, int *p) {
+ * range name alone is at 0% for a start, 100% for an end. Lot 104: *len
+ * 1 when *p is a length */
+static int cp_range_edge(const char *v, int b, int *i, int end, unsigned char *kind, int *p, unsigned char *len) {
     int x, y, j, k;
     long long q;
+    *len = 0;
     if (!cp_next_tok(v, b, i, &x, &y)) return 0;
     if (cp_eqn(v + x, y - x, "normal")) { *kind = WF_CSSANIM_R_NORMAL; *p = 0; return 1; }
     if (cp_range_pct(v, x, y, &q)) { *kind = WF_CSSANIM_R_PCT; *p = (int)q; return 1; }
+    if (cp_range_len(v, x, y, &q)) { *kind = WF_CSSANIM_R_PCT; *p = (int)q; *len = 1; return 1; }
     k = cp_kw(v + x, y - x, cp_ranges);
     if (!k) return 0;
     *kind = (unsigned char)(WF_CSSANIM_R_COVER + k - 1);
     *p = end ? (int)(100 * CP_S) : 0;
     j = *i;
-    if (cp_next_tok(v, b, &j, &x, &y) && cp_range_pct(v, x, y, &q)) { *p = (int)q; *i = j; }
+    if (cp_next_tok(v, b, &j, &x, &y)) {
+        if (cp_range_pct(v, x, y, &q)) { *p = (int)q; *i = j; }
+        else if (cp_range_len(v, x, y, &q)) { *p = (int)q; *len = 1; *i = j; }
+    }
     return 1;
 }
 
 /* Lot 102: one item of animation-range-start (end 0) or -end (1) */
 static int cp_range_long(const char *v, int a, int b, int end, wf_cssanim_t *o) {
     int i = a, x, y;
-    if (!cp_range_edge(v, b, &i, end, end ? &o->re : &o->rs, end ? &o->rep : &o->rsp)) return 0;
+    if (!cp_range_edge(v, b, &i, end, end ? &o->re : &o->rs, end ? &o->rep : &o->rsp, end ? &o->rel : &o->rsl)) return 0;
     return !cp_next_tok(v, b, &i, &x, &y);
 }
 
 /* Lot 102: one item of the animation-range shorthand */
 static int cp_range_one(const char *v, int a, int b, wf_cssanim_t *o) {
     int i = a, j, x, y;
-    if (!cp_range_edge(v, b, &i, 0, &o->rs, &o->rsp)) return 0;
+    if (!cp_range_edge(v, b, &i, 0, &o->rs, &o->rsp, &o->rsl)) return 0;
     j = i;
     if (!cp_next_tok(v, b, &j, &x, &y)) {
         /* no end: the start's range name at 100%, else normal */
         int named = o->rs >= WF_CSSANIM_R_COVER;
         o->re = named ? o->rs : (unsigned char)WF_CSSANIM_R_NORMAL;
         o->rep = named ? (int)(100 * CP_S) : 0;
+        o->rel = 0;
         return 1;
     }
-    if (!cp_range_edge(v, b, &i, 1, &o->re, &o->rep)) return 0;
+    if (!cp_range_edge(v, b, &i, 1, &o->re, &o->rep, &o->rel)) return 0;
     return !cp_next_tok(v, b, &i, &x, &y);
 }
 
@@ -3378,7 +3407,7 @@ int wf_cssanim_range_text(const wf_cssanim_t *a, int n, int end, char *out, int 
             const char *nm = cp_ranges[kind - WF_CSSANIM_R_COVER];
             if (!cp_put(out, &m, cap, nm, cp_len(nm)) || !cp_put(out, &m, cap, " ", 1)) { out[0] = 0; return 0; }
         }
-        r = cp_fmt(end ? a[k].rep : a[k].rsp, "%", out + m, cap - m);
+        r = cp_fmt(end ? a[k].rep : a[k].rsp, (end ? a[k].rel : a[k].rsl) ? "px" : "%", out + m, cap - m);
         if (r < 0) { out[0] = 0; return 0; }
         m += r;
     }
@@ -3518,12 +3547,13 @@ static void cp_anim_field(int k, wf_cssanim_t *dst, const wf_cssanim_t *src) {
     case WF_CSSANIM_L_FILL: dst->fill = src->fill; break;
     case WF_CSSANIM_L_PLAY: dst->paused = src->paused; break;
     case WF_CSSANIM_L_COMPOSITION: dst->comp = src->comp; break;
-    case WF_CSSANIM_L_RANGE_START: dst->rs = src->rs; dst->rsp = src->rsp; break;     /* Lot 102 */
-    case WF_CSSANIM_L_RANGE_END: dst->re = src->re; dst->rep = src->rep; break;
+    case WF_CSSANIM_L_RANGE_START: dst->rs = src->rs; dst->rsp = src->rsp; dst->rsl = src->rsl; break;  /* Lot 102, 104 */
+    case WF_CSSANIM_L_RANGE_END: dst->re = src->re; dst->rep = src->rep; dst->rel = src->rel; break;
     default:
         dst->timeline = src->timeline;
         dst->tlsrc = src->tlsrc;
         dst->tlaxis = src->tlaxis;
+        for (j = 0; j < 2; j++) { dst->vik[j] = src->vik[j]; dst->viv[j] = src->viv[j]; }     /* Lot 104 */
         for (j = 0; j < WF_CSSPROP_NAME; j++) dst->tlname[j] = src->tlname[j];
         break;
     }
@@ -3618,10 +3648,42 @@ static int cp_tl_name(const char *w, int l, wf_csstl_t *o) {
     return 1;
 }
 
+/* Lot 104: the insets of one item (or of the view-timeline shorthand
+ * after its name, with an axis before or after them: vshort) from the
+ * tokens of v at *i before b into o: 1, 0 when they are not valid */
+static int cp_tl_insets(const char *v, int b, int *i, int vshort, wf_csstl_t *o) {
+    int x, y, k, n = 0, axis = 0, closed = 0, iv[2] = {0, 0};
+    unsigned char ik[2] = {WF_CSSTL_I_AUTO, WF_CSSTL_I_AUTO};
+    while (cp_next_tok(v, b, i, &x, &y)) {
+        k = vshort ? cp_kw(v + x, y - x, cp_tl_axes) : 0;
+        if (k && !axis) {
+            axis = 1;
+            closed = n > 0;
+            o->axis = (unsigned char)(k - 1);
+            continue;
+        }
+        if (closed || n >= 2 || !cp_inset_tok(v, x, y, &ik[n], &iv[n])) return 0;
+        n++;
+    }
+    /* an item has a token (cp_list_items), so a list of insets has n >= 1 */
+    for (k = 0; k < 2; k++) {
+        o->ik[k] = ik[n == 1 ? 0 : k];
+        o->iv[k] = iv[n == 1 ? 0 : k];
+    }
+    return 1;
+}
+
 static int cp_tl_one(int which, const char *v, int a, int b, wf_csstl_t *o) {
     int i = a, x, y, k;
     o->name[0] = 0;
     o->axis = WF_CSSTL_BLOCK;
+    o->ik[0] = o->ik[1] = WF_CSSTL_I_AUTO;
+    o->iv[0] = o->iv[1] = 0;
+    if (which == WF_CSSTL_INSETS) return cp_tl_insets(v, b, &i, 0, o);
+    if (which == WF_CSSTL_VSHORT) {
+        if (!cp_next_tok(v, b, &i, &x, &y) || !cp_tl_name(v + x, y - x, o)) return 0;
+        return cp_tl_insets(v, b, &i, 1, o);
+    }
     if (which == WF_CSSTL_SHORT) {
         if (!cp_next_tok(v, b, &i, &x, &y) || !cp_tl_name(v + x, y - x, o)) return 0;
         if (!cp_next_tok(v, b, &i, &x, &y)) return 1;
@@ -3646,7 +3708,7 @@ static int cp_tl_one(int which, const char *v, int a, int b, wf_csstl_t *o) {
 
 int wf_csstl_parse(int which, const char *v, wf_csstl_t *out, int max) {
     int ia[WF_CSSANIM_MAX], ib[WF_CSSANIM_MAX], c, k, r;
-    if (!v || !out || which < WF_CSSTL_NAMES || which > WF_CSSTL_SCOPE) return -1;
+    if (!v || !out || which < WF_CSSTL_NAMES || which > WF_CSSTL_VSHORT) return -1;
     if (max > WF_CSSANIM_MAX) max = WF_CSSANIM_MAX;
     c = cp_list_items(v, ia, ib, max);     /* max < 1: no list fits */
     for (k = 0; k < c; k++) {
@@ -3667,13 +3729,32 @@ int wf_csstl_scoped(const char *v, const char *name) {
 }
 
 int wf_csstl_coord(const char *names, const char *axes, wf_csstl_t *out, int max) {
-    static wf_csstl_t ax[WF_CSSANIM_MAX];
-    int n, a = 0, k;
+    return wf_csstl_coord_ex(names, axes, 0, out, max);
+}
+
+int wf_csstl_coord_ex(const char *names, const char *axes, const char *insets, wf_csstl_t *out, int max) {
+    static wf_csstl_t ax[WF_CSSANIM_MAX], in[WF_CSSANIM_MAX];
+    int n, a = 0, c = 0, k, j;
     n = wf_csstl_parse(WF_CSSTL_NAMES, names, out, max);     /* -1 for a null names or out */
     if (n < 1) return 0;
     if (axes) a = wf_csstl_parse(WF_CSSTL_AXES, axes, ax, WF_CSSANIM_MAX);
-    for (k = 0; k < n; k++) out[k].axis = a > 0 ? ax[k % a].axis : (unsigned char)WF_CSSTL_BLOCK;
+    if (insets) c = wf_csstl_parse(WF_CSSTL_INSETS, insets, in, WF_CSSANIM_MAX);   /* Lot 104 */
+    for (k = 0; k < n; k++) {
+        out[k].axis = a > 0 ? ax[k % a].axis : (unsigned char)WF_CSSTL_BLOCK;
+        /* the names list left them auto */
+        if (c > 0) for (j = 0; j < 2; j++) { out[k].ik[j] = in[k % c].ik[j]; out[k].iv[j] = in[k % c].iv[j]; }
+    }
     return n;
+}
+
+/* Lot 104: one inset as text into out at *m: 1, 0 when it does not fit */
+static int cp_inset_text(int k, int v, char *out, int *m, int cap) {
+    int r;
+    if (k == WF_CSSTL_I_AUTO) return cp_put(out, m, cap, "auto", 4);
+    r = cp_fmt(v, k == WF_CSSTL_I_PCT ? "%" : "px", out + *m, cap - *m);
+    if (r < 0) return 0;
+    *m += r;
+    return 1;
 }
 
 int wf_csstl_text(const wf_csstl_t *t, int n, int axes, char *out, int cap) {
@@ -3683,6 +3764,16 @@ int wf_csstl_text(const wf_csstl_t *t, int n, int axes, char *out, int cap) {
     out[0] = 0;
     if (!t) return 0;
     for (k = 0; k < n; k++) {
+        if (axes == 2) {
+            /* Lot 104: the insets, two equal ones once */
+            int two = t[k].ik[0] != t[k].ik[1] || t[k].iv[0] != t[k].iv[1];
+            if ((k && !cp_put(out, &m, cap, ", ", 2)) || !cp_inset_text(t[k].ik[0], t[k].iv[0], out, &m, cap) ||
+                (two && (!cp_put(out, &m, cap, " ", 1) || !cp_inset_text(t[k].ik[1], t[k].iv[1], out, &m, cap)))) {
+                out[0] = 0;
+                return 0;
+            }
+            continue;
+        }
         s = axes ? cp_tl_axes[t[k].axis & 3] : t[k].name[0] ? t[k].name : "none";
         if (k) { if (m + 2 >= cap) { out[0] = 0; return 0; } out[m++] = ','; out[m++] = ' '; }
         for (j = 0; s[j]; j++) { if (m + 1 >= cap) { out[0] = 0; return 0; } out[m++] = s[j]; }
@@ -3707,6 +3798,8 @@ int wf_cssanim_range_ms(const wf_cssanim_t *a, int prog, int *ms) {
     long long s, st, en, den, t, lim = 2LL * WF_CSSANIM_MS_MAX;
     cp_w_t num, q;
     if (!wf_cssanim_scroll_ms(a, prog, ms)) return 0;     /* the same checks */
+    *ms = 0;
+    if (a->rsl || a->rel) return 0;     /* Lot 104: a length needs the scroll range (wf_cssanim_scroll_px_ms) */
     st = a->rs == WF_CSSANIM_R_PCT ? a->rsp : 0;
     en = a->re == WF_CSSANIM_R_PCT ? a->rep : 100 * CP_S;
     *ms = 0;
@@ -3724,4 +3817,102 @@ int wf_cssanim_range_ms(const wf_cssanim_t *a, int prog, int *ms) {
     }
     *ms = (int)t;
     return 1;
+}
+
+/* ---- Lot 104: view progress timelines (CSS Scroll-driven Animations 1,
+ * 3.2 and 4.1) ---- */
+
+/* floor(num / den), den > 0, the result within a 64-bit word */
+static long long cp_wfloor(cp_w_t num, long long den) {
+    long long t = (long long)cp_wdiv(num, den, 2).lo;      /* toward zero */
+    if (cp_wneg_p(cp_wsub(num, cp_wmul(cp_w(t), den)))) t--;
+    return t;
+}
+
+/* inset k (0 start, 1 end) of v in 1/1000000 px: auto 0 (the reader has
+ * no scroll-padding), a length, a percentage of the view (rounded down) */
+static long long cp_view_inset(const wf_cssview_t *v, int k) {
+    if (v->ik[k] == WF_CSSTL_I_LEN) return (long long)v->iv[k] * 100;
+    if (v->ik[k] == WF_CSSTL_I_PCT) return cp_wfloor(cp_wmul(cp_w(v->view), v->iv[k]), 1000000);
+    return 0;
+}
+
+int wf_cssview_range(const wf_cssview_t *v, int range, long long *lo, long long *hi) {
+    long long s, e, vw, is, ie, a, b;
+    if (!v || !lo || !hi || range < WF_CSSANIM_R_COVER || range > WF_CSSANIM_R_SCROLL) return 0;
+    s = v->start; e = v->start + v->size; vw = v->view;
+    is = cp_view_inset(v, 0); ie = cp_view_inset(v, 1);
+    /* contain: the subject inside the view, or covering it */
+    a = e - vw + ie; b = s - is;
+    if (a > b) { long long t = a; a = b; b = t; }
+    switch (range) {
+    case WF_CSSANIM_R_COVER: *lo = s - vw + ie; *hi = e - is; break;
+    case WF_CSSANIM_R_CONTAIN: *lo = a; *hi = b; break;
+    case WF_CSSANIM_R_ENTRY: *lo = s - vw + ie; *hi = a; break;
+    case WF_CSSANIM_R_EXIT: *lo = b; *hi = e - is; break;
+    case WF_CSSANIM_R_ENTRY_CROSSING: *lo = s - vw + ie; *hi = e - vw + ie; break;
+    case WF_CSSANIM_R_EXIT_CROSSING: *lo = s - is; *hi = e - is; break;
+    default: *lo = 0; *hi = v->range; break;
+    }
+    return 1;
+}
+
+int wf_cssview_edge(const wf_cssview_t *v, int kind, int val, int len, int end, long long *out) {
+    long long lo, hi;
+    if (!v || !out) return 0;
+    if (!wf_cssview_range(v, kind >= WF_CSSANIM_R_COVER ? kind : WF_CSSANIM_R_COVER, &lo, &hi)) return 0;
+    if (kind == WF_CSSANIM_R_NORMAL) { *out = end ? hi : lo; return 1; }
+    if (len) { *out = lo + (long long)val * 100; return 1; }
+    *out = lo + cp_wfloor(cp_wmul(cp_w(hi - lo), val), 1000000);
+    return 1;
+}
+
+/* the time of a at pos within [st, en] (a: finite count and T checked) */
+static int cp_span_ms(const wf_cssanim_t *a, long long st, long long en, long long pos, int *ms) {
+    long long s, t, den, lim = 2LL * WF_CSSANIM_MS_MAX;
+    cp_w_t num, q;
+    *ms = 0;
+    if (a->iters < 0) return 0;
+    s = (long long)a->delay * CP_S + (long long)a->dur * a->iters;
+    if (s <= 0 || s > (long long)WF_CSSANIM_MS_MAX * CP_S || en <= st) return 0;
+    /* s (pos - st) / (CP_S (en - st)): s within 2^50, the positions
+     * within about 2^40, so den within 2^54 */
+    num = cp_wmul(cp_w(s), pos - st);
+    den = (en - st) * CP_S;
+    q = cp_wdiv(num, den, 2);      /* toward zero */
+    if (cp_wlt(q, cp_w(-lim))) t = -lim;
+    else if (cp_wlt(cp_w(lim), q)) t = lim;
+    else {
+        t = cp_wfloor(num, den);     /* rounded down: -2e8 - 0.5 is still -2e8 */
+        if (t < -lim) t = -lim;
+    }
+    *ms = (int)t;
+    return 1;
+}
+
+int wf_cssanim_view_ms(const wf_cssanim_t *a, const wf_cssview_t *v, int *ms) {
+    long long st, en;
+    if (!ms) return 0;
+    *ms = 0;
+    if (!a || !v) return 0;
+    if (!wf_cssview_edge(v, a->rs, a->rsp, a->rsl, 0, &st) || !wf_cssview_edge(v, a->re, a->rep, a->rel, 1, &en)) return 0;
+    return cp_span_ms(a, st, en, v->pos, ms);
+}
+
+int wf_cssanim_scroll_px_ms(const wf_cssanim_t *a, long long range, long long pos, int *ms) {
+    wf_cssview_t v;
+    wf_cssanim_t b;
+    long long st, en;
+    if (!ms) return 0;
+    *ms = 0;
+    if (!a || range <= 0) return 0;
+    /* a view timeline whose cover range is [0, range]: no view, a subject
+     * of the range's size at 0, no insets */
+    v.view = 0; v.start = 0; v.size = range; v.range = range; v.pos = pos;
+    v.ik[0] = v.ik[1] = WF_CSSTL_I_AUTO; v.iv[0] = v.iv[1] = 0;
+    b = *a;
+    if (b.rs >= WF_CSSANIM_R_COVER) { b.rs = WF_CSSANIM_R_NORMAL; b.rsl = 0; }
+    if (b.re >= WF_CSSANIM_R_COVER) { b.re = WF_CSSANIM_R_NORMAL; b.rel = 0; }
+    if (!wf_cssview_edge(&v, b.rs, b.rsp, b.rsl, 0, &st) || !wf_cssview_edge(&v, b.re, b.rep, b.rel, 1, &en)) return 0;
+    return cp_span_ms(a, st, en, pos, ms);
 }

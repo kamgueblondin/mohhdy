@@ -12,9 +12,11 @@ The root html names a scroll timeline (scroll-timeline: --page101) and
 25% the colour is #404040 and at 75% #bfbfbf whatever the reader clock
 (500ms is set to show it), and the css-anim line has "scroll 1 pos
 2500 color 1 0"; at 100% the animation is over (no colour, no colour
-part). #v101 names a view timeline, which is never active, so its
-animation stays idle. An out-of-range position is refused with the
-usage line. The Lot 100 page is checked by make qemu-lot100.
+part). #v101 names a view timeline (Lot 104: active, fed by the layout
+geometry; the page does not scroll, so its progress is that of its box at
+offset 262 in the 480 px viewport: #747474 at every position, and the
+css-anim line ends with "view 1 need 1 geom 1"). An out-of-range
+position is refused with the usage line. The Lot 100 page is checked by make qemu-lot100.
 No guest clock is involved (no -rtc option).
 """
 from __future__ import print_function
@@ -39,12 +41,13 @@ import test_qemu_lot88 as l88  # noqa: E402  (boot, stop, need, refuse, keep_log
 ROOT = g.ROOT
 SRV_LOG = os.path.join(g.LOG_DIR, "lot101-web-server.log")
 need, refuse = l88.need, l88.refuse
+VIEW = " view 1 need 1 geom 1\n"
 KEEP = ["lkeep101", "okeep101", "akeep101", "ukeep101", "skeep101", "vkeep101"]
 STATIC = ["node div #l101 display auto color #777777\n",
           "node div #o101 display auto bg #636363\n",
           "node div #a101 display auto color #818181\n",
           "node div #u101 display auto color #ff0000 bg #4000bf\n",
-          "node div #v101 display auto\n"]
+          "node div #v101 display auto color #747474\n"]
 
 
 def say(msg):
@@ -64,23 +67,23 @@ def step_reader(mon, proc, u):
     read = lw.run(mon, proc, "web-read", "fin101", 30)
     need(read, KEEP, "web-read spaces")
     need(css, STATIC + ["node div #s101 display auto color #404040\n",
-                        "css-anim keyframes 1 animated 0 transitioned 0 font 0 at 500ms scroll 1 pos 2500 color 1 0\n"],
+                        "css-anim keyframes 1 animated 0 transitioned 0 font 0 at 500ms scroll 1 pos 2500 color 2 0" + VIEW],
          "web-css at 25%")
     css = at_scroll(mon, proc, u, 75)
     need(css, STATIC + ["node div #s101 display auto color #bfbfbf\n",
-                        "css-anim keyframes 1 animated 0 transitioned 0 font 0 at 500ms scroll 1 pos 7500 color 1 0\n"],
+                        "css-anim keyframes 1 animated 0 transitioned 0 font 0 at 500ms scroll 1 pos 7500 color 2 0" + VIEW],
          "web-css at 75%")
     css = at_scroll(mon, proc, u, 100)
     need(css, STATIC + ["node div #s101 display auto\n",
-                        "css-anim keyframes 1 animated 0 transitioned 0 font 0 at 500ms scroll 1 pos 10000\n"],
+                        "css-anim keyframes 1 animated 0 transitioned 0 font 0 at 500ms scroll 1 pos 10000 color 1 0" + VIEW],
          "web-css at 100%")
-    refuse(css, [" color 1", " color 0"], "web-css at 100%")
+    refuse(css, ["node div #s101 display auto color", " color 2"], "web-css at 100%")
     lw.run(mon, proc, "web-css scroll 101", "usage: web-css scroll <0..100>", 20)
     lw.run(mon, proc, "web-css scroll 0", "web-css scroll 0%\n", 20)
     lw.run(mon, proc, "web-css time 0", "web-css time 0\n", 20)
     lw.run(mon, proc, "web-css off", "web-css off", 20)
     say("reader: lab #777777, oklch bg #636363, a98-rgb #818181, currentcolor mix bg #4000bf; "
-        "scroll timeline 25% #404040, 75% #bfbfbf, 100% over; view timeline idle; 101 refused")
+        "scroll timeline 25% #404040, 75% #bfbfbf, 100% over; view timeline #747474; 101 refused")
 
 
 def boot(hp):

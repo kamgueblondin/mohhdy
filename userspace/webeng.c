@@ -12514,6 +12514,7 @@ static void ellipsis_cut(os_fb_web_item_t *it, int keep_px) {
 }
 
 #include "webeng_scroll.inc"
+#include "webeng_geom.inc"     /* Lot 104 */
 
 static void ellipsis_items(we_doc_t *d) {
     int i, j;

@@ -108,11 +108,15 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
   /lot102/range.html  Lot 102: none components (a missing red carried
                       in color-mix()), scroll() and scroll(root) with
                       animation-range, a named timeline hidden by
-                      timeline-scope, view() left idle
+                      timeline-scope, view() (active since Lot 104)
   /lot103/gamut.html  Lot 103: out-of-sRGB colours gamut-mapped (CSS
                       Color 4), color-mix() in oklch, lch and hsl with a
                       hue method and missing components, a keyframes
                       colour from a gamut-mapped display-p3 green
+  /lot104/view.html   Lot 104: view timelines fed by the layout geometry
+                      (view(), a named view timeline with insets, entry,
+                      exit, contain and cover ranges, px offsets,
+                      view(diagonal) invalid)
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -636,6 +640,32 @@ LOT103_PAGES = {
 }
 
 
+# Lot 104: reader page with view timelines (tests/scripts/test_qemu_lot104.py)
+LOT104_FILL = "".join("<p>line104 %d</p>" % i for i in range(12))
+LOT104_PAGES = {
+    "/lot104/view.html": (
+        "<!doctype html><html><head><title>Lot 104 view</title><style>"
+        "@keyframes k104 { from { color: #000000 } to { color: #ffffff } }\n"
+        "#a104 { animation: k104 1000ms linear; animation-timeline: view() }\n"
+        "#e104 { animation: k104 1000ms linear; animation-timeline: view(); animation-range: entry 0% exit 0% }\n"
+        "#n104 { view-timeline-name: --v104; view-timeline-axis: block; view-timeline-inset: 0px 100px;"
+        " animation: k104 1000ms linear; animation-timeline: --v104; animation-range: contain }\n"
+        "#l104 { animation: k104 1000ms linear; animation-timeline: view(); animation-range: cover 0px cover 200px }\n"
+        "#d104 { animation: k104 1000ms linear; animation-timeline: view(diagonal) }\n"
+        "</style></head><body><h1>View 104</h1>"
+        "<div id=\"a104\">akeep104</div>"
+        + LOT104_FILL +
+        "<div id=\"e104\">ekeep104</div>"
+        + LOT104_FILL +
+        "<div id=\"n104\">nkeep104</div>"
+        + LOT104_FILL +
+        "<div id=\"l104\">lkeep104</div>"
+        "<div id=\"d104\">dkeep104</div>"
+        + LOT104_FILL +
+        "<p>fin104</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -852,6 +882,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT103_PAGES:
             self._send(200, LOT103_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT104_PAGES:
+            self._send(200, LOT104_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

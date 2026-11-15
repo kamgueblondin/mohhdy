@@ -198,6 +198,7 @@ static int web_viewport_w(void) {
 }
 
 static int (*g_wops_atlas_dims)(void *ctx, int slot, int *w, int *h);
+static const osui_web_page_ops_t *g_wops;
 /* Lot 74: live state of the page's form controls (webeng_finput.inc),
  * cleared on every new page; the source length for a render after a
  * click or a key */
@@ -339,6 +340,15 @@ int osui_gui_web_load(const char *file, char *status, int max) {
         }
         g_web_src[n < OSUI_WEB_SRC_MAX ? n : OSUI_WEB_SRC_MAX - 1] = 0;
         rc = osui_web_pipeline(g_web_src, n);
+        if (rc == 0 && g_wops && g_wops->page_geom) {
+            /* Lot 104: view timelines read the boxes of this layout; the
+             * page comes back with their colours and is laid out again */
+            int m = g_wops->page_geom(&g_web, g_web_src, OSUI_WEB_SRC_MAX);
+            if (m > 0) {
+                g_web_src[m < OSUI_WEB_SRC_MAX ? m : OSUI_WEB_SRC_MAX - 1] = 0;
+                rc = osui_web_pipeline(g_web_src, m);
+            }
+        }
         if (status) {
             scpy(status, max, fst);
             web_num(status, max, rc == 0 ? " render ok nodes " : " render error nodes ", (int)g_web.perf.nodes);
@@ -471,7 +481,6 @@ static int web_go_page(const char *file, int push, char *out, int out_max) {
 
 static void gui_cat_u(char *d, int max, unsigned v);
 /* Lot 71: page ops of the shell (sections, forms) */
-static const osui_web_page_ops_t *g_wops;
 void osui_gui_set_web_page_ops(const osui_web_page_ops_t *ops) {
     g_wops = ops;
     g_wops_atlas_dims = ops ? ops->atlas_dims : 0;

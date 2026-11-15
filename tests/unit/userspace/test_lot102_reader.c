@@ -252,7 +252,7 @@ static void test_l102_range_api(void) {
     TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_L_RANGE_END, "normal", a, 4));
     TEST_ASSERT_EQUAL_STRING("7 125000 0 0", edges(&a[0]));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_RANGE_START, "5", a, 4));
-    TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_RANGE_START, "10px", a, 4));
+    TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_RANGE_START, "1em", a, 4));     /* Lot 104, converted: 10px is a length edge */
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_RANGE_START, "normal 10%", a, 4));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_RANGE_START, "cover 10% 20%", a, 4));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_RANGE_END, "10% entry", a, 4));
@@ -362,7 +362,7 @@ static void test_l102_scope_api(void) {
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_SCOPE, "none, --a", t, 4));
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_SCOPE, "auto", t, 4));
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_SCOPE, "--a --b", t, 4));
-    TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_SCOPE + 1, "block", t, 4));     /* mutation witness */
+    TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_VSHORT + 1, "block", t, 4));     /* mutation witness (Lot 104, converted: SCOPE + 1 is WF_CSSTL_INSETS) */
     TEST_ASSERT_EQUAL(2, wf_csstl_scoped("all", "--t"));
     TEST_ASSERT_EQUAL(1, wf_csstl_scoped("--t, --u", "--u"));
     TEST_ASSERT_EQUAL(0, wf_csstl_scoped("--t", "--u"));
@@ -553,7 +553,7 @@ static void test_l102_range_reader(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#404040\"", style_of("i"));
     prep(KB AN "scroll(); animation-range: 25% 75%; animation-range: unset }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#404040\"", style_of("i"));
-    prep(KB AN "scroll(); animation-range: 25% 75%; animation-range: 10px }", 0, 2500);
+    prep(KB AN "scroll(); animation-range: 25% 75%; animation-range: 1em }", 0, 2500);     /* Lot 104, converted: 10px is valid */
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000\"", style_of("i"));
     prep(KB AN "scroll(); animation-range-start: 25%; animation-range-start: initial }", 0, 2500);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#404040\"", style_of("i"));
@@ -574,7 +574,7 @@ static void test_l102_range_reader(void) {
     TEST_ASSERT_TRUE(g_d.node[node("i")].al[WF_CSSANIM_LONGS + WF_CSSTRANS_L_DURATION] > 0);
     TEST_ASSERT_EQUAL_STRING("1s", g_d.lpool[g_d.node[node("i")].al[WF_CSSANIM_LONGS + WF_CSSTRANS_L_DURATION] - 1]);
     TEST_ASSERT_EQUAL(17, WF_SITE_ALONGS);
-    TEST_ASSERT_EQUAL(5, WF_SITE_TLS);
+    TEST_ASSERT_EQUAL(6, WF_SITE_TLS);     /* Lot 104, converted: view-timeline-inset is slot 5 */
     TEST_ASSERT_EQUAL(WF_SITE_K_LONG0 + WF_SITE_ALONGS, WF_SITE_K_TL0);
 }
 
