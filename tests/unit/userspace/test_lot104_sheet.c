@@ -59,7 +59,9 @@ static void prep3(const char *css, int ms, int pm, int with_geom) {
     for (k = 0; k < g_np; k++) {
         int i = index_of(g_pend[k].id);
         TEST_ASSERT_TRUE(i >= 0 && i < WF_GEOM_MAX);
-        g_g.box[i] = g_pend[k].b;
+        /* Lot 106 (converted): the body's box is its own record */
+        if (!strcmp(g_pend[k].id, "body")) g_g.body = g_pend[k].b;
+        else g_g.box[i] = g_pend[k].b;
         g_g.n++;
     }
     wf_site_set_geom(with_geom ? &g_g : 0);
@@ -385,13 +387,13 @@ static void test_l104_sheet_6(void) {
     geo("o", 0, 0, 1529, 100, 55, 181, 640, 480, 0, 2477);
     geo("i", 1, 0, 2655, 0, 44, 563, 640, 480, 0, 2477);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: color-mix(in srgb, color(srgb-linear none none none), rgb(none none none)) } 25% { color: color(xyz-d50 none 0.45 0.765 /0.77); background-color: hwb(89 32.36% 0% / 1.5) } 60% { color: color-mix(in  srgb,25% hwb(141 8.1% 0%),color-mix(in srgb , 25% lime , hwb(599.431 50% 54%/-0.5))); background-color: hwb(2.62rad 91 76%) } } @keyframes j { to { color: hwb(none none none/50%) } } html { scroll-timeline: --u x; view-timeline-name: --t; view-timeline-axis: inline } #o { view-timeline-name: --u; view-timeline-axis: inline; view-timeline-inset: auto 150%, 12pt 199.33px 33.3333% } #i { color: dodgerblue; animation: j 1000ms; animation-timeline: --t, auto }", 0, 2500, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d31c328d\"", style_of("i"));
-    TEST_ASSERT_EQUAL(1, g_d.col_animated);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1e90ff\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(1000);
     geo("html", 0, 1, 464, 0, 43, 70, 480, 640, 1000, 0);
     geo("body", 1, 1, 1400, 100, 12, 561, 480, 640, 1000, 0);
@@ -660,13 +662,13 @@ static void test_l104_sheet_12(void) {
     geo("o", 1, 1, 189, 20, 24, 251, 480, 640, 400, 0);
     geo("i", 1, 0, 578, 505, 18, 165, 640, 480, 0, 400);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: red } 60% { color: #2dfa74; background-color: rgb(133 none 92%) } 75% { color: color(xyz-d65 none none none/95%); background-color: mintcream } } @keyframes j { 60% { color: navy; background-color: #36b } 75% { background-color: color(xyz-d65 none 0.1 0.971 /0.5) } to { color: oklch(1 0 none) } } html { view-timeline-name: --v; view-timeline-name: --t; view-timeline-axis: x } #i { background-color: goldenrod; animation: j 2s linear, j 1000ms linear; animation-timeline: --t } #q { view-timeline: --v }", 0, 6800, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00006d;background-color:#4b6fa5\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#daa520\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(400);
     geo("body", 1, 1, 297, 20, 0, 113, 480, 640, 400, 0);
     geo("o", 0, 1, 276, 639, 55, 172, 480, 640, 400, 0);
@@ -700,10 +702,10 @@ static void test_l104_sheet_12(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
 }
 
 static void test_l104_sheet_13(void) {
@@ -729,8 +731,8 @@ static void test_l104_sheet_13(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(1000);
     geo("html", 1, 1, 137, 691, 49, 47, 480, 640, 1000, 0);
     geo("o", 1, 1, 170, 0, 36, 488, 480, 640, 1000, 0);
@@ -739,10 +741,10 @@ static void test_l104_sheet_13(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(0);
     geo("html", 1, 1, 655, 0, 14, 94, 480, 640, 0, 0);
     geo("body", 1, 1, 263, 100, 45, 601, 480, 640, 0, 0);
@@ -1124,10 +1126,10 @@ static void test_l104_sheet_21(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(400);
     geo("html", 1, 1, 202, 0, 15, 161, 480, 640, 400, 0);
     geo("body", 1, 1, -22, 20, 3, 219, 480, 640, 400, 0);
@@ -1603,7 +1605,7 @@ static void test_l104_sheet_31(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
     TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(400);
     geo("html", 0, 1, 326, 20, 20, 318, 480, 640, 400, 0);
@@ -1623,10 +1625,10 @@ static void test_l104_sheet_31(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
 }
 
 static void test_l104_sheet_32(void) {
@@ -1959,7 +1961,7 @@ static void test_l104_sheet_38(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
     TEST_ASSERT_EQUAL(0, g_d.geom_used);
 }
 
@@ -1971,10 +1973,10 @@ static void test_l104_sheet_39(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#4b4b4b\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_clear();
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: color-mix(in srgb, 94% rgba(79% none 120), lch(2.1 none 37.6deg)) } 25% { background-color: lch(none 0% 203.7deg) } 60% { color: hwb(300 50% 100%); background-color: teal } } html { view-timeline-name: --t; view-timeline-axis: inline; view-timeline-inset: 100%,75.3px block; view-timeline: unset } #i { animation: k 500ms 500ms both; animation-timeline: --t, view(10% 20%) }", 0, 0, 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
@@ -3200,7 +3202,7 @@ static void test_l104_sheet_64(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
     TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(400);
     geo("o", 1, 1, 452, 0, 59, 541, 480, 640, 400, 0);

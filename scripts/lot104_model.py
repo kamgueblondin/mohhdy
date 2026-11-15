@@ -312,7 +312,12 @@ def scroll_clock(a, c):
     return None if t is None else ("scroll", t)
 
 
-def view_clock(a, q, axis, ins, c):
+def view_clock(a, q, axis, ins, c, nodes=None):
+    # Lot 106, converted: the root element has no ancestor scroll
+    # container, its view timeline is inactive and asks for no geometry
+    # (CSS Scroll-driven Animations 1, 3.1)
+    if nodes is not None and nodes[q]["parent"] < 0 and nodes[q]["tag"] == "html":
+        return None
     c.need.add(q)
     g = c.geom
     b = g["box"].get(q) if g else None
@@ -337,7 +342,7 @@ def clock(a, nodes, i, ms, c):
     nd = nodes[i]
     if isinstance(tl, tuple):
         if tl[0] == "view":
-            return view_clock(a, i, tl[1], tl[2], c)
+            return view_clock(a, i, tl[1], tl[2], c, nodes)
         _, src, axis = tl
         root = nd["parent"] < 0 and nd["tag"] == "html"
         if (src == "self" and not root) or (src == "nearest" and nd["parent"] < 0) or axis not in ("block", "y"):
@@ -351,7 +356,7 @@ def clock(a, nodes, i, ms, c):
         if d:
             n = nodes[q]
             if d[0] == 2:
-                return view_clock(a, q, d[1], d[2], c)
+                return view_clock(a, q, d[1], d[2], c, nodes)
             if n["parent"] >= 0 or n["tag"] != "html" or d[1] not in ("block", "y"):
                 return None
             return scroll_clock(a, c)
