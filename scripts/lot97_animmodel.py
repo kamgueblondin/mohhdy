@@ -506,13 +506,19 @@ def interp_colour(a, b, t):
         return None
     x, y = xy
     (ca, aa), (cb, ab) = x, y
-    an = min(max(aa * S + (ab - aa) * t, 0), S * S)
+    # Lot 107, converted: past the ends the channels are divided by the
+    # alpha as it is, clamped afterwards (CSS Color 4 12.3,
+    # scripts/lot107_model.py)
+    import lot107_model as L107
+    an = aa * S + (ab - aa) * t
+    if not L107.ORDER123:
+        an = min(max(an, 0), S * S)
     out = []
     for k in range(3):
         pa, pb = ca[k] * aa, cb[k] * ab
         pn = pa * S + (pb - pa) * t
         out.append(min(max(rhalf(F(pn, an * S)), 0), 255) if an else 0)
-    alpha = rhalf(F(an, S))
+    alpha = min(max(rhalf(F(an, S)), 0), S)
     if alpha == S:
         return "rgb(%d, %d, %d)" % tuple(out)
     return "rgba(%d, %d, %d, %s)" % (out[0], out[1], out[2], P.fmt(alpha, ""))

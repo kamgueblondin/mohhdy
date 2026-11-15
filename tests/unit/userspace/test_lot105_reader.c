@@ -209,6 +209,12 @@ static void test_l105_passed(void) {
     TEST_ASSERT_EQUAL(1, g_d.node[4].scr);
     TEST_ASSERT_EQUAL(0, g_d.node[5].scr);
     TEST_ASSERT_EQUAL_STRING("", style_of(3));
+    /* Lot 107 conversion (review point): a percentage height is passed
+       on now; Lot 105 refused it ("") */
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:50%\"", style_of(4));
+    /* a height with no length the reader passes (fit-content): not passed */
+    prep(KF "#b { overflow: auto; height: fit-content; animation: k 1s; animation-timeline: scroll(self) }");
+    TEST_ASSERT_EQUAL(1, g_d.node[4].scr);
     TEST_ASSERT_EQUAL_STRING("", style_of(4));
     /* a box scroller no timeline reads is not passed on */
     prep(KF "#o { overflow: auto; height: 120px } #i { animation: k 1s; animation-timeline: scroll(root) }");

@@ -2703,14 +2703,17 @@ static int cp_interp_color(const char *a, const char *b, int t, int add, char *o
          * values as they convert: CSS Color 4 4.4, a missing component is
          * 0 outside interpolation) */
         if (!add) cp_carry(&x, &y);
-        /* alpha * 10^8: Aa 10^4 + (Ab - Aa) t, or (Aa + Ab) 10^4 */
-        an = cp_clampll(add ? (x.a + y.a) * CP_S : x.a * CP_S + (y.a - x.a) * t, 0, CP_S * CP_S);
+        /* alpha * 10^8: Aa 10^4 + (Ab - Aa) t, or (Aa + Ab) 10^4 clamped
+         * to 1. Lot 107: an interpolation past its ends divides by the
+         * alpha as it is and clamps it afterwards (CSS Color 4 12.3, as
+         * the Oklab path since Lot 106) */
+        an = add ? cp_clampll((x.a + y.a) * CP_S, 0, CP_S * CP_S) : x.a * CP_S + (y.a - x.a) * t;
         for (k = 0; k < 3; k++) {
             long long pa = x.c[k] * x.a, pb = y.c[k] * y.a;
             long long pn = add ? (pa + pb) * CP_S : pa * CP_S + (pb - pa) * t;
             ch[k] = an ? cp_clampll(cp_div(pn, an * CP_S, 0), 0, 255) : 0;
         }
-        alpha = (int)cp_div(an, CP_S, 0);
+        alpha = (int)cp_clampll(cp_div(an, CP_S, 0), 0, CP_S);
     }
     if (!cp_put(out, &len, cap, alpha == CP_S ? "rgb(" : "rgba(", alpha == CP_S ? 4 : 5)) return -2;
     for (k = 0; k < 3; k++) {

@@ -237,10 +237,15 @@ enum {
      * 102: timeline-scope; Lot 104: view-timeline-inset (slot 5) */
     WF_SITE_K_TL0 = 46,       /* Lot 102: 46 (the animation-range longhands take 39 and 40) */
     /* Lot 105: overflow-x, overflow-y and height (slot = kind -
-     * WF_SITE_K_SC0): what makes an element a box scroller */
-    WF_SITE_K_SC0 = 52
+     * WF_SITE_K_SC0): what makes an element a box scroller; Lot 107:
+     * max-height (slot 3) */
+    WF_SITE_K_SC0 = 52,
+    /* Lot 107: scroll-padding by logical side (slot = kind -
+     * WF_SITE_K_SP0: block-start, block-end, inline-start, inline-end) */
+    WF_SITE_K_SP0 = 56
 };
-#define WF_SITE_SCS 3               /* Lot 105: the scroller slots (overflow-x, overflow-y, height) */
+#define WF_SITE_SCS 4               /* Lot 105: the scroller slots (overflow-x, overflow-y, height; Lot 107: max-height) */
+#define WF_SITE_SPS 4               /* Lot 107: the scroll-padding sides */
 /* Lot 105: overflow keywords (0: not set, visible) */
 enum {
     WF_SITE_OV_VISIBLE = 1,
@@ -361,6 +366,17 @@ typedef struct {
     int hpx;
     int scrank[WF_SITE_SCS];
     uint8_t scr;
+    /* Lot 107: max-height in px + 1 like hpx (0: none or not absolute);
+     * the height and max-height values that are not absolute lengths, as
+     * a token resolved when the style is written (box_len): "%N" a
+     * percentage of the containing block, "~L" a length with a font or
+     * viewport unit, "=N" a math function (pool entry N - 1), "" none */
+    int mpx;
+    char htok[WF_SITE_TOK], mtok[WF_SITE_TOK];
+    /* Lot 107: scroll-padding per logical side (WF_SITE_K_SP0): a token
+     * as above ("%N", "~L", "=N"; "" auto) and the ranks */
+    char sptok[WF_SITE_SPS][WF_SITE_TOK];
+    int sprank[WF_SITE_SPS];
 } wf_site_node_t;
 
 typedef struct {
@@ -610,6 +626,10 @@ void wf_site_set_geom(const wf_geom_t *g);
  * view timeline subject; Lot 105: or a box scroller a timeline reads),
  * else -1 */
 int wf_site_geom_subject(const wf_site_t *d, int offset);
+/* Lot 107: the start offset of the body element of the last prepare (a
+ * body at the top or a child of the root html element), -1 when there is
+ * none: the reader view writes its style attribute on its <body> */
+int wf_site_body_start(const wf_site_t *d);
 /* Lot 105: the root position of the scroll and view timelines is the
  * root scroll offset of the geometry (sc_y, the GUI scroll position the
  * layout had) when on is 1, the wf_site_set_scroll setting when 0 (the

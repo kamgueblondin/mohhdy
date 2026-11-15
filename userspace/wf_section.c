@@ -12,6 +12,20 @@ static int s_find(const char* s, int n, int from, const char* p) {
     return -1;
 }
 
+/* Lot 107: the body start tag (bare or with attributes: the reader writes
+ * the body's own style): its offset, *end just past its '>'; -1 if none */
+static int s_body(const char* src, int n, int* end) {
+    int b, e;
+    for (b = s_find(src, n - 1, 0, "<body"); b >= 0; b = s_find(src, n - 1, b + 5, "<body")) {
+        if (src[b + 5] != '>' && src[b + 5] != ' ') continue;
+        e = s_find(src, n, b, ">");
+        if (e < 0) return -1;
+        *end = e + 1;
+        return b;
+    }
+    return -1;
+}
+
 static int s_eq(const char* a, const char* b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
 
 /* tag at src[i] == '<': name (lowercase), closing flag, end ('>' + 1) */
@@ -75,15 +89,16 @@ int wf_section_index(const char* src, int n, wf_sections_t* s) {
     int i, nodes = 0, start, b, t;
     for (i = 0; i < (int)sizeof(*s); i++) ((char*)s)[i] = 0;
     st.d = 0;
-    b = s_find(src, n, 0, "<body>");
+    b = s_body(src, n, &t);
     if (b < 0) return -1;
+    s->body_tag = b;
+    s->body_start = t;
     t = s_find(src, b, 0, "<title>");
     if (t >= 0) {
         s->title_start = t + 7;
         s->title_end = s_find(src, b, t, "</title>");
         if (s->title_end < 0) s->title_end = s->title_start;
     }
-    s->body_start = b + 6;
     s->body_end = s_find(src, n, s->body_start, "</body>");
     if (s->body_end < 0) s->body_end = n;
     start = s->body_start;
@@ -258,7 +273,9 @@ int wf_section_render(const char* src, int n, const wf_sections_t* s, int k, con
     b.o = out; b.cap = cap - 260; b.n = 0; b.full = 0;   /* room kept for the closing part */
     sb_s(&b, "<html><head><title>");
     for (i = s->title_start; i < s->title_end; i++) sb_c(&b, src[i]);
-    sb_s(&b, "</title></head><body>");
+    sb_s(&b, "</title></head>");
+    /* Lot 107: the body tag as the page has it (its style too) */
+    for (i = s->body_tag; i < s->body_start; i++) sb_c(&b, src[i]);
     if (s->n > 1 && k > 0) {
         sb_s(&b, "<p>[section "); sb_n(&b, k + 1); sb_c(&b, '/'); sb_n(&b, s->n);
         sb_s(&b, " - fleche haut en haut de page: section precedente]</p>");

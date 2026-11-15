@@ -232,7 +232,7 @@ static void test_l105_overflow_2(void) {
     TEST_ASSERT_EQUAL_STRING("0 0 0 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("0 4 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:20px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } }  #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -580,7 +580,7 @@ static void test_l105_overflow_6(void) {
     TEST_ASSERT_EQUAL_STRING("5 5 0 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("4 4 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:160px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { height: 3rem; overflow: SCROLL } #b { overflow-y: clip; overflow-x: Auto; height: calc(10px + 5px) } #i { height: 12.5px; overflow: auto revert-layer } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -681,7 +681,7 @@ static void test_l105_overflow_7(void) {
     TEST_ASSERT_EQUAL_STRING("4 4 1 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("5 4 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:96px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow: visible scroll; height: 1cm } html { overflow-x: visible !important; height: 1cm; height: 20vh } #b { overflow: auto } div { overflow-y: Auto; height: overlay; height: 100px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -721,7 +721,7 @@ static void test_l105_overflow_7(void) {
     TEST_ASSERT_EQUAL(3, wf_site_scroller_of(&g_d, 5));
     TEST_ASSERT_EQUAL(-1, wf_site_scroller_of(&g_d, 7));
     TEST_ASSERT_EQUAL_STRING("2 1 0 1", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:15px\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("1 1 0 0", sc_of(4));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
 }
@@ -754,7 +754,7 @@ static void test_l105_overflow_8(void) {
     TEST_ASSERT_EQUAL_STRING("4 0 0 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("0 4 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:160px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow: scroll; overflow-y: auto auto auto; height: 1cm; overflow-x: overlay } div { overflow: Auto SCROLL } #b { height: 214px !important; overflow: auto auto auto } html { overflow: hidden! } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -810,7 +810,7 @@ static void test_l105_overflow_8(void) {
     TEST_ASSERT_EQUAL_STRING("0 0 0 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("5 0 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:48px\"", style_of("b"));
 }
 
 static void test_l105_overflow_9(void) {
@@ -839,7 +839,7 @@ static void test_l105_overflow_9(void) {
     TEST_ASSERT_EQUAL(3, wf_site_scroller_of(&g_d, 5));
     TEST_ASSERT_EQUAL(-1, wf_site_scroller_of(&g_d, 7));
     TEST_ASSERT_EQUAL_STRING("4 4 0 1", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:20px\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("1 1 101 0", sc_of(4));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow-x: clip !important; height: auto } #b { height: 200px; overflow-y: SCROLL; overflow-x: scroll } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
@@ -956,7 +956,7 @@ static void test_l105_overflow_10(void) {
     TEST_ASSERT_EQUAL_STRING("1 1 0 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("4 0 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:15px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow: scroll  !important; height: 68px !important; overflow: visible } #b { overflow-x: SCROLL; height: 385px; overflow-y: hidden } body { height: overlay !important; height: 3q; overflow-x: overlay; overflow-y: visible } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -984,7 +984,7 @@ static void test_l105_overflow_10(void) {
     TEST_ASSERT_EQUAL_STRING("4 2 49 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("5 1 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:48px\"", style_of("b"));
 }
 
 static void test_l105_overflow_11(void) {
@@ -1189,7 +1189,7 @@ static void test_l105_overflow_13(void) {
     TEST_ASSERT_EQUAL_STRING("1 1 132 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("5 5 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:100%\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { height: 332px; overflow: overlay !important } html { overflow: scroll overlay; height: --x } #q { height: 12pt; overflow-y: inherit } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -1652,7 +1652,7 @@ static void test_l105_overflow_18(void) {
     TEST_ASSERT_EQUAL_STRING("3 0 201 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("4 4 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:50%\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { overflow-y: SCROLL; height: 10px!; overflow: Auto } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -1711,7 +1711,7 @@ static void test_l105_overflow_19(void) {
     TEST_ASSERT_EQUAL_STRING("4 4 101 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("5 4 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:20px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow: overlay Auto !important; height: 370px !important } #b { overflow: SCROLL; height: 200px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -1784,7 +1784,7 @@ static void test_l105_overflow_20(void) {
     TEST_ASSERT_EQUAL_STRING("0 4 421 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("5 5 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:50%\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { overflow-y: overlay; overflow-x: auto; height: inherit } #o { overflow: Auto; height: unset !important } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -1826,7 +1826,7 @@ static void test_l105_overflow_20(void) {
     TEST_ASSERT_EQUAL_STRING("5 5 0 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("4 4 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:20px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow-x: SCROLL; overflow-y: Auto; height: unset } body { overflow: 347px; overflow: overlay } #b { height: max(10px, 20px); overflow-y: Auto } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -1840,7 +1840,7 @@ static void test_l105_overflow_20(void) {
     TEST_ASSERT_EQUAL_STRING("5 4 0 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("0 4 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:20px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } body { height: 567px; overflow: hidden visible } #b { overflow: scroll; height: 294px } #o { height: fit-content(10px); overflow-y: scroll; overflow-x: auto } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -1911,7 +1911,7 @@ static void test_l105_overflow_21(void) {
     TEST_ASSERT_EQUAL(3, wf_site_scroller_of(&g_d, 5));
     TEST_ASSERT_EQUAL(-1, wf_site_scroller_of(&g_d, 7));
     TEST_ASSERT_EQUAL_STRING("4 4 0 1", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:15px\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("1 1 591 0", sc_of(4));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } div { overflow: visible; height: auto; overflow-y: 6pc } #o { overflow: Auto; height: 2.54cm } #b { overflow: Auto SCROLL; height: 0.5in } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
@@ -2045,7 +2045,7 @@ static void test_l105_overflow_23(void) {
     TEST_ASSERT_EQUAL_STRING("4 5 0 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("5 5 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:20px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { height: Auto; overflow: visible; height: 528px } #i { height: 122px; overflow: SCROLL } #o { overflow-x: auto auto auto; height: fit-content; height: 592px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
@@ -2115,7 +2115,7 @@ static void test_l105_overflow_23(void) {
     TEST_ASSERT_EQUAL_STRING("0 0 0 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("4 0 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:15px\"", style_of("b"));
 }
 
 static void test_l105_overflow_24(void) {
@@ -2275,7 +2275,7 @@ static void test_l105_overflow_25(void) {
     TEST_ASSERT_EQUAL_STRING("1 1 101 0", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("4 1 0 1", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:96px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { overflow-x: overlay } #o { overflow: auto; height: 25.4mm } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));

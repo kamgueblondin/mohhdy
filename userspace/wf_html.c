@@ -779,7 +779,16 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
         if (st->title[k] == '&') ob_s(&b, "&amp;");
         else { char one[2]; one[0] = st->title[k]; one[1] = 0; ob_s(&b, one); }
     }
-    ob_s(&b, "</title></head><body>");
+    ob_s(&b, "</title></head><body");
+    {
+        /* Lot 107: the body's own style (an animated colour too), no mark:
+         * the layout gives the body box in its own record; none without
+         * site CSS (the site is not ready) */
+        static char bsty[1280];
+        int bo = wf_site_body_start(&g_site);
+        if (bo >= 0 && wf_site_style_attr(&g_site, bo, bsty, (int)sizeof(bsty)) > 0) ob_s(&b, bsty);
+    }
+    ob_c(&b, '>');
     (void)in_title;
     /* Lot 85: keep a header search form that the content root would skip. */
     if (i > 0 && g_forms) {
