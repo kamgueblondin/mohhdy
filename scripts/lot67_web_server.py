@@ -122,6 +122,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       timeline, view() inside the box, a hidden box),
                       scroll(root) at the GUI scroll position, a
                       field whose value survives the restyle
+  /lot106/body.html   Lot 106: a named view timeline of the body (its own
+                      geometry record), html's view timeline inactive,
+                      keyframes colours in Oklab (a color() frame) and
+                      in sRGB (legacy frames)
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -699,6 +703,31 @@ LOT105_PAGES = {
 }
 
 
+# Lot 106: reader page with the body as a view timeline subject
+# (tests/scripts/test_qemu_lot106.py)
+LOT106_FILL = "".join("<p>line106 %d</p>" % i for i in range(30))
+LOT106_PAGES = {
+    "/lot106/body.html": (
+        "<!doctype html><html><head><title>Lot 106 body</title><style>"
+        "@keyframes k106 { from { color: #000000 } to { color: #ffffff } }\n"
+        "@keyframes c106 { from { color: color(srgb 1 0 0) } to { color: blue } }\n"
+        "@keyframes s106 { from { color: red } to { color: blue } }\n"
+        "html { view-timeline: --h106 }\n"
+        "body { view-timeline: --b106 }\n"
+        "#b106 { animation: k106 1000ms linear; animation-timeline: --b106 }\n"
+        "#h106 { animation: k106 1000ms linear; animation-timeline: --h106 }\n"
+        "#o106 { animation: c106 1000ms linear }\n"
+        "#s106 { animation: s106 1000ms linear }\n"
+        "</style></head><body><h1>Body 106</h1>"
+        "<div id=\"b106\">bkeep106</div>"
+        "<div id=\"h106\">hkeep106</div>"
+        "<div id=\"o106\">okeep106</div>"
+        "<div id=\"s106\">skeep106</div>"
+        + LOT106_FILL +
+        "<p>fin106</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -921,6 +950,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT105_PAGES:
             self._send(200, LOT105_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT106_PAGES:
+            self._send(200, LOT106_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
