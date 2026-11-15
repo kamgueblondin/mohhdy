@@ -1277,6 +1277,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 102: one boot of make qemu-lot102 (about 40 s locally)
+  lot102-reader-ranges:
+    name: QEMU none components, scroll() and animation-range, timeline-scope (Lot 102)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 102 boot
+        run: make qemu-lot102
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot102-reader-ranges-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 101: one boot of make qemu-lot101 (about 40 s locally)
   lot101-reader-spaces:
     name: QEMU lab, oklch and color() painted, currentcolor, named scroll timeline (Lot 101)
