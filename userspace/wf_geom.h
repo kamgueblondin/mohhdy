@@ -16,7 +16,14 @@
  * element is itself a box scroller (sv: overflow auto or scroll along y),
  * its own scrollport height, scroll offset and scroll range along y (a
  * box scroller scrolls along y only); the root scroll offset (sc_y, the
- * GUI scroll position the layout had). */
+ * GUI scroll position the layout had).
+ *
+ * Lot 106: the body element's box (body, filled as a box above from the
+ * layout's body element: its nearest scroller is the root, as html and
+ * body are never box scrollers), so the body can be a view timeline
+ * subject; the reader view writes no mark on html or body. The root
+ * element (html) has no box here: it has no ancestor scroll container,
+ * so its view timeline is inactive (CSS Scroll-driven Animations 1). */
 #ifndef WF_GEOM_H
 #define WF_GEOM_H
 
@@ -42,6 +49,7 @@ typedef struct {
     int rg_x, rg_y;              /* the root scroll range, >= 0 */
     int sc_y;                    /* Lot 105: the root scroll offset along y (the GUI scroll position) */
     wf_geom_box_t box[WF_GEOM_MAX];
+    wf_geom_box_t body;          /* Lot 106: the body element (ok 0 when there is none or it has no box) */
 } wf_geom_t;
 
 #endif

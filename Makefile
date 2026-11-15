@@ -1715,6 +1715,13 @@ qemu-lot104: $(OS_IMAGE) pack-initrd disk
 qemu-lot105: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot105.py
 
+# Lot 106: the body as a view timeline subject (its own geometry
+# record), html's view timeline inactive, keyframes colours in Oklab
+# unless both are legacy (tests/scripts/test_qemu_lot106.py)
+.PHONY: qemu-lot106
+qemu-lot106: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot106.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

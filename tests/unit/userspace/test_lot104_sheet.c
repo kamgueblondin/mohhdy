@@ -59,7 +59,9 @@ static void prep3(const char *css, int ms, int pm, int with_geom) {
     for (k = 0; k < g_np; k++) {
         int i = index_of(g_pend[k].id);
         TEST_ASSERT_TRUE(i >= 0 && i < WF_GEOM_MAX);
-        g_g.box[i] = g_pend[k].b;
+        /* Lot 106 (converted): the body's box is its own record */
+        if (!strcmp(g_pend[k].id, "body")) g_g.body = g_pend[k].b;
+        else g_g.box[i] = g_pend[k].b;
         g_g.n++;
     }
     wf_site_set_geom(with_geom ? &g_g : 0);
@@ -265,7 +267,7 @@ static void test_l104_sheet_4(void) {
     geo("o", 1, 0, 290, 100, 39, 466, 640, 480, 0, 0);
     geo("i", 1, 1, -74, 642, 0, 193, 480, 640, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: color(srgb 0.41 0.213 none) } 50% { background-color: color-mix(in srgb, lab(2.5e-2 none none/1.5) 0%, hwb(437.4deg 100% 100% /-0.5)) } to { color: hsl(none 63% 0% /1.5); background-color: rgb(113.6 265 155 / 1) } } @keyframes j { from { background-color: white } 50% { color: #1d4; background-color: currentcolor } 75% { color: color-mix(in	srgb , rgb(50%, 258, 232.6) 50% , transparent 100%); background-color: hwb(6 100% 50) } } html { view-timeline: --u; view-timeline-inset: 100000px auto, 10% 141.3741% auto } body { view-timeline: --t 7.3097%; view-timeline-inset: 0.5px auto 4q } #i { background-color: hwb(171 91 112%); animation: k 1s forwards; animation-timeline: view(25%), scroll(root); animation-range-start: 1pc; animation-range-end: scroll 2.5cm }", 500, 5000, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#71f59b\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#76f493\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_view);
@@ -385,13 +387,13 @@ static void test_l104_sheet_6(void) {
     geo("o", 0, 0, 1529, 100, 55, 181, 640, 480, 0, 2477);
     geo("i", 1, 0, 2655, 0, 44, 563, 640, 480, 0, 2477);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { background-color: color-mix(in srgb, color(srgb-linear none none none), rgb(none none none)) } 25% { color: color(xyz-d50 none 0.45 0.765 /0.77); background-color: hwb(89 32.36% 0% / 1.5) } 60% { color: color-mix(in  srgb,25% hwb(141 8.1% 0%),color-mix(in srgb , 25% lime , hwb(599.431 50% 54%/-0.5))); background-color: hwb(2.62rad 91 76%) } } @keyframes j { to { color: hwb(none none none/50%) } } html { scroll-timeline: --u x; view-timeline-name: --t; view-timeline-axis: inline } #o { view-timeline-name: --u; view-timeline-axis: inline; view-timeline-inset: auto 150%, 12pt 199.33px 33.3333% } #i { color: dodgerblue; animation: j 1000ms; animation-timeline: --t, auto }", 0, 2500, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#d31c328d\"", style_of("i"));
-    TEST_ASSERT_EQUAL(1, g_d.col_animated);
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#1e90ff\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(1000);
     geo("html", 0, 1, 464, 0, 43, 70, 480, 640, 1000, 0);
     geo("body", 1, 1, 1400, 100, 12, 561, 480, 640, 1000, 0);
@@ -513,7 +515,7 @@ static void test_l104_sheet_9(void) {
     geo("o", 1, 1, 1358, 561, 1, 575, 480, 640, 1000, 0);
     geo("i", 1, 1, 444, 0, 47, 292, 480, 640, 1000, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: color(srgb-linear none none none) } 60% { background-color: lime } 75% { background-color: rgba(none 50% 12% 82) } } html { scroll-timeline-name: --v, --u; view-timeline: --t x 150% } #i { view-timeline: --u inline; animation: k 2s 500ms; animation-timeline: --u; animation-range-start: 25% }", 0, 10000, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#00ff00\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#009d00\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_view);
@@ -660,13 +662,13 @@ static void test_l104_sheet_12(void) {
     geo("o", 1, 1, 189, 20, 24, 251, 480, 640, 400, 0);
     geo("i", 1, 0, 578, 505, 18, 165, 640, 480, 0, 400);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: red } 60% { color: #2dfa74; background-color: rgb(133 none 92%) } 75% { color: color(xyz-d65 none none none/95%); background-color: mintcream } } @keyframes j { 60% { color: navy; background-color: #36b } 75% { background-color: color(xyz-d65 none 0.1 0.971 /0.5) } to { color: oklch(1 0 none) } } html { view-timeline-name: --v; view-timeline-name: --t; view-timeline-axis: x } #i { background-color: goldenrod; animation: j 2s linear, j 1000ms linear; animation-timeline: --t } #q { view-timeline: --v }", 0, 6800, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00006d;background-color:#4b6fa5\"", style_of("i"));
-    TEST_ASSERT_EQUAL(2, g_d.col_animated);
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#daa520\"", style_of("i"));
+    TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(400);
     geo("body", 1, 1, 297, 20, 0, 113, 480, 640, 400, 0);
     geo("o", 0, 1, 276, 639, 55, 172, 480, 640, 400, 0);
@@ -700,10 +702,10 @@ static void test_l104_sheet_12(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
 }
 
 static void test_l104_sheet_13(void) {
@@ -729,8 +731,8 @@ static void test_l104_sheet_13(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(1000);
     geo("html", 1, 1, 137, 691, 49, 47, 480, 640, 1000, 0);
     geo("o", 1, 1, 170, 0, 36, 488, 480, 640, 1000, 0);
@@ -739,16 +741,16 @@ static void test_l104_sheet_13(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(0);
     geo("html", 1, 1, 655, 0, 14, 94, 480, 640, 0, 0);
     geo("body", 1, 1, 263, 100, 45, 601, 480, 640, 0, 0);
     geo("i", 1, 1, 240, 463, 6, 84, 480, 640, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: rgba(none 153.5 none/none); background-color: hsla(-0.3turn, 94.8809%, 8%, 100%) } 50% { color: color(rec2020 0.1 none 0.2218) } 75% { background-color: white } } @keyframes j { 60% { background-color: color(srgb-linear 106.28% none 0.594) } 75% { color: red; background-color: hsl(31 23.3% none) } } html { scroll-timeline-name: --t; scroll-timeline: auto } #i { color: yellowgreen; background-color: red; animation: k 1s linear; animation-timeline: scroll(root); animation-range: entry 10% entry-crossing 150% }", 0, 3414, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#339a4c;background-color:#362f4f\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#366540;background-color:#362f4f\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);
@@ -1124,17 +1126,17 @@ static void test_l104_sheet_21(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(400);
     geo("html", 1, 1, 202, 0, 15, 161, 480, 640, 400, 0);
     geo("body", 1, 1, -22, 20, 3, 219, 480, 640, 400, 0);
     geo("o", 1, 0, 889, 100, 21, 487, 640, 480, 0, 400);
     geo("i", 1, 1, 766, 100, 0, 449, 480, 640, 400, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color-mix(in srgb, hsl(-60deg 50% none / -0.5) 65%, hsla(180 none none) 61.5%); background-color: hsla(441.5494deg 4% 1.5% /none) } } html { scroll-timeline: --v, --t block; scroll-timeline-name: inherit } body { view-timeline-name: --t, --u; timeline-scope: --t } #i { color: rgb(185 130 19 / 0.575); background-color: hsla(-693.98, 65.3%, 50%, 100%); animation: k 2s; animation-timeline: view(inline) } #q { view-timeline-name: --v, --t; view-timeline-inset: , }", 0, 2500, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#32230581;background-color:#351f0d\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#190e0081;background-color:#351f0d\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_view);
@@ -1357,7 +1359,7 @@ static void test_l104_sheet_26(void) {
     geo("o", 1, 1, 434, 71, 36, 309, 480, 640, 0, 0);
     geo("i", 1, 1, 292, 0, 0, 481, 480, 640, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: color-mix(in  srgb , 50% hwb(63 0% 14) , #ae9) } 50% { color: rgb(233 46 163 / -0.5); background-color: navy } } html { view-timeline-name: --u; view-timeline-inset: 100000px 12.34567px, 10% } body { view-timeline: --v x 4q; view-timeline-inset: 100% } #o { view-timeline: --t y 100000px, --u; view-timeline-inset: ; view-timeline-inset: auto } #i { background-color: dimgray; animation: k 1000ms linear forwards; animation-timeline: view() }", 500, 7500, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000038;background-color:#52646a\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#00000038;background-color:#397584\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_view);
@@ -1490,7 +1492,7 @@ static void test_l104_sheet_29(void) {
     geo("o", 1, 1, 1689, 476, 53, 156, 480, 640, 1595, 0);
     geo("i", 1, 1, 411, 648, 50, 91, 480, 640, 1595, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: currentcolor; background-color: color(display-p3 none none none / none) } 60% { color: color(xyz 0.2 -1 none); background-color: hsla(68 68% 30% / 0.9999) } 75% { color: rebeccapurple; background-color: hwb(none none none / none) } } html { scroll-timeline: --v, --u; view-timeline-name: --u, --v } body { timeline-scope: --t } #i { background-color: rgb(40 25 36 / -0.5); animation: k 500ms both; animation-timeline: view(); animation-range: 0% normal } #q { view-timeline: --u 150% }", 500, 0, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#738118\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#000100\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_view);
@@ -1589,7 +1591,7 @@ static void test_l104_sheet_31(void) {
     geo("body", 1, 0, 598, 20, 12, 255, 640, 480, 0, 1473);
     geo("o", 1, 1, 2143, 202, 28, 89, 480, 640, 1473, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { background-color: color-mix(in srgb, color(xyz-d50 0.5 0 1.823 / 1.5) 52.77%, color-mix(in srgb, #cee1c5, oklab(0.45 -0.1957 -0.3353))) } 60% { color: hwb(250.3214 91% 39%/95%) } } @keyframes j { from { color: color-mix(in srgb, #a8c, 70.5% hwb(none, 10%, 10%)); background-color: currentcolor } 50% { color: hwb(none none none); background-color: hsl(-669.4342 56% 91.1 / 50%) } } html { scroll-timeline: --t; view-timeline-name: --u; view-timeline-name: --v; view-timeline-inset: 2.5cm } #i { background-color: slategrey; animation: j 1000ms linear, k 1000ms linear; animation-timeline: none, --t } #q { view-timeline-name: --v, --t; view-timeline-inset: 128.2%,100% 10% }", 500, 7500, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6d6d6df7;background-color:#7865ac\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#6d6d6df7;background-color:#7869ad\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);
@@ -1603,7 +1605,7 @@ static void test_l104_sheet_31(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
     TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(400);
     geo("html", 0, 1, 326, 20, 20, 318, 480, 640, 400, 0);
@@ -1623,10 +1625,10 @@ static void test_l104_sheet_31(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(2, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
 }
 
 static void test_l104_sheet_32(void) {
@@ -1959,7 +1961,7 @@ static void test_l104_sheet_38(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
     TEST_ASSERT_EQUAL(0, g_d.geom_used);
 }
 
@@ -1971,10 +1973,10 @@ static void test_l104_sheet_39(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#4b4b4b\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
-    TEST_ASSERT_EQUAL(1, g_d.anim_view);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
-    TEST_ASSERT_EQUAL(1, g_d.geom_used);
+    TEST_ASSERT_EQUAL(0, g_d.anim_view);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_clear();
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { color: color-mix(in srgb, 94% rgba(79% none 120), lch(2.1 none 37.6deg)) } 25% { background-color: lch(none 0% 203.7deg) } 60% { color: hwb(300 50% 100%); background-color: teal } } html { view-timeline-name: --t; view-timeline-axis: inline; view-timeline-inset: 100%,75.3px block; view-timeline: unset } #i { animation: k 500ms 500ms both; animation-timeline: --t, view(10% 20%) }", 0, 0, 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
@@ -2000,7 +2002,7 @@ static void test_l104_sheet_39(void) {
     geo("o", 1, 1, 115, 0, 23, 547, 480, 640, 1000, 0);
     geo("i", 1, 1, 1068, 20, 13, 521, 480, 640, 1000, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 0% { background-color: rgb(119 198 15 / 12%) } 25% { color: color(xyz-d65 none 0.13 29.2%); background-color: hsla(-3.6915rad, 50%, 12.47%, 1) } 60% { background-color: currentcolor } } body { view-timeline-name: --v; view-timeline-inset: auto } #i { animation: k 1000ms; animation-timeline: view(); animation-range: entry-crossing 100% exit-crossing 10% }", 500, 8895, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#001615;background-color:#001615fc\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000505;background-color:#000505fc\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_view);
@@ -2155,7 +2157,7 @@ static void test_l104_sheet_43(void) {
     geo("o", 1, 1, 2253, 20, 33, 284, 480, 640, 1973, 0);
     geo("i", 1, 1, 700, 20, 3, 328, 480, 640, 1973, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: color-mix(in srgb, color-mix(in srgb, hwb(-255.385deg 32 none/none), hsla(-177.99grad 82.4% 1.7% / 2)), #762fba) } 60% { color: rgba(none none none); background-color: hsl(279 2.57% 20 / 1) } to { color: hwb(357 50% 100%) } } #o { view-timeline-name: --t; view-timeline-inset: 100%, 0%, -205.35px 52%, 100% } #i { background-color: teal; animation: k 1000ms linear; animation-timeline: view(10px); animation-range: scroll -5% } #q { view-timeline-name: --v, --u; view-timeline-axis: block; view-timeline-inset: -177.951px 33.3333%, 100000px auto, 0.5px 260.12px, 100% }", 0, 0, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#11797e\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#000000;background-color:#2a797e\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_view);
@@ -2241,7 +2243,7 @@ static void test_l104_sheet_44(void) {
     geo("o", 1, 0, 957, 300, 10, 307, 640, 480, 0, 400);
     geo("i", 1, 0, 492, 20, 16, 262, 640, 480, 0, 400);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(display-p3 none -0.0563 0.6207); background-color: #1aa8b9fc } 60% { background-color: rgb(-15 114.15 191.47) } 75% { background-color: hwb(589.6grad 3.06% 32) } } #i { color: rgb(83 64 13 / 1.5); animation: k 1s forwards; animation-timeline: view(y); animation-range-start: 2.5cm; animation-range-end: normal } #q { view-timeline: --t, --v x; view-timeline-inset: auto, 1pc; view-timeline: unset }", 500, 5000, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#533e13;background-color:#08ad942e\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#504019;background-color:#08ad942e\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_view);
@@ -2324,7 +2326,7 @@ static void test_l104_sheet_46(void) {
     geo("html", 1, 0, 775, 678, 7, 432, 640, 480, 0, 0);
     geo("i", 1, 1, 305, 0, 9, 364, 480, 640, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: #da800be0 } 50% { color: oklch(0 none none) } } @keyframes j { 60% { color: hwb(none none none) } } html { scroll-timeline-name: --u, --t; scroll-timeline: initial } #o { view-timeline: --t, --v -5% } #i { color: cadetblue; background-color: black; animation: k 1000ms linear, k 2s linear; animation-timeline: view(25%), view(); animation-range: normal 25% }", 0, 5000, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4f8385;background-color:#190e01fb\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#497b7c;background-color:#190e01fb\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(2, g_d.anim_view);
@@ -2751,7 +2753,7 @@ static void test_l104_sheet_55(void) {
     geo_root(400);
     geo("i", 1, 1, 53, 685, 40, 605, 480, 640, 400, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { background-color: color(srgb-linear 0.1 none none /1) } 75% { color: red } } @keyframes j { 33.33% { color: hwb(6.28rad 43 100%/50%) } to { background-color: lab(none -23% -63.9/0.24) } } html { scroll-timeline: --v, --t x; view-timeline-name: --v; view-timeline-axis: y; view-timeline-inset: 133.25% auto -27.814px,150%,1pc } body { view-timeline: --u y } #i { color: antiquewhite; background-color: rgb(160 178 67 / 0.72); animation: k 1000ms; animation-timeline: view(inline) }", 0, 7500, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff1513;background-color:#79b243d9\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#ff1513;background-color:#7f561bd9\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_view);
@@ -3200,7 +3202,7 @@ static void test_l104_sheet_64(void) {
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
-    TEST_ASSERT_EQUAL(1, g_d.geom_need);
+    TEST_ASSERT_EQUAL(0, g_d.geom_need);
     TEST_ASSERT_EQUAL(0, g_d.geom_used);
     geo_root(400);
     geo("o", 1, 1, 452, 0, 59, 541, 480, 640, 400, 0);
@@ -3449,7 +3451,7 @@ static void test_l104_sheet_69(void) {
     geo("body", 0, 1, 144, 499, 45, 65, 480, 640, 1000, 0);
     geo("i", 1, 1, 1142, 629, 45, 351, 480, 640, 1000, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 25% { color: lch(none 107% none / none); background-color: hwb(none none none/120%) } 60% { color: hwb(102 63% 50% /34%); background-color: rgba(none none 4.2 / none) } } #i { color: blue; animation: k 1s linear forwards, k 1s linear; animation-timeline: view(block auto 50px), --v; animation-range: 10px }", 0, 7500, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#0300e6;background-color:#ff00001b\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4a00ee;background-color:#ff00001b\"", style_of("i"));
     TEST_ASSERT_EQUAL(2, g_d.col_animated);
     TEST_ASSERT_EQUAL(0, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(1, g_d.anim_view);
@@ -3915,7 +3917,7 @@ static void test_l104_sheet_78(void) {
     geo("o", 1, 1, 352, 20, 18, 270, 480, 640, 400, 0);
     geo("i", 1, 1, 614, 0, 37, 69, 480, 640, 400, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { color: color(display-p3 none none 0.523) } 60% { color: hwb(7.686grad 93.002% 78.6%) } } html { view-timeline-name: --v, --t } #i { color: hsla(316 0% 22% / 2); animation: j 1s linear -500ms, k 1s linear 250ms; animation-timeline: scroll(root) }", 0, 2500, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#383847\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#2c3649\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.col_animated);
     TEST_ASSERT_EQUAL(1, g_d.anim_scroll);
     TEST_ASSERT_EQUAL(0, g_d.anim_view);

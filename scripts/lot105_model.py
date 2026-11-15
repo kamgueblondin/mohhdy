@@ -234,6 +234,10 @@ def scroll_clock(a, src, c):
 
 
 def view_clock(a, nodes, q, axis, ins, c):
+    # Lot 106, converted: the root element's view timeline is inactive
+    # (no ancestor scroll container) and asks for no geometry
+    if nodes[q]["parent"] < 0 and nodes[q]["tag"] == "html":
+        return None
     s = scroller_of(nodes, q)
     c.need.add(q)
     if s >= 0:

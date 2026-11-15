@@ -14,7 +14,9 @@
  * Lot 105: an element that is a box scroller itself also gives its own
  * scrollport height, scroll offset and range (scroll_view_h,
  * box_scroll_y, scroll_apply's limit); we_geom_feed says which marked
- * box scroller is the nearest one and the root scroll offset. */
+ * box scroller is the nearest one and the root scroll offset.
+ * Lot 106: we_geom_feed also gives the box of the body element (the
+ * first element child of the root element named body), unmarked. */
 
 /* 1 when node i or an ancestor is display:none (no box) */
 static int geom_hidden(const we_doc_t *d, int i) {
@@ -29,6 +31,16 @@ static int geom_root_el(const we_doc_t *d) {
     int i;
     for (i = 0; i < (int)d->nnodes; i++)
         if (d->nodes[i].parent == d->root && !d->nodes[i].is_text) return i;
+    return -1;
+}
+
+/* Lot 106: the body element (a child of the root element named body, the
+ * first one), or -1. A text node has an empty tag, and without a root
+ * element (h -1) only the document node has parent -1 (empty tag) */
+static int geom_body_el(const we_doc_t *d) {
+    int h = geom_root_el(d), i;
+    for (i = 0; i < (int)d->nnodes; i++)
+        if (d->nodes[i].parent == h && w_eq(d->nodes[i].tag, "body")) return i;
     return -1;
 }
 
@@ -143,6 +155,8 @@ int we_geom_feed(const we_doc_t *d, const char *prefix, wf_geom_t *g) {
     (void)geom_phys(d, d->root, r, &wm);
     g->vw = r[4]; g->vh = r[5]; g->rg_x = r[8]; g->rg_y = r[9];
     g->sc_y = r[7];      /* Lot 105 */
+    i = geom_body_el(d);     /* Lot 106 */
+    if (i >= 0) (void)we_geom(d, i, &g->body);
     for (i = 0; i < (int)d->nnodes; i++) {
         int m = geom_mark(d->nodes[i].id, prefix), s;     /* a text node has no id */
         if (m < 0 || g->box[m].ok) continue;

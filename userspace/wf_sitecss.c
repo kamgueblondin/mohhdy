@@ -4317,16 +4317,35 @@ static int scroll_clock(wf_site_t *d, int src, const wf_cssanim_t *a, int *ms) {
  * the nearest scroller is the reader's (wf_site_scroller_of): a box
  * scroller runs when the layout puts q in that marked box (sm), at its
  * scroll offsets (5); with the GUI position the root's are the layout's */
+/* Lot 106: node q is the body element (named body, at the top or a child
+ * of the root html element) */
+static int site_body(const wf_site_t *d, int q) {
+    int p = d->node[q].parent;
+    return eq(d->node[q].tag, "body") && (p < 0 || (d->node[p].parent < 0 && eq(d->node[p].tag, "html")));
+}
+
+/* Lot 106: the geometry box of node q (the body's own record for the
+ * body element), 0 without geometry */
+static const wf_geom_box_t *geom_box(const wf_site_t *d, int q) {
+    if (!g_geom) return 0;
+    return site_body(d, q) ? &g_geom->body : &g_geom->box[q];
+}
+
 static int view_clock(wf_site_t *d, int q, int axis, const unsigned char *ik, const int *iv, const wf_cssanim_t *a,
                       int *ms) {
     const wf_geom_box_t *b;
     wf_cssview_t v;
-    int useb, vert, s = wf_site_scroller_of(d, q);
+    int useb, vert, s;
+    /* Lot 106: the root element has no ancestor scroll container, its
+     * view timeline is inactive (CSS Scroll-driven Animations 1, 3.1):
+     * no geometry is asked for */
+    if (d->node[q].parent < 0 && eq(d->node[q].tag, "html")) return 0;
+    s = wf_site_scroller_of(d, q);
     d->node[q].geo = 1;
     if (s >= 0) d->node[s].scr = 1;
     if (s >= 0 || d->scroll_gui) d->geom_live = 1;
-    if (!g_geom || !g_geom->box[q].ok) return 0;
-    b = &g_geom->box[q];
+    b = geom_box(d, q);
+    if (!b || !b->ok) return 0;
     if (s < 0 ? !b->root : b->root || b->sm != s + 1) return 0;
     /* the block axis, or the inline one; which one is vertical */
     useb = axis == WF_CSSTL_BLOCK || (axis == WF_CSSTL_Y && b->bvert) || (axis == WF_CSSTL_X && !b->bvert);
@@ -4823,7 +4842,7 @@ int wf_site_apply(wf_site_t *d) {
     for (i = 0; i < d->nnodes; i++) {
         if (!d->node[i].geo && !d->node[i].scr) continue;     /* Lot 105: box scrollers too */
         d->geom_need++;
-        if (g_geom && g_geom->box[i].ok) d->geom_used++;
+        if (g_geom && geom_box(d, i)->ok) d->geom_used++;     /* Lot 106: the body's own record */
     }
     d->ready = 1;
     return 0;

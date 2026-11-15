@@ -10,9 +10,10 @@ color-mix(in hsl longer hue, red, blue) the hue 120, #00ff00 (shorter:
 #ff00ff); color-mix(in lch, lch(50 40 none), lch(70 60 240)) carries the
 hue 240: bg #009fda; color-mix(in hsl, hsl(none 50% 50%), hsl(120 100%
 50%)) carries the hue 120: #20df20. color-mix(in srgb longer hue, ...) is
-invalid, #b103 has no colour. #a103 runs a keyframes colour from the
-mapped display-p3 green (#00fb29) to black: #007e14 at 500 ms (from the
-clipped #00ff00 it would be #008000), no colour at 2000 ms. The Lot 102
+invalid, #b103 has no colour. #a103 runs a keyframes colour from
+display-p3 green to black: Lot 106 (converted, was #007e14 in sRGB from
+the mapped #00fb29): color() is not a legacy form, so the interpolation
+is in Oklab (CSS Color 4 12.1), #006300 at 500 ms; no colour at 2000 ms. The Lot 102
 page is checked by make qemu-lot102.
 No guest clock is involved (no -rtc option).
 """
@@ -63,11 +64,11 @@ def step_reader(mon, proc, u):
     css = at_time(mon, proc, u, 500)
     read = lw.run(mon, proc, "web-read", "fin103", 30)
     need(read, KEEP, "web-read gamut")
-    need(css, STATIC + ["node div #a103 display auto color #007e14\n",
+    need(css, STATIC + ["node div #a103 display auto color #006300\n",
                         "css-anim keyframes 1 animated 0 transitioned 0 font 0 at 500ms color 1 0\n"],
          "web-css at 500 ms")
     refuse(css, ["node div #g103 display auto color #ff0000", "node div #m103 display auto color #800080",
-                 "node div #b103 display auto color"], "web-css at 500 ms")
+                 "node div #b103 display auto color", "node div #a103 display auto color #007e14"], "web-css at 500 ms")
     css = at_time(mon, proc, u, 2000)
     need(css, STATIC + ["node div #a103 display auto\n",
                         "css-anim keyframes 1 animated 0 transitioned 0 font 0 at 2000ms\n"], "web-css at 2000 ms")
@@ -75,7 +76,7 @@ def step_reader(mon, proc, u):
     lw.run(mon, proc, "web-css time 0", "web-css time 0\n", 20)
     lw.run(mon, proc, "web-css off", "web-css off", 20)
     say("reader: p3 red #ff0b0c, oklch bg #ff5843, oklch mix #b700be, hsl longer #00ff00, lch none hue bg #009fda, "
-        "hsl none hue #20df20, srgb longer invalid; keyframes from mapped p3 green #007e14 then over")
+        "hsl none hue #20df20, srgb longer invalid; keyframes from p3 green in Oklab #006300 then over")
 
 
 def boot(hp):

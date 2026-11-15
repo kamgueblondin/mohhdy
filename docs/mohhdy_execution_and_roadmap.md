@@ -7,6 +7,17 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 106 (15 November 2026, base 419085f, PR 263 merged)
+
+US-031 partial, phase3_complete=false. Keyframes and transitions of
+colours are interpolated in Oklab unless both colours are legacy sRGB
+forms (CSS Color 4 12.1), with the alpha sum past the ends as CSS Color
+4 12.3 gives it. The layout hands the body box back in its own record,
+so body is a view timeline subject; html's view timeline is inactive. A
+QEMU page (`make qemu-lot106`, CI job lot106-reader-body) checks it.
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097
+stay simule. See docs/lot106_plan.md.
+
 ### Lot 105 (15 November 2026, base da0e8fc, PR 262 merged)
 
 US-031 partial, phase3_complete=false. The reader reads overflow and

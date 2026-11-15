@@ -166,8 +166,10 @@ static void test_l103_missing(void) {
     TEST_ASSERT_EQUAL(1, mt("color-mix(in oklch longer hue, red, blue)"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in display-p3, red, hsl(none 50% 50%))"));
     TEST_ASSERT_EQUAL(0, mt("color-mix(in srgb longer hue, red, blue)"));
-    /* magenta (the hsl mix) halfway to lime */
-    TEST_ASSERT_EQUAL_STRING("rgb(128, 128, 128)", ip("color-mix(in hsl, red, blue)", "lime", 5000));
+    /* magenta (the hsl mix) halfway to lime; Lot 106 (converted, was
+     * rgb(128, 128, 128) in sRGB): a color-mix() is interpolated in Oklab */
+    TEST_ASSERT_EQUAL_STRING("rgb(198, 180, 180)", ip("color-mix(in hsl, red, blue)", "lime", 5000));
+    TEST_ASSERT_EQUAL_STRING("rgb(128, 128, 128)", ip("magenta", "lime", 5000));
     /* the missing hue of hsl() is red (0) in sRGB, halfway to blue */
     TEST_ASSERT_EQUAL_STRING("rgb(128, 0, 128)", ip("hsl(none 100% 50%)", "blue", 5000));
 }
