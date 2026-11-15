@@ -235,8 +235,21 @@ enum {
      * view-timeline-name and view-timeline-axis (slot = kind -
      * WF_SITE_K_TL0), lists in lpool like the animation longhands; Lot
      * 102: timeline-scope; Lot 104: view-timeline-inset (slot 5) */
-    WF_SITE_K_TL0 = 46        /* Lot 102: 46 (the animation-range longhands take 39 and 40) */
+    WF_SITE_K_TL0 = 46,       /* Lot 102: 46 (the animation-range longhands take 39 and 40) */
+    /* Lot 105: overflow-x, overflow-y and height (slot = kind -
+     * WF_SITE_K_SC0): what makes an element a box scroller */
+    WF_SITE_K_SC0 = 52
 };
+#define WF_SITE_SCS 3               /* Lot 105: the scroller slots (overflow-x, overflow-y, height) */
+/* Lot 105: overflow keywords (0: not set, visible) */
+enum {
+    WF_SITE_OV_VISIBLE = 1,
+    WF_SITE_OV_HIDDEN = 2,
+    WF_SITE_OV_CLIP = 3,
+    WF_SITE_OV_AUTO = 4,          /* overlay too (a legacy alias) */
+    WF_SITE_OV_SCROLL = 5
+};
+#define WF_SITE_HMAX 30000          /* Lot 105: the largest height passed on, px */
 #define WF_SITE_ALONGS 17           /* Lot 98: WF_CSSANIM_LONGS + WF_CSSTRANS_LONGS slots per element (Lot 102: 17) */
 #define WF_SITE_TLS 6               /* Lot 101: the timeline longhand slots (Lot 102: timeline-scope, slot 4; Lot 104: view-timeline-inset, 5) */
 /* Lot 89: a compound that names the scoping root */
@@ -339,6 +352,15 @@ typedef struct {
     uint8_t tl[WF_SITE_TLS];
     int tlrank[WF_SITE_TLS];
     uint8_t geo;                  /* Lot 104: 1 when an animation needs its layout geometry (a view timeline subject) */
+    /* Lot 105: overflow-x and overflow-y (WF_SITE_OV_*, 0 visible), the
+     * height in px + 1 (0: auto or a value the reader does not pass on), the
+     * ranks of the three, and 1 in scr when a timeline reads the element
+     * as its box scroller (its geometry is needed and it is passed on as
+     * a scroll box) */
+    uint8_t ov[2];
+    int hpx;
+    int scrank[WF_SITE_SCS];
+    uint8_t scr;
 } wf_site_node_t;
 
 typedef struct {
@@ -499,6 +521,10 @@ typedef struct {
     int geom_need;                /* Lot 104: elements whose layout geometry the animations need (+1 for the root scroll range) */
     int geom_root;                /* Lot 104: 1 when a scroll timeline with a length edge needs the root scroll range */
     int geom_used;                /* Lot 104: layout boxes read (wf_site_set_geom) */
+    int scroll_gui;               /* Lot 105: 1 when the root position is the GUI scroll offset of the geometry */
+    int anim_box;                 /* Lot 105: element animations on an active box scroller timeline */
+    int geom_live;                /* Lot 105: 1 when a timeline reads a real scroll offset (box scrollers, the GUI root) */
+    int gui_y;                    /* Lot 105: the GUI root position read (sc_y of the geometry), px */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */
@@ -572,18 +598,44 @@ void wf_site_set_scroll(int pm);
  * or view-timeline-inset, and the animation-range edges on that view
  * timeline (wf_cssanim_view_ms). A scroll timeline (Lot 101, 102) with a
  * length edge runs on the root scroll range of the geometry (vertical,
- * range > 0: wf_cssanim_scroll_px_ms). */
+ * range > 0: wf_cssanim_scroll_px_ms). Lot 105: a subject in a box
+ * scroller (wf_site_scroller_of) runs on it when the layout says that
+ * marked box is its nearest scroller (sm), at the box's own scroll
+ * offset; scroll(nearest), scroll(self) and scroll-timeline-name run on a
+ * box scroller with its own scroll range and offset (sv, s_rg, s_sc); with
+ * wf_site_set_scroll_gui the root position is the geometry's sc_y. */
 void wf_site_set_geom(const wf_geom_t *g);
 /* Lot 104: the element index (wf_geom.h box index) of the start tag at
  * offset when the animations of the last prepare need its geometry (a
- * view timeline subject), else -1 */
+ * view timeline subject; Lot 105: or a box scroller a timeline reads),
+ * else -1 */
 int wf_site_geom_subject(const wf_site_t *d, int offset);
+/* Lot 105: the root position of the scroll and view timelines is the
+ * root scroll offset of the geometry (sc_y, the GUI scroll position the
+ * layout had) when on is 1, the wf_site_set_scroll setting when 0 (the
+ * default); for the pages applied after it */
+void wf_site_set_scroll_gui(int on);
+/* Lot 105: the computed overflow along y (WF_SITE_OV_*) of element i when
+ * it is a scroll container (overflow-x or overflow-y hidden, auto or
+ * scroll after the visible/clip rule), else 0; html and body are never
+ * box scrollers (their overflow is the viewport's, the root scroller) */
+int wf_site_box_scroller(const wf_site_t *d, int i);
+/* Lot 105: the nearest box scroller ancestor of element i, -1 for the
+ * root */
+int wf_site_scroller_of(const wf_site_t *d, int i);
+/* Lot 105: 1 when the element at offset must keep a box of its own in
+ * the reader view (a div written as a div, not merged into a paragraph):
+ * a box scroller a timeline reads, or a view timeline subject that holds
+ * block children */
+int wf_site_geom_block(const wf_site_t *d, int offset);
 /* Lot 97: "keyframes K animated A transitioned T font F at Nms" (and
  * " dropped D" when @keyframes were over the table; Lot 98: " composed C"
  * when C animated values added a keyframe to the value below; Lot 104:
  * " view V need N geom G" when V animations ran on view timelines, N
  * elements need their geometry (the root counted once for the scroll
- * range of a length edge) or G of their boxes were read); length, 0 when
+ * range of a length edge) or G of their boxes were read; Lot 105:
+ * " box B" when B of them ran on box scrollers, " gui Y" with the GUI
+ * root position, and " pos gui" in the scroll part); length, 0 when
  * the page had no keyframes, animation or transition list, or
  * font-relative value. */
 int wf_site_anim_text(const wf_site_t *d, char *out, int cap);

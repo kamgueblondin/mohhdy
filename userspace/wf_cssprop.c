@@ -3276,6 +3276,17 @@ static int cp_inset_tok(const char *s, int a, int b, unsigned char *k, int *v) {
     return q.t == WF_CSSPROP_LENGTH || (q.t == WF_CSSPROP_NUMBER && !q.v);
 }
 
+/* Lot 105: v is one absolute length (or a unitless 0): its value in
+ * 1/10000 px into *out (within +-100000px) */
+int wf_csslen_abs(const char *v, int *out) {
+    unsigned char k;
+    int x, y, q;
+    if (!v || !out || !cp_one_tok(v, 0, cp_len(v), &x, &y) || !cp_inset_tok(v, x, y, &k, &q) || k != WF_CSSTL_I_LEN)
+        return 0;
+    *out = q;
+    return 1;
+}
+
 /* Lot 102: scroll(...) or view(...) at w[0..l) into o: 1, 0 when it is
  * not valid, -1 when w is neither function */
 static int cp_anon_tl(const char *w, int l, wf_cssanim_t *o) {

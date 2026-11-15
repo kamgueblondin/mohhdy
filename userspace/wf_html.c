@@ -17,6 +17,7 @@ typedef struct { char* o; int cap; int n; int full; int nodes; } ob_t;
  * says the page was cut, and empty paragraphs from nested divs are not
  * emitted at all. */
 #define WF_HTML_NODE_BUDGET 140
+#define WF_HTML_DIVS 32            /* Lot 105: open div-like elements tracked for the divs kept */
 
 /* Lot 71: source charset: the Content-Type charset of the server when it
  * has one (HTML rule: the transport wins), else a <meta> of the page,
@@ -95,6 +96,10 @@ static int g_geommarks;
 void wf_html_set_geommarks(int on) { g_geommarks = on ? 1 : 0; }
 void wf_html_set_cssgeom(const wf_geom_t *g) { wf_site_set_geom(g); }
 int wf_html_sitecss_geom_need(void) { return g_site.ready ? g_site.geom_need : 0; }
+/* Lot 105: the GUI scroll position as the root position; the last page
+ * has timelines that read real scroll offsets */
+void wf_html_set_cssscroll_gui(int on) { wf_site_set_scroll_gui(on); }
+int wf_html_sitecss_geom_live(void) { return g_site.ready ? g_site.geom_live : 0; }
 
 static void ob_style(ob_t *b, int offset) {
     /* Lot 88: five more properties can be passed on; Lot 90: six long
@@ -102,7 +107,8 @@ static void ob_style(ob_t *b, int offset) {
     static char sty[1280];
     if (!g_sitecss) return;
     if (g_geommarks) {
-        /* Lot 104: id="wgN" on a view timeline subject (reader node N),
+        /* Lot 104: id="wgN" on a view timeline subject (reader node N; Lot
+         * 105: or a box scroller a timeline reads),
          * so the layout can hand its box back (we_geom_feed) */
         int k = wf_site_geom_subject(&g_site, offset), p = 1000;
         if (k >= 0 && k < WF_GEOM_MAX) {
@@ -710,6 +716,11 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
     static char href[WF_URL_PATH_MAX], abs_url[WF_URL_HOST_MAX + WF_URL_PATH_MAX + 16];
     ob_t b;
     int i = 0, last_sp = 1, pre = 0, in_title = 0, tn = 0, k, body_seen = 0, span_hi;
+    /* Lot 105: the open div-like elements (AS_P) and whether each was
+     * written as a div (wf_site_geom_block) */
+    static char ds_name[WF_HTML_DIVS][16];
+    static unsigned char ds_div[WF_HTML_DIVS];
+    int nds = 0;
     wf_html_stats_t dummy;
     if (!st) st = &dummy;
     for (k = 0; k < (int)sizeof(*st); k++) ((char*)st)[k] = 0;
@@ -875,16 +886,43 @@ int wf_html_reduce_ex(const char* in, int n, const wf_url_t* base, char* out, in
                 if (!seq(name, "a") && !seq(name, "b") && !seq(name, "i") && !seq(name, "em") && !seq(name, "strong") &&
                     !seq(name, "code")) last_sp = 1;
             } else if (in_list(name, AS_P)) {
+                int div = 0, t;
                 if (!ob_room(&b, 600)) { b.full = 1; break; }
                 st->tags_kept++;
                 if (close) {
+                    /* Lot 105: the nearest open one of that name */
+                    for (t = nds - 1; t >= 0 && !seq(ds_name[t], name); t--) {}
+                    if (t >= 0) { div = ds_div[t]; nds = t; }
+                }
+                if (close && div) {
                     if (ends_with(&b, "<p>")) { b.n -= 3; b.nodes--; }      /* empty paragraph: dropped */
-                    else if (!ends_with(&b, "</p>")) ob_s(&b, "</p>");
-                } else if (!ends_with(&b, "<p>")) {
-                    ob_s(&b, "<p");
-                    ob_style(&b, i);
-                    ob_s(&b, ">");
-                    b.nodes++;
+                    ob_s(&b, "</div>");
+                } else if (close) {
+                    if (ends_with(&b, "<p>")) { b.n -= 3; b.nodes--; }      /* empty paragraph: dropped */
+                    else if (!ends_with(&b, "</p>") && !ends_with(&b, "</div>")) ob_s(&b, "</p>");   /* Lot 105: a kept div */
+                } else {
+                    /* Lot 105: a box scroller a timeline reads, or a view
+                     * timeline subject holding blocks, keeps its own box
+                     * (while its end tag can be matched) */
+                    div = nds < WF_HTML_DIVS && wf_site_geom_block(&g_site, i);    /* 0 without site CSS (not ready) */
+                    if (div) {
+                        if (ends_with(&b, "<p>")) { b.n -= 3; b.nodes--; }
+                        ob_s(&b, "<div");
+                        ob_style(&b, i);
+                        ob_s(&b, ">");
+                        b.nodes++;
+                    } else if (!ends_with(&b, "<p>")) {
+                        ob_s(&b, "<p");
+                        ob_style(&b, i);
+                        ob_s(&b, ">");
+                        b.nodes++;
+                    }
+                    if (nds < WF_HTML_DIVS) {
+                        int q;
+                        for (q = 0; name[q] && q < 15; q++) ds_name[nds][q] = name[q];
+                        ds_name[nds][q] = 0;
+                        ds_div[nds++] = (unsigned char)div;
+                    }
                 }
                 last_sp = 1;
             } else {

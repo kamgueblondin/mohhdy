@@ -545,6 +545,7 @@ static int web_submit(int n, char *out, int out_max) {
 static void web_open_line(const char *line, char *out, int out_max);
 static void web_form_result(int fr, char *out, int out_max);
 static int web_form_render(void);
+static int web_scroll_command(const char *line, char *out, int out_max);   /* Lot 105 */
 static void gui_cat_i(char *d, int max, int v) {
     if (v < 0) { scat(d, max, "-"); v = -v; }
     gui_cat_u(d, max, (unsigned)v);
@@ -758,6 +759,9 @@ int osui_gui_web_command(const char *line, char *out, int out_max) {
         (void)g_wops->page_css(line, out, out_max);
         return 1;
     }
+    if ((sncmp(line, "web-scroll", 10) == 0 && (line[10] == ' ' || !line[10])) ||
+        (sncmp(line, "web-bscroll", 11) == 0 && (line[11] == ' ' || !line[11])))
+        return web_scroll_command(line, out, out_max);     /* Lot 105 */
     if (sncmp(line, "web-f", 5) == 0) {
         int handled = web_form_command(line, out, out_max);
         if (handled) return 1;
@@ -830,6 +834,60 @@ static int web_form_render(void) {
     rc = osui_web_pipeline(g_web_src, g_web_src_n);
     if (rc == 0) g_web_scroll = we_scroll(&g_web, scroll);
     return rc;
+}
+
+/* Lot 105: the page again after the GUI scrolled (the root, or a box)
+ * when its reader timelines read real scroll offsets: the layout's
+ * geometry goes back to the reader (page_geom), the page it returns is
+ * laid out at the same scroll offset (box offsets are kept by the forms
+ * state, by id). 1 restyled, 0 nothing to do, -1 render error */
+static int web_geom_refresh(void) {
+    int scroll = g_web_scroll, m, rc;
+    if (g_web_src_n <= 0 || !g_wops || !g_wops->page_geom) return 0;     /* callers: a page is shown */
+    m = g_wops->page_geom(&g_web, g_web_src, OSUI_WEB_SRC_MAX);
+    if (m <= 0) return 0;
+    g_web_src[m < OSUI_WEB_SRC_MAX ? m : OSUI_WEB_SRC_MAX - 1] = 0;
+    rc = osui_web_pipeline(g_web_src, m);
+    if (rc != 0) return -1;
+    g_web_scroll = we_scroll(&g_web, scroll);
+    return 1;
+}
+
+/* Lot 105: "web-scroll Y": the GUI page to scroll offset Y (as the arrow
+ * keys do, bounded by the engine); "web-bscroll X Y": a click on the
+ * scrollbar of a box scroller at (X, Y) of the page view. Either one
+ * styles the page again when its timelines read the scroll offsets. */
+static int web_scroll_command(const char *line, char *out, int out_max) {
+    const char *a;
+    char m[48];
+    int v[2] = {0, 0}, k, nv = line[4] == 'b' ? 2 : 1, r = 0, bs = 0;
+    a = line + (nv == 2 ? 11 : 10);
+    for (k = 0; k < nv; k++) {
+        int dg = 0;
+        while (*a == ' ') a++;
+        while (*a >= '0' && *a <= '9' && dg < 6) { v[k] = v[k] * 10 + (*a++ - '0'); dg++; }
+        if (!dg || (*a >= '0' && *a <= '9')) {
+            app_out(out, out_max, nv == 2 ? "osui web bscroll error=usage web-bscroll X Y" :
+                                            "osui web scroll error=usage web-scroll Y", 0);
+            return 1;
+        }
+    }
+    if (!g_web_active) { app_out(out, out_max, nv == 2 ? "osui web bscroll error=no_page" : "osui web scroll error=no_page", 0); return 1; }
+    if (nv == 1) {
+        int before = g_web_scroll;
+        g_web_scroll = we_scroll(&g_web, v[0]);
+        if (g_web_scroll != before) r = web_geom_refresh();
+        scpy(m, (int)sizeof(m), "osui web scroll ");
+        gui_cat_u(m, (int)sizeof(m), (unsigned)g_web_scroll);
+    } else {
+        bs = we_box_scroll_click(&g_web, v[0], v[1] + g_web_scroll);
+        if (bs == 2 && web_form_render() == 0) r = web_geom_refresh();
+        scpy(m, (int)sizeof(m), bs > 0 ? "osui web bscroll hit" : "osui web bscroll none");
+    }
+    if (r > 0) scat(m, (int)sizeof(m), " restyled");
+    if (r < 0) scat(m, (int)sizeof(m), " error=render");
+    app_out(out, out_max, m, 0);
+    return 1;
 }
 
 /* the URL a form sends to: action (already without query for GET, with
@@ -1302,6 +1360,12 @@ static void web_event(const char *p, char *out, int out_max) {
              * Lot 87: the open autofill list is over the page, before it */
             int fr;
             if (web_offer_click(x, y, out, out_max)) return;
+            /* Lot 105: the scrollbar of a box scroller */
+            fr = we_box_scroll_click(&g_web, x, y);
+            if (fr > 0) {
+                if (fr == 2 && web_form_render() == 0) (void)web_geom_refresh();
+                return;
+            }
             fr = we_form_click(&g_web, x, y);
             if (fr >= 0) { web_form_result(fr, out, out_max); return; }
         }
@@ -2581,6 +2645,7 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
              * position:fixed boxes in place; the kernel subtracts it. */
             int before = g_web_scroll, cnt = web_nsections();
             g_web_scroll = we_scroll(&g_web, g_web_scroll + (key == OS_VGA_KEY_DOWN ? 20 : -20));
+            if (g_web_scroll != before) (void)web_geom_refresh();     /* Lot 105 */
             if (g_web_scroll == before && cnt > 1) {
                 int cur = g_wops->current ? g_wops->current() : 0;
                 if (key == OS_VGA_KEY_DOWN && cur + 1 < cnt) (void)web_show_section(cur + 1, 0, 0, out, out_max);
