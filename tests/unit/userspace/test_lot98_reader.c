@@ -184,8 +184,9 @@ static void test_l98_long_api(void) {
     static wf_csstrans_t t[WF_CSSANIM_MAX + 2];
     const char *v[WF_CSSANIM_LONGS] = {0};
     unsigned char sh[WF_CSSANIM_LONGS] = {0};
-    /* Lot 99, converted: animation-timeline is the tenth (was 9) */
-    TEST_ASSERT_EQUAL(10, WF_CSSANIM_LONGS);
+    /* Lot 99, converted: animation-timeline is the tenth (was 9). Lot 102,
+     * converted: then animation-range-start and -end (was 10) */
+    TEST_ASSERT_EQUAL(12, WF_CSSANIM_LONGS);
     TEST_ASSERT_EQUAL(5, WF_CSSTRANS_LONGS);
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_NAME, 0, a, 4));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_NAME, "k", 0, 4));
@@ -196,8 +197,12 @@ static void test_l98_long_api(void) {
     /* Lot 99, converted: the last longhand is animation-timeline (was
      * animation-composition, WF_CSSANIM_LONGS - 1 "add" gave 1) */
     TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_L_COMPOSITION, "add", a, 4));
+    /* Lot 102, converted: the last longhand is animation-range-end (was
+     * animation-timeline, WF_CSSANIM_LONGS - 1 "none" gave 1) */
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_LONGS - 1, "add", a, 4));
-    TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_LONGS - 1, "none", a, 4));
+    TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_L_TIMELINE, "none", a, 4));
+    TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_LONGS - 1, "none", a, 4));
+    TEST_ASSERT_EQUAL(1, wf_cssanim_long(WF_CSSANIM_LONGS - 1, "normal", a, 4));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_NAME, "a, b, c", a, 2));
     TEST_ASSERT_EQUAL(4, wf_cssanim_long(WF_CSSANIM_L_NAME, "a, b, c, d", a, WF_CSSANIM_MAX + 2));
     TEST_ASSERT_EQUAL(-1, wf_cssanim_long(WF_CSSANIM_L_NAME, "a, b, c, d, e", a, WF_CSSANIM_MAX + 2));

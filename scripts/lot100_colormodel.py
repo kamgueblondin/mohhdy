@@ -253,6 +253,13 @@ BLACK = ([0, 0, 0], S)
 
 
 def rgba(v, depth=0):
+    """Lot 102, converted: the none keyword and color-mix() with missing
+    components by scripts/lot102_model.py (rgba_base below otherwise)"""
+    import lot102_model as L102
+    return L102.rgba(v, depth)
+
+
+def rgba_base(v, depth=0):
     """channels in 1/10000 of 0..255 and alpha in 1/10000, or None (Lot
     97's rgba with every name, hwb() and color-mix())"""
     v = v.lower()
@@ -292,6 +299,12 @@ def colour_match(v):
     import lot101_colormodel as L101
     if L101.is_space_fn(v):
         return rgba(v) is not None
+    # Lot 102, converted: rgb(), rgba(), hsl(), hsla() with none by their
+    # conversion
+    import lot102_model as L102
+    r = L102.none_match(v)
+    if r is not None:
+        return r
     return A.colour_match97(v)
 
 

@@ -111,11 +111,11 @@ static void test_l101_lab(void) {
     TEST_ASSERT_EQUAL_STRING("#777777 255", rc("lch(50 -20 40)"));
     /* a, b and C are kept within 10000 */
     TEST_ASSERT_EQUAL_STRING(rc("lab(50 10000 0)"), rc("lab(50 20000 0)"));
-    /* refused: commas, counts, none, units */
+    /* refused: commas, counts, units (Lot 102, converted: none is 0) */
     TEST_ASSERT_EQUAL_STRING("-", rc("lab(50, 0, 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lab(50 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lab(50 0 0 0)"));
-    TEST_ASSERT_EQUAL_STRING("-", rc("lab(none 0 0)"));
+    TEST_ASSERT_EQUAL_STRING("#000000 255", rc("lab(none 0 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lab(50px 0 0)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lch(50 30deg 90)"));
     TEST_ASSERT_EQUAL_STRING("-", rc("lch(50 30 90px)"));
@@ -328,7 +328,7 @@ static void test_l101_tl_api(void) {
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_NAMES, "--a, --b", t, 1));
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_NAMES, "--a", t, 0));
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(WF_CSSTL_NAMES, "--a,", t, 4));
-    TEST_ASSERT_EQUAL(-1, wf_csstl_parse(3, "--a", t, 4));
+    TEST_ASSERT_EQUAL(-1, wf_csstl_parse(4, "--a", t, 4));     /* Lot 102, converted: 3 is WF_CSSTL_SCOPE */
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(-1, "--a", t, 4));
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(3, "block", t, 4));
     TEST_ASSERT_EQUAL(-1, wf_csstl_parse(-1, "block", t, 4));

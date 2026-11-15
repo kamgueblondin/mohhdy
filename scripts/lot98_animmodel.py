@@ -391,11 +391,17 @@ def stack(alts, anims, kfs, under, ms):
     whether one animated and whether one composed"""
     animated = composed = False
     base = under
+    import lot102_model as L102
     for a in anims:
-        # Lot 99: an animation whose timeline is not auto has no effect
-        if not a["name"] or a["name"] not in kfs or a.get("timeline", "auto") != "auto":
+        # Lot 99: an animation whose timeline is not auto has no effect.
+        # Lot 102, converted: scroll() runs on #o (a child of body) at the
+        # scroll position 0 (lot102_model.simple_clock)
+        if not a["name"] or a["name"] not in kfs:
             continue
-        v, c = anim_value(alts, a, kfs[a["name"]], under, ms, base)
+        ck = L102.simple_clock(a, ms)
+        if ck is None:
+            continue
+        v, c = anim_value(alts, a, kfs[a["name"]], under, ck[1], base)
         if v is not None:
             under, animated = v, True
             composed = composed or c

@@ -160,11 +160,11 @@ static void test_l99_sheet_4(void) {
     TEST_ASSERT_EQUAL(1, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep("@property --p { syntax: '<length>'; inherits: true; initial-value: 0px } @keyframes k { 50% { --p: 257.82px } } #o { animation: k 1000ms ease-in-out, none 2000ms linear; animation-timeline: view(); --p: -134.1px }", 250);
-    TEST_ASSERT_EQUAL_STRING("61.86px", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("61.86px", nv("i"));
-    TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
+    TEST_ASSERT_EQUAL_STRING("-134.1px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("-134.1px", nv("i"));
+    TEST_ASSERT_EQUAL(0, g_d.prop_animated > 0);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep("@property --p { syntax: '<transform-function>+'; inherits: false; initial-value: skew(45deg, 45deg) skew(0deg, -279.3grad) } @keyframes k { 60% { --p: skew(2rad) skew(-0.5turn, 0) } } #o { animation: none 500ms linear, k 500ms steps(4); animation-composition: add; --p: skew(28.29deg) skew(45deg, 0.5turn) }", 750);
     TEST_ASSERT_EQUAL_STRING("skew(28.29deg) skew(45deg, 180deg)", nv("o"));
     TEST_ASSERT_EQUAL_STRING("skew(45deg, 45deg) skew(0deg, -251.37deg)", nv("i"));
@@ -418,7 +418,7 @@ static void test_l99_sheet_13(void) {
 
 static void test_l99_sheet_14(void) {
     prep("@property --p { syntax: '<number>'; inherits: false; initial-value: -301.2344 } @keyframes k { 50% { --p: -767.2052 } } @keyframes j { 60% { --p: -989.6 } } #o { animation-composition: replace; animation-timeline: scroll(); animation-duration: 500ms, 1s; animation-timing-function: linear; animation-name: j, k; --p: 210 }", 250);
-    TEST_ASSERT_EQUAL_STRING("-278.6026", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("210", nv("o"));
     TEST_ASSERT_EQUAL_STRING("-301.2344", nv("i"));
     TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
@@ -501,9 +501,9 @@ static void test_l99_sheet_17(void) {
     prep("@property --p { syntax: '<length>'; inherits: true; initial-value: 8px } @keyframes k { 60% { --p: -258px; animation-timing-function: steps(2); animation-composition: replace } } @keyframes j { 60% { --p: 0px } } #o { animation-name: k; animation-duration: 500ms, 1s; animation-timing-function: linear; animation-composition: accumulate, add; animation-timeline: view(); animation-fill-mode: both; --p: 0px }", 500);
     TEST_ASSERT_EQUAL_STRING("0px", nv("o"));
     TEST_ASSERT_EQUAL_STRING("0px", nv("i"));
-    TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
-    TEST_ASSERT_EQUAL(1, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(0, g_d.prop_animated > 0);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep("@property --p { syntax: '<length>'; inherits: true; initial-value: 37px } @keyframes k { 75% { --p: 37.88px } } @keyframes j { from { --p: 0px } } #o { animation-duration: 2s; animation-name: k; animation-timing-function: linear; --p: 0px }", 250);
     TEST_ASSERT_EQUAL_STRING("6.3146px", nv("o"));
     TEST_ASSERT_EQUAL_STRING("6.3146px", nv("i"));
@@ -538,11 +538,11 @@ static void test_l99_sheet_18(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep("@property --p { syntax: '<transform-function>+'; inherits: true; initial-value: scale(1) } @keyframes k { 50% { --p: translate(0px, 61.5%) } } #o { animation: k 2000ms linear; animation-composition: add; animation-timeline: view(); animation-iteration-count: 2; --p: scale(1, 2) }", 1208);
-    TEST_ASSERT_EQUAL_STRING("scale(1, 2) translate(0px, 61.5%)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("scale(1, 2) translate(0px, 61.5%)", nv("i"));
-    TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
-    TEST_ASSERT_EQUAL(1, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    TEST_ASSERT_EQUAL_STRING("scale(1, 2)", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("scale(1, 2)", nv("i"));
+    TEST_ASSERT_EQUAL(0, g_d.prop_animated > 0);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep("@property --p { syntax: '<color>'; inherits: false; initial-value: rgba(169, 19, 155, 0.43) } @keyframes k { 25% { --p: hsl(-60deg 26.6 56/0.7); animation-timing-function: ease-in } 60% { --p: hsl(-0.9turn 63% 58.5%); animation-timing-function: steps(2) } } @keyframes j { to { --p: #4ce75d; animation-composition: accumulate } } #o { animation: none 1000ms linear, none 1000ms steps(4); animation-timeline: auto, none; animation-composition: ACCUMULATE }", 369);
     TEST_ASSERT_EQUAL_STRING("rgba(169, 19, 155, 0.43)", nv("o"));
     TEST_ASSERT_EQUAL_STRING("rgba(169, 19, 155, 0.43)", nv("i"));
@@ -700,11 +700,11 @@ static void test_l99_sheet_24(void) {
     TEST_ASSERT_EQUAL(1, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep("@property --p { syntax: '<percentage>'; inherits: true; initial-value: 21% } @keyframes k { 33.33% { --p: 99.849% } } @keyframes j { 25% { --p: 150.345%; animation-timing-function: ease-in } } #o { animation: k 1000ms linear; animation-composition: accumulate, add; animation-timeline: view(); --p: -63.5073% }", 500);
-    TEST_ASSERT_EQUAL_STRING("-4.4974%", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("-4.4974%", nv("i"));
-    TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
-    TEST_ASSERT_EQUAL(1, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    TEST_ASSERT_EQUAL_STRING("-63.5073%", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("-63.5073%", nv("i"));
+    TEST_ASSERT_EQUAL(0, g_d.prop_animated > 0);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep("@property --p { syntax: '<transform-function>+'; inherits: true; initial-value: matrix(0.5, 0.5, 1, 1, 0.5, 0) } @keyframes k { 50% { --p: rotate3d(0, 1, 0.5, 0rad) translatey(-4.48%); animation-timing-function: linear; animation-composition: add } } @keyframes j { 50% { --p: rotate3d(0, 1, 0, 0.9turn) translatey(1in) } } #o { animation: none 2000ms linear, j 2000ms steps(4); animation-fill-mode: both; animation-iteration-count: 0.5; --p: rotate3d(0, 1, 0, 45deg) translatey(-99%) }", 500);
     TEST_ASSERT_EQUAL_STRING("rotate3d(0, 1, 0, 324deg) translatey(96px)", nv("o"));
     TEST_ASSERT_EQUAL_STRING("rotate3d(0, 1, 0, 324deg) translatey(96px)", nv("i"));
@@ -841,11 +841,11 @@ static void test_l99_sheet_29(void) {
     TEST_ASSERT_EQUAL(1, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep("@property --p { syntax: '<length>+'; inherits: true; initial-value: 0px 5px } @keyframes k { 50% { --p: 0px 0px; animation-composition: replace } 75% { --p: 0px 0px } } @keyframes j { 25% { --p: 35.4px 153px } 100% { --p: 28.8px 58.73px; animation-timing-function: steps(2) } } #o { animation-name: k; animation-duration: 1000ms; animation-timing-function: linear; animation-composition: accumulate; animation-timeline: view(); animation-iteration-count: infinite }", 1233);
-    TEST_ASSERT_EQUAL_STRING("0px 5.34px", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("0px 5.34px", nv("i"));
-    TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
-    TEST_ASSERT_EQUAL(1, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    TEST_ASSERT_EQUAL_STRING("0px 5px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("0px 5px", nv("i"));
+    TEST_ASSERT_EQUAL(0, g_d.prop_animated > 0);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
 }
 
 static void test_l99_sheet_30(void) {
@@ -885,7 +885,7 @@ static void test_l99_sheet_31(void) {
     prep("@property --p { syntax: '<transform-function>'; inherits: false; initial-value: scale3d(100%, 2, 1) } @keyframes k { 25% { --p: scale3d(145%, 0.5, 2); animation-composition: replace } 50% { --p: scale3d(0.5, 0.5, 3.7) } } @keyframes j { 50% { --p: scale3d(-1, -2, 2) } } #o { animation-composition: add; animation-timing-function: linear; animation-duration: 500ms, 1s; animation-name: k; animation-timeline: scroll(); animation-fill-mode: none }", 693);
     TEST_ASSERT_EQUAL_STRING("scale3d(100%, 2, 1)", nv("o"));
     TEST_ASSERT_EQUAL_STRING("scale3d(100%, 2, 1)", nv("i"));
-    TEST_ASSERT_EQUAL(0, g_d.prop_animated > 0);
+    TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep("@property --p { syntax: '<color>'; inherits: true; initial-value: hsl(-449.034 70% 50%) } @keyframes k { 75% { --p: hsl(89, 51.8%, 85%); animation-composition: replace } } #o { animation: none 500ms linear; animation-composition: accumulate }", 250);
@@ -991,8 +991,8 @@ static void test_l99_sheet_35(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep("@property --p { syntax: '<transform-list>'; inherits: true; initial-value: translate(10px) rotatez(1.196rad) rotate(-0.92turn) } @keyframes k { 33.33% { --p: translate(50%, 84%) rotatez(0) rotate(1rad) } } #o { animation-duration: 2s; animation-composition: accumulate; animation-timing-function: linear; animation-timeline: scroll(); animation-name: k, j; --p: translate(1in, 10px) rotatez(-0.4turn) rotate(0) }", 377);
-    TEST_ASSERT_EQUAL_STRING("translate(calc(50% + 96px), calc(84% + 10px)) rotatez(-144deg) rotate(57.2958deg)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("translate(calc(50% + 96px), calc(84% + 10px)) rotatez(-144deg) rotate(57.2958deg)", nv("i"));
+    TEST_ASSERT_EQUAL_STRING("translate(192px, 20px) rotatez(-288deg) rotate(0deg)", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("translate(192px, 20px) rotatez(-288deg) rotate(0deg)", nv("i"));
     TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
     TEST_ASSERT_EQUAL(1, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
@@ -1552,7 +1552,7 @@ static void test_l99_sheet_55(void) {
 
 static void test_l99_sheet_56(void) {
     prep("@property --p { syntax: '<length>+'; inherits: false; initial-value: 0px -133px } @keyframes k { 33.33% { --p: 0px -228.191px } 60% { --p: 0px 33.4px; animation-timing-function: linear; animation-composition: replace } } #o { animation-name: j, k; animation-duration: 500ms, 1s; animation-timing-function: linear; animation-timeline: scroll(); animation-fill-mode: none }", 795);
-    TEST_ASSERT_EQUAL_STRING("0px -47.72px", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("0px -133px", nv("o"));
     TEST_ASSERT_EQUAL_STRING("0px -133px", nv("i"));
     TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
@@ -1566,9 +1566,9 @@ static void test_l99_sheet_56(void) {
     prep("@property --p { syntax: '<transform-list>'; inherits: true; initial-value: scale(0, -7.9%) scale(100%, 100%) } @keyframes k { 25% { --p: scale(-13%, 3.4) scale(-96%, 254.5%) } 60% { --p: translatex(35.1px) rotate(-0.678rad) translate(-78.38%); animation-composition: replace } } @keyframes j { 50% { --p: skew(45deg, 45deg) scale(100%) rotate3d(0, 1, 0, -275grad) } 60% { --p: scale(-0.35, -0.3) scale(100%, 1) } } #o { animation: k 2000ms linear, k 1000ms; animation-timeline: view() }", 750);
     TEST_ASSERT_EQUAL_STRING("scale(0, -7.9%) scale(100%, 100%)", nv("o"));
     TEST_ASSERT_EQUAL_STRING("scale(0, -7.9%) scale(100%, 100%)", nv("i"));
-    TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
+    TEST_ASSERT_EQUAL(0, g_d.prop_animated > 0);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    TEST_ASSERT_EQUAL(2, g_d.anim_idle);
     prep("@property --p { syntax: '<percentage>'; inherits: false; initial-value: 21.2% } @keyframes k { 60% { --p: 0.3% } } #o { animation-name: k; animation-duration: 2s; animation-timing-function: linear; animation-composition: replace; --p: 12% }", 250);
     TEST_ASSERT_EQUAL_STRING("9.5629%", nv("o"));
     TEST_ASSERT_EQUAL_STRING("21.2%", nv("i"));
@@ -2050,11 +2050,11 @@ static void test_l99_sheet_74(void) {
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     TEST_ASSERT_EQUAL(0, g_d.anim_idle);
     prep("@property --p { syntax: '<transform-list>'; inherits: true; initial-value: rotate(0deg) rotatez(39grad) skewx(305.3deg) } @keyframes k { 60% { --p: translatex(-176.1px) } to { --p: rotate(2rad) rotatez(45deg) skewx(0.3turn) } } #o { animation-fill-mode: none; animation-composition: accumulate, add; animation: k 1000ms linear; animation-timeline: view() }", 0);
-    TEST_ASSERT_EQUAL_STRING("rotate(0deg) rotatez(70.2deg) skewx(610.6deg)", nv("o"));
-    TEST_ASSERT_EQUAL_STRING("rotate(0deg) rotatez(70.2deg) skewx(610.6deg)", nv("i"));
-    TEST_ASSERT_EQUAL(1, g_d.prop_animated > 0);
-    TEST_ASSERT_EQUAL(1, g_d.prop_composed);
-    TEST_ASSERT_EQUAL(0, g_d.anim_idle);
+    TEST_ASSERT_EQUAL_STRING("rotate(0deg) rotatez(35.1deg) skewx(305.3deg)", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("rotate(0deg) rotatez(35.1deg) skewx(305.3deg)", nv("i"));
+    TEST_ASSERT_EQUAL(0, g_d.prop_animated > 0);
+    TEST_ASSERT_EQUAL(0, g_d.prop_composed);
+    TEST_ASSERT_EQUAL(1, g_d.anim_idle);
     prep("@property --p { syntax: '<length>+'; inherits: true; initial-value: 9.4px -90px } @keyframes k { 50% { --p: -239.0569px 45.9px } } #o { animation: none 2000ms }", 500);
     TEST_ASSERT_EQUAL_STRING("9.4px -90px", nv("o"));
     TEST_ASSERT_EQUAL_STRING("9.4px -90px", nv("i"));

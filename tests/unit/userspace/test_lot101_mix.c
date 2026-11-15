@@ -828,7 +828,7 @@ static void test_l101_mix_60(void) {
 static void test_l101_mix_61(void) {
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, color(xyz-d65 -15.84% 0 0.94), rgb(232 20 20 / 120%))"));
     TEST_ASSERT_EQUAL(0, mt("oklab()"));
-    TEST_ASSERT_EQUAL(0, mt("oklch(none 50% 3.1416rad)"));
+    TEST_ASSERT_EQUAL(1, mt("oklch(none 50% 3.1416rad)"));
     TEST_ASSERT_EQUAL(1, mt("oklab(68.2% 0 -0.1393)"));
     TEST_ASSERT_EQUAL(0, mt("color(--x 1e-1 0.55 0)"));
     TEST_ASSERT_EQUAL(1, mt("oklch(0.7 .5 -18.0498deg)"));
@@ -912,7 +912,7 @@ static void test_l101_mix_67(void) {
     TEST_ASSERT_EQUAL(1, mt("oklab(0% 0 0.4125)"));
     TEST_ASSERT_EQUAL(1, mt("oklab(12%	0	0.3782 /-0.5)"));
     TEST_ASSERT_EQUAL(0, mt("oklch(-7.2% 0.1685deg 8.19rad)"));
-    TEST_ASSERT_EQUAL(0, mt("oklch(none 99.25% 2.08turn)"));
+    TEST_ASSERT_EQUAL(1, mt("oklch(none 99.25% 2.08turn)"));
     TEST_ASSERT_EQUAL(0, mt("color()"));
 }
 
@@ -923,7 +923,7 @@ static void test_l101_mix_68(void) {
     TEST_ASSERT_EQUAL(1, mt("oklch(0% 0.2072 -499 /50%)"));
     TEST_ASSERT_EQUAL(1, mt("lab(49% -126.3168 -120.4)"));
     TEST_ASSERT_EQUAL(0, mt("color(xyz-d50 0.5 0.895 0"));
-    TEST_ASSERT_EQUAL(0, mt("lch(none 24.8 239)"));
+    TEST_ASSERT_EQUAL(1, mt("lch(none 24.8 239)"));
     TEST_ASSERT_EQUAL(1, mt("color(xyz-d50	0.51	0.02	0.12/0.5)"));
     TEST_ASSERT_EQUAL(1, mt("color(prophoto-rgb 0.651 0.8963 -0.65/0)"));
     TEST_ASSERT_EQUAL(0, mt("color(xyz-d65 -0.5201 0.6233 0.5 / 1 / 1)"));
@@ -932,7 +932,7 @@ static void test_l101_mix_68(void) {
 static void test_l101_mix_69(void) {
     TEST_ASSERT_EQUAL(0, mt("color(xyz-d50 0.0795 0 -0.651 / 1 / 1)"));
     TEST_ASSERT_EQUAL(1, mt("lab(+0.5  -99.9  -0 / 92%)"));
-    TEST_ASSERT_EQUAL(0, mt("lab(none 66.52 -96)"));
+    TEST_ASSERT_EQUAL(1, mt("lab(none 66.52 -96)"));
     TEST_ASSERT_EQUAL(0, mt("lab()"));
     TEST_ASSERT_EQUAL(1, mt("color(srgb 0.14 0 0 /72%)"));
     TEST_ASSERT_EQUAL(1, mt("color-mix(in srgb, hwb(170.9905 60 76%/46%) 25%, lch(0 67% 5.472rad))"));

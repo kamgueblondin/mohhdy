@@ -1148,7 +1148,9 @@ static int cp_named_at(const char *v, int n) {
     return -1;
 }
 
-typedef struct { long long c[3], a; } cp_rgba_t;
+/* Lot 102: miss, the missing components (the none keyword): bits 0..2
+ * the channels (red, green, blue), bit 3 the alpha */
+typedef struct { long long c[3], a; int miss; } cp_rgba_t;
 static int cp_rgba(const char *v, cp_rgba_t *o);
 
 static int cp_color(const char *v) {
@@ -1170,6 +1172,8 @@ static int cp_color(const char *v) {
     for (k = 0; fns[k]; k++) {
         int m = cp_len(fns[k]), i, depth = 0;
         if (n <= m || !cp_eqn(v, m, fns[k])) continue;
+        /* Lot 102: a none component is matched by the conversion */
+        for (i = m; i + 4 <= n; i++) if (cp_eqn(v + i, 4, "none")) return cp_rgba(v, &t);
         /* one level, digits, '.', '%', ',', '/', spaces and "deg"; Lot
          * 99: the letters of grad, rad and turn in hsl() and hsla() */
         for (i = m; i < n - 1; i++) {
@@ -1794,6 +1798,20 @@ static int cp_tok_num(const char *s, int a, int b, long long *v, int *pct) {
 
 static long long cp_clampll(long long v, long long lo, long long hi) { return v < lo ? lo : v > hi ? hi : v; }
 
+/* Lot 102: the none keyword at s[a..b) (CSS Color 4, missing components) */
+static int cp_none(const char *s, int a, int b) { return cp_eqn(s + a, b - a, "none"); }
+
+/* Lot 102: the alpha token s[a..b) into o: none (missing, 0), else a
+ * number or percentage clamped to 0..1; 0 when it is neither */
+static int cp_alpha_tok(const char *s, int a, int b, cp_rgba_t *o) {
+    long long y;
+    int pct;
+    if (cp_none(s, a, b)) { o->a = 0; o->miss |= 8; return 1; }
+    if (!cp_tok_num(s, a, b, &y, &pct)) return 0;
+    o->a = cp_clampll(pct ? cp_div(y, 100, 0) : y, 0, CP_S);
+    return 1;
+}
+
 /* Lot 98: the 3 or 4 arguments of a colour function from v[i] to the
  * closing parenthesis (v[n - 1], checked by cp_color before any
  * interpolation): by commas, or by spaces with "/ alpha" before the
@@ -2088,6 +2106,21 @@ static int cp_mix_item(const char *s, int a, int b, cp_rgba_t *o, long long *p, 
     return cp_rgba_d(item, o, depth + 1);
 }
 
+/* Lot 102: the missing components of two colours before they are mixed
+ * or interpolated (CSS Color 4, interpolating with missing components):
+ * one missing in one colour takes the other's value, one missing in both
+ * is 0 in both */
+static void cp_carry(cp_rgba_t *x, cp_rgba_t *y) {
+    int k;
+    for (k = 0; k < 4; k++) {
+        long long *p = k < 3 ? &x->c[k] : &x->a, *q = k < 3 ? &y->c[k] : &y->a;
+        int mx = (x->miss >> k) & 1, my = (y->miss >> k) & 1;
+        if (mx && my) *p = *q = 0;
+        else if (mx) *p = *q;
+        else if (my) *q = *p;
+    }
+}
+
 /* Lot 100: color-mix(in srgb, C1 [P1], C2 [P2]) (CSS Color 5) at v[0..n):
  * the percentages default to 50% each, or to 100% minus the other; their
  * sum S (> 0) normalises them; the colours are mixed premultiplied and an
@@ -2107,6 +2140,8 @@ static int cp_mix(const char *v, int n, cp_rgba_t *o, int depth) {
     for (w1 = w0 + 2; cp_sp(v[w1]); w1++) {}
     if (!cp_eqn(v + w1, pb[0] - w1, "srgb")) return 0;
     for (k = 0; k < 2; k++) if (!cp_mix_item(v, pa[k + 1], pb[k + 1], &x[k], &p[k], depth)) return 0;
+    cp_carry(&x[0], &x[1]);     /* Lot 102: a component missing in both stays missing */
+    o->miss = x[0].miss & x[1].miss;
     if (p[0] < 0 && p[1] < 0) p[0] = p[1] = 50 * CP_S;
     else if (p[0] < 0) p[0] = 100 * CP_S - p[1];
     else if (p[1] < 0) p[1] = 100 * CP_S - p[0];
@@ -2134,6 +2169,7 @@ void wf_cssprop_set_current(int on, unsigned int rgb, int alpha) {
 static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
     int n = cp_len(v), k;
     o->a = CP_S;
+    o->miss = 0;
     if (cp_eqn(v, n, "transparent")) { o->c[0] = o->c[1] = o->c[2] = 0; o->a = 0; return 1; }
     if (cp_eqn(v, n, "currentcolor")) {
         /* Lot 101: the colour set by wf_cssprop_set_current, else none */
@@ -2163,6 +2199,15 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
         int ta[4], tb[4], got = cp_color_toks(v, n, v[3] == '(' ? 4 : 5, ta, tb), pct;
         long long x;
         for (k = 0; k < got; k++) {
+            if (cp_none(v, ta[k], tb[k])) {
+                /* Lot 102: none, in the space form only: a missing
+                 * component, 0 */
+                if (cp_comma_after(v, tb[0], n)) return 0;
+                if (k < 3) o->c[k] = 0;
+                else o->a = 0;
+                o->miss |= 1 << k;
+                continue;
+            }
             if (!cp_tok_num(v, ta[k], tb[k], &x, &pct)) return 0;
             if (k < 3) o->c[k] = cp_clampll(pct ? cp_div(x * 255, 100, 0) : x, 0, 255 * CP_S);
             else o->a = cp_clampll(pct ? cp_div(x, 100, 0) : x, 0, CP_S);
@@ -2177,16 +2222,18 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
         cp_q_t q;
         if (got != 3 && got != 4) return 0;
         comma = cp_comma_after(v, tb[0], n);    /* the legacy form: percentages only */
-        if (!cp_hue(v, ta[0], tb[0], &q)) return 0;
+        /* Lot 102: none (the space form only) is 0; an hsl component is
+         * not a channel, so only a missing alpha is kept */
+        for (k = 0; k < got; k++) if (comma && cp_none(v, ta[k], tb[k])) return 0;
+        if (cp_none(v, ta[0], tb[0])) q.v = 0;
+        else if (!cp_hue(v, ta[0], tb[0], &q)) return 0;
         h = q.v - cp_div(q.v, 3600000, 1) * 3600000;   /* 0..359.9999deg */
         for (k = 1; k < 3; k++) {
-            if (!cp_tok_num(v, ta[k], tb[k], &x, &pct) || (comma && !pct)) return 0;
+            if (cp_none(v, ta[k], tb[k])) { x = 0; pct = 1; }
+            else if (!cp_tok_num(v, ta[k], tb[k], &x, &pct) || (comma && !pct)) return 0;
             sl[k - 1] = cp_clampll(x, 0, 100 * CP_S);
         }
-        if (got == 4) {
-            if (!cp_tok_num(v, ta[3], tb[3], &x, &pct)) return 0;
-            o->a = cp_clampll(pct ? cp_div(x, 100, 0) : x, 0, CP_S);
-        }
+        if (got == 4 && !cp_alpha_tok(v, ta[3], tb[3], o)) return 0;
         cp_hsl_rgb(h, sl[0], sl[1], o->c);
         return 1;
     }
@@ -2196,16 +2243,16 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
         int ta[4], tb[4], got = cp_color_toks(v, n, 4, ta, tb), pct;
         long long h, wb[2], x;
         cp_q_t q;
-        if ((got != 3 && got != 4) || cp_comma_after(v, tb[0], n) || !cp_hue(v, ta[0], tb[0], &q)) return 0;
+        if ((got != 3 && got != 4) || cp_comma_after(v, tb[0], n)) return 0;
+        if (cp_none(v, ta[0], tb[0])) q.v = 0;     /* Lot 102: none is 0 */
+        else if (!cp_hue(v, ta[0], tb[0], &q)) return 0;
         h = q.v - cp_div(q.v, 3600000, 1) * 3600000;
         for (k = 1; k < 3; k++) {
-            if (!cp_tok_num(v, ta[k], tb[k], &x, &pct)) return 0;
+            if (cp_none(v, ta[k], tb[k])) x = 0;
+            else if (!cp_tok_num(v, ta[k], tb[k], &x, &pct)) return 0;
             wb[k - 1] = cp_clampll(x, 0, 100 * CP_S);
         }
-        if (got == 4) {
-            if (!cp_tok_num(v, ta[3], tb[3], &x, &pct)) return 0;
-            o->a = cp_clampll(pct ? cp_div(x, 100, 0) : x, 0, CP_S);
-        }
+        if (got == 4 && !cp_alpha_tok(v, ta[3], tb[3], o)) return 0;
         cp_hwb_rgb(h, wb[0], wb[1], o->c);
         return 1;
     }
@@ -2222,21 +2269,20 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
         if ((got != 3 && got != 4) || cp_comma_after(v, tb[0], n)) return 0;
         for (k = 0; k < 3; k++) {
             if (k == 2 && lch) {
-                if (!cp_hue(v, ta[2], tb[2], &q)) return 0;
+                if (cp_none(v, ta[2], tb[2])) q.v = 0;     /* Lot 102: none is 0 */
+                else if (!cp_hue(v, ta[2], tb[2], &q)) return 0;
                 cp_cossin(q.v, &cs, &sn);
                 x[2] = cp_qmul(x[1], sn);
                 x[1] = cp_qmul(x[1], cs);
                 continue;
             }
-            if (!cp_tok_num(v, ta[k], tb[k], &y, &pct)) return 0;
+            if (cp_none(v, ta[k], tb[k])) { y = 0; pct = 0; }
+            else if (!cp_tok_num(v, ta[k], tb[k], &y, &pct)) return 0;
             if (!k) x[0] = cp_clampll(cp_q40(y, pct, ok ? 1 : 100, 1), 0, ok ? CP_Q : 100 * CP_Q);
             else if (k == 1 && lch) x[1] = cp_clampll(cp_q40(y, pct, ok ? 2 : 150, ok ? 5 : 1), 0, lim);
             else x[k] = cp_clampll(cp_q40(y, pct, ok ? 2 : 125, ok ? 5 : 1), -lim, lim);
         }
-        if (got == 4) {
-            if (!cp_tok_num(v, ta[3], tb[3], &y, &pct)) return 0;
-            o->a = cp_clampll(pct ? cp_div(y, 100, 0) : y, 0, CP_S);
-        }
+        if (got == 4 && !cp_alpha_tok(v, ta[3], tb[3], o)) return 0;
         cp_space_rgb(ok ? CP_SP_OKLAB : CP_SP_LAB, x, o->c);
         return 1;
     }
@@ -2257,14 +2303,14 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
         got = cp_color_toks(v, n, i, ta, tb);
         if ((got != 3 && got != 4) || cp_comma_after(v, tb[0], n)) return 0;
         for (k = 0; k < 3; k++) {
-            if (!cp_tok_num(v, ta[k], tb[k], &y, &pct)) return 0;
+            /* Lot 102: none is 0 and a missing channel (each component of
+             * an rgb or xyz space is the analogue of red, green, blue) */
+            if (cp_none(v, ta[k], tb[k])) { y = 0; pct = 0; o->miss |= 1 << k; }
+            else if (!cp_tok_num(v, ta[k], tb[k], &y, &pct)) return 0;
             if (sp < 0) o->c[k] = cp_clampll(pct ? cp_div(y * 255, 100, 0) : y * 255, 0, 255 * CP_S);
             else x[k] = cp_clampll(cp_q40(y, pct, 1, 1), -100 * CP_Q, 100 * CP_Q);
         }
-        if (got == 4) {
-            if (!cp_tok_num(v, ta[3], tb[3], &y, &pct)) return 0;
-            o->a = cp_clampll(pct ? cp_div(y, 100, 0) : y, 0, CP_S);
-        }
+        if (got == 4 && !cp_alpha_tok(v, ta[3], tb[3], o)) return 0;
         if (sp >= 0) cp_space_rgb(sp, x, o->c);
         return 1;
     }
@@ -2291,6 +2337,9 @@ static int cp_interp_color(const char *a, const char *b, int t, int add, char *o
     long long an, ch[3];
     int k, len = 0, alpha;
     if (!cp_rgba(a, &x) || !cp_rgba(b, &y)) return -1;
+    /* Lot 102: missing components, when interpolating (add takes the
+     * values as they convert) */
+    if (!add) cp_carry(&x, &y);
     /* alpha * 10^8: Aa 10^4 + (Ab - Aa) t, or (Aa + Ab) 10^4 */
     an = cp_clampll(add ? (x.a + y.a) * CP_S : x.a * CP_S + (y.a - x.a) * t, 0, CP_S * CP_S);
     for (k = 0; k < 3; k++) {
@@ -2907,12 +2956,147 @@ static const char *const cp_fills[] = {"none", "forwards", "backwards", "both", 
 static const char *const cp_plays[] = {"running", "paused", 0};
 static const char *const cp_comps[] = {"replace", "add", "accumulate", 0};
 
+static const char *const cp_tl_axes[] = { "block", "inline", "x", "y", 0 };
+static const char *const cp_scrollers[] = {"nearest", "root", "self", 0};
+static const char *const cp_ranges[] = {"cover", "contain", "entry", "exit", "entry-crossing", "exit-crossing",
+                                        "scroll", 0};
+
+/* Lot 102: an inset of view(): auto, a length, a percentage or 0 */
+static int cp_inset_tok(const char *s, int a, int b) {
+    char item[32];
+    cp_q_t q;
+    cp_mp_t m;
+    if (cp_eqn(s + a, b - a, "auto")) return 1;
+    if (cp_copy_item(item, (int)sizeof(item), s, a, b) < 0) return 0;
+    m.s = item; m.i = 0; m.depth = 0;
+    cp_mleaf(&m, &q);
+    if (item[m.i] || !q.ok) return 0;
+    return q.t == WF_CSSPROP_LENGTH || q.t == WF_CSSPROP_PERCENT || (q.t == WF_CSSPROP_NUMBER && !q.v);
+}
+
+/* Lot 102: scroll(...) or view(...) at w[0..l) into o: 1, 0 when it is
+ * not valid, -1 when w is neither function */
+static int cp_anon_tl(const char *w, int l, wf_cssanim_t *o) {
+    int view, i, x, y, k, src = -1, axis = -1, inset = 0, closed = 0;
+    if (l >= 8 && cp_eqn(w, 7, "scroll(")) { view = 0; i = 7; }
+    else if (l >= 6 && cp_eqn(w, 5, "view(")) { view = 1; i = 5; }
+    else return -1;
+    if (w[l - 1] != ')') return 0;
+    while (cp_next_tok(w, l - 1, &i, &x, &y)) {
+        k = cp_kw(w + x, y - x, cp_tl_axes);
+        if (k && axis < 0) {
+            /* an axis ends the insets before it */
+            axis = k - 1;
+            closed = inset > 0;
+            continue;
+        }
+        if (!view) {
+            k = cp_kw(w + x, y - x, cp_scrollers);
+            if (!k || src >= 0) return 0;
+            src = k - 1;
+            continue;
+        }
+        if (closed || inset >= 2 || !cp_inset_tok(w, x, y)) return 0;
+        inset++;
+    }
+    /* a stray ')' stops the tokens early */
+    while (i < l - 1 && cp_sp(w[i])) i++;
+    if (i < l - 1) return 0;
+    o->timeline = (unsigned char)(view ? WF_CSSANIM_TL_VIEW : WF_CSSANIM_TL_SCROLL);
+    o->tlsrc = (unsigned char)(src < 0 ? WF_CSSANIM_SC_NEAREST : src);
+    o->tlaxis = (unsigned char)(axis < 0 ? WF_CSSTL_BLOCK : axis);
+    o->tlname[0] = 0;
+    return 1;
+}
+
+/* Lot 102: a percentage or a unitless 0 at [x, y): 1 and *p (1/10000 %) */
+static int cp_range_pct(const char *v, int x, int y, long long *p) {
+    int pct;
+    if (!cp_tok_num(v, x, y, p, &pct)) return 0;
+    return pct || !*p;
+}
+
+/* Lot 102: one animation-range edge from the tokens of v at *i (before
+ * b): 1 into *kind and *p, 0 when there is none or it is not valid; a
+ * range name alone is at 0% for a start, 100% for an end */
+static int cp_range_edge(const char *v, int b, int *i, int end, unsigned char *kind, int *p) {
+    int x, y, j, k;
+    long long q;
+    if (!cp_next_tok(v, b, i, &x, &y)) return 0;
+    if (cp_eqn(v + x, y - x, "normal")) { *kind = WF_CSSANIM_R_NORMAL; *p = 0; return 1; }
+    if (cp_range_pct(v, x, y, &q)) { *kind = WF_CSSANIM_R_PCT; *p = (int)q; return 1; }
+    k = cp_kw(v + x, y - x, cp_ranges);
+    if (!k) return 0;
+    *kind = (unsigned char)(WF_CSSANIM_R_COVER + k - 1);
+    *p = end ? (int)(100 * CP_S) : 0;
+    j = *i;
+    if (cp_next_tok(v, b, &j, &x, &y) && cp_range_pct(v, x, y, &q)) { *p = (int)q; *i = j; }
+    return 1;
+}
+
+/* Lot 102: one item of animation-range-start (end 0) or -end (1) */
+static int cp_range_long(const char *v, int a, int b, int end, wf_cssanim_t *o) {
+    int i = a, x, y;
+    if (!cp_range_edge(v, b, &i, end, end ? &o->re : &o->rs, end ? &o->rep : &o->rsp)) return 0;
+    return !cp_next_tok(v, b, &i, &x, &y);
+}
+
+/* Lot 102: one item of the animation-range shorthand */
+static int cp_range_one(const char *v, int a, int b, wf_cssanim_t *o) {
+    int i = a, j, x, y;
+    if (!cp_range_edge(v, b, &i, 0, &o->rs, &o->rsp)) return 0;
+    j = i;
+    if (!cp_next_tok(v, b, &j, &x, &y)) {
+        /* no end: the start's range name at 100%, else normal */
+        int named = o->rs >= WF_CSSANIM_R_COVER;
+        o->re = named ? o->rs : (unsigned char)WF_CSSANIM_R_NORMAL;
+        o->rep = named ? (int)(100 * CP_S) : 0;
+        return 1;
+    }
+    if (!cp_range_edge(v, b, &i, 1, &o->re, &o->rep)) return 0;
+    return !cp_next_tok(v, b, &i, &x, &y);
+}
+
+int wf_cssanim_range(const char *v, wf_cssanim_t *out, int max) {
+    int ia[WF_CSSANIM_MAX], ib[WF_CSSANIM_MAX], c, k;
+    if (!v || !out) return -1;
+    if (max > WF_CSSANIM_MAX) max = WF_CSSANIM_MAX;
+    c = cp_list_items(v, ia, ib, max);     /* max < 1: no list fits */
+    for (k = 0; k < c; k++) if (!cp_range_one(v, ia[k], ib[k], &out[k])) return -1;
+    return c;
+}
+
+int wf_cssanim_range_text(const wf_cssanim_t *a, int n, int end, char *out, int cap) {
+    int k, m = 0, r;
+    if (!out || cap <= 0) return 0;
+    out[0] = 0;
+    if (!a) return 0;
+    for (k = 0; k < n; k++) {
+        int kind = end ? a[k].re : a[k].rs;
+        if (kind > WF_CSSANIM_R_SCROLL || (k && !cp_put(out, &m, cap, ", ", 2))) { out[0] = 0; return 0; }
+        if (kind == WF_CSSANIM_R_NORMAL) {
+            if (!cp_put(out, &m, cap, "normal", 6)) { out[0] = 0; return 0; }
+            continue;
+        }
+        if (kind >= WF_CSSANIM_R_COVER) {
+            const char *nm = cp_ranges[kind - WF_CSSANIM_R_COVER];
+            if (!cp_put(out, &m, cap, nm, cp_len(nm)) || !cp_put(out, &m, cap, " ", 1)) { out[0] = 0; return 0; }
+        }
+        r = cp_fmt(end ? a[k].rep : a[k].rsp, "%", out + m, cap - m);
+        if (r < 0) { out[0] = 0; return 0; }
+        m += r;
+    }
+    return m;
+}
+
 /* one item of animation longhand which into o: 1, 0 when it is not valid */
 static int cp_anim_long_one(int which, const char *v, int a, int b, wf_cssanim_t *o) {
     int x, y, l, k;
     const char *w;
     long long ms;
     wf_cssease_t e;
+    if (which == WF_CSSANIM_L_RANGE_START || which == WF_CSSANIM_L_RANGE_END)
+        return cp_range_long(v, a, b, which == WF_CSSANIM_L_RANGE_END, o);
     if (!cp_one_tok(v, a, b, &x, &y)) return 0;
     w = v + x; l = y - x;
     switch (which) {
@@ -2959,6 +3143,8 @@ static int cp_anim_long_one(int which, const char *v, int a, int b, wf_cssanim_t
     default:
         /* Lot 99: animation-timeline */
         /* tlname is meaningful for WF_CSSANIM_TL_NAMED only */
+        k = cp_anon_tl(w, l, o);     /* Lot 102 */
+        if (k >= 0) return k;
         if (cp_eqn(w, l, "auto")) { o->timeline = WF_CSSANIM_TL_AUTO; return 1; }
         if (cp_eqn(w, l, "none")) { o->timeline = WF_CSSANIM_TL_NONE; return 1; }
         if (l < 3 || w[0] != '-' || w[1] != '-' || !cp_is_ident(w, l) || l >= WF_CSSPROP_NAME) return 0;
@@ -3036,8 +3222,12 @@ static void cp_anim_field(int k, wf_cssanim_t *dst, const wf_cssanim_t *src) {
     case WF_CSSANIM_L_FILL: dst->fill = src->fill; break;
     case WF_CSSANIM_L_PLAY: dst->paused = src->paused; break;
     case WF_CSSANIM_L_COMPOSITION: dst->comp = src->comp; break;
+    case WF_CSSANIM_L_RANGE_START: dst->rs = src->rs; dst->rsp = src->rsp; break;     /* Lot 102 */
+    case WF_CSSANIM_L_RANGE_END: dst->re = src->re; dst->rep = src->rep; break;
     default:
         dst->timeline = src->timeline;
+        dst->tlsrc = src->tlsrc;
+        dst->tlaxis = src->tlaxis;
         for (j = 0; j < WF_CSSPROP_NAME; j++) dst->tlname[j] = src->tlname[j];
         break;
     }
@@ -3120,7 +3310,6 @@ int wf_cssanim_progress(const wf_cssanim_t *a, int ms, int *p, int *before) {
 
 /* ---- Lot 101: scroll and view timeline names (CSS Scroll-driven
  * Animations 1) ---- */
-static const char *const cp_tl_axes[] = { "block", "inline", "x", "y", 0 };
 
 /* one name: none (an empty name) or a <dashed-ident> as animation-timeline
  * takes it */
@@ -3146,6 +3335,12 @@ static int cp_tl_one(int which, const char *v, int a, int b, wf_csstl_t *o) {
         return !cp_next_tok(v, b, &i, &x, &y);
     }
     if (!cp_one_tok(v, a, b, &x, &y)) return 0;
+    if (which == WF_CSSTL_SCOPE) {
+        /* Lot 102: none and all are keywords (alone), else a name */
+        if (cp_eqn(v + x, y - x, "all")) { o->axis = WF_CSSTL_ALL; return 2; }
+        if (cp_eqn(v + x, y - x, "none")) return 2;
+        return cp_tl_name(v + x, y - x, o);
+    }
     if (which == WF_CSSTL_NAMES) return cp_tl_name(v + x, y - x, o);
     k = cp_kw(v + x, y - x, cp_tl_axes);
     if (!k) return 0;
@@ -3154,12 +3349,25 @@ static int cp_tl_one(int which, const char *v, int a, int b, wf_csstl_t *o) {
 }
 
 int wf_csstl_parse(int which, const char *v, wf_csstl_t *out, int max) {
-    int ia[WF_CSSANIM_MAX], ib[WF_CSSANIM_MAX], c, k;
-    if (!v || !out || which < WF_CSSTL_NAMES || which > WF_CSSTL_SHORT) return -1;
+    int ia[WF_CSSANIM_MAX], ib[WF_CSSANIM_MAX], c, k, r;
+    if (!v || !out || which < WF_CSSTL_NAMES || which > WF_CSSTL_SCOPE) return -1;
     if (max > WF_CSSANIM_MAX) max = WF_CSSANIM_MAX;
     c = cp_list_items(v, ia, ib, max);     /* max < 1: no list fits */
-    for (k = 0; k < c; k++) if (!cp_tl_one(which, v, ia[k], ib[k], &out[k])) return -1;
+    for (k = 0; k < c; k++) {
+        r = cp_tl_one(which, v, ia[k], ib[k], &out[k]);
+        if (!r || (r == 2 && c > 1)) return -1;      /* Lot 102: none and all alone */
+    }
     return c;
+}
+
+int wf_csstl_scoped(const char *v, const char *name) {
+    static wf_csstl_t t[WF_CSSANIM_MAX];
+    int n, k;
+    if (!name || !name[0]) return 0;
+    n = wf_csstl_parse(WF_CSSTL_SCOPE, v, t, WF_CSSANIM_MAX);    /* -1 for a null v */
+    if (n == 1 && t[0].axis == WF_CSSTL_ALL) return 2;
+    for (k = 0; k < n; k++) if (cp_eqn(t[k].name, cp_len(t[k].name), name)) return 1;
+    return 0;
 }
 
 int wf_csstl_coord(const char *names, const char *axes, wf_csstl_t *out, int max) {
@@ -3196,5 +3404,28 @@ int wf_cssanim_scroll_ms(const wf_cssanim_t *a, int prog, int *ms) {
     s = (long long)a->delay * CP_S + (long long)a->dur * a->iters;
     if (s <= 0 || s > (long long)WF_CSSANIM_MS_MAX * CP_S) return 0;
     *ms = (int)cp_div(s * prog, CP_S * CP_S, 1);
+    return 1;
+}
+
+int wf_cssanim_range_ms(const wf_cssanim_t *a, int prog, int *ms) {
+    long long s, st, en, den, t, lim = 2LL * WF_CSSANIM_MS_MAX;
+    cp_w_t num, q;
+    if (!wf_cssanim_scroll_ms(a, prog, ms)) return 0;     /* the same checks */
+    st = a->rs == WF_CSSANIM_R_PCT ? a->rsp : 0;
+    en = a->re == WF_CSSANIM_R_PCT ? a->rep : 100 * CP_S;
+    *ms = 0;
+    if (en <= st) return 0;
+    s = (long long)a->delay * CP_S + (long long)a->dur * a->iters;
+    /* s (100 prog - S) / (10000 (E - S)), at most about 10^21 / 1 */
+    num = cp_wmul(cp_w(s), (long long)prog * 100 - st);
+    den = (en - st) * CP_S;
+    q = cp_wdiv(num, den, 2);      /* toward zero */
+    if (cp_wlt(q, cp_w(-lim))) t = -lim;
+    else if (cp_wlt(cp_w(lim), q)) t = lim;
+    else {
+        t = (long long)q.lo;
+        if (cp_wneg_p(cp_wsub(num, cp_wmul(cp_w(t), den)))) t--;     /* rounded down */
+    }
+    *ms = (int)t;
     return 1;
 }
