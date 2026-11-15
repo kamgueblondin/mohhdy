@@ -47,8 +47,8 @@ Size: see review point 10.
     - Hand: test_lot100_reader.c (rgb(198, 73, 109) with a legacy witness; #5147d2 was #4000bf; rgb(189, 1, 1) was rgb(192, 1, 1)), test_lot101_reader.c (185,185,185 and 140,83,162, with an rgb() witness), test_lot103_reader.c (198,180,180, with a magenta/lime witness).
     - tests/scripts/test_qemu_lot103.py: the keyframes colour #007e14 is now #006300 (Oklab), the old value refused.
 8. CI: one new job, lot106-reader-body (make qemu-lot106, timeout 15 minutes).
-9. Mutations: see the Gates section and /workspace/run/lot106/mutations.txt on the box.
-10. Size: see the Gates section.
+9. Mutations: host, 2 runs on wf_cssprop.c, wf_sitecss.c and webeng_geom.inc (112 suites incl. test_osui_gui), each with a no-op control mutant (a comment changed) that survived as it must: run 1 59 mutants, 15 survived and 1 did not build (each got a witness: the component bound past the ends, the exact OKLab of a mix in oklch, which element is the body or the inactive root, a body not under the root element; the text and no-root checks of geom_body_el were equivalent and are removed; the unbuildable mutant was rewritten); run 2 57 mutants, 56 killed, the control survived. QEMU: 7 mutants on a git archive copy, make qemu-lot106: the control survived, body record not filled, body reading its index box, html active, everything legacy, Oklab only for two non-legacy colours, geom_used by index: killed. Detail: /workspace/run/lot106/mutations.txt on the box.
+10. Size: 8963 lines added and 1625 removed outside docs: code 134 / 25 (userspace), model scripts/lot106_model.py and generator scripts/lot106_gen.py 787 (new), generator and model conversions 63 / 8, generated suites 5770 (new), hand suites 445 (test_lot106_reader.c, test_lot106_engine.c), regenerated and converted older suites 1592 / 1584, QEMU test, server page, Makefile, CI and run_all_tests.sh 172 / 8. Inside the 8000-10000 aim.
 
 ## Not done (first gaps for lot 107)
 
@@ -65,4 +65,12 @@ QEMU: tests/scripts/test_qemu_lot106.py, `make qemu-lot106` (one boot at 1x): /l
 
 ## Gates on the box
 
-(filled at the end of the lot)
+Code commit ed0780e (the docs commit after it changes no code), 15 November 2026, UTC+4:
+
+- make all: pass; a fresh git archive make all: pass (35 s).
+- make test-all: pass, 24614 tests, 0 failed, registry, GUI parity and the other post checks pass (505 s).
+- make qemu-lot106: pass (100 s); make qemu-lot105: pass (159 s). At de3ea37 (same behaviour, before the equivalent geom_body_el reduction): qemu-lot106, 105, 104, 103 (converted check), 102, 101, 100 and 99: pass.
+- roadmap-check, secrets-check, font-check, strict-image-check: pass.
+- ASan/UBSan test-all: base 419085f 24361 tests 5 failed, head (code ed0780e) 24529 tests 5 failed (the same known five: test_gpt2_infer, test_pmm, test_vfs_service, test_lot87_web, test_webrt).
+- Mutations: host 56 distinct mutants killed and the control survived (run 2); QEMU 6 killed, the control survived (review point 9).
+- Other QEMU gates: left to GitHub CI.
