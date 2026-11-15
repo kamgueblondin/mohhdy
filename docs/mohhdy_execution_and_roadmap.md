@@ -7,6 +7,19 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 105 (15 November 2026, base da0e8fc, PR 262 merged)
+
+US-031 partial, phase3_complete=false. The reader reads overflow and
+height, finds scroll containers, and runs scroll(nearest), scroll(self),
+named scroll timelines and view() subjects against box scrollers from
+their own scroll state in the layout geometry; such a box is passed on
+to the engine and kept as a div. "web-css scroll gui" uses the GUI
+scroll offset, and the GUI styles the page again after scrolling
+(web-scroll, web-bscroll, arrow keys, box scrollbar clicks). A QEMU page
+(`make qemu-lot105`, CI job lot105-reader-scroll) checks it. US-068/073,
+US-076, US-080 and US-081 stay partial. US-078 and US-097 stay simule.
+See docs/lot105_plan.md.
+
 ### Lot 104 (15 November 2026, base 67c8f67, PR 261 merged)
 
 US-031 partial, phase3_complete=false. The layout hands a bounded box

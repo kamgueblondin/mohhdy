@@ -86,6 +86,13 @@ void wf_html_set_cssscroll(int pm);
 void wf_html_set_geommarks(int on);
 void wf_html_set_cssgeom(const wf_geom_t *g);
 int wf_html_sitecss_geom_need(void);
+/* Lot 105: the root position of the reader timelines is the GUI scroll
+ * offset of the layout geometry (on 1) or the wf_html_set_cssscroll
+ * setting (on 0, the default); 1 when the last reduced page has timelines
+ * that read a real scroll offset (box scrollers, the GUI root position):
+ * the page is styled again when the GUI scrolls (shell_page_geom) */
+void wf_html_set_cssscroll_gui(int on);
+int wf_html_sitecss_geom_live(void);
 /* Plain text of a page for the console (tags removed, blocks on new
  * lines). Lot 71: every character reference decoded and the text written
  * as UTF-8 (the console decodes UTF-8), Latin-1 pages converted. */

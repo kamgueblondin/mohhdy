@@ -243,6 +243,10 @@ static wf_cssl_stats_t g_css_st;
  * and 1 while the presented page waits for it */
 static wf_geom_t g_geom;
 static int g_geom_pending;
+/* Lot 105: 1 while the presented page has timelines that read a real
+ * scroll offset (box scrollers, the GUI root position): it is styled
+ * again from the layout when the GUI scrolls */
+static int g_geom_live;
 static wf_url_t g_geom_base;
 static int g_css_ran;
 static char g_load_dir[96];
@@ -345,6 +349,9 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
         wf_html_set_geommarks(0);
         /* Lot 104: view timelines wait for the layout (shell_page_geom) */
         g_geom_pending = use_css && wf_html_sitecss_geom_need() > 0;
+        /* Lot 105: set before g_page_ok (cleared above) is, so a page
+         * that is not presented is never styled again */
+        g_geom_live = g_geom_pending && wf_html_sitecss_geom_live();
         g_geom_base = base;
         wf_html_set_sitecss(0);
         wf_html_set_extcss(0, 0);
@@ -431,11 +438,25 @@ int shell_page_sections(void) { return g_page_ok ? g_sec.n : 0; }
  * images, already fetched) in src. The marks and the layout inputs are the
  * same (the reader passes colours only for them), so the layout is too.
  * Length, 0 when the page did not wait for its geometry. */
+/* Lot 105: a byte copy of the reader form state (no memcpy here) */
+static void fcopy(wf_form_page_t *dst, const wf_form_page_t *src) {
+    int k;
+    for (k = 0; k < (int)sizeof(*dst); k++) ((char *)dst)[k] = ((const char *)src)[k];
+}
+
+/* Lot 105: also after the first pass while the page is live (its
+ * timelines read real scroll offsets) and section 0 is shown: the GUI
+ * scrolled (the root, or a box), so the layout's scroll offsets go back
+ * to the reader; the reader form state the user gave is kept. */
 int shell_page_geom(const void *doc, char *src, int src_max) {
+    static wf_form_page_t keep;
     wf_html_stats_t st;
-    int n;
-    if (!g_geom_pending || !doc || !src || src_max <= 0) return 0;
+    int n, again;
+    if (!doc || !src || src_max <= 0) return 0;
+    again = !g_geom_pending;
+    if (again && !(g_geom_live && g_page_ok && g_cur == 0)) return 0;
     g_geom_pending = 0;
+    if (again) fcopy(&keep, &g_forms);
     (void)we_geom_feed((const we_doc_t *)doc, "wg", &g_geom);
     wf_html_set_cssgeom(&g_geom);
     wf_html_set_sitecss(1);
@@ -447,6 +468,7 @@ int shell_page_geom(const void *doc, char *src, int src_max) {
     wf_html_set_geommarks(0);
     wf_html_set_sitecss(0);
     wf_html_set_extcss(0, 0);
+    if (again) fcopy(&g_forms, &keep);
     if (g_full_n <= 0 || wf_section_index(g_full, g_full_n, &g_sec) <= 0) { g_page_ok = 0; return 0; }
     g_cur = 0;
     n = wf_section_render(g_full, g_full_n, &g_sec, 0, &g_forms, src, src_max);
@@ -810,12 +832,20 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
         const char *t = a + 6;
         int v = 0, dg = 0;
         while (*t == ' ') t++;
+        if (t[0] == 'g' && t[1] == 'u' && t[2] == 'i' && !t[3]) {
+            /* Lot 105: "web-css scroll gui": the GUI scroll position of
+             * the page (the layout's root scroll offset) */
+            wf_html_set_cssscroll_gui(1);
+            scat(out, cap, "web-css scroll gui\n");
+            return 0;
+        }
         while (*t >= '0' && *t <= '9' && dg < 4) { v = v * 10 + (*t - '0'); t++; dg++; }
         while (*t == ' ') t++;
         if (!dg || *t || v > 100) {
             scat(out, cap, "usage: web-css scroll <0..100>\n");
             return -1;
         }
+        wf_html_set_cssscroll_gui(0);
         wf_html_set_cssscroll(v * 100);
         scat(out, cap, "web-css scroll ");
         scat_int(out, cap, v);

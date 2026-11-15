@@ -1708,6 +1708,13 @@ qemu-lot103: $(OS_IMAGE) pack-initrd disk
 qemu-lot104: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot104.py
 
+# Lot 105: box scrollers as scroll and view timeline sources, the GUI
+# scroll position (web-css scroll gui, web-scroll, web-bscroll)
+# (tests/scripts/test_qemu_lot105.py)
+.PHONY: qemu-lot105
+qemu-lot105: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot105.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

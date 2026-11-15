@@ -13,8 +13,9 @@ on scroll(root) with animation-range: 20% 60%: #202020 at 25%, #bfbfbf
 at 50%, over at 75% (no colour). The root names --page102 but body has
 timeline-scope: --page102 and no descendant defines it, so #q102 stays
 idle. #v102 on view() (Lot 104: active, fed by the layout geometry; the
-page does not scroll, so its progress is that of its box at offset 262 in
-the 480 px viewport) is #747474 at every position. The css-anim line
+page does not scroll, so its progress is that of its box (Lot 105: a
+div holding a block, kept as a box: offset 254, 26 px high) in the 480
+px viewport, cover [-226, 280]) is #727272 at every position. The css-anim line
 counts the two scroll animations (scroll 2), the colours painted (color
 3, then 2 at 75%) and ends with "view 1 need 1 geom 1". The Lot 101 page is checked by make qemu-lot101.
 No guest clock is involved (no -rtc option).
@@ -45,7 +46,7 @@ KEEP = ["nkeep102", "mkeep102", "skeep102", "rkeep102", "qkeep102", "vkeep102"]
 STATIC = ["node div #n102 display auto color #ff0000\n",
           "node div #m102 display auto bg #c80000\n",
           "node div #q102 display auto\n",
-          "node div #v102 display auto color #747474\n"]
+          "node div #v102 display auto color #727272\n"]
 ANIM = "css-anim keyframes 1 animated 0 transitioned 0 font 0 at 500ms scroll 2 pos %d color %d 0 view 1 need 1 geom 1\n"
 
 
@@ -79,7 +80,7 @@ def step_reader(mon, proc, u):
     lw.run(mon, proc, "web-css time 0", "web-css time 0\n", 20)
     lw.run(mon, proc, "web-css off", "web-css off", 20)
     say("reader: none red #ff0000, carried mix bg #c80000; scroll() 25/50/75% #404040 #808080 #bfbfbf; "
-        "range 20%-60% #202020 #bfbfbf then over; scoped name idle, view() #747474")
+        "range 20%-60% #202020 #bfbfbf then over; scoped name idle, view() #727272")
 
 
 def boot(hp):

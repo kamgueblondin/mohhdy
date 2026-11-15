@@ -9,7 +9,14 @@
  * in CSS px of the page: the border box along the block and inline axes
  * of its nearest scroller's writing mode (vertical-rl block offsets from
  * the right edge, the block start), from that scroller's content start, with that scroller's scrollport size, scroll offset and
- * scroll range (max scroll offset) along both axes. */
+ * scroll range (max scroll offset) along both axes.
+ *
+ * Lot 105: which box scroller that is (sm: its reader index + 1 when it
+ * carries a mark, 0 for the root or an unmarked box), and, when the
+ * element is itself a box scroller (sv: overflow auto or scroll along y),
+ * its own scrollport height, scroll offset and scroll range along y (a
+ * box scroller scrolls along y only); the root scroll offset (sc_y, the
+ * GUI scroll position the layout had). */
 #ifndef WF_GEOM_H
 #define WF_GEOM_H
 
@@ -24,12 +31,16 @@ typedef struct {
     int vp_b, vp_i;              /* the scroller's scrollport size */
     int sc_b, sc_i;              /* its scroll offset */
     int rg_b, rg_i;              /* its scroll range, >= 0 */
+    unsigned char sv;            /* Lot 105: 1 when the element is a box scroller itself */
+    int sm;                      /* Lot 105: the nearest box scroller's reader index + 1, 0 none (root, unmarked) */
+    int s_vp, s_sc, s_rg;        /* Lot 105: its own scrollport height, scroll offset and range along y (sv) */
 } wf_geom_box_t;
 
 typedef struct {
     int n;                       /* boxes filled (ok) */
     int vw, vh;                  /* the root scrollport (viewport) */
     int rg_x, rg_y;              /* the root scroll range, >= 0 */
+    int sc_y;                    /* Lot 105: the root scroll offset along y (the GUI scroll position) */
     wf_geom_box_t box[WF_GEOM_MAX];
 } wf_geom_t;
 

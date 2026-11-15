@@ -10,7 +10,11 @@
  * writing mode (the root element's for the root); in vertical-rl the
  * block offset is taken from the block start (the right edge of the
  * scroller's content box, of the root element for the root), the inline
- * offsets stay physical (direction is not read). */
+ * offsets stay physical (direction is not read).
+ * Lot 105: an element that is a box scroller itself also gives its own
+ * scrollport height, scroll offset and range (scroll_view_h,
+ * box_scroll_y, scroll_apply's limit); we_geom_feed says which marked
+ * box scroller is the nearest one and the root scroll offset. */
 
 /* 1 when node i or an ancestor is display:none (no box) */
 static int geom_hidden(const we_doc_t *d, int i) {
@@ -32,10 +36,27 @@ static int geom_root_el(const we_doc_t *d) {
  * scroller's content start, the scrollport (vw, vh), scroll offset (sx,
  * sy) and range (rx, ry); 1 when the scroller is the root; its writing
  * mode in *wm */
+/* Lot 105: the nearest ancestor of node i that scrolls vertically, -1
+ * for the root */
+static int geom_scroller(const we_doc_t *d, int i) {
+    int s;
+    for (s = d->nodes[i].parent; s >= 0 && !overflow_scrollable(&d->nodes[s]); s = d->nodes[s].parent) {}
+    return s;
+}
+
+/* Lot 105: the scrollport height, scroll offset and scroll range of box
+ * scroller s (the limit scroll_apply keeps box_scroll_y in) */
+static void geom_own(const we_doc_t *d, int s, int *vp, int *sc, int *rg) {
+    const we_node_t *c = &d->nodes[s];
+    int view = scroll_view_h(c), content = scroll_content_bottom(d, s) + c->box_scroll_y;
+    *vp = view;
+    *sc = c->box_scroll_y;
+    *rg = content > view ? content - view : 0;
+}
+
 static int geom_phys(const we_doc_t *d, int i, int *r, int *wm) {
     const we_node_t *n = &d->nodes[i];
-    int s, vw, vh;
-    for (s = n->parent; s >= 0 && !overflow_scrollable(&d->nodes[s]); s = d->nodes[s].parent) {}
+    int s = geom_scroller(d, i), vw, vh;
     if (s >= 0) *wm = d->nodes[s].wmode;
     else {
         int h = geom_root_el(d);
@@ -57,13 +78,13 @@ static int geom_phys(const we_doc_t *d, int i, int *r, int *wm) {
     {
         const we_node_t *c = &d->nodes[s];
         int left = c->x + box_edge(c, 3) + c->padding[3], top = c->y + box_edge(c, 0) + c->padding[0];
-        int view = scroll_view_h(c), content = scroll_content_bottom(d, s) + c->box_scroll_y;
         int w = c->w - box_edge(c, 1) - box_edge(c, 3) - c->padding[1] - c->padding[3];
         r[0] = n->x - left;
         r[1] = n->y - (top - c->box_scroll_y);
-        r[4] = w > 0 ? w : 0; r[5] = view;
-        r[6] = 0; r[7] = c->box_scroll_y;
-        r[8] = 0; r[9] = content > view ? content - view : 0;
+        r[4] = w > 0 ? w : 0;
+        r[6] = 0;
+        r[8] = 0;
+        geom_own(d, s, &r[5], &r[7], &r[9]);
     }
     return 0;
 }
@@ -91,6 +112,12 @@ int we_geom(const we_doc_t *d, int node, wf_geom_box_t *g) {
     g->vp_b = r[v ? 5 : 4]; g->vp_i = r[v ? 4 : 5];
     g->sc_b = r[v ? 7 : 6]; g->sc_i = r[v ? 6 : 7];
     g->rg_b = r[v ? 9 : 8]; g->rg_i = r[v ? 8 : 9];
+    /* Lot 105: a box scroller gives its own scroll state (sm is
+     * we_geom_feed's: it needs the marks) */
+    g->sm = 0;
+    g->sv = (unsigned char)overflow_scrollable(&d->nodes[node]);
+    g->s_vp = g->s_sc = g->s_rg = 0;
+    if (g->sv) geom_own(d, node, &g->s_vp, &g->s_sc, &g->s_rg);
     return 0;
 }
 
@@ -115,10 +142,16 @@ int we_geom_feed(const we_doc_t *d, const char *prefix, wf_geom_t *g) {
     if (!d || !prefix || !prefix[0] || d->root < 0 || !d->nnodes) return 0;
     (void)geom_phys(d, d->root, r, &wm);
     g->vw = r[4]; g->vh = r[5]; g->rg_x = r[8]; g->rg_y = r[9];
+    g->sc_y = r[7];      /* Lot 105 */
     for (i = 0; i < (int)d->nnodes; i++) {
-        int m = geom_mark(d->nodes[i].id, prefix);     /* a text node has no id */
+        int m = geom_mark(d->nodes[i].id, prefix), s;     /* a text node has no id */
         if (m < 0 || g->box[m].ok) continue;
-        if (we_geom(d, i, &g->box[m]) == 0) g->n++;
+        if (we_geom(d, i, &g->box[m]) != 0) continue;
+        g->n++;
+        /* Lot 105: the marked box scroller around it (0: the root, or a
+         * box scroller without a mark) */
+        s = geom_scroller(d, i);
+        if (s >= 0) g->box[m].sm = geom_mark(d->nodes[s].id, prefix) + 1;
     }
     return g->n;
 }

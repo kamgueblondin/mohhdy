@@ -59,6 +59,8 @@ void wf_site_set_scroll(int pm) { g_scroll_pm = pm < 0 ? 0 : pm > 10000 ? 10000 
 /* Lot 104: the layout geometry of the next prepares (not copied) */
 static const wf_geom_t *g_geom;
 void wf_site_set_geom(const wf_geom_t *g) { g_geom = g; }
+static int g_scroll_gui;     /* Lot 105 */
+void wf_site_set_scroll_gui(int on) { g_scroll_gui = on ? 1 : 0; }
 
 static int vname_index(const wf_site_t *d, const char *name) {
     int k;
@@ -1008,6 +1010,16 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
         *rr = rank;
         return;
     }
+    if (r->kind >= WF_SITE_K_SC0 && r->kind < WF_SITE_K_SC0 + WF_SITE_SCS) {
+        /* Lot 105: overflow-x, overflow-y and height, the strongest wins */
+        int t = r->kind - WF_SITE_K_SC0, k, v = 0;
+        if (rank < nd->scrank[t]) return;
+        nd->scrank[t] = rank;
+        if (t < 2) { nd->ov[t] = r->val; return; }
+        for (k = 0; r->tok[k]; k++) v = v * 10 + (r->tok[k] - '0');
+        nd->hpx = v;
+        return;
+    }
     if (r->kind >= WF_SITE_K_TL0 && r->kind < WF_SITE_K_TL0 + WF_SITE_TLS) {
         /* Lot 101: per timeline longhand, the strongest list wins */
         int t = r->kind - WF_SITE_K_TL0;
@@ -1209,16 +1221,27 @@ static int long_given(const wf_site_node_t *nd) {
     return 0;
 }
 
+/* Lot 105: the overflow along y the reader passes on for element nd (a
+ * box scroller a timeline reads, auto or scroll along y, with a height it
+ * passes on), else 0 */
+static int box_passed(const wf_site_t *d, const wf_site_node_t *nd) {
+    int y;
+    if (!nd->scr || !nd->hpx) return 0;
+    y = wf_site_box_scroller(d, (int)(nd - d->node));
+    return y == WF_SITE_OV_AUTO || y == WF_SITE_OV_SCROLL ? y : 0;
+}
+
 int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
     const wf_site_node_t *nd = node_by_start(d, offset);
-    int n = 0, any = 0;
+    int n = 0, any = 0, box;
     if (!out || cap < 8) return 0;
     out[0] = 0;
     if (!nd) return 0;
+    box = box_passed(d, nd);
     if (!nd->color_set && nd->weight != 2 && nd->align < 2 && !nd->margin_set && !nd->pad_set &&
         nd->italic != 2 && nd->deco < 2 && nd->transform < 2 && nd->ws < 2 && !nd->bg_set &&
         nd->tok_val[0] != 2 && nd->tok_val[1] != 2 && nd->tok_val[2] != 2 && nd->tok_val[3] != 2 &&
-        !long_given(nd)) return 0;
+        !long_given(nd) && !box) return 0;
     n = app(out, cap, n, " style=\"");
     if (nd->color_set) { n = app(out, cap, n, "color:"); n = app_hex(out, cap, n, nd->color); any = 1; }
     if (nd->weight == 2) { if (any) n = app(out, cap, n, ";"); n = app(out, cap, n, "font-weight:bold"); any = 1; }
@@ -1295,6 +1318,14 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
             n = app(out, cap, n, d->lpool[nd->lv[t] - 1]);
             any = 1;
         }
+    }
+    if (box) {
+        /* Lot 105: a scroll box in the layout (Lot 74), so the timeline
+         * has a scroller to read */
+        if (any) n = app(out, cap, n, ";");
+        n = app(out, cap, n, box == WF_SITE_OV_AUTO ? "overflow-y:auto;height:" : "overflow-y:scroll;height:");
+        n = app_u(out, cap, n, (unsigned)(nd->hpx - 1));
+        n = app(out, cap, n, "px");
     }
     n = app(out, cap, n, "\"");
     return n;
@@ -1928,6 +1959,50 @@ static int long_proto(const wf_site_t *d, int kind, const char *norm, int given,
     return 1;
 }
 
+/* Lot 105: an overflow keyword (WF_SITE_OV_*), 0 */
+static int ov_val(const char *w) {
+    if (eq(w, "visible")) return WF_SITE_OV_VISIBLE;
+    if (eq(w, "hidden")) return WF_SITE_OV_HIDDEN;
+    if (eq(w, "clip")) return WF_SITE_OV_CLIP;
+    if (eq(w, "auto") || eq(w, "overlay")) return WF_SITE_OV_AUTO;
+    if (eq(w, "scroll")) return WF_SITE_OV_SCROLL;
+    return 0;
+}
+
+/* Lot 105: a height value: 1 with *px the px + 1 of an absolute length
+ * (rounded down, 0..WF_SITE_HMAX), *px 0 for a value the reader keeps
+ * but does not pass on (auto, the content keywords, a percentage, a
+ * number with another unit, calc() and the other math functions); 0 when
+ * it is not a height (a negative length, a keyword or a unitless number
+ * other than 0, several tokens) */
+static int height_val(const char *v, int *px) {
+    int q, k = 0, dg = 0, dot = 0;
+    *px = 0;
+    if (wf_csslen_abs(v, &q)) {
+        if (q < 0) return 0;
+        q /= 10000;
+        *px = (q > WF_SITE_HMAX ? WF_SITE_HMAX : q) + 1;
+        return 1;
+    }
+    if (eq(v, "auto") || eq(v, "min-content") || eq(v, "max-content") || eq(v, "fit-content")) return 1;
+    {
+        static const char *const fn[] = {"calc(", "min(", "max(", "clamp(", "fit-content(", 0};
+        int f, l = slen(v);
+        for (f = 0; fn[f]; f++) {
+            int m = slen(fn[f]), j;
+            for (j = 0; j < m && v[j] == fn[f][j]; j++) {}
+            if (j == m && l > m && v[l - 1] == ')') return 1;
+        }
+    }
+    if (v[k] == '+') k++;
+    while ((v[k] >= '0' && v[k] <= '9') || v[k] == '.') { if (v[k] != '.') dg++; else dot++; k++; }
+    if (!dg || dot > 1) return 0;
+    if (v[k] == '%' && !v[k + 1]) return 1;
+    if (!(v[k] >= 'a' && v[k] <= 'z')) return 0;
+    while (v[k] >= 'a' && v[k] <= 'z') k++;
+    return !v[k];
+}
+
 static int list_name(const char *s);
 
 /* Lot 90: the background shorthand: the colour (one colour as in lot
@@ -2134,6 +2209,65 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                             return 1;
                         }
                     }
+                }
+                if (i < n && body[i] == ';') i++;
+                continue;
+            }
+        }
+        {
+            /* Lot 105: overflow (one or two keywords: x then y),
+             * overflow-x, overflow-y and height, what makes a box
+             * scroller; initial and unset give visible (auto); a height
+             * the reader does not pass on (auto, a percentage, a font or
+             * viewport unit, calc() of them) still wins the cascade */
+            int sh = eq(prop, "overflow"), q = sh ? 0 : eq(prop, "overflow-x") ? 1 : eq(prop, "overflow-y") ? 2 :
+                                                     eq(prop, "height") ? 3 : -1;
+            if (q >= 0) {
+                int ini = eq(val, "initial") || eq(val, "unset"), ok = 1, kw[2] = {WF_SITE_OV_VISIBLE, 0}, nk = 0, px = 0;
+                proto->revert = WF_SITE_RV_NONE;
+                proto->box_n = 0;
+                proto->tok[0] = 0;
+                proto->val = 0;
+                if (q < 3 && !ini) {
+                    int k = 0;
+                    while (val[k] && ok) {
+                        char w[12];
+                        int l = 0;
+                        while (val[k] == ' ') k++;
+                        if (!val[k]) break;
+                        while (val[k] && val[k] != ' ' && l < 11) w[l++] = val[k++];
+                        w[l] = 0;      /* a longer word is no keyword (ov_val) */
+                        if (nk >= (sh ? 2 : 1)) ok = 0;
+                        else kw[nk++] = ov_val(w);
+                        if (ok && !kw[nk - 1]) ok = 0;
+                    }
+                    if (!nk) ok = 0;
+                } else if (q == 3 && !ini) {
+                    ok = height_val(val, &px);
+                }
+                if (ok) {
+                    if (q == 3) {
+                        proto->kind = WF_SITE_K_SC0 + 2;
+                        /* the value is the text (val unused): none when empty */
+                        if (px > 0) {
+                            /* px + 1 (at most WF_SITE_HMAX + 1), as decimal text */
+                            char t[8];
+                            int m = 0, v = px, o = 0;
+                            while (v) { t[m++] = (char)('0' + v % 10); v /= 10; }
+                            while (m) proto->tok[o++] = t[--m];
+                            proto->tok[o] = 0;
+                        }
+                        return 1;
+                    }
+                    proto->kind = (uint8_t)(WF_SITE_K_SC0 + (q == 2 ? 1 : 0));
+                    proto->val = (uint8_t)kw[0];
+                    if (sh) {
+                        g_more[0] = *proto;
+                        g_more[0].kind = WF_SITE_K_SC0 + 1;
+                        g_more[0].val = (uint8_t)(nk == 2 ? kw[1] : kw[0]);
+                        g_nmore = 1;
+                    }
+                    return 1;
                 }
                 if (i < n && body[i] == ';') i++;
                 continue;
@@ -4120,29 +4254,80 @@ static int tl_scoped_at(const wf_site_t *d, int q, const char *name) {
  * another scroller). Lot 104: with the layout geometry (wf_site_set_geom)
  * a view timeline runs (3, view_clock), and a scroll timeline with a
  * length edge runs on the root scroll range (scroll_clock) */
+/* Lot 105: the computed overflow along an axis (self, other: the two
+ * WF_SITE_OV_* values, 0 visible): visible next to hidden, auto or scroll
+ * is auto, clip there is hidden (CSS Overflow 3) */
+static int ov_axis(int self, int other) {
+    int box = other == WF_SITE_OV_HIDDEN || other == WF_SITE_OV_AUTO || other == WF_SITE_OV_SCROLL;
+    if (!self) self = WF_SITE_OV_VISIBLE;
+    if (box && self == WF_SITE_OV_VISIBLE) return WF_SITE_OV_AUTO;
+    if (box && self == WF_SITE_OV_CLIP) return WF_SITE_OV_HIDDEN;
+    return self;
+}
+
+int wf_site_box_scroller(const wf_site_t *d, int i) {
+    const wf_site_node_t *nd;
+    int y;
+    if (!d || i < 0 || i >= d->nnodes) return 0;
+    nd = &d->node[i];
+    if (eq(nd->tag, "html") || eq(nd->tag, "body")) return 0;
+    /* a box value along x makes y one too (ov_axis), so y alone says
+     * whether one axis is a box value */
+    y = ov_axis(nd->ov[1], nd->ov[0]);
+    if (y != WF_SITE_OV_HIDDEN && y != WF_SITE_OV_AUTO && y != WF_SITE_OV_SCROLL) return 0;
+    return y;
+}
+
+int wf_site_scroller_of(const wf_site_t *d, int i) {
+    int p;
+    if (!d || i < 0 || i >= d->nnodes) return -1;
+    for (p = d->node[i].parent; p >= 0; p = d->node[p].parent)
+        if (wf_site_box_scroller(d, p)) return p;
+    return -1;
+}
+
 /* Lot 104: a scroll timeline at the reader scroll position; with a length
- * edge on the root scroll range of the geometry (vertical, > 0) */
-static int scroll_clock(wf_site_t *d, const wf_cssanim_t *a, int *ms) {
+ * edge on the root scroll range of the geometry (vertical, > 0). Lot 105:
+ * src -1 is the root, else box scroller src, which runs on its own scroll
+ * range and offset from the geometry (4); with the GUI position the root
+ * runs on the geometry's range and sc_y */
+static int scroll_clock(wf_site_t *d, int src, const wf_cssanim_t *a, int *ms) {
     long long r;
-    if (!a->rsl && !a->rel) return wf_cssanim_range_ms(a, d->scroll_pm, ms) ? 2 : 0;
+    const wf_geom_box_t *b;
+    if (src >= 0) {
+        d->node[src].scr = 1;
+        d->geom_live = 1;
+        if (!g_geom || !g_geom->box[src].ok || !g_geom->box[src].sv) return 0;
+        b = &g_geom->box[src];
+        return wf_cssanim_scroll_px_ms(a, (long long)b->s_rg * 1000000, (long long)b->s_sc * 1000000, ms) ? 4 : 0;
+    }
+    if (d->scroll_gui) d->geom_live = 1;
+    else if (!a->rsl && !a->rel) return wf_cssanim_range_ms(a, d->scroll_pm, ms) ? 2 : 0;
     d->geom_root = 1;
     if (!g_geom) return 0;
     r = (long long)g_geom->rg_y * 1000000;      /* 0: no effect (wf_cssanim_scroll_px_ms) */
-    return wf_cssanim_scroll_px_ms(a, r, (long long)d->scroll_pm * g_geom->rg_y * 100, ms) ? 2 : 0;
+    return wf_cssanim_scroll_px_ms(a, r, d->scroll_gui ? (long long)g_geom->sc_y * 1000000 :
+                                         (long long)d->scroll_pm * g_geom->rg_y * 100, ms) ? 2 : 0;
 }
 
 /* Lot 104: animation a on the view timeline of subject q (axis, insets
  * ik and iv): the box of q along the axis from the root scroller, the
  * root scrolled along y at the reader scroll position (x at 0): 3, 0 when
- * q has no box, another scroller, or the time gives no effect */
+ * q has no box, another scroller, or the time gives no effect. Lot 105:
+ * the nearest scroller is the reader's (wf_site_scroller_of): a box
+ * scroller runs when the layout puts q in that marked box (sm), at its
+ * scroll offsets (5); with the GUI position the root's are the layout's */
 static int view_clock(wf_site_t *d, int q, int axis, const unsigned char *ik, const int *iv, const wf_cssanim_t *a,
                       int *ms) {
     const wf_geom_box_t *b;
     wf_cssview_t v;
-    int useb, vert;
+    int useb, vert, s = wf_site_scroller_of(d, q);
     d->node[q].geo = 1;
-    if (!g_geom || !g_geom->box[q].ok || !g_geom->box[q].root) return 0;
+    if (s >= 0) d->node[s].scr = 1;
+    if (s >= 0 || d->scroll_gui) d->geom_live = 1;
+    if (!g_geom || !g_geom->box[q].ok) return 0;
     b = &g_geom->box[q];
+    if (s < 0 ? !b->root : b->root || b->sm != s + 1) return 0;
     /* the block axis, or the inline one; which one is vertical */
     useb = axis == WF_CSSTL_BLOCK || (axis == WF_CSSTL_Y && b->bvert) || (axis == WF_CSSTL_X && !b->bvert);
     vert = useb ? b->bvert : !b->bvert;
@@ -4150,34 +4335,46 @@ static int view_clock(wf_site_t *d, int q, int axis, const unsigned char *ik, co
     v.size = (long long)(useb ? b->b_size : b->i_size) * 1000000;
     v.view = (long long)(useb ? b->vp_b : b->vp_i) * 1000000;
     v.range = (long long)(useb ? b->rg_b : b->rg_i) * 1000000;
-    v.pos = vert ? (long long)d->scroll_pm * (useb ? b->rg_b : b->rg_i) * 100 : 0;
+    if (s >= 0 || d->scroll_gui) v.pos = (long long)(useb ? b->sc_b : b->sc_i) * 1000000;
+    else v.pos = vert ? (long long)d->scroll_pm * (useb ? b->rg_b : b->rg_i) * 100 : 0;
     v.ik[0] = ik[0]; v.ik[1] = ik[1]; v.iv[0] = iv[0]; v.iv[1] = iv[1];
-    return wf_cssanim_view_ms(a, &v, ms) ? 3 : 0;
+    if (!wf_cssanim_view_ms(a, &v, ms)) return 0;
+    return s >= 0 ? 5 : 3;
+}
+
+/* Lot 105: the scroll timeline of element j as a source (j the root
+ * element: the root; a box scroller: that box; else none, -2) */
+static int scroll_src(const wf_site_t *d, int j) {
+    if (d->node[j].parent < 0 && eq(d->node[j].tag, "html")) return -1;
+    return wf_site_box_scroller(d, j) ? j : -2;
 }
 
 static int anim_clock(wf_site_t *d, int i, const wf_cssanim_t *a, int *ms) {
     static wf_csstl_t t;
     int q, s;
-    int root = d->node[i].parent < 0 && eq(d->node[i].tag, "html");
     *ms = d->anim_ms;
     if (a->timeline == WF_CSSANIM_TL_AUTO) return 1;
     if (a->timeline == WF_CSSANIM_TL_SCROLL) {
-        if ((a->tlsrc == WF_CSSANIM_SC_SELF && !root) || (a->tlsrc == WF_CSSANIM_SC_NEAREST && d->node[i].parent < 0) ||
-            (a->tlaxis != WF_CSSTL_BLOCK && a->tlaxis != WF_CSSTL_Y))
-            return 0;
-        return scroll_clock(d, a, ms);
+        /* Lot 105: nearest is the nearest box scroller, else the root
+         * (none for the root element); self the root element or a box
+         * scroller */
+        if (a->tlaxis != WF_CSSTL_BLOCK && a->tlaxis != WF_CSSTL_Y) return 0;
+        if (a->tlsrc == WF_CSSANIM_SC_SELF) s = scroll_src(d, i);
+        else if (a->tlsrc == WF_CSSANIM_SC_NEAREST) s = d->node[i].parent < 0 ? -2 : wf_site_scroller_of(d, i);
+        else s = -1;
+        return s < -1 ? 0 : scroll_clock(d, s, a, ms);
     }
     /* Lot 104: view(), the element itself is the subject */
     if (a->timeline == WF_CSSANIM_TL_VIEW) return view_clock(d, i, a->tlaxis, a->vik, a->viv, a, ms);
     if (a->timeline != WF_CSSANIM_TL_NAMED) return 0;
     for (q = i; q >= 0; q = d->node[q].parent) {
-        const wf_site_node_t *nd = &d->node[q];
         s = tl_defines(d, q, a->tlname, &t);
         if (s == 2) return view_clock(d, q, t.axis, t.ik, t.iv, a, ms);
         if (s) {
-            if (nd->parent >= 0 || !eq(nd->tag, "html") || (t.axis != WF_CSSTL_BLOCK && t.axis != WF_CSSTL_Y))
-                return 0;
-            return scroll_clock(d, a, ms);
+            /* Lot 105: a box scroller too */
+            s = scroll_src(d, q);
+            if (s < -1 || (t.axis != WF_CSSTL_BLOCK && t.axis != WF_CSSTL_Y)) return 0;
+            return scroll_clock(d, s, a, ms);
         }
         if (tl_scoped_at(d, q, a->tlname)) return 0;
     }
@@ -4428,8 +4625,9 @@ static void col_pass(wf_site_t *d) {
         /* Lot 101: the animations a scroll timeline drives */
         for (j = 0; j < na; j++) {
             int c = kf_find(d, al[j].name) ? anim_clock(d, i, &al[j], &ms[j]) : 0;
-            if (c == 2) d->anim_scroll++;
-            if (c == 3) d->anim_view++;     /* Lot 104 */
+            if (c == 2 || c == 4) d->anim_scroll++;
+            if (c == 3 || c == 5) d->anim_view++;     /* Lot 104 */
+            if (c >= 4) d->anim_box++;                /* Lot 105 */
         }
         for (w = 0; w < 2; w++) {
             const char *name = w ? "background-color" : "color";
@@ -4512,7 +4710,8 @@ int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
         n = app(out, cap, n, " scroll ");
         n = app_u(out, cap, n, (unsigned)d->anim_scroll);
         n = app(out, cap, n, " pos ");
-        n = app_u(out, cap, n, (unsigned)d->scroll_pm);
+        if (d->scroll_gui) n = app(out, cap, n, "gui");     /* Lot 105 */
+        else n = app_u(out, cap, n, (unsigned)d->scroll_pm);
     }
     if (d->col_animated || d->col_transitioned) {
         n = app(out, cap, n, " color ");
@@ -4528,6 +4727,15 @@ int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
         n = app_u(out, cap, n, (unsigned)d->geom_need);
         n = app(out, cap, n, " geom ");
         n = app_u(out, cap, n, (unsigned)d->geom_used);
+    }
+    if (d->anim_box) {
+        /* Lot 105 */
+        n = app(out, cap, n, " box ");
+        n = app_u(out, cap, n, (unsigned)d->anim_box);
+    }
+    if (d->scroll_gui && d->geom_live) {
+        n = app(out, cap, n, " gui ");
+        n = app_u(out, cap, n, (unsigned)d->gui_y);
     }
     return n;
 }
@@ -4595,6 +4803,8 @@ int wf_site_apply(wf_site_t *d) {
      * then the reader properties again when one changed (var() reads it) */
     d->anim_ms = g_anim_ms;
     d->scroll_pm = g_scroll_pm;
+    d->scroll_gui = g_scroll_gui;     /* Lot 105 */
+    d->gui_y = g_scroll_gui && g_geom ? g_geom->sc_y : 0;
     if (d->nprops && anim_pass(d)) {
         int k;
         /* the animation and transition lists come out the same (same
@@ -4611,7 +4821,7 @@ int wf_site_apply(wf_site_t *d) {
     d->geom_need = d->geom_root;
     d->geom_used = 0;
     for (i = 0; i < d->nnodes; i++) {
-        if (!d->node[i].geo) continue;
+        if (!d->node[i].geo && !d->node[i].scr) continue;     /* Lot 105: box scrollers too */
         d->geom_need++;
         if (g_geom && g_geom->box[i].ok) d->geom_used++;
     }
@@ -4621,5 +4831,27 @@ int wf_site_apply(wf_site_t *d) {
 
 int wf_site_geom_subject(const wf_site_t *d, int offset) {
     const wf_site_node_t *nd = node_by_start(d, offset);
-    return nd && nd->geo ? (int)(nd - d->node) : -1;
+    return nd && (nd->geo || nd->scr) ? (int)(nd - d->node) : -1;
+}
+
+/* Lot 105: the tags the reader view writes as blocks (a paragraph, a
+ * heading, a list, or a div it merges into a paragraph) */
+static int block_tag(const char *t) {
+    static const char *const bt[] = {"p", "div", "section", "article", "main", "header", "h1", "h2", "h3", "h4", "h5",
+                                     "h6", "ul", "ol", "li", "pre", "blockquote", "hr", "table", "tr", "td", "th",
+                                     "dt", "dd", "figcaption", "caption", "summary", "details", 0};
+    int k;
+    for (k = 0; bt[k]; k++) if (eq(t, bt[k])) return 1;
+    return 0;
+}
+
+int wf_site_geom_block(const wf_site_t *d, int offset) {
+    const wf_site_node_t *nd = node_by_start(d, offset);
+    int c;
+    if (!nd) return 0;
+    if (nd->scr) return 1;
+    if (!nd->geo) return 0;
+    for (c = nd->first; c >= 0; c = d->node[c].next)
+        if (block_tag(d->node[c].tag)) return 1;
+    return 0;
 }

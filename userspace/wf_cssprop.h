@@ -560,4 +560,8 @@ int wf_cssanim_view_ms(const wf_cssanim_t *a, const wf_cssview_t *v, int *ms);
  * 0) at scroll offset pos: the edges as on a view timeline whose cover
  * range is [0, range] (range names count as normal), the same time. */
 int wf_cssanim_scroll_px_ms(const wf_cssanim_t *a, long long range, long long pos, int *ms);
+/* Lot 105: v is one absolute length (px, cm, mm, q, in, pt, pc) or a
+ * unitless 0: 1 and its value in 1/10000 px (within +-100000px) in *out;
+ * 0 for anything else (auto, a percentage, a font or viewport unit) */
+int wf_csslen_abs(const char *v, int *out);
 #endif

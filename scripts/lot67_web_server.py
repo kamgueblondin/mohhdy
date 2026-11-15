@@ -117,6 +117,11 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       (view(), a named view timeline with insets, entry,
                       exit, contain and cover ranges, px offsets,
                       view(diagonal) invalid)
+  /lot105/scroll.html Lot 105: a box scroller as a scroll and a view
+                      timeline source (scroll(nearest), a named scroll
+                      timeline, view() inside the box, a hidden box),
+                      scroll(root) at the GUI scroll position, a
+                      field whose value survives the restyle
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -666,6 +671,34 @@ LOT104_PAGES = {
 }
 
 
+# Lot 105: reader page with a box scroller (tests/scripts/test_qemu_lot105.py)
+LOT105_BOX = "".join("<p>box105 %d</p>" % i for i in range(8))
+LOT105_FILL = "".join("<p>line105 %d</p>" % i for i in range(24))
+LOT105_PAGES = {
+    "/lot105/scroll.html": (
+        "<!doctype html><html><head><title>Lot 105 scroll</title><style>"
+        "@keyframes k105 { from { color: #000000 } to { color: #ffffff } }\n"
+        "#o105 { overflow-y: auto; height: 120px; scroll-timeline: --s105 }\n"
+        "#i105 { animation: k105 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "#j105 { animation: k105 1000ms linear; animation-timeline: --s105; animation-range: 0px 100px }\n"
+        "#v105 { animation: k105 1000ms linear; animation-timeline: view() }\n"
+        "#h105 { overflow: hidden; height: 40px }\n"
+        "#c105 { animation: k105 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "#r105 { animation: k105 1000ms linear; animation-timeline: scroll(root) }\n"
+        "</style></head><body><main>"
+        "<div id=\"o105\"><p id=\"i105\">ikeep105</p><p id=\"j105\">jkeep105</p>"
+        + LOT105_BOX +
+        "<p id=\"v105\">vkeep105</p>"
+        + LOT105_BOX +
+        "</div>"
+        "<div id=\"h105\"><p id=\"c105\">ckeep105</p><p>hidden105</p><p>hidden105</p></div>"
+        "<p id=\"r105\">rkeep105</p>"
+        "<form action=\"/echo\"><input name=\"q105\" value=\"\"></form>"
+        + LOT105_FILL +
+        "<p>fin105</p></main></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -885,6 +918,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT104_PAGES:
             self._send(200, LOT104_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT105_PAGES:
+            self._send(200, LOT105_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

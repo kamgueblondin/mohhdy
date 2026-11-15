@@ -2103,6 +2103,174 @@ static void test_lot104_page_geom(void) {
     osui_gui_set_web_fetch(0);
 }
 
+/* Lot 105: "web-scroll Y" and "web-bscroll X Y" (view coordinates), the
+ * arrow keys and a desktop click on a box scrollbar style the page again
+ * (page_geom) when it moved; the page returned is laid out at the same
+ * offsets (the box one kept by its id) */
+static int g_l105_calls, g_l105_ret, g_l105_box;
+#define L105_BODY "<div id=wg2 style=\"overflow-y:auto;height:60px\"><p>a</p><p>b</p><p>c</p><p>d</p><p>e</p>" \
+    "<p>f</p><p>g</p><p>h</p></div><p>1</p><p>2</p><p>3</p><p>4</p><p>5</p><p>6</p><p>7</p><p>8</p><p>9</p><p>10</p>" \
+    "<p>11</p><p>12</p><p>13</p><p>14</p><p>15</p><p>16</p><p>17</p><p>18</p><p>19</p><p>20</p><p>21</p><p>22</p>" \
+    "<p>23</p><p>24</p><p>25</p><p>26</p><p>27</p><p>28</p><p>29</p><p>30</p>"
+static int l105_fetch(const char *url, char *src, int src_max, char *final_url, int url_max, char *status, int st_max) {
+    (void)url_max; (void)st_max;
+    snprintf(final_url, 64, "%s", url);
+    snprintf(status, 64, "osui web fetch ok fake");
+    return snprintf(src, (size_t)src_max, "<html><head><title>S</title></head><body>" L105_BODY "</body></html>");
+}
+static int l105_geom(const void *doc, char *src, int src_max) {
+    const we_doc_t *d = (const we_doc_t *)doc;
+    int b = we_find_id(d, "wg2");
+    g_l105_calls++;
+    g_l105_box = b >= 0 ? d->nodes[b].box_scroll_y : -1;
+    if (!g_l105_ret) return 0;
+    if (g_l105_ret == 2) {
+        /* over the engine's node budget: its render fails */
+        int n = snprintf(src, (size_t)src_max, "<html><body>"), i;
+        for (i = 0; i < 400 && n < src_max - 32; i++) n += snprintf(src + n, (size_t)(src_max - n), "<p>x</p>");
+        return n + snprintf(src + n, (size_t)(src_max - n), "</body></html>");
+    }
+    return snprintf(src, (size_t)src_max, "<html><head><title>S</title></head><body><p id=styled>s</p>" L105_BODY
+                    "</body></html>");
+}
+static int l105_box(void) {
+    int b = we_find_id(osui_gui_web_doc(), "wg2");
+    return b >= 0 ? osui_gui_web_doc()->nodes[b].box_scroll_y : -1;
+}
+static void test_lot105_scroll_refresh(void) {
+    static const osui_web_page_ops_t ops = { .page_geom = l105_geom };
+    const we_node_t *n;
+    char e[64];
+    int b, x, y;
+    setup();
+    osui_gui_set_web_page_ops(0);
+    if (osui_gui_web_active()) osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(0, osui_gui_web_active());
+    /* usage, no page */
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll 10", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web scroll error=no_page"));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-bscroll 1 2", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web bscroll error=no_page"));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web scroll error=usage web-scroll Y"));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll x", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web scroll error=usage web-scroll Y"));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-bscroll 5", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web bscroll error=usage web-bscroll X Y"));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-bscroll", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web bscroll error=usage web-bscroll X Y"));
+    /* another command of that prefix is not this one */
+    memset(g_out, 0, sizeof(g_out));
+    (void)osui_gui_web_command("web-scrollx 5", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NULL(strstr(g_out, "osui web scroll"));
+    (void)osui_gui_web_command("web-bscrollx 5 5", g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NULL(strstr(g_out, "osui web bscroll"));
+    osui_gui_set_web_fetch(l105_fetch);
+    osui_gui_set_web_page_ops(&ops);
+    g_l105_calls = 0;
+    g_l105_ret = 0;
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-open https://ex.am/s", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(1, g_l105_calls);
+    /* the root: restyled at the new offset */
+    g_l105_ret = 1;
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll 100", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web scroll 100 restyled"));
+    TEST_ASSERT_EQUAL(2, g_l105_calls);
+    TEST_ASSERT(we_find_id(osui_gui_web_doc(), "styled") >= 0);
+    TEST_ASSERT_EQUAL(100, osui_gui_web_doc()->scroll_y);
+    /* the same offset: nothing to do */
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll  100", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web scroll 100"));
+    TEST_ASSERT_NULL(strstr(g_out, "restyled"));
+    TEST_ASSERT_EQUAL(2, g_l105_calls);
+    /* page_geom has nothing: the layout stays */
+    g_l105_ret = 0;
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll 0", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web scroll 0"));
+    TEST_ASSERT_NULL(strstr(g_out, "restyled"));
+    TEST_ASSERT_EQUAL(3, g_l105_calls);
+    /* bounded by the engine; at most six digits */
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll 999999", g_out, (int)sizeof(g_out)));
+    snprintf(e, sizeof(e), "osui web scroll %d", osui_gui_web_doc()->scroll_y);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, e));
+    TEST_ASSERT(osui_gui_web_doc()->scroll_y > 100);
+    TEST_ASSERT(osui_gui_web_doc()->scroll_y < 99999);
+    TEST_ASSERT_EQUAL(4, g_l105_calls);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll 1000000", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web scroll error=usage web-scroll Y"));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-bscroll 1 1000000", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web bscroll error=usage web-bscroll X Y"));
+    TEST_ASSERT_EQUAL(4, g_l105_calls);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll 0", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(5, g_l105_calls);
+    /* the box scrollbar: page_geom sees the box offset; the restyled page
+     * keeps it */
+    b = we_find_id(osui_gui_web_doc(), "wg2");
+    TEST_ASSERT(b >= 0);
+    n = &osui_gui_web_doc()->nodes[b];
+    x = n->x + n->w - 2;
+    y = n->y + 50;
+    g_l105_ret = 1;
+    memset(g_out, 0, sizeof(g_out));
+    snprintf(e, sizeof(e), "web-bscroll %d %d", x, y);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command(e, g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web bscroll hit restyled"));
+    TEST_ASSERT_EQUAL(6, g_l105_calls);
+    TEST_ASSERT(g_l105_box > 0);
+    TEST_ASSERT_EQUAL(g_l105_box, l105_box());
+    TEST_ASSERT(we_find_id(osui_gui_web_doc(), "styled") >= 0);
+    /* the same place again: hit, no change, no call */
+    memset(g_out, 0, sizeof(g_out));
+    b = we_find_id(osui_gui_web_doc(), "wg2");
+    n = &osui_gui_web_doc()->nodes[b];
+    snprintf(e, sizeof(e), "web-bscroll %d %d", n->x + n->w - 2, n->y + 50);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command(e, g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web bscroll hit"));
+    TEST_ASSERT_NULL(strstr(g_out, "restyled"));
+    TEST_ASSERT_EQUAL(6, g_l105_calls);
+    /* not on a scrollbar */
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-bscroll 0 0", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web bscroll none"));
+    TEST_ASSERT_EQUAL(6, g_l105_calls);
+    /* view coordinates: with the page scrolled the box is higher */
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll 20", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_EQUAL(7, g_l105_calls);
+    b = we_find_id(osui_gui_web_doc(), "wg2");
+    n = &osui_gui_web_doc()->nodes[b];
+    memset(g_out, 0, sizeof(g_out));
+    snprintf(e, sizeof(e), "web-bscroll %d %d", n->x + n->w - 2, n->y - 20);
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command(e, g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web bscroll hit restyled"));
+    TEST_ASSERT_EQUAL(8, g_l105_calls);
+    TEST_ASSERT_EQUAL(0, l105_box());
+    TEST_ASSERT_EQUAL(20, osui_gui_web_doc()->scroll_y);
+    /* a desktop click on the scrollbar (page coordinates), no form */
+    b = we_find_id(osui_gui_web_doc(), "wg2");
+    n = &osui_gui_web_doc()->nodes[b];
+    snprintf(e, sizeof(e), "web click %d %d", n->x + n->w - 2, n->y + 40);
+    evt(e);
+    TEST_ASSERT_EQUAL(9, g_l105_calls);
+    TEST_ASSERT(l105_box() > 0);
+    /* the arrow keys */
+    osui_gui_feed_key(OS_VGA_KEY_DOWN, g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL(10, g_l105_calls);
+    TEST_ASSERT_EQUAL(40, osui_gui_web_doc()->scroll_y);
+    /* the page returned does not render: said, the offset is not set */
+    g_l105_ret = 2;
+    memset(g_out, 0, sizeof(g_out));
+    TEST_ASSERT_EQUAL(1, osui_gui_web_command("web-scroll 60", g_out, (int)sizeof(g_out)));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web scroll 60 error=render"));
+    TEST_ASSERT_NULL(strstr(g_out, "restyled"));
+    TEST_ASSERT_EQUAL(11, g_l105_calls);
+    osui_gui_set_web_page_ops(0);
+    osui_gui_set_web_fetch(0);
+}
+
 /* Lot 90: a value picked from the list and kept is accepted: the store is
  * told (page_offer_touch) so it dates that value today. Down with one
  * value, a click on a row, and Down / Up then leaving the field (Tab,
@@ -2223,6 +2391,7 @@ int main(void) {
     RUN_TEST(test_lot87_offer_delete);
     RUN_TEST(test_lot74_gui_fragment);
     RUN_TEST(test_lot104_page_geom);
+    RUN_TEST(test_lot105_scroll_refresh);
     unity_print_results();
     unity_cleanup();
     return (unity_stats.tests_failed == 0) ? 0 : 1;
