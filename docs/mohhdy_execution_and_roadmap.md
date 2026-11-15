@@ -7,6 +7,18 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 104 (15 November 2026, base 67c8f67, PR 261 merged)
+
+US-031 partial, phase3_complete=false. The layout hands a bounded box
+geometry record back to the reader (two passes, layout results
+unchanged), so view() and named view timelines run against the root
+scroller with view-timeline-inset, the named ranges cover, contain,
+entry, exit, entry-crossing and exit-crossing, and absolute lengths in
+animation-range. A QEMU page (`make qemu-lot104`, CI job
+lot104-reader-view) checks the reader at three scroll positions.
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097
+stay simule. See docs/lot104_plan.md.
+
 ### Lot 103 (15 November 2026, base aaca718, PR 260 merged)
 
 US-031 partial, phase3_complete=false. The reader gamut-maps colours
