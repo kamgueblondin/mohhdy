@@ -17,6 +17,10 @@ height:32px;min-height:80px;overflow-x:auto;max-width:240px"; the box is
 alone: none. "web-bscroll 158 66" scrolls #o108 to 380 * 150 / 300 =
 190: #i108 at 190 / 380, #808080. "web-bscroll 68 146" scrolls #m108
 to 440 * 60 / 240 = 110: #n108 at 110 / 440, #404040.
+#v108, a row of #m108 on view(inline), is #808080 at offset 0 (its
+inline offset 0 in a 240 px scrollport: (0 + 240) / 480) and #bababa at
+110 ((110 + 240) / 480); without the x shift of the contents it stays
+#808080 (refused).
 Relative colours (CSS Color 5): #r108 rgb(from #336699 r g calc(b -
 16)) is #336689; #h108 hsl(from rgb(from red b g r) calc(h - 120) s
 calc(l - 10)) is hsl(120 100 40), #00cc00; #c108 runs keyframes from
@@ -47,7 +51,7 @@ ROOT = g.ROOT
 SRV_LOG = os.path.join(g.LOG_DIR, "lot108-web-server.log")
 need, refuse = l88.need, l88.refuse
 KEEP = ["ikeep108", "nkeep108", "rkeep108", "hkeep108", "ckeep108"]
-ANIM = "css-anim keyframes 2 animated 0 transitioned 0 font 0 at 500ms scroll 2 pos 0 color 3 0 view 0 need 2 geom 2 box 2\n"
+ANIM = "css-anim keyframes 2 animated 0 transitioned 0 font 0 at 500ms scroll 2 pos 0 color 4 0 view 1 need 3 geom 3 box 3\n"
 FIXED = ["node p #r108 display auto color #336689\n", "node p #h108 display auto color #00cc00\n",
          "node p #c108 display auto color #800080\n"]
 NEVER = ["node p #r108 display auto\n", "node p #h108 display auto\n", "node p #c108 display auto\n"]
@@ -55,6 +59,10 @@ NEVER = ["node p #r108 display auto\n", "node p #h108 display auto\n", "node p #
 
 def say(msg):
     print("[lot108] %s" % msg, flush=True)
+
+
+def vnode(c):
+    return "node p #v108 display auto color %s\n" % c
 
 
 def node(i, c):
@@ -72,20 +80,23 @@ def step_reader(mon, proc, u):
     out = css(mon, proc)
     read = lw.run(mon, proc, "web-read", "fin108", 30)
     need(read, KEEP, "web-read x")
-    need(out, FIXED + [node("i108", "#000000"), node("n108", "#000000"), ANIM], "web-css before")
+    need(out, FIXED + [node("i108", "#000000"), node("n108", "#000000"), vnode("#808080"), ANIM],
+         "web-css before")
     refuse(out, NEVER, "web-css before")
     lw.run(mon, proc, "web-bscroll 68 100", "osui web bscroll none", 30, fail=["error=", "bscroll hit"])
     lw.run(mon, proc, "web-bscroll 158 66", "osui web bscroll hit restyled", 30, fail=["error="])
     out = css(mon, proc)
-    need(out, FIXED + [node("i108", "#808080"), node("n108", "#000000"), ANIM], "web-css at #o108 190")
+    need(out, FIXED + [node("i108", "#808080"), node("n108", "#000000"), vnode("#808080"), ANIM],
+         "web-css at #o108 190")
     lw.run(mon, proc, "web-bscroll 68 146", "osui web bscroll hit restyled", 30, fail=["error="])
     out = css(mon, proc)
-    need(out, FIXED + [node("i108", "#808080"), node("n108", "#404040"), ANIM], "web-css at #m108 110")
-    refuse(out, NEVER, "web-css after")
+    need(out, FIXED + [node("i108", "#808080"), node("n108", "#404040"), vnode("#bababa"), ANIM],
+         "web-css at #m108 110")
+    refuse(out, NEVER + [vnode("#808080")], "web-css after")
     lw.run(mon, proc, "web-css time 0", "web-css time 0\n", 20)
     lw.run(mon, proc, "web-css off", "web-css off", 20)
     say("reader: x box 300 px (#808080 at 190/380), max-width 15em / min-height 5em box 80 px high (#404040 at "
-        "110/440, no bar at 32 px), relative colours #336689, #00cc00, keyframes #800080")
+        "110/440, no bar at 32 px), view(inline) #808080 then #bababa, relative colours #336689, #00cc00, keyframes #800080")
 
 
 def boot(hp):
