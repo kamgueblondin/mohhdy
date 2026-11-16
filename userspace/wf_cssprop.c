@@ -2365,7 +2365,9 @@ static void cp_mix_comps(int m, const cp_rgba_t *x, long long *v, int *miss) {
         long long a = v[1], b = v[2];
         v[1] = (long long)cp_isqrt(cp_wadd(cp_wmul(cp_w(a), a), cp_wmul(cp_w(b), b)));
         v[2] = cp_atan2(b, a);
-        if (m == 13 ? v[1] * 10000 <= 15 * CP_Q : v[1] * 1000000 <= 4 * CP_Q) *miss |= 64;
+        /* Lot 108: compared without the product (a chroma past 9 from a
+         * relative colour's origin overflowed it); exact for an integer */
+        if (m == 13 ? v[1] <= 15 * CP_Q / 10000 : v[1] <= 4 * CP_Q / 1000000) *miss |= 64;
     }
 }
 

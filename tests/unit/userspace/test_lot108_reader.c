@@ -63,6 +63,10 @@ static void test_l108_rel_basic(void) {
     TEST_ASSERT_EQUAL_STRING("636363 255", col("oklab(from black calc(l + 0.5) a b)"));
     TEST_ASSERT_EQUAL_STRING("d58679 255", col("oklch(from oklch(0.7 0.1 30) l c h)"));
     TEST_ASSERT_EQUAL_STRING("009cb2 255", col("oklch(from red l c calc(h + 180))"));
+    /* an origin of chroma 10 (the powerless test used to overflow: a
+     * UBSan witness) */
+    TEST_ASSERT_EQUAL_STRING("b32800 255", col("oklch(from oklch(0.5 10 40) l c h)"));
+    TEST_ASSERT_EQUAL_STRING("924d35 255", col("oklch(from oklch(0.5 10 40) l calc(c / 100) h)"));
     /* any letter case */
     TEST_ASSERT_EQUAL_STRING("ff0000 255", col("RGB(FROM Red R G B)"));
 }
