@@ -2163,8 +2163,8 @@ static void test_l105_sheet_36(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("0 0 0 0 1 1 0 1", counts());
-    TEST_ASSERT_EQUAL_STRING("0000000010", flags());
+    TEST_ASSERT_EQUAL_STRING("0 0 0 0 1 2 0 1", counts());
+    TEST_ASSERT_EQUAL_STRING("0001000010", flags());
     geo_root(1000, 500);
     geo(2, 1, 1, 1139, 48, 11, 36, 480, 640, 1000, 0);
     geo2(2, 0, 376, 0, 0, 0, 0, 0);
@@ -2262,11 +2262,11 @@ static void test_l105_sheet_37(void) {
     geo(5, 1, 1, 771, 100, 19, 21, 480, 640, 1571, 0);
     geo2(5, 0, 785, 0, 0, 0, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 33.33% { background-color: color(a98-rgb none none 0.095) } } @keyframes j { 60% { color: color(xyz-d50 none none 0) } 75% { color: oklab(none 0 none) } 100% { background-color: rgb(none 50% 100% 76%) } } html { overflow-x: auto; height: 12pt } body { overflow-x: auto } #b { height: none; overflow: visible initial; height: 0.5in } #o { view-timeline: --v -5px, --u block 93.8292%; view-timeline-inset: 150% -5% } #b { scroll-timeline: --v y } #i { background-color: #cd563d69; view-timeline-name: --v; animation: k 1000ms linear 250ms, j 500ms linear 500ms 0.5; animation-timeline: scroll(); animation-range-start: -5px }", 500, 2500, 1, 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#010114f5\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"background-color:#cd563d69\"", style_of("i"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    TEST_ASSERT_EQUAL_STRING("1 2 0 0 0 1 0 1", counts());
-    TEST_ASSERT_EQUAL_STRING("0000000000", flags());
+    TEST_ASSERT_EQUAL_STRING("0 0 0 0 2 1 0 1", counts());
+    TEST_ASSERT_EQUAL_STRING("0001000000", flags());
 }
 
 static void test_l105_sheet_38(void) {

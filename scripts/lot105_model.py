@@ -175,7 +175,15 @@ def ov_axis(self, other):
 
 
 def box_scroller(nodes, i):
-    """the computed y code when node i is a scroll container, else 0"""
+    """the computed y code when node i is a scroll container, else 0.
+    Lot 110, converted: the body is one when html's overflow is not
+    visible (scripts/lot110_model.py)"""
+    import lot110_model as M10
+    return M10.box_scroller(nodes, i)
+
+
+def box_scroller_lot105(nodes, i):
+    """the Lot 105 rule: html and body never are"""
     nd = nodes[i]
     if nd["tag"] in ("html", "body"):
         return 0
@@ -225,14 +233,16 @@ class Ctx(M4.Ctx):
         self.live = False
 
 
-def scroll_clock(a, src, c, ax=False):
+def scroll_clock(a, src, c, ax=False, nodes=None):
     """Lot 108, converted: ax (the inline or x axis) runs a box scroller
-    on its own range and offset along x (svx, x_rg, x_sc)"""
+    on its own range and offset along x (svx, x_rg, x_sc). Lot 110,
+    converted: a body box scroller (nodes given) runs on the body record"""
+    import lot110_model as M10
     g = c.geom
     if src >= 0:
         c.scr.add(src)
         c.live = True
-        b = g["box"].get(src) if g else None
+        b = (M10.box_of(nodes, src, g) if nodes else g["box"].get(src)) if g else None
         if not b or not b.get("svx" if ax else "sv"):
             return None
         if ax:
@@ -254,6 +264,7 @@ def scroll_clock(a, src, c, ax=False):
 
 
 def view_clock(a, nodes, q, axis, ins, c):
+    import lot110_model as M10
     # Lot 106, converted: the root element's view timeline is inactive
     # (no ancestor scroll container) and asks for no geometry
     if nodes[q]["parent"] < 0 and nodes[q]["tag"] == "html":
@@ -270,7 +281,8 @@ def view_clock(a, nodes, q, axis, ins, c):
         return None
     if s < 0 and not b["root"]:
         return None
-    if s >= 0 and (b["root"] or b.get("sm", 0) != s + 1):
+    # Lot 110, converted: a box in the body box scroller says SM_BODY
+    if s >= 0 and (b["root"] or b.get("sm", 0) != M10.sm_of(nodes, s)):
         return None
     useb = axis == "block" or (axis == "y" and b["bvert"]) or (axis == "x" and not b["bvert"])
     vert = b["bvert"] if useb else not b["bvert"]
@@ -314,7 +326,7 @@ def clock(a, nodes, i, ms, c):
             s = -2 if nd["parent"] < 0 else scroller_of(nodes, i)
         else:
             s = -1
-        return None if s < -1 or (ax and s < 0) else scroll_clock(a, s, c, ax)
+        return None if s < -1 or (ax and s < 0) else scroll_clock(a, s, c, ax, nodes)
     if tl == "none":
         return None
     q = i
@@ -327,7 +339,7 @@ def clock(a, nodes, i, ms, c):
             ax = d[1] in ("inline", "x")     # Lot 108, converted
             if s < -1 or (ax and s < 0):
                 return None
-            return scroll_clock(a, s, c, ax)
+            return scroll_clock(a, s, c, ax, nodes)
         if M4.scoped_at(nodes, q, tl):
             return None
         q = nodes[q]["parent"]

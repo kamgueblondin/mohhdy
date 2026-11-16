@@ -853,8 +853,8 @@ static void test_l106_sheet_15(void) {
     geo2(-1, 0, 0, 0, 0, 0, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { 50% { color: color(xyz none -1 none/120%); background-color: hsla(none none 16.61%) } } html { overflow-y: auto; height: 521px !important } body div { height: 10mm; overflow: inherit } body { overflow: scroll; height: inherit } body { view-timeline: --t y, --u } #i { view-timeline-name: --u; view-timeline-axis: x; view-timeline-inset: auto 1ch; animation: k 1000ms backwards; animation-timeline: view(block) }", 0, 5000, 1, 1);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL_STRING("0 0 0 0 1 1 0 1", counts());
-    TEST_ASSERT_EQUAL_STRING("0000000010", flags());
+    TEST_ASSERT_EQUAL_STRING("0 0 0 0 1 2 1 1", counts());
+    TEST_ASSERT_EQUAL_STRING("0001000010", flags());
     geo_root(400, 200);
     geo(4, 1, 1, 182, 20, 26, 175, 480, 640, 400, 0);
     geo2(4, 0, 400, 0, 0, 0, 0, 0);

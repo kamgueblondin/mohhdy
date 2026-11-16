@@ -150,7 +150,8 @@ static void test_l105_containers(void) {
     prep("html { overflow: auto } body { overflow: scroll } #o { overflow-x: auto } #b { overflow-x: clip } "
          "#i { overflow: clip hidden } #q { overflow-x: visible; overflow-y: clip }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 0));
-    TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 2));
+    /* Lot 110: html's overflow is not visible, so the body keeps its own */
+    TEST_ASSERT_EQUAL(WF_SITE_OV_SCROLL, wf_site_box_scroller(&g_d, 2));
     /* visible next to auto: auto */
     TEST_ASSERT_EQUAL(WF_SITE_OV_AUTO, wf_site_box_scroller(&g_d, 3));
     /* clip and visible: not a container */
@@ -160,8 +161,9 @@ static void test_l105_containers(void) {
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 7));
     TEST_ASSERT_EQUAL(3, wf_site_scroller_of(&g_d, 5));
     TEST_ASSERT_EQUAL(3, wf_site_scroller_of(&g_d, 4));
-    TEST_ASSERT_EQUAL(-1, wf_site_scroller_of(&g_d, 3));
-    TEST_ASSERT_EQUAL(-1, wf_site_scroller_of(&g_d, 7));
+    /* Lot 110: the body box scroller */
+    TEST_ASSERT_EQUAL(2, wf_site_scroller_of(&g_d, 3));
+    TEST_ASSERT_EQUAL(2, wf_site_scroller_of(&g_d, 7));
     TEST_ASSERT_EQUAL(-1, wf_site_scroller_of(&g_d, 0));
     /* x clip next to y scroll: x hidden; y stays scroll */
     prep("#o { overflow: clip scroll } #b { overflow: scroll clip } #i { overflow-y: hidden }");

@@ -149,16 +149,17 @@ static void test_l108_xbox(void) {
     prep("#o { overflow-x: auto; width: 10em; max-width: 50px } #o { max-width: none } "
          "#i { animation: k 1s; animation-timeline: scroll(x) } @keyframes k { to { color: red } }");
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:160px\"", style_of("o"));
-    /* html and body are no box scrollers: their timelines are the root's,
-     * nothing is passed on for them */
+    /* html is no box scroller, nor the body while html's overflow is
+     * visible: their timelines are the root's, nothing is passed on for
+     * them (Lot 110: with html's overflow auto the body is one) */
     prep("body { overflow-x: auto; width: 300px; animation: k 1s; animation-timeline: scroll(self x) } "
          "@keyframes k { to { color: red } }");
     TEST_ASSERT_EQUAL_STRING("", style_of_tag("body"));
     prep("body { overflow-y: auto; height: 100px; scroll-timeline: --b } html { overflow: auto; height: 50px; scroll-timeline: --h x } "
          "#i { animation: k 1s; animation-timeline: --b } #b { animation: k 1s; animation-timeline: --h } @keyframes k { to { color: red } }");
     TEST_ASSERT_EQUAL(0, g_d.node[0].scr);
-    TEST_ASSERT_EQUAL(0, g_d.node[2].scr);
-    TEST_ASSERT_EQUAL_STRING("", style_of_tag("body"));
+    TEST_ASSERT_EQUAL(1, g_d.node[2].scr);
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:100px\"", style_of_tag("body"));
     prep("#o { overflow-x: auto; width: 10em; max-width: none } #i { animation: k 1s; animation-timeline: scroll(x) } "
          "@keyframes k { to { color: red } }");
     /* overflow-x alone: y computes to auto, but no height to pass */

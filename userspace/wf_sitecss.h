@@ -245,7 +245,10 @@ enum {
     WF_SITE_K_SP0 = 56,
     /* Lot 108: width, max-width and min-height of a box scroller (slot =
      * kind - WF_SITE_K_SX0) */
-    WF_SITE_K_SX0 = 60
+    WF_SITE_K_SX0 = 60,
+    /* Lot 110: opacity (val 1 initial or unset, 2 a value in color as
+     * 1/10000, 3 inherit); outside the kinds of K_MAX like the above */
+    WF_SITE_K_OP = 63
 };
 #define WF_SITE_SCS 4               /* Lot 105: the scroller slots (overflow-x, overflow-y, height; Lot 107: max-height) */
 #define WF_SITE_SPS 4               /* Lot 107: the scroll-padding sides */
@@ -387,6 +390,11 @@ typedef struct {
     int xpx[WF_SITE_SXS];
     char xtok[WF_SITE_SXS][WF_SITE_TOK];
     int sxrank[WF_SITE_SXS];
+    /* Lot 110: opacity in 1/10000 (0..10000) with op_val as the rule's
+     * val (0 not set), its rank, the starting value of @starting-style
+     * rules (sop_set) and its rank; op is final once the animations ran */
+    int op, oprank, sop, soprank;
+    uint8_t op_val, sop_set;
 } wf_site_node_t;
 
 typedef struct {
@@ -551,6 +559,8 @@ typedef struct {
     int anim_box;                 /* Lot 105: element animations on an active box scroller timeline */
     int geom_live;                /* Lot 105: 1 when a timeline reads a real scroll offset (box scrollers, the GUI root) */
     int gui_y;                    /* Lot 105: the GUI root position read (sc_y of the geometry), px */
+    int op_animated;              /* Lot 110: animated opacity values */
+    int op_transitioned;          /* Lot 110: ... transitioned */
 } wf_site_t;
 
 /* Build the tree and apply the <style> blocks plus the user-agent sheet. */

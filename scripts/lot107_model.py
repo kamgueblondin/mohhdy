@@ -470,7 +470,7 @@ def clock(a, nodes, i, ms, c):
             s = -2 if nd["parent"] < 0 else M5.scroller_of(nodes, i)
         else:
             s = -1
-        return None if s < -1 or (ax and s < 0) else M5.scroll_clock(a, s, c, ax)
+        return None if s < -1 or (ax and s < 0) else M5.scroll_clock(a, s, c, ax, nodes)
     if tl == "none":
         return None
     q = i
@@ -483,7 +483,7 @@ def clock(a, nodes, i, ms, c):
             ax = d[1] in ("inline", "x")     # Lot 108, converted
             if s < -1 or (ax and s < 0):
                 return None
-            return M5.scroll_clock(a, s, c, ax)
+            return M5.scroll_clock(a, s, c, ax, nodes)
         if M4.scoped_at(nodes, q, tl):
             return None
         q = nodes[q]["parent"]
