@@ -248,7 +248,12 @@ enum {
     WF_SITE_K_SX0 = 60,
     /* Lot 110: opacity (val 1 initial or unset, 2 a value in color as
      * 1/10000, 3 inherit); outside the kinds of K_MAX like the above */
-    WF_SITE_K_OP = 63
+    WF_SITE_K_OP = 63,
+    /* Lot 111: line-height (tok: "n" normal, "i" inherit, "#N" a number
+     * in 1/1000, "%N" a percentage in 1/1000 %, "pN" px thousandths,
+     * "~L" or "=N" a font or viewport length or a math function); outside
+     * the kinds of K_MAX (all and revert leave it alone) */
+    WF_SITE_K_LH = 64
 };
 #define WF_SITE_SCS 4               /* Lot 105: the scroller slots (overflow-x, overflow-y, height; Lot 107: max-height) */
 #define WF_SITE_SPS 4               /* Lot 107: the scroll-padding sides */
@@ -395,6 +400,10 @@ typedef struct {
      * rules (sop_set) and its rank; op is final once the animations ran */
     int op, oprank, sop, soprank;
     uint8_t op_val, sop_set;
+    uint8_t op_rv;      /* Lot 111: as rv for opacity (revert, revert-layer) */
+    /* Lot 111: line-height as its token (WF_SITE_K_LH) and its rank */
+    char lhtok[WF_SITE_TOK];
+    int lhrank;
 } wf_site_node_t;
 
 typedef struct {
@@ -535,6 +544,13 @@ typedef struct {
     int long_values;              /* declarations dropped because the value was too long */
     int fs[WF_SITE_NODES];        /* font size of each element, px thousandths */
     int root_fs;                  /* the root element's (rem), px thousandths */
+    /* Lot 111: each element's line height: lh px thousandths + 1 (0:
+     * normal, lh is 10/16 em), and its computed value as it inherits
+     * (lhk 0 normal, 1 a number in lhv 1/1000, 2 a length in lhv px
+     * thousandths) */
+    int lh[WF_SITE_NODES];
+    int lhv[WF_SITE_NODES];
+    uint8_t lhk[WF_SITE_NODES];
     int len_resolved, len_dropped;   /* lengths the reader resolved; out of bounds there */
     /* Lot 97 */
     wf_site_kf_t kf[WF_SITE_KFS];

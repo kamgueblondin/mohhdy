@@ -794,7 +794,7 @@ static void test_l110_op_28(void) {
     TEST_ASSERT_EQUAL(0, g_d.op_transitioned);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     prep("@starting-style { #o { opacity: inherit } } #o { opacity: var(--o); opacity: calc(0.5); transition-property: color; transition-duration: 1s, 0s; transition-timing-function: ease-in }", 750);
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"opacity:50%\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.op_animated);
     TEST_ASSERT_EQUAL(0, g_d.op_transitioned);
@@ -950,7 +950,7 @@ static void test_l110_op_34(void) {
     TEST_ASSERT_EQUAL(0, g_d.op_transitioned);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     prep("@starting-style { #o { opacity: initial } } #o { opacity: calc(0.5); transition-property: --x, opacity; transition-duration: 400ms, 1s; transition-timing-function: linear }", 2406);
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"opacity:50%\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.op_animated);
     TEST_ASSERT_EQUAL(0, g_d.op_transitioned);

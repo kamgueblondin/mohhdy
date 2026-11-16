@@ -137,11 +137,11 @@ static void test_l109_pct_math(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:50%;max-width:min(90%, 240px)\"", style_of("b"));
 }
 
-/* what does not pass: bounds, a mixed function in an arithmetic or
- * nested, the expression's size */
+/* what does not pass: bounds, the expression's size (Lot 111: a mixed
+ * function in an arithmetic or nested passes, see the end) */
 static void test_l109_pct_refused(void) {
-    static const char *const bad[] = {"calc(3000px + 1%)", "calc(2001% + 1px)", "calc(min(50%, 10px) + 1px)",
-                                      "min(min(50%, 1px), 2px)", "min(50%, 2)", "calc(50% * 2%)", "calc(50% + 1)",
+    static const char *const bad[] = {"calc(3000px + 1%)", "calc(2001% + 1px)",
+                                      "min(50%, 2)", "calc(50% * 2%)", "calc(50% + 1)",
                                       "max(10%, 1px) * 2", "calc(10% / 0)", "clamp(10%, 1px)", 0};
     int k;
     char css[160];
@@ -176,6 +176,12 @@ static void test_l109_pct_refused(void) {
     prep("#b { overflow: auto; height: min(50%, calc(1em - 16px)); font-size: 20px } " RD);
     TEST_ASSERT_EQUAL('=', node("b")->htok[0]);
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:20px;overflow-y:auto;height:min(50%, 4px)\"", style_of("b"));
+    /* Lot 111 (converted from the list above): the sum goes into the
+     * arguments, a nested min() of the same kind is flattened */
+    prep("#b { overflow: auto; height: calc(min(50%, 10px) + 1px) } " RD);
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(calc(50% + 1px), 11px)\"", style_of("b"));
+    prep("#b { overflow: auto; height: min(min(50%, 1px), 2px) } " RD);
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(50%, 1px, 2px)\"", style_of("b"));
 }
 
 /* scroll-padding: ex, ch, lh resolve; a percentage in math is auto */
@@ -207,10 +213,11 @@ static void test_l109_math_api(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 calc(50% - 10px)", mb("calc(50% - 10px)", 16000, 80));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(50% - 10px)", 16000, 16));     /* 16 bytes: too small */
     TEST_ASSERT_EQUAL_STRING("2 0 calc(50% - 10px)", mb("calc(50% - 10px)", 16000, 17));
-    /* a mixed min()/max() in a product or a quotient */
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(min(10%, 1px) * 2)", 16000, 80));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(2 * max(10%, 1px))", 16000, 80));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(max(10%, 1px) / 2)", 16000, 80));
+    /* a mixed min()/max() in a product or a quotient (Lot 111, converted
+     * from -1: the factor goes into the arguments) */
+    TEST_ASSERT_EQUAL_STRING("2 0 min(20%, 2px)", mb("calc(min(10%, 1px) * 2)", 16000, 80));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(20%, 2px)", mb("calc(2 * max(10%, 1px))", 16000, 80));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(5%, 1px)", mb("calc(max(10%, 1px) / 2)", 16000, 80));
     TEST_ASSERT_EQUAL(-1, wf_css_math_box(0, 0, 0, 16000, 16000, &px, m, 16));
     TEST_ASSERT_EQUAL(-1, wf_css_math_box("1px", 0, 0, 16000, 16000, &px, m, 0));
     TEST_ASSERT_EQUAL(-1, wf_css_math_box("1px", 0, 0, 16000, 0, &px, m, 16));

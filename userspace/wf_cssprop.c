@@ -2409,7 +2409,8 @@ static int cp_rel_kw(int fn, const char *s, int a, int b) {
  * channels, exact); oklab l a b and oklch l c (from its OKLab values,
  * exact for an oklab() or oklch() origin, else from its linear sRGB
  * values) and h in deg (0..360, 0 when powerless); alpha of 0..1. A
- * missing component of the origin is 0 */
+ * missing component of the origin is 0 (Lot 111: cp_rel then writes none
+ * for a keyword of an analogous missing one, cp_rel_miss) */
 static void cp_rel_kv(int fn, const cp_rgba_t *x, long long *kv) {
     static const signed char sp[7] = {0, 11, 7, 14, 12, 6, 13};
     long long c[3];
@@ -2442,6 +2443,23 @@ static void cp_rel_kv(int fn, const cp_rgba_t *x, long long *kv) {
     kv[1] = cp_div(c[1] * CP_S, CP_Q, 0);
     if (cp_mixh[m] != 2) kv[2] = cp_div(c[2] * CP_S, CP_Q, 0);
     else kv[2] = (miss & 64) ? 0 : c[2] < 0 ? c[2] + 3600000 : c[2];
+}
+
+/* Lot 111: the components of function fn that are missing in the origin
+ * x (CSS Color 5, 4.1: the origin's missing components are carried
+ * forward to the analogous components of fn's space, CSS Color 4 12.2):
+ * bits 0..2 fn's channels in order, bit 3 the alpha */
+static int cp_rel_miss(int fn, const cp_rgba_t *x) {
+    static const signed char sp[7] = {0, 11, 7, 14, 12, 6, 13};
+    /* color() takes an rgb or an xyz space only (cp_rel): its channels
+     * are the reds, greens and blues of row 0 */
+    int j, cat, mk = 0, m = fn >= 7 ? 0 : sp[fn];
+    for (j = 0; j < 3; j++) {
+        cat = cp_mixc[m][j];
+        if (cat >= 0 && ((x->miss >> cat) & 1)) mk |= 1 << j;
+    }
+    if ((x->miss >> 3) & 1) mk |= 8;
+    return mk;
 }
 
 /* Lot 108: one argument s[a..b) of a relative colour into out (cap
@@ -2490,7 +2508,7 @@ static int cp_rel_arg(int fn, const char *s, int a, int b, const long long *kv, 
 static int cp_rel(const char *v, int n, int fn, int i, cp_rgba_t *o, int depth) {
     static const char *const names[] = {"rgb(", "hsl(", "oklab(", "oklch(", "hwb(", "lab(", "lch(", "color("};
     char org[WF_CSSPROP_VAL], buf[WF_CSSPROP_VAL], arg[WF_CSSPROP_VAL];
-    int ta[6], tb[6], nt = 0, slash = -1, len = 0, k, d, a, c = fn == 7;
+    int ta[6], tb[6], nt = 0, slash = -1, len = 0, k, d, a, c = fn == 7, mk;
     long long kv[4];
     cp_rgba_t x;
     if (depth > 3) return 0;
@@ -2533,11 +2551,18 @@ static int cp_rel(const char *v, int n, int fn, int i, cp_rgba_t *o, int depth) 
     org[tb[0] - ta[0]] = 0;
     if (!cp_rgba_d(org, &x, depth + 1)) return 0;
     cp_rel_kv(fn, &x, kv);
+    /* Lot 111: a keyword of a missing component is none (written as such
+     * alone, 0 in a math function: CSS Color 5, 4.2) */
+    mk = cp_rel_miss(fn, &x);
+    for (k = 0; k < 4; k++) if ((mk >> k) & 1) kv[k] = 0;
     if (!cp_put(buf, &len, (int)sizeof(buf), names[c ? 7 : fn], cp_len(names[c ? 7 : fn])) ||
         (c && (!cp_put(buf, &len, (int)sizeof(buf), v + ta[1], tb[1] - ta[1]) || !cp_put(buf, &len, (int)sizeof(buf), " ", 1))))
         return 0;
     for (k = 1 + c; k < 5 + c; k++) {
-        if (k == 4 + c && nt == 4 + c) {
+        int kw = k == 4 + c && nt == 4 + c ? 3 : cp_rel_kw(fn, v, ta[k], tb[k]);
+        if (kw >= 0 && ((mk >> kw) & 1)) {
+            arg[0] = 'n'; arg[1] = 'o'; arg[2] = 'n'; arg[3] = 'e'; arg[4] = 0;
+        } else if (k == 4 + c && nt == 4 + c) {
             if (cp_fmt(kv[3], "", arg, (int)sizeof(arg)) < 0) return 0;
         } else if (cp_rel_arg(fn, v, ta[k], tb[k], kv, arg, (int)sizeof(arg)) < 0) return 0;
         if (!cp_put(buf, &len, (int)sizeof(buf), k == 4 + c ? " / " : k > 1 + c ? " " : "", k == 4 + c ? 3 : k > 1 + c) ||

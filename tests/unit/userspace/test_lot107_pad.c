@@ -915,7 +915,7 @@ static void test_l107_pad_18(void) {
     geo(5, 0, 1, -2, 43, 17, 512, 200, 640, 200, 0);
     geo2(5, 5, 0, 0, 0, 0, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: #000000 } to { color: #ffffff } } #q { overflow: clip; overflow: scroll; height: --x } #b { overflow: SCROLL !important } #o { overflow-x: clip; height: 1in; overflow-y: clip } #o { scroll-padding-block-end: 0; scroll-padding-inline: min-content } #b { scroll-padding-inline-start: calc(10px - 30px); scroll-padding-inline: calc(10% + 2px) 113px; scroll-padding-inline-end: initial } body { scroll-padding-top: 3pc } #b { font-size: 20px } #b { view-timeline-name: --v; view-timeline-axis: x } #i { animation: k 1s linear; animation-timeline: view(x) }", 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#8a8a8a\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#929292\"", style_of("i"));
     TEST_ASSERT_EQUAL_STRING("1 0 1 1 0 1", counts());
 }
 
@@ -1083,7 +1083,7 @@ static void test_l107_pad_22(void) {
     geo(5, 1, 1, 413, 100, 51, 247, 480, 640, 400, 0);
     geo2(5, 0, 334, 0, 0, 0, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: #000000 } to { color: #ffffff } } #q { height: 3q; overflow-x: SCROLL } html { scroll-padding-left: calc(10px - 30px); scroll-padding-block: calc(10% + 2px) 50px } #o { scroll-padding-inline-start: auto; scroll-padding-block: calc(1em + 4px) 100px; scroll-padding: 2em } #b { scroll-padding-inline-start: 1rem }  #i { animation: k 1s linear; animation-timeline: view(auto 20px) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#151515\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#171717\"", style_of("i"));
     TEST_ASSERT_EQUAL_STRING("1 0 1 0 0 0", counts());
     geo_root(400, 0);
     geo(0, 1, 1, 481, 22, 35, 442, 480, 640, 400, 0);

@@ -5,6 +5,14 @@
 
 typedef struct { int px, em, len, mix; } mv_t;     /* thousandths; len 0: a plain number */
 
+/* Lot 111: a value mixing px and % (box mode) as a tree: MX_LIN a
+ * linear part (px and em fields), MX_MIN / MX_MAX / MX_CLAMP (3) of the
+ * kids; mv_t.mix is its index + 1 */
+enum { MX_LIN, MX_MIN, MX_MAX, MX_CLAMP };
+#define MX_NODES 24
+#define MX_KIDS 8
+typedef struct { unsigned char op, n, kid[MX_KIDS]; int px, em; } mx_t;
+
 typedef struct {
     const char *s;
     int i, depth, vw, vh, bad;
@@ -16,6 +24,14 @@ typedef struct {
      * clamp() mixing parts is written to out (mix 1 then) */
     int box, olen, cap;
     char *out;
+    /* Lot 111: lh against this line height (px thousandths) when >= 0,
+     * else line-height normal (10/16 em) */
+    int lh_px;
+    /* Lot 111: % of this basis (px thousandths) when >= 0 (box mode) */
+    int basis;
+    /* Lot 111: the trees of mixed values */
+    int nmx;
+    mx_t mx[MX_NODES];
 } mp_t;
 
 static char lc(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
@@ -105,8 +121,15 @@ static mv_t with_unit(mp_t *p, int n) {
         int x = mul_milli(n, p->em_px, &p->bad);
         p->i += 2;
         v.px = x / 16 * k + x % 16 * k / 16;
+        /* Lot 111: lh of an element with a line height of its own */
+        if (k == 10 && p->lh_px >= 0) v.px = mul_milli(n, p->lh_px, &p->bad);
     }
-    else if (p->s[p->i] == '%' && p->box) { p->i++; v.em = n; }
+    else if (p->s[p->i] == '%' && p->box) {
+        p->i++;
+        /* Lot 111: of a known basis, a px value (n is 1/1000 %) */
+        if (p->basis >= 0) v.px = mul_milli(n, p->basis, &p->bad) / 100;
+        else v.em = n;
+    }
     else if (p->s[p->i] == '%') { p->i++; if (p->ctx) v.px = mul_milli(n / 100, p->em_px, &p->bad); else v.em = n / 100; }
     else if ((p->s[p->i] >= 'a' && p->s[p->i] <= 'z') || (p->s[p->i] >= 'A' && p->s[p->i] <= 'Z')) p->bad = 1;
     else { v.len = 0; v.px = n; }
@@ -172,21 +195,167 @@ static void put_lin(mp_t *p, mv_t v) {
     put_int(p, v.px, "px)");
 }
 
-/* Lot 109: a min()/max()/clamp() of lengths mixing px and % (box mode
- * only, one per value, not nested, not in an arithmetic): written as
- * the engine reads it */
-static mv_t mixed(mp_t *p, const mv_t *a, int n, const char *fn) {
+static int key(mv_t v, int part);
+
+/* Lot 111: a new tree node, or -1 (bad) */
+static int mx_new(mp_t *p, int op, int px, int em) {
+    mx_t *x;
+    if (p->nmx >= MX_NODES) { p->bad = 1; return -1; }
+    x = &p->mx[p->nmx];
+    x->op = (unsigned char)op; x->n = 0; x->px = px; x->em = em;
+    return p->nmx++;
+}
+
+/* the tree of a value (a linear one gets a leaf) */
+static int mx_of(mp_t *p, mv_t v) { return v.mix ? v.mix - 1 : mx_new(p, MX_LIN, v.px, v.em); }
+
+static mv_t mx_val(mp_t *p, int x) {
     mv_t v;
-    int k;
-    v.px = v.em = 0;
-    v.len = v.mix = 1;
-    if (!p->box || p->olen) { p->bad = 1; return v; }
-    /* a mixed argument wrote out already (p->olen) */
-    for (k = 0; k < n; k++) if (!a[k].len) { p->bad = 1; return v; }
-    put(p, fn);
-    for (k = 0; k < n; k++) { if (k) put(p, ", "); put_lin(p, a[k]); }
-    put(p, ")");
+    v.len = 1; v.mix = 0; v.px = v.em = 0;
+    if (x < 0 || p->bad) { p->bad = 1; return v; }
+    if (p->mx[x].op == MX_LIN) { v.px = p->mx[x].px; v.em = p->mx[x].em; }
+    else v.mix = x + 1;
+    if (!in_range(v)) p->bad = 1;
     return v;
+}
+
+/* Lot 111: min (op MX_MIN) or max of the trees kid[0..n): a kid of the
+ * same op gives its own kids (min(a, min(b, c)) is min(a, b, c)); leaves
+ * that share one part are compared as CSS has it (the first of equal
+ * ones), one kid is the value itself */
+static int mx_op(mp_t *p, int op, const int *kid, int n) {
+    int k, j, x, all = 1;
+    mv_t a[MX_KIDS];
+    int flat[MX_KIDS], m = 0;
+    a[0].px = a[0].em = 0;      /* n >= 1 here; for gcc's -Wmaybe-uninitialized */
+    if (p->bad) return -1;
+    for (k = 0; k < n; k++) {
+        const mx_t *t = &p->mx[kid[k] < 0 ? 0 : kid[k]];
+        int c = t->op == op ? t->n : 1;
+        if (kid[k] < 0 || m + c > MX_KIDS) { p->bad = 1; return -1; }
+        if (t->op == op) for (j = 0; j < c; j++) flat[m++] = t->kid[j];
+        else flat[m++] = kid[k];
+    }
+    for (k = 0; k < m; k++) {
+        if (p->mx[flat[k]].op != MX_LIN) all = 0;
+        a[k].px = p->mx[flat[k]].px; a[k].em = p->mx[flat[k]].em; a[k].len = 1; a[k].mix = 0;
+    }
+    if (all) {
+        int part = one_part(a, m);
+        if (part) {
+            x = 0;
+            for (k = 1; k < m; k++)
+                if (op == MX_MIN ? key(a[k], part) < key(a[x], part) : key(a[k], part) > key(a[x], part)) x = k;
+            return flat[x];
+        }
+    }
+    if (m == 1) return flat[0];
+    x = mx_new(p, op, 0, 0);
+    if (x < 0) return -1;
+    for (k = 0; k < m; k++) p->mx[x].kid[k] = (unsigned char)flat[k];
+    p->mx[x].n = (unsigned char)m;
+    return x;
+}
+
+/* Lot 111: clamp(kid[0], kid[1], kid[2]) */
+static int mx_clamp(mp_t *p, const int *kid) {
+    int x, k;
+    for (k = 0; k < 3; k++) if (kid[k] < 0) { p->bad = 1; return -1; }
+    x = mx_new(p, MX_CLAMP, 0, 0);
+    if (x < 0) return -1;
+    for (k = 0; k < 3; k++) p->mx[x].kid[k] = (unsigned char)kid[k];
+    p->mx[x].n = 3;
+    return x;
+}
+
+/* Lot 111: tree x times k/1000 (div 0) or 1000/k (div 1): a negative
+ * factor turns min into max (k * min(a, b) is max(k * a, k * b)) */
+static int mx_scale(mp_t *p, int x, int k, int div) {
+    int kid[MX_KIDS], j, n, op;
+    if (p->bad || x < 0) return -1;
+    if (p->mx[x].op == MX_LIN) {
+        int px = div ? div_milli(p->mx[x].px, k, &p->bad) : mul_milli(p->mx[x].px, k, &p->bad);
+        int em = div ? div_milli(p->mx[x].em, k, &p->bad) : mul_milli(p->mx[x].em, k, &p->bad);
+        mv_t v;
+        v.px = px; v.em = em;
+        if (!in_range(v)) { p->bad = 1; return -1; }
+        return mx_new(p, MX_LIN, px, em);
+    }
+    n = p->mx[x].n;
+    op = p->mx[x].op;
+    if (op == MX_CLAMP) {
+        for (j = 0; j < 3; j++) kid[j] = mx_scale(p, p->mx[x].kid[j], k, div);
+        if (k >= 0) return mx_clamp(p, kid);
+        /* -clamp(a, b, c) is min(-a, max(-b, -c)) */
+        kid[1] = mx_op(p, MX_MAX, kid + 1, 2);
+        return mx_op(p, MX_MIN, kid, 2);
+    }
+    if (k < 0) op = op == MX_MIN ? MX_MAX : MX_MIN;
+    for (j = 0; j < n; j++) kid[j] = mx_scale(p, p->mx[x].kid[j], k, div);
+    return mx_op(p, op, kid, n);
+}
+
+/* Lot 111: tree x plus (sg 1) or minus (sg -1) tree y: the sum goes into
+ * the kids (min(a, b) + c is min(a + c, b + c)) */
+static int mx_add(mp_t *p, int x, int y, int sg) {
+    int kid[MX_KIDS], j, n;
+    if (p->bad || x < 0 || y < 0) return -1;
+    if (p->mx[x].op == MX_LIN && p->mx[y].op == MX_LIN) {
+        mv_t v;
+        v.px = p->mx[x].px + sg * p->mx[y].px; v.em = p->mx[x].em + sg * p->mx[y].em;
+        if (!in_range(v)) { p->bad = 1; return -1; }
+        return mx_new(p, MX_LIN, v.px, v.em);
+    }
+    if (p->mx[x].op != MX_LIN) {
+        n = p->mx[x].n;
+        for (j = 0; j < n; j++) kid[j] = mx_add(p, p->mx[x].kid[j], y, sg);
+        return p->mx[x].op == MX_CLAMP ? mx_clamp(p, kid) : mx_op(p, p->mx[x].op, kid, n);
+    }
+    if (sg < 0) return mx_add(p, x, mx_scale(p, y, -1000, 0), 1);
+    n = p->mx[y].n;
+    for (j = 0; j < n; j++) kid[j] = mx_add(p, x, p->mx[y].kid[j], 1);
+    return p->mx[y].op == MX_CLAMP ? mx_clamp(p, kid) : mx_op(p, p->mx[y].op, kid, n);
+}
+
+/* Lot 111: a min()/max()/clamp() of lengths mixing px and % (box mode
+ * only; Lot 109 took one per value, not nested, not in an arithmetic) */
+static mv_t mixed(mp_t *p, const mv_t *a, int n, int op) {
+    mv_t v;
+    int k, kid[MX_KIDS];
+    v.px = v.em = v.mix = 0;
+    v.len = 1;
+    if (!p->box) { p->bad = 1; return v; }
+    for (k = 0; k < n; k++) if (!a[k].len) { p->bad = 1; return v; }
+    for (k = 0; k < n; k++) kid[k] = mx_of(p, a[k]);
+    if (op == MX_CLAMP) return mx_val(p, mx_clamp(p, kid));
+    return mx_val(p, mx_op(p, op, kid, n));
+}
+
+/* Lot 111: the engine's nodes (webeng.c parse_math) and function depth of
+ * tree x as put_mx writes it */
+static int mx_cost(const mp_t *p, int x, int *depth) {
+    const mx_t *t = &p->mx[x];
+    int j, n, d, dm = 0;
+    *depth = 0;     /* also past the argument bound (the cost refuses it) */
+    if (t->op == MX_LIN) { *depth = t->em && t->px ? 1 : 0; return t->em && t->px ? 3 : 1; }
+    if (t->n > WF_CSSMATH_ARGS) return WF_CSSMATH_NODES + 1;      /* the engine takes 4 arguments */
+    n = t->op == MX_CLAMP ? 1 : t->n - 1;
+    for (j = 0; j < t->n; j++) {
+        n += mx_cost(p, t->kid[j], &d);
+        if (d > dm) dm = d;
+    }
+    *depth = dm + 1;
+    return n;
+}
+
+static void put_mx(mp_t *p, int x) {
+    const mx_t *t = &p->mx[x];
+    int j;
+    mv_t v;
+    if (t->op == MX_LIN) { v.px = t->px; v.em = t->em; put_lin(p, v); return; }
+    put(p, t->op == MX_MIN ? "min(" : t->op == MX_MAX ? "max(" : "clamp(");
+    for (j = 0; j < t->n; j++) { if (j) put(p, ", "); put_mx(p, t->kid[j]); }
+    put(p, ")");
 }
 
 static int key(mv_t v, int part) { return part == 2 ? v.em : v.px; }
@@ -210,7 +379,7 @@ static mv_t factor(mp_t *p) {
         n = args(p, a, 8);
         if (!p->bad) {
             part = one_part(a, n);
-            if (!part) { p->depth--; return mixed(p, a, n, is_min ? "min(" : "max("); }
+            if (!part) { p->depth--; return mixed(p, a, n, is_min ? MX_MIN : MX_MAX); }
             v = a[0];
             for (k = 1; k < n && !p->bad; k++)
                 if (is_min ? key(a[k], part) < key(v, part) : key(a[k], part) > key(v, part)) v = a[k];
@@ -221,7 +390,7 @@ static mv_t factor(mp_t *p) {
         if (!p->bad && n != 3) p->bad = 1;
         if (!p->bad) {
             part = one_part(a, 3);
-            if (!part) { p->depth--; return mixed(p, a, 3, "clamp("); }
+            if (!part) { p->depth--; return mixed(p, a, 3, MX_CLAMP); }
             /* max(MIN, min(VAL, MAX)): MIN wins over MAX */
             v = a[1];
             if (key(a[2], part) < key(v, part)) v = a[2];
@@ -250,7 +419,14 @@ static mv_t term(mp_t *p) {
         p->i++;
         w = factor(p);
         if (p->bad) return v;
-        if (v.mix || w.mix) { p->bad = 1; return v; }
+        if (v.mix || w.mix) {
+            /* Lot 111: a mixed value times or over a plain number */
+            int k = v.mix ? w.px : v.px;
+            if ((v.mix && w.mix) || (v.mix ? w.len : v.len) || (op == '/' && !v.mix)) { p->bad = 1; return v; }
+            v = mx_val(p, mx_scale(p, v.mix ? v.mix - 1 : w.mix - 1, k, op == '/'));
+            if (p->bad) return v;
+            continue;
+        }
         if (op == '*') {
             if (!w.len) { v.px = mul_milli(v.px, w.px, &p->bad); v.em = mul_milli(v.em, w.px, &p->bad); }
             else if (!v.len) { int k = v.px; v.px = mul_milli(w.px, k, &p->bad); v.em = mul_milli(w.em, k, &p->bad); v.len = 1; }
@@ -281,7 +457,12 @@ static mv_t expr(mp_t *p) {
         }
         p->i++;
         w = term(p);
-        if (w.len != v.len || v.mix || w.mix) { p->bad = 1; return v; }   /* a number plus a length */
+        if (w.len != v.len) { p->bad = 1; return v; }   /* a number plus a length */
+        if (v.mix || w.mix) {           /* Lot 111: a mixed value in a sum */
+            v = mx_val(p, mx_add(p, mx_of(p, v), mx_of(p, w), op == '+' ? 1 : -1));
+            if (p->bad) return v;
+            continue;
+        }
         if (op == '+') { v.px += w.px; v.em += w.em; }
         else { v.px -= w.px; v.em -= w.em; }
         if (!in_range(v)) { p->bad = 1; return v; }
@@ -326,7 +507,7 @@ int wf_css_math(const char *s, int vw, int vh, char *out, int cap) {
     out[0] = 0;
     if (!wf_css_is_math(s)) return 0;
     p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
-    p.ctx = 0; p.em_px = p.rem_px = 0; p.box = 0; p.olen = 0;
+    p.ctx = 0; p.em_px = p.rem_px = 0; p.box = 0; p.olen = 0; p.lh_px = -1; p.basis = -1; p.nmx = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i] || !v.len) return -1;
@@ -344,7 +525,7 @@ int wf_css_math_px(const char *s, int vw, int vh, int em_px, int rem_px, int *px
     if (!s[0]) return 0;
     if (em_px <= 0 || em_px > WF_CSSMATH_MAX || rem_px <= 0 || rem_px > WF_CSSMATH_MAX) return -1;
     p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
-    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px; p.box = 0; p.olen = 0;
+    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px; p.box = 0; p.olen = 0; p.lh_px = -1; p.basis = -1; p.nmx = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i]) return -1;
@@ -353,22 +534,52 @@ int wf_css_math_px(const char *s, int vw, int vh, int em_px, int rem_px, int *px
     return 1;
 }
 
+static int box_run(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int basis, int *px, char *out,
+                   int cap);
+
 /* Lot 109: a box scroller length, see wf_cssmath.h */
 int wf_css_math_box(const char *s, int vw, int vh, int em_px, int rem_px, int *px, char *out, int cap) {
+    return wf_css_math_box_lh(s, vw, vh, em_px, rem_px, -1, px, out, cap);
+}
+
+/* Lot 111: with the element's line height, see wf_cssmath.h */
+int wf_css_math_box_lh(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int *px, char *out, int cap) {
+    return box_run(s, vw, vh, em_px, rem_px, lh_px, -1, px, out, cap);
+}
+
+/* Lot 111: with percentages of a known basis, see wf_cssmath.h */
+int wf_css_math_box_at(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int basis, int *px) {
+    char out[4];
+    if (px) *px = 0;
+    if (basis < 0 || basis > WF_CSSMATH_MAX) return -1;
+    return box_run(s, vw, vh, em_px, rem_px, lh_px, basis, px, out, (int)sizeof(out)) == 1 ? 1 : -1;
+}
+
+static int box_run(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int basis, int *px, char *out,
+                   int cap) {
     mp_t p;
     mv_t v;
     if (!s || !px || !out || cap <= 0) return -1;
     *px = 0;
     out[0] = 0;
     if (!s[0]) return 0;
-    if (em_px <= 0 || em_px > WF_CSSMATH_MAX || rem_px <= 0 || rem_px > WF_CSSMATH_MAX) return -1;
+    if (em_px <= 0 || em_px > WF_CSSMATH_MAX || rem_px <= 0 || rem_px > WF_CSSMATH_MAX || lh_px > WF_CSSMATH_MAX)
+        return -1;
     p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
     p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px;
-    p.box = 1; p.olen = 0; p.cap = cap; p.out = out;
+    p.box = 1; p.olen = 0; p.cap = cap; p.out = out; p.lh_px = lh_px < 0 ? -1 : lh_px; p.basis = basis; p.nmx = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i] || (!v.len && v.px)) { out[0] = 0; return -1; }
-    if (v.mix) return 2;
+    if (v.mix) {
+        int d;
+        /* Lot 111: the tree as the engine's math reads it (at most
+         * WE_MATH_NODES_MAX nodes, WE_MATH_DEPTH_MAX functions deep) */
+        if (mx_cost(&p, v.mix - 1, &d) > WF_CSSMATH_NODES || d > WF_CSSMATH_FN_DEPTH) return -1;
+        put_mx(&p, v.mix - 1);
+        if (p.bad) { out[0] = 0; return -1; }
+        return 2;
+    }
     if (!v.em) { *px = v.px; return 1; }
     put_lin(&p, v);
     if (p.bad) { out[0] = 0; return -1; }

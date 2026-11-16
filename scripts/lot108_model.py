@@ -80,6 +80,7 @@ def passed(nodes, i, scr):
     if (ws[0] is not None or ws[1] is not None) and x in (4, 5):
         t = "overflow-x:%s" % M5.OV_NAME[x]
         for name, w in (("width", ws[0]), ("max-width", ws[1])):
+            w = M10.body_pct(nodes, i, w, ax=1)     # Lot 111, converted: of html's width
             if w is not None:
                 t += ";%s:%s" % (name, L7.box_text(w))
         parts.append(t)

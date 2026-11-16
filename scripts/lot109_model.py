@@ -208,7 +208,7 @@ def lin_text(px, pc):
     return "calc(%s %s %dpx)" % (t, "-" if px < 0 else "+", abs(q))
 
 
-def math_box(s, em=16, rem=16, exact=False):
+def math_box_lot109(s, em=16, rem=16, exact=False):
     """("px", px) for a box length without a percentage, ("expr", text)
     for one with a percentage, None when it does not resolve; exact: px
     must be what the C gets to 1/1000 (Unsure when a step is cut)"""
@@ -231,6 +231,13 @@ def math_box(s, em=16, rem=16, exact=False):
         return ("px", v[0])
     except (ValueError, ZeroDivisionError, IndexError):
         return None
+
+
+def math_box(s, em=16, rem=16, exact=False):
+    """Lot 111: lot111_model.math_box (mixed functions nested or in an
+    arithmetic); the Lot 109 rule is math_box_lot109"""
+    import lot111_model as L111
+    return L111.math_box(s, em, rem, exact)
 
 
 def engine_px(text, basis):

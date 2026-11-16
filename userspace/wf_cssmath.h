@@ -51,5 +51,21 @@ int wf_css_token(int milli, const char *unit, char *out, int cap);
  * (one such function, not nested and not in an arithmetic); 0 for an
  * empty string; -1 otherwise. */
 #define WF_CSSMATH_LIT 2000       /* webeng.h WE_MATH_LITERAL_MAX */
+/* Lot 111: a value mixing px and % may nest min()/max()/clamp() and sit
+ * in a sum or a product with a number: the sums and factors go into the
+ * arguments (min(a, b) + c is min(a + c, b + c), -clamp(a, b, c) is
+ * min(-a, max(-b, -c))), written within the engine's bounds */
+#define WF_CSSMATH_NODES 24       /* webeng.h WE_MATH_NODES_MAX */
+#define WF_CSSMATH_FN_DEPTH 4     /* webeng.h WE_MATH_DEPTH_MAX */
+#define WF_CSSMATH_ARGS 4         /* arguments of one function (webeng.c math_atom) */
 int wf_css_math_box(const char *s, int vw, int vh, int em_px, int rem_px, int *px, char *out, int cap);
+/* Lot 111: wf_css_math_box with lh against lh_px, the element's line
+ * height in px thousandths (0..WF_CSSMATH_MAX), when it is not negative;
+ * a negative lh_px is line-height normal (10/16 of em_px, as above) */
+int wf_css_math_box_lh(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int *px, char *out, int cap);
+/* Lot 111: wf_css_math_box_lh with a percentage of basis (px thousandths,
+ * 0..WF_CSSMATH_MAX: the containing block is known), so every value is
+ * px: 1 and *px (px thousandths), -1 otherwise (0 for an empty string is
+ * -1 here) */
+int wf_css_math_box_at(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int basis, int *px);
 #endif
