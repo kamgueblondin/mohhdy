@@ -109,18 +109,26 @@ static void scroll_shift(we_doc_t *d, int idx, int dx, int dy) {
     }
 }
 
+/* the key of a box's offset in the forms: its id; Lot 110: " body" for
+ * the body element without one (the body box scroller the reader
+ * passes; an id never holds a space) */
 static int scroll_node_id(const we_doc_t *d, int idx, char *out, int max) {
     const we_node_t *n = &d->nodes[idx];
+    if (!n->id[0] && w_eq(n->tag, "body")) {
+        w_cpy(out, max, " body", 5);
+        return 0;
+    }
     if (!n->id[0]) { out[0] = 0; return -1; }
     w_cpy(out, max, n->id, w_len(n->id));
     return 0;
 }
 
 static void scroll_restore(we_doc_t *d, int idx) {
+    char id[WE_TARGET_MAX];
     int k;
-    if (!d->forms || !d->forms->nscroll || !d->nodes[idx].id[0]) return;
+    if (!d->forms || !d->forms->nscroll || scroll_node_id(d, idx, id, WE_TARGET_MAX) != 0) return;
     for (k = 0; k < d->forms->nscroll; k++)
-        if (w_eq(d->forms->scroll_id[k], d->nodes[idx].id)) {
+        if (w_eq(d->forms->scroll_id[k], id)) {
             d->nodes[idx].box_scroll_y = d->forms->scroll_y[k];
             d->nodes[idx].box_scroll_x = d->forms->scroll_x[k];     /* Lot 108 */
             return;

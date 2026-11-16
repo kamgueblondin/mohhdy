@@ -2329,7 +2329,7 @@ static void test_l107_pad_49(void) {
     geo2(5, 0, 400, 0, 0, 0, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: #000000 } to { color: #ffffff } } body { overflow: overlay; height: 3rem; overflow-y: hidden } #b { height: 1in; overflow-x: visible !important } html { height: 200px; overflow-y: overlay } #q { overflow-x: visible; overflow-y: visible hidden x; overflow-y: inherit } html { scroll-padding-left: 6pt; scroll-padding-inline: 67px; scroll-padding-bottom: 3pc } #o { scroll-padding-inline-start: 0.25% } #b { scroll-padding-bottom: 5vh } body { scroll-padding-inline: 1.5em } html { font-size: 24px } #b { font-size: 10px } #i { view-timeline: --v 150%, --t 89.49%; view-timeline: initial; animation: k 1s linear; animation-timeline: view() }", 1);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
-    TEST_ASSERT_EQUAL_STRING("0 0 1 0 0 1", counts());
+    TEST_ASSERT_EQUAL_STRING("0 0 0 0 1 1", counts());
 }
 
 static void test_l107_pad_50(void) {

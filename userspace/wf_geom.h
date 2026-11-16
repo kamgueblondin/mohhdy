@@ -33,6 +33,7 @@
 #define WF_GEOM_H
 
 #define WF_GEOM_MAX 192          /* reader elements (WF_SITE_NODES) */
+#define WF_GEOM_SM_BODY (WF_GEOM_MAX + 1)   /* Lot 110: sm of a box in the unmarked body box scroller */
 
 typedef struct {
     unsigned char ok;            /* 1: the element has a box */
@@ -44,7 +45,8 @@ typedef struct {
     int sc_b, sc_i;              /* its scroll offset */
     int rg_b, rg_i;              /* its scroll range, >= 0 */
     unsigned char sv;            /* Lot 105: 1 when the element is a box scroller itself */
-    int sm;                      /* Lot 105: the nearest box scroller's reader index + 1, 0 none (root, unmarked) */
+    int sm;                      /* Lot 105: the nearest box scroller's reader index + 1, 0 none (root, unmarked);
+                                  * Lot 110: WF_GEOM_SM_BODY for the body element (unmarked) */
     int s_vp, s_sc, s_rg;        /* Lot 105: its own scrollport height, scroll offset and range along y (sv) */
     unsigned char svx;           /* Lot 108: 1 when the element is a box scroller along x (overflow-x auto or scroll) */
     int x_vp, x_sc, x_rg;        /* Lot 108: its own scrollport width, scroll offset and range along x (svx) */

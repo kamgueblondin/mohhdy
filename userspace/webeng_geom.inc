@@ -17,7 +17,9 @@
  * box_scroll_y, scroll_apply's limit); we_geom_feed says which marked
  * box scroller is the nearest one and the root scroll offset.
  * Lot 106: we_geom_feed also gives the box of the body element (the
- * first element child of the root element named body), unmarked. */
+ * first element child of the root element named body), unmarked.
+ * Lot 110: a box whose nearest scroller is that body element (a box
+ * scroller when the reader passes it an overflow) has sm WF_GEOM_SM_BODY. */
 
 /* 1 when node i or an ancestor is display:none (no box) */
 static int geom_hidden(const we_doc_t *d, int i) {
@@ -162,15 +164,15 @@ static int geom_mark(const char *id, const char *prefix) {
 }
 
 int we_geom_feed(const we_doc_t *d, const char *prefix, wf_geom_t *g) {
-    int i, k, r[10], wm;
+    int i, k, r[10], wm, b;
     if (!g) return -1;
     for (k = 0; k < (int)sizeof(*g); k++) ((unsigned char *)g)[k] = 0;
     if (!d || !prefix || !prefix[0] || d->root < 0 || !d->nnodes) return 0;
     (void)geom_phys(d, d->root, r, &wm);
     g->vw = r[4]; g->vh = r[5]; g->rg_x = r[8]; g->rg_y = r[9];
     g->sc_y = r[7];      /* Lot 105 */
-    i = geom_body_el(d);     /* Lot 106 */
-    if (i >= 0) (void)we_geom(d, i, &g->body);
+    b = geom_body_el(d);     /* Lot 106 */
+    if (b >= 0) (void)we_geom(d, b, &g->body);
     for (i = 0; i < (int)d->nnodes; i++) {
         int m = geom_mark(d->nodes[i].id, prefix), s;     /* a text node has no id */
         if (m < 0 || g->box[m].ok) continue;
@@ -180,6 +182,8 @@ int we_geom_feed(const we_doc_t *d, const char *prefix, wf_geom_t *g) {
          * box scroller without a mark) */
         s = geom_scroller(d, i);
         if (s >= 0) g->box[m].sm = geom_mark(d->nodes[s].id, prefix) + 1;
+        /* Lot 110: the body element as a box scroller has no mark */
+        if (s >= 0 && !g->box[m].sm && s == b) g->box[m].sm = WF_GEOM_SM_BODY;
     }
     return g->n;
 }

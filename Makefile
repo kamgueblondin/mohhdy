@@ -1743,6 +1743,13 @@ qemu-lot108: $(OS_IMAGE) pack-initrd disk
 qemu-lot109: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot109.py
 
+# Lot 110: the body as a box scroller of its own (html overflow hidden),
+# a body height in % of html's, read by scroll(nearest), a named timeline
+# and view(); opacity animated and transitioned (tests/scripts/test_qemu_lot110.py)
+.PHONY: qemu-lot110
+qemu-lot110: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot110.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

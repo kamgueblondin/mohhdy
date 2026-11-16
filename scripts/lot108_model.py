@@ -54,6 +54,7 @@ def passed(nodes, i, scr):
     timeline reads: along y (auto or scroll, a height or max-height
     passed; min-height with them), then along x (a width or max-width)"""
     import lot105_model as M5
+    import lot110_model as M10
     sc = nodes[i]["sc"]
     if i not in scr or not M5.box_scroller(nodes, i):
         return ""
@@ -70,6 +71,7 @@ def passed(nodes, i, scr):
     if (hs[0] is not None or hs[1] is not None) and y in (4, 5):
         t = "overflow-y:%s" % M5.OV_NAME[y]
         for name, h in (("height", hs[0]), ("max-height", hs[1]), ("min-height", slot(8))):
+            h = M10.body_pct(nodes, i, h)     # Lot 110, converted: of html's height
             if h is not None:
                 t += ";%s:%s" % (name, L7.box_text(h))
         parts.append(t)

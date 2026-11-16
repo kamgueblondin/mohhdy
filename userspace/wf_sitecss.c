@@ -998,6 +998,15 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
         rr[k] = rank > 0 ? rank : 1;
         return;
     }
+    if (r->kind == WF_SITE_K_OP) {
+        /* Lot 110: opacity, the strongest wins (a starting one apart) */
+        int *rr = r->starting ? &nd->soprank : &nd->oprank;
+        if (rank < *rr) return;
+        *rr = rank;
+        if (r->starting) { nd->sop = (int)r->color; nd->sop_set = 1; }
+        else { nd->op = (int)r->color; nd->op_val = r->val; }
+        return;
+    }
     if (r->starting) {
         /* Lot 100: a starting colour (add_rule keeps no other kind);
          * transparent is a colour with alpha 0 here */
@@ -1301,10 +1310,31 @@ static int ov_axis(int self, int other);
 static int box_passed(const wf_site_t *d, const wf_site_node_t *nd, int ax) {
     int o, v, pct;
     char ex[WF_SITE_BOXEX];
-    /* scr is never set on html or body (their timelines are the root's) */
+    /* scr is never set on html, nor (Lot 110) on a body whose overflow
+     * goes to the viewport (their timelines are the root's) */
     if (!nd->scr || (!box_len(d, nd, ax ? 2 : 0, &v, &pct, ex) && !box_len(d, nd, ax ? 3 : 1, &v, &pct, ex))) return 0;
     o = ax ? ov_axis(nd->ov[0], nd->ov[1]) : ov_axis(nd->ov[1], nd->ov[0]);
     return o == WF_SITE_OV_AUTO || o == WF_SITE_OV_SCROLL ? o : 0;
+}
+
+static int site_body(const wf_site_t *d, int q);
+
+/* Lot 110: a percentage height, max-height or min-height of the body
+ * box scroller is of the root element's height (CSS 2, 10.5): in px when
+ * html has a height in px or in % (of the viewport, the initial
+ * containing block), integer steps truncated, at most WF_SITE_HMAX; left
+ * as it is otherwise (html's height is auto: the engine reads the
+ * percentage as auto) */
+static void body_pct(const wf_site_t *d, const wf_site_node_t *nd, int *v, int *pct) {
+    int p = nd->parent, hv, hp;
+    char ex[WF_SITE_BOXEX];
+    if (!*pct || p < 0 || !site_body(d, (int)(nd - d->node))) return;
+    if (!box_len(d, &d->node[p], 0, &hv, &hp, ex) || ex[0]) return;
+    if (hp) hv = d->vh * hv / 100;
+    if (hv > WF_SITE_HMAX) hv = WF_SITE_HMAX;
+    hv = hv * *v / 100;
+    *v = hv > WF_SITE_HMAX ? WF_SITE_HMAX : hv;
+    *pct = 0;
 }
 
 /* Lot 109: a box_len value: the engine's expression ex, else v in px or % */
@@ -1325,7 +1355,7 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
     if (!nd->color_set && nd->weight != 2 && nd->align < 2 && !nd->margin_set && !nd->pad_set &&
         nd->italic != 2 && nd->deco < 2 && nd->transform < 2 && nd->ws < 2 && !nd->bg_set &&
         nd->tok_val[0] != 2 && nd->tok_val[1] != 2 && nd->tok_val[2] != 2 && nd->tok_val[3] != 2 &&
-        !long_given(nd) && !box && !xbox) return 0;
+        !long_given(nd) && !box && !xbox && nd->op_val < 2) return 0;
     n = app(out, cap, n, " style=\"");
     if (nd->color_set) { n = app(out, cap, n, "color:"); n = app_hex(out, cap, n, nd->color); any = 1; }
     if (nd->weight == 2) { if (any) n = app(out, cap, n, ";"); n = app(out, cap, n, "font-weight:bold"); any = 1; }
@@ -1403,6 +1433,15 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
             any = 1;
         }
     }
+    if (nd->op_val >= 2) {
+        /* Lot 110: the final opacity as a whole percentage, truncated
+         * (the engine keeps whole percents) */
+        if (any) n = app(out, cap, n, ";");
+        n = app(out, cap, n, "opacity:");
+        n = app_u(out, cap, n, (unsigned)(nd->op / 100));
+        n = app(out, cap, n, "%");
+        any = 1;
+    }
     if (box) {
         /* Lot 105: a scroll box in the layout (Lot 74), so the timeline
          * has a scroller to read */
@@ -1416,6 +1455,7 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
          * min-height with them */
         for (mx = 0; mx < 3; mx++) {
             if (!box_len(d, nd, hx[mx], &v, &pct, ex)) continue;
+            body_pct(d, nd, &v, &pct);     /* Lot 110 */
             n = app(out, cap, n, hn[mx]);
             n = box_app(out, cap, n, v, pct, ex);
         }
@@ -1584,8 +1624,10 @@ static int add_rule(wf_site_t *d, const wf_site_rule_t *src) {
      * custom properties; its other declarations are left out. Lot 100:
      * and of color and background-color (a colour, initial or transparent;
      * the other CSS-wide keywords are left out) */
+    /* Lot 110: and of opacity (a value, initial or unset) */
     if (src->starting && src->kind != WF_SITE_K_VAR &&
-        ((src->kind != 4 && src->kind != WF_SITE_K_BG) || src->revert)) return 0;
+        ((src->kind != 4 && src->kind != WF_SITE_K_BG && src->kind != WF_SITE_K_OP) || src->revert ||
+         (src->kind == WF_SITE_K_OP && src->val == 3))) return 0;
     if (d->nrules >= WF_SITE_RULES) { d->dropped_rules++; return -1; }
     r = &d->rule[d->nrules];
     clear(r, (int)sizeof(*r));
@@ -2280,6 +2322,48 @@ static int long_decl(const wf_site_t *d, const char *prop, const char *val, wf_s
     return long_proto(d, kind, norm, 1, proto);
 }
 
+/* Lot 110: an opacity value s (lower case, trimmed): a number
+ * ([+-]digits[.digits], a fraction without digits before the dot too) or
+ * that followed by %, in 1/10000 truncated toward zero (digits past the
+ * fourth decimal of the number, the second of the percentage, are
+ * dropped), clamped to 0..10000 (CSS Color 4, opacity: the computed value
+ * is clamped to [0, 1]); 1 and *v, 0 when s is not one */
+static int op_num(const char *s, int *v) {
+    int k = 0, neg = 0, w = 0, f = 0, fd = 0, dg = 0, pct, scale;
+    if (s[k] == '+' || s[k] == '-') neg = s[k++] == '-';
+    /* w stops past 100000 (it is clamped anyway) */
+    for (; s[k] >= '0' && s[k] <= '9'; k++, dg++)
+        if (w <= 100000) w = w * 10 + (s[k] - '0');
+    if (s[k] == '.') {
+        k++;
+        if (s[k] < '0' || s[k] > '9') return 0;
+        for (; s[k] >= '0' && s[k] <= '9'; k++, dg++)
+            if (fd < 4) { f = f * 10 + (s[k] - '0'); fd++; }
+    }
+    pct = s[k] == '%';
+    if (pct) k++;
+    if (!dg || s[k]) return 0;
+    while (fd < 4) { f *= 10; fd++; }
+    /* w.f in 1/10000: a percentage is w * 100 + f / 100 */
+    if (w > 100000) scale = 10001;     /* (w * 10000 would overflow) */
+    else scale = pct ? w * 100 + f / 100 : w * 10000 + f;
+    if (neg) scale = 0;
+    *v = scale > 10000 ? 10000 : scale;
+    return 1;
+}
+
+/* Lot 110: opacity v (1/10000) as a number: "1", "0", else "0." and
+ * four digits */
+static void op_text(int v, char *out, int cap) {
+    char t[8];
+    int k, m;
+    if (v >= 10000 || v <= 0) { scopy(out, cap, v > 0 ? "1" : "0", 1); return; }
+    t[0] = '0'; t[1] = '.';
+    for (k = 0, m = 1000; k < 4; k++, m /= 10) t[2 + k] = (char)('0' + v / m % 10);
+    t[6] = 0;
+    scopy(out, cap, t, 6);
+}
+
 static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_t *proto) {
     int i = 0;
     proto->kind = 0;
@@ -2394,6 +2478,23 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                 if (i < n && body[i] == ';') i++;
                 continue;
             }
+        }
+        if (eq(prop, "opacity")) {
+            /* Lot 110: a number or a percentage (op_num), initial and
+             * unset 1, inherit the parent's final value; anything else
+             * is dropped */
+            int v = 10000, k = eq(val, "inherit") ? 3 : (eq(val, "initial") || eq(val, "unset")) ? 1 : 0;
+            if (!k && op_num(val, &v)) k = 2;
+            if (k) {
+                proto->revert = WF_SITE_RV_NONE;
+                proto->box_n = 0;
+                proto->tok[0] = 0;
+                proto->kind = WF_SITE_K_OP;
+                proto->val = (uint8_t)k;
+                proto->color = (uint32_t)v;
+                return 1;
+            }
+            /* anything else: no later branch takes opacity */
         }
         {
             /* Lot 105: overflow (one or two keywords: x then y),
@@ -4320,6 +4421,18 @@ typedef struct {
 
 /* one frame value (lower case, trimmed) of registration p: computed with
  * the font context into out; 0 when it is left out */
+/* Lot 110: the registration opacity animates as (a <number>) */
+static const wf_cssprop_t *op_prop(void) {
+    static wf_cssprop_t p;
+    static int done;
+    if (!done) {
+        clear(&p, (int)sizeof(p));
+        p.syntax = (unsigned char)wf_cssprop_syntax_parse("'<number>'", 10, &p);
+        done = 1;
+    }
+    return &p;
+}
+
 static int kf_take(const wf_cssprop_t *p, const char *s, int n, const wf_cssprop_fctx_t *fc, char *out, int cap) {
     char raw[WF_CSSPROP_VAL];
     int a = 0, b = n, k;
@@ -4330,6 +4443,13 @@ static int kf_take(const wf_cssprop_t *p, const char *s, int n, const wf_cssprop
     for (k = 0; raw[k]; k++) {
         if (raw[k] == '!') return 0;                                      /* !important: ignored in keyframes */
         if (raw[k] == 'v' && raw[k + 1] == 'a' && raw[k + 2] == 'r' && raw[k + 3] == '(') return 0;
+    }
+    if (p == op_prop()) {
+        /* Lot 110: an opacity keyframe is computed (clamped) first */
+        int v;
+        if (!op_num(raw, &v)) return 0;
+        op_text(v, out, cap);
+        return 1;
     }
     if (!wf_cssprop_match_prop(p, raw)) return 0;
     if (!wf_cssprop_compute_font(p, raw, fc, out, cap)) scopy(out, cap, raw, slen(raw));
@@ -4517,12 +4637,26 @@ static int ov_axis(int self, int other) {
     return self;
 }
 
+/* Lot 110: 1 when node i is the body element under the root html
+ * element and keeps its own overflow: the root's overflow applies to the
+ * viewport, and the body's only when the root's is visible along both
+ * axes (CSS Overflow 3, 3.3); a body whose overflow does not go to the
+ * viewport is a box scroller like any element */
+static int body_own(const wf_site_t *d, int i) {
+    int p = d->node[i].parent;
+    if (p < 0 || !site_body(d, i)) return 0;
+    return ov_axis(d->node[p].ov[0], d->node[p].ov[1]) != WF_SITE_OV_VISIBLE ||
+           ov_axis(d->node[p].ov[1], d->node[p].ov[0]) != WF_SITE_OV_VISIBLE;
+}
+
 int wf_site_box_scroller(const wf_site_t *d, int i) {
     const wf_site_node_t *nd;
     int y;
     if (!d || i < 0 || i >= d->nnodes) return 0;
     nd = &d->node[i];
-    if (eq(nd->tag, "html") || eq(nd->tag, "body")) return 0;
+    /* the root's overflow is the viewport's; Lot 110: the body's too
+     * unless the root keeps a box value */
+    if (eq(nd->tag, "html") || (eq(nd->tag, "body") && !body_own(d, i))) return 0;
     /* a box value along x makes y one too (ov_axis), so y alone says
      * whether one axis is a box value */
     y = ov_axis(nd->ov[1], nd->ov[0]);
@@ -4545,14 +4679,17 @@ int wf_site_scroller_of(const wf_site_t *d, int i) {
  * runs on the geometry's range and sc_y */
 /* Lot 108: ax 1 along x (the inline axis, horizontal-tb), on a box
  * scroller's own range and offset along x (svx, x_rg, x_sc) */
+static const wf_geom_box_t *geom_box(const wf_site_t *d, int q);
+
 static int scroll_clock(wf_site_t *d, int src, const wf_cssanim_t *a, int *ms, int ax) {
     long long r;
     const wf_geom_box_t *b;
     if (src >= 0) {
         d->node[src].scr = 1;
         d->geom_live = 1;
-        if (!g_geom || !g_geom->box[src].ok || !(ax ? g_geom->box[src].svx : g_geom->box[src].sv)) return 0;
-        b = &g_geom->box[src];
+        /* Lot 110: the body's own record for a body box scroller */
+        b = geom_box(d, src);
+        if (!b || !b->ok || !(ax ? b->svx : b->sv)) return 0;
         if (ax) return wf_cssanim_scroll_px_ms(a, (long long)b->x_rg * 1000000, (long long)b->x_sc * 1000000, ms) ? 4 : 0;
         return wf_cssanim_scroll_px_ms(a, (long long)b->s_rg * 1000000, (long long)b->s_sc * 1000000, ms) ? 4 : 0;
     }
@@ -4639,7 +4776,8 @@ static int view_clock(wf_site_t *d, int q, int axis, const unsigned char *ik, co
     if (s >= 0 || d->scroll_gui) d->geom_live = 1;
     b = geom_box(d, q);
     if (!b || !b->ok) return 0;
-    if (s < 0 ? !b->root : b->root || b->sm != s + 1) return 0;
+    /* Lot 110: the engine marks the body box scroller WF_GEOM_SM_BODY */
+    if (s < 0 ? !b->root : b->root || b->sm != (site_body(d, s) ? WF_GEOM_SM_BODY : s + 1)) return 0;
     /* the block axis, or the inline one; which one is vertical */
     useb = axis == WF_CSSTL_BLOCK || (axis == WF_CSSTL_Y && b->bvert) || (axis == WF_CSSTL_X && !b->bvert);
     vert = useb ? b->bvert : !b->bvert;
@@ -4929,6 +5067,48 @@ static void cur_pass(wf_site_t *d) {
     /* col_pass, which comes next, sets it off at its end */
 }
 
+/* Lot 110: opacity like color and background-color: inherit takes the
+ * parent's final opacity (parents come first), the value below the
+ * animations is the element's own (1 when it has none), an !important
+ * own declaration keeps its value, and a transition runs from the
+ * @starting-style value; keyframe values are clamped when they are taken
+ * (kf_take), the result once the animations ran (op_num) */
+static void op_anim(wf_site_t *d, int i, const wf_cssanim_t *al, int na, const int *ms, const wf_cssprop_fctx_t *fc) {
+    static char base[WF_CSSPROP_VAL], cur[WF_CSSPROP_VAL], val[WF_CSSPROP_VAL];
+    const wf_cssprop_t *p = op_prop();
+    wf_site_node_t *nd = &d->node[i];
+    const wf_csstrans_t *t;
+    int j, animated = 0, composed = 0, v;
+    if (nd->op_val == 3) nd->op = nd->parent >= 0 ? d->node[nd->parent].op : 10000;     /* final: 1 when unset */
+    if (nd->op_val != 2 && nd->op_val != 3) nd->op = 10000;
+    op_text(nd->op, base, (int)sizeof(base));
+    scopy(cur, WF_CSSPROP_VAL, base, slen(base));
+    if (nd->oprank < (1 << 30))
+        for (j = 0; j < na; j++) {
+            const wf_site_kf_t *kf = kf_find(d, al[j].name);
+            int m = ms[j];
+            if (kf && !anim_clock(d, i, &al[j], &m)) kf = 0;
+            if (kf && anim_value(d, &al[j], kf, "opacity", p, fc, base, cur, val, (int)sizeof(val), &composed, m)) {
+                scopy(cur, WF_CSSPROP_VAL, val, slen(val));
+                animated = 1;
+            }
+        }
+    if (composed) d->prop_composed++;
+    if (animated) d->op_animated++;
+    else {
+        if (!nd->sop_set || !(t = trans_of(d, nd, "opacity"))) return;
+        op_text(nd->sop, val, (int)sizeof(val));
+        scopy(base, WF_CSSPROP_VAL, val, slen(val));
+        if (!trans_run(d, t, p, base, cur, val, (int)sizeof(val))) return;
+        scopy(cur, WF_CSSPROP_VAL, val, slen(val));
+        d->op_transitioned++;
+    }
+    if (op_num(cur, &v)) {
+        nd->op = v;
+        nd->op_val = 2;     /* inherit is resolved (children read op) */
+    }
+}
+
 static void col_pass(wf_site_t *d) {
     static wf_cssanim_t al[WF_CSSANIM_MAX];
     static char base[WF_CSSPROP_VAL], cur[WF_CSSPROP_VAL], val[WF_CSSPROP_VAL];
@@ -4987,6 +5167,7 @@ static void col_pass(wf_site_t *d) {
             }
             if (parse_color(cur, slen(cur), &c)) { *slot = c; *set = 1; }
         }
+        op_anim(d, i, al, na, ms, &fc);
     }
     wf_cssprop_set_current(0, 0, 0);
 }
@@ -5035,6 +5216,13 @@ int wf_site_anim_text(const wf_site_t *d, char *out, int cap) {
         n = app_u(out, cap, n, (unsigned)d->col_animated);
         n = app(out, cap, n, " ");
         n = app_u(out, cap, n, (unsigned)d->col_transitioned);
+    }
+    if (d->op_animated || d->op_transitioned) {
+        /* Lot 110 */
+        n = app(out, cap, n, " opacity ");
+        n = app_u(out, cap, n, (unsigned)d->op_animated);
+        n = app(out, cap, n, " ");
+        n = app_u(out, cap, n, (unsigned)d->op_transitioned);
     }
     if (d->anim_view || d->geom_need || d->geom_used) {
         /* Lot 104 */

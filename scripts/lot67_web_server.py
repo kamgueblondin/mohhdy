@@ -140,6 +140,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       percentage inside clamp() (against a box scroller
                       parent), relative lab(), lch(), hwb() and color(),
                       an out-of-gamut origin kept unclamped
+  /lot110/body.html   Lot 110: the body as a box scroller of its own
+                      (html overflow hidden, body 50% of html's 400px),
+                      read by scroll(nearest), a named timeline and
+                      view(); opacity, animated and transitioned
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -832,6 +836,31 @@ LOT109_PAGES = {
 }
 
 
+# Lot 110: reader page whose body is a box scroller (html overflow hidden),
+# opacity animated and transitioned (tests/scripts/test_qemu_lot110.py)
+LOT110_FILL = "".join("<p>line110 %d</p>" % i for i in range(12))
+LOT110_PAGES = {
+    "/lot110/body.html": (
+        "<!doctype html><html><head><title>Lot 110 body</title><style>"
+        "@keyframes k110 { from { color: #000000 } to { color: #ffffff } }\n"
+        "@keyframes f110 { from { opacity: 0 } to { opacity: 100% } }\n"
+        "html { overflow: hidden; height: 400px }\n"
+        "body { overflow: auto; height: 50%; margin: 0; scroll-timeline: --b110 }\n"
+        "#i110 { animation: k110 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "#n110 { animation: k110 1000ms linear; animation-timeline: --b110 }\n"
+        "#v110 { animation: k110 1000ms linear; animation-timeline: view() }\n"
+        "#o110 { opacity: 0.5 }\n"
+        "#a110 { animation: f110 1000ms linear }\n"
+        "#t110 { opacity: 0.8; transition: opacity 1s linear }\n"
+        "@starting-style { #t110 { opacity: 0 } }\n"
+        "</style></head><body><h1>Body 110</h1>"
+        "<p id=\"i110\">ikeep110</p><p id=\"n110\">nkeep110</p>" + LOT110_FILL +
+        "<p id=\"v110\">vkeep110</p>" + LOT110_FILL +
+        "<p id=\"o110\">okeep110</p><p id=\"a110\">akeep110</p><p id=\"t110\">tkeep110</p>"
+        "<p>fin110</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -1066,6 +1095,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT109_PAGES:
             self._send(200, LOT109_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT110_PAGES:
+            self._send(200, LOT110_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
