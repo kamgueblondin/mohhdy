@@ -6,8 +6,8 @@
  * box_scroll_x, with a horizontal bar WE_SCROLL_W px high inside the
  * padding edge at the bottom (left of the vertical bar when both are
  * painted). The content width is the right edge of the in-flow
- * descendant boxes and of their display items (a nowrap line is wider
- * than its block), from the content edge; out-of-flow and hidden
+ * descendant boxes and text runs (a nowrap line is wider than its
+ * block), from the content edge; out-of-flow and hidden
  * subtrees and the insides of a box clipping along x do not count. It is
  * measured by scroll_apply before the display list is clipped (box_cw). */
 #define WE_SCROLL_W 6
@@ -36,30 +36,25 @@ static int scroll_in_flow(const we_doc_t *d, int c, int idx) {
 }
 
 /* Lot 108: the content width of box idx from its left content edge: the
- * right edges of the boxes and display items that count (a child
- * narrower than its own child does not hide it) */
+ * right edges of the boxes that count, text runs included (a child
+ * narrower than its own child does not hide it; a box shadow or an
+ * outline painted past a box does not count) */
 static int scroll_content_right(const we_doc_t *d, int idx) {
     const we_node_t *n = &d->nodes[idx];
     int pad_left = n->x + box_edge(n, 3) + n->padding[3];
-    int right = pad_left, c, i;
+    int right = pad_left, c;
     for (c = idx + 1; c < (int)d->nnodes; c++) {
         const we_node_t *ch = &d->nodes[c];
-        if (ch->is_text || !scroll_in_flow(d, c, idx)) continue;
+        if (!scroll_in_flow(d, c, idx)) continue;
         if (ch->x + ch->w > right) right = ch->x + ch->w;
-    }
-    for (i = 0; i < (int)d->nitems; i++) {
-        int own = d->item_owner[i], r;
-        if (own < 0 || own == idx || !scroll_in_flow(d, own, idx)) continue;
-        r = d->items[i].x + (int)d->items[i].w;
-        if (r > right) right = r;
     }
     return right - pad_left;
 }
 
-/* Lot 108: the scrollport width (the content box, as scroll_view_h) */
+/* Lot 108: the scrollport width (the content box, as scroll_view_h; the
+ * layout keeps a border box at least as wide as its borders and padding) */
 static int scroll_view_w(const we_node_t *n) {
-    int w = n->w - box_edge(n, 1) - box_edge(n, 3) - n->padding[1] - n->padding[3];
-    return w > 0 ? w : 0;
+    return n->w - box_edge(n, 1) - box_edge(n, 3) - n->padding[1] - n->padding[3];
 }
 
 static int scroll_content_bottom(const we_doc_t *d, int idx) {
@@ -180,13 +175,14 @@ static int scroll_ybar(const we_doc_t *d, int idx) {
     return scroll_content_bottom(d, idx) + n->box_scroll_y > scroll_view_h(n);
 }
 
-static int scroll_paint_x(we_doc_t *d, int idx, int ybar) {
+static void scroll_paint_x(we_doc_t *d, int idx, int ybar) {
     we_node_t *n = &d->nodes[idx];
     int view, content, max_scroll, tx, ty, tw, thumb_w, ratio;
-    if (!overflow_scrollable_x(n) || d->nitems + 2 > WE_MAX_ITEMS) return 0;
+    /* box_cw is 0 for a box not scrolling along x (style_node) */
+    if (d->nitems + 2 > WE_MAX_ITEMS) return;
     view = scroll_view_w(n);
     content = n->box_cw;
-    if (content <= view || !scroll_xtrack(d, idx, ybar, &tx, &ty, &tw)) return 0;
+    if (content <= view || !scroll_xtrack(d, idx, ybar, &tx, &ty, &tw)) return;
     max_scroll = content - view;
     thumb_w = view * tw / content;
     if (thumb_w < 4) thumb_w = 4;
@@ -202,7 +198,6 @@ static int scroll_paint_x(we_doc_t *d, int idx, int ybar) {
         it->w = (uint16_t)thumb_w; it->h = WE_SCROLL_W; it->color = 0x888888;
         d->item_owner[d->nitems++] = (int16_t)idx;
     }
-    return 2;
 }
 
 static int scroll_paint(we_doc_t *d, int idx) {
@@ -210,16 +205,16 @@ static int scroll_paint(we_doc_t *d, int idx) {
     int view, content, max_scroll, track_x, track_y, track_h, thumb_h, thumb_y, ratio;
     /* Lot 108: the horizontal bar first (it reads the content before
      * the vertical bar's items exist) */
-    int xs = scroll_paint_x(d, idx, scroll_ybar(d, idx));
-    if (!overflow_scrollable(n) || d->nitems + 2 > WE_MAX_ITEMS) return xs;
+    scroll_paint_x(d, idx, scroll_ybar(d, idx));
+    if (!overflow_scrollable(n) || d->nitems + 2 > WE_MAX_ITEMS) return 0;
     view = scroll_view_h(n);
     content = scroll_content_bottom(d, idx) + n->box_scroll_y;
-    if (content <= view) return xs;
+    if (content <= view) return 0;
     max_scroll = content - view;
     track_x = n->x + n->w - box_edge(n, 1) - WE_SCROLL_W;
     track_y = n->y + box_edge(n, 0);
     track_h = n->h - box_edge(n, 0) - box_edge(n, 2);
-    if (track_h < 4 || track_x < n->x) return xs;
+    if (track_h < 4 || track_x < n->x) return 0;
     thumb_h = view * track_h / content;
     if (thumb_h < 4) thumb_h = 4;
     if (thumb_h > track_h) thumb_h = track_h;
@@ -235,7 +230,7 @@ static int scroll_paint(we_doc_t *d, int idx) {
         it->w = WE_SCROLL_W; it->h = (uint16_t)thumb_h; it->color = 0x888888;
         d->item_owner[d->nitems++] = (int16_t)idx;
     }
-    return xs + 2;
+    return 2;
 }
 
 /* the offset of box idx along y (Lot 108: x when ax), kept in the forms
@@ -267,8 +262,8 @@ static int scroll_click_x(we_doc_t *d, int i, int x, int y) {
     content = n->box_cw;
     max_scroll = content > view ? content - view : 0;
     if (max_scroll <= 0) return 0;
+    /* below max_scroll: x - tx < tw */
     want = (int)(((long)max_scroll * (x - tx)) / tw);
-    if (want > max_scroll) want = max_scroll;
     if (want == n->box_scroll_x) return 1;
     scroll_persist(d, i, want, 1);
     return 2;

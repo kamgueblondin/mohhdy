@@ -211,6 +211,134 @@ static void test_l108_content_width(void) {
     TEST_ASSERT_EQUAL(0, g.svx);
     TEST_ASSERT_EQUAL(0, g.x_rg);
     TEST_ASSERT_EQUAL(0, we_box_scroll_click(&g_doc, 50, 15));
+    /* a box left of the page: a hidden box (laid out at 0, 0) still does
+     * not count */
+    lay(&g_doc, "<html><body><div id=o style=\"overflow-x:auto;width:50px;margin-left:-100px\">"
+                "<div style=\"width:20px;height:12px\"></div><div style=\"display:none\"></div></div></body></html>");
+    TEST_ASSERT_EQUAL(-92, g_doc.nodes[node_of("o")].x);
+    TEST_ASSERT_EQUAL(20, g_doc.nodes[node_of("o")].box_cw);
+}
+
+/* the contents move along x as a whole: grandchildren and their display
+ * items too (a red box at 250 px in a 270 px content, scrolled by 168 px,
+ * is painted at 90 px) */
+static void test_l108_shift(void) {
+    static const char page[] = "<html><body><div id=o style=\"overflow-x:auto;width:100px\"><div id=c style=\"width:300px\">"
+                               "<div id=g style=\"margin-left:250px;width:20px;height:10px;background:#ff0000\"></div>"
+                               "</div></div></body></html>";
+    int o, g, i, hit = 0;
+    we_set_forms(&g_doc, 0);
+    lay(&g_doc, page);
+    o = node_of("o");
+    g = node_of("g");
+    TEST_ASSERT_EQUAL(258, g_doc.nodes[g].x);
+    TEST_ASSERT_EQUAL(300, g_doc.nodes[o].box_cw);
+    /* track 8..108 at the bottom: 200 * 99 / 100 */
+    TEST_ASSERT_EQUAL(2, click(107, g_doc.nodes[o].y + g_doc.nodes[o].h - 3));
+    TEST_ASSERT_EQUAL(198, g_doc.nodes[o].box_scroll_x);
+    TEST_ASSERT_EQUAL(8 - 198, g_doc.nodes[node_of("c")].x);
+    TEST_ASSERT_EQUAL(258 - 198, g_doc.nodes[g].x);
+    for (i = 0; i < (int)g_doc.nitems; i++)
+        if (g_doc.item_owner[i] == g && g_doc.items[i].kind == OS_FB_WEB_RECT && g_doc.items[i].color == 0xFF0000) {
+            TEST_ASSERT_EQUAL(258 - 198, g_doc.items[i].x);
+            TEST_ASSERT_EQUAL(20, g_doc.items[i].w);
+            hit++;
+        }
+    TEST_ASSERT_EQUAL(1, hit);
+}
+
+/* a kept offset out of the range is clamped and stored; a box scrolling
+ * along x only keeps no y offset */
+static void test_l108_clamp(void) {
+    static const char page[] = "<html><body><div id=o style=\"overflow-x:auto;width:100px;height:20px\">"
+                               "<div style=\"width:300px;height:50px\"></div></div></body></html>";
+    int o;
+    we_forms_init(&g_forms);
+    g_forms.nscroll = 1;
+    strcpy(g_forms.scroll_id[0], "o");
+    g_forms.scroll_x[0] = 1000;
+    g_forms.scroll_y[0] = 10;
+    we_set_forms(&g_doc, &g_forms);
+    lay(&g_doc, page);
+    o = node_of("o");
+    TEST_ASSERT_EQUAL(200, g_doc.nodes[o].box_scroll_x);
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[o].box_scroll_y);
+    TEST_ASSERT_EQUAL(8 - 200, g_doc.nodes[o + 1].x);
+    g_forms.scroll_x[0] = -5;
+    lay(&g_doc, page);
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[node_of("o")].box_scroll_x);
+    TEST_ASSERT_EQUAL(8, g_doc.nodes[node_of("o") + 1].x);
+    we_set_forms(&g_doc, 0);
+}
+
+/* the corner at the end of the y range is still the vertical track's;
+ * a track narrower than 4 px is not one */
+static void test_l108_corner(void) {
+    static const char page[] = "<html><body><div id=o style=\"overflow:auto;width:200px;height:40px\">"
+                               "<div style=\"width:600px;height:12px\"></div><div style=\"width:20px;height:12px\"></div>"
+                               "<div style=\"width:20px;height:12px\"></div><div style=\"width:20px;height:12px\"></div>"
+                               "<div style=\"width:20px;height:12px\"></div></div></body></html>";
+    we_forms_init(&g_forms);
+    g_forms.nscroll = 1;
+    strcpy(g_forms.scroll_id[0], "o");
+    g_forms.scroll_y[0] = 20;
+    we_set_forms(&g_doc, &g_forms);
+    lay(&g_doc, page);
+    TEST_ASSERT_EQUAL(20, g_doc.nodes[node_of("o")].box_scroll_y);
+    (void)click(204, 44);
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[node_of("o")].box_scroll_x);
+    TEST_ASSERT_EQUAL(0, g_forms.scroll_x[0]);
+    we_set_forms(&g_doc, 0);
+    lay(&g_doc, "<html><body><div id=o style=\"overflow-x:scroll;width:3px\"><div style=\"width:300px;height:12px\"></div>"
+                "</div></body></html>");
+    TEST_ASSERT_EQUAL(0, we_box_scroll_click(&g_doc, 9, 15));
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[node_of("o")].box_scroll_x);
+}
+
+/* a new style pass starts the box at 0 along x as along y (no forms) */
+static void test_l108_restyle(void) {
+    static const char page[] = "<html><body><div id=o style=\"overflow-x:scroll;width:100px\">"
+                               "<div style=\"width:300px;height:12px\"></div></div></body></html>";
+    we_set_forms(&g_doc, 0);
+    lay(&g_doc, page);
+    TEST_ASSERT_EQUAL(2, we_box_scroll_click(&g_doc, 58, 15));
+    TEST_ASSERT_EQUAL(100, g_doc.nodes[node_of("o")].box_scroll_x);
+    TEST_ASSERT_EQUAL(0, we_style(&g_doc));
+    TEST_ASSERT_EQUAL(0, we_layout_viewport(&g_doc, 640, 480));
+    TEST_ASSERT_EQUAL(0, g_doc.nodes[node_of("o")].box_scroll_x);
+    TEST_ASSERT_EQUAL(8, g_doc.nodes[node_of("o") + 1].x);
+}
+
+/* a border box narrower than its padding: the layout widens it to the
+ * padding, the scrollport is 0 px and the range the whole content */
+static void test_l108_narrowpad(void) {
+    wf_geom_box_t g;
+    lay(&g_doc, "<html><body><div id=o style=\"overflow-x:auto;box-sizing:border-box;width:10px;padding:0 20px\">"
+                "<div style=\"width:30px;height:12px\"></div></div></body></html>");
+    TEST_ASSERT_EQUAL(0, we_geom(&g_doc, node_of("o"), &g));
+    TEST_ASSERT_EQUAL(40, g_doc.nodes[node_of("o")].w);
+    TEST_ASSERT_EQUAL(0, g.x_vp);
+    TEST_ASSERT_EQUAL(30, g.x_rg);
+}
+
+/* the scroller of an element inside a box scrolling along x only: its
+ * range along x, none along y; along y only: none along x */
+static void test_l108_child_ranges(void) {
+    wf_geom_box_t g;
+    lay(&g_doc, "<html><body><div id=o style=\"overflow-x:auto;width:100px;height:20px\">"
+                "<div id=c style=\"width:300px;height:50px\"></div></div></body></html>");
+    TEST_ASSERT_EQUAL(0, we_geom(&g_doc, node_of("c"), &g));
+    TEST_ASSERT_EQUAL(0, g.root);
+    TEST_ASSERT_EQUAL(100, g.vp_i);
+    TEST_ASSERT_EQUAL(200, g.rg_i);
+    TEST_ASSERT_EQUAL(20, g.vp_b);
+    TEST_ASSERT_EQUAL(0, g.rg_b);
+    lay(&g_doc, "<html><body><div id=o style=\"overflow-y:auto;width:100px;height:20px\">"
+                "<div id=c style=\"width:300px;height:50px\"></div></div></body></html>");
+    TEST_ASSERT_EQUAL(0, we_geom(&g_doc, node_of("c"), &g));
+    TEST_ASSERT_EQUAL(0, g.root);
+    TEST_ASSERT_EQUAL(30, g.rg_b);
+    TEST_ASSERT_EQUAL(0, g.rg_i);
 }
 
 int main(void) {
@@ -220,6 +348,12 @@ int main(void) {
     RUN_TEST(test_l108_flow_inline);
     RUN_TEST(test_l108_flow_maxwidth);
     RUN_TEST(test_l108_content_width);
+    RUN_TEST(test_l108_shift);
+    RUN_TEST(test_l108_clamp);
+    RUN_TEST(test_l108_corner);
+    RUN_TEST(test_l108_restyle);
+    RUN_TEST(test_l108_narrowpad);
+    RUN_TEST(test_l108_child_ranges);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

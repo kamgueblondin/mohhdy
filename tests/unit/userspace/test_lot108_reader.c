@@ -36,6 +36,14 @@ static const char *style_of(const char *id) {
     return g_o;
 }
 
+static const char *style_of_tag(const char *tag) {
+    int i;
+    g_o[0] = 0;
+    for (i = 0; i < g_d.nnodes; i++)
+        if (!strcmp(g_d.node[i].tag, tag)) wf_site_style_attr(&g_d, g_d.node[i].start, g_o, (int)sizeof(g_o));
+    return g_o;
+}
+
 /* the keywords, the alpha left out (the origin's) or given, calc() */
 static void test_l108_rel_basic(void) {
     TEST_ASSERT_EQUAL_STRING("ff0000 255", col("rgb(from red r g b)"));
@@ -79,8 +87,26 @@ static void test_l108_rel_invalid(void) {
     TEST_ASSERT_EQUAL_STRING("0", col("rgb(from red) r g b)"));
     TEST_ASSERT_EQUAL_STRING("0", col("hwb(from red h w b)"));          /* only rgb, hsl, oklab and oklch */
     TEST_ASSERT_EQUAL_STRING("0", col("rgb(from currentcolor r g b)")); /* no current colour */
+    TEST_ASSERT_EQUAL_STRING("0", col("oklaba(from red l a b)"));       /* an a only after rgb and hsl */
+    TEST_ASSERT_EQUAL_STRING("0", col("rgb(fromxred r g b)"));          /* from and a space */
+    TEST_ASSERT_EQUAL_STRING("0", col("rgb(from red calc(2r) g b)"));   /* no keyword glued to a number */
+    TEST_ASSERT_EQUAL_STRING("0", col("rgb(from red r g b / / 1)"));
+    TEST_ASSERT_EQUAL_STRING("0", col("rgb(from red calc(r / 0) g b)")); /* no known value */
+    TEST_ASSERT_EQUAL_STRING("0", col("rgb(from red calc(infinity) g b)"));
+    TEST_ASSERT_EQUAL_STRING("0", col("hsl(from red 0, 100%, 50%)"));
+    TEST_ASSERT_EQUAL_STRING("0", col("rgb(from red r g calc(b)))"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from red r g)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from red r g b)"));
+    /* an origin longer than a value buffer (wf_cssprop_match takes any
+     * length): refused, nothing copied past the buffer */
+    {
+        static char big[400];
+        int k;
+        strcpy(big, "rgb(from color-mix(in srgb, ");
+        for (k = 0; k < 100; k++) strcat(big, " ");
+        strcat(big, "red, blue) r g b)");
+        TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, big));
+    }
 }
 
 /* nesting: an origin may be relative, four levels deep at most */
@@ -115,6 +141,22 @@ static void test_l108_xbox(void) {
     prep("#o { overflow-x: auto; width: 10em; max-width: none } #i { animation: k 1s; animation-timeline: scroll(x) } "
          "@keyframes k { to { color: red } }");
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:160px\"", style_of("o"));
+    /* max-width: none wins over an earlier max-width */
+    prep("#o { overflow-x: auto; width: 10em; max-width: 50px } #o { max-width: none } "
+         "#i { animation: k 1s; animation-timeline: scroll(x) } @keyframes k { to { color: red } }");
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:160px\"", style_of("o"));
+    /* html and body are no box scrollers: their timelines are the root's,
+     * nothing is passed on for them */
+    prep("body { overflow-x: auto; width: 300px; animation: k 1s; animation-timeline: scroll(self x) } "
+         "@keyframes k { to { color: red } }");
+    TEST_ASSERT_EQUAL_STRING("", style_of_tag("body"));
+    prep("body { overflow-y: auto; height: 100px; scroll-timeline: --b } html { overflow: auto; height: 50px; scroll-timeline: --h x } "
+         "#i { animation: k 1s; animation-timeline: --b } #b { animation: k 1s; animation-timeline: --h } @keyframes k { to { color: red } }");
+    TEST_ASSERT_EQUAL(0, g_d.node[0].scr);
+    TEST_ASSERT_EQUAL(0, g_d.node[2].scr);
+    TEST_ASSERT_EQUAL_STRING("", style_of_tag("body"));
+    prep("#o { overflow-x: auto; width: 10em; max-width: none } #i { animation: k 1s; animation-timeline: scroll(x) } "
+         "@keyframes k { to { color: red } }");
     /* overflow-x alone: y computes to auto, but no height to pass */
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     /* min-height alone passes nothing; with a height it goes along */

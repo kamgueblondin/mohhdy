@@ -70,13 +70,14 @@ static void geom_own(const we_doc_t *d, int s, int *vp, int *sc, int *rg) {
 }
 
 /* Lot 108: the same along x (scroll_view_w, box_scroll_x, the content
- * width scroll_apply measured) */
+ * width scroll_apply measured; 0 for a box not scrolling along x, as
+ * style_node resets it) */
 static void geom_own_x(const we_doc_t *d, int s, int *vp, int *sc, int *rg) {
     const we_node_t *c = &d->nodes[s];
     int view = scroll_view_w(c), content = c->box_cw;
     *vp = view;
     *sc = c->box_scroll_x;
-    *rg = overflow_scrollable_x(c) && content > view ? content - view : 0;
+    *rg = content > view ? content - view : 0;
 }
 
 static int geom_phys(const we_doc_t *d, int i, int *r, int *wm) {

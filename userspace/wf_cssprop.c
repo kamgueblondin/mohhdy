@@ -2458,7 +2458,7 @@ static int cp_rel_arg(int fn, const char *s, int a, int b, const long long *kv, 
 
 /* Lot 108: the relative colour v[0..n) of function fn, its origin from
  * v[i] (after "from"): the origin, then three arguments and an optional
- * "/ alpha" (spaces only, no comma), each a number, percentage, angle,
+ * "/ alpha" (spaces only; a comma fails), each a number, percentage, angle,
  * none, a keyword of fn or a math function of them; the alpha is the
  * origin's when left out. The colour is the absolute one written with
  * those values (so it is clamped and converted as that one is) */
@@ -2482,9 +2482,11 @@ static int cp_rel(const char *v, int n, int fn, int i, cp_rgba_t *o, int depth) 
         a = i;
         d = 0;
         while (i < n - 1 && (d || (!cp_sp(v[i]) && v[i] != '/'))) {
+            /* a comma or a stray ')' at the top level makes the absolute
+             * colour below invalid (a legacy comma form takes no "/"; a
+             * negative depth runs to the end and fails below) */
             if (v[i] == '(') d++;
-            else if (v[i] == ')') { if (!d) return 0; d--; }
-            else if (!d && v[i] == ',') return 0;
+            else if (v[i] == ')') d--;
             i++;
         }
         if (d) return 0;

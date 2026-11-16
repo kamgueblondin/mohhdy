@@ -1282,8 +1282,8 @@ static int ov_axis(int self, int other);
  * overflow along x, with a width or a max-width */
 static int box_passed(const wf_site_t *d, const wf_site_node_t *nd, int ax) {
     int o, v, pct;
+    /* scr is never set on html or body (their timelines are the root's) */
     if (!nd->scr || (!box_len(d, nd, ax ? 2 : 0, &v, &pct) && !box_len(d, nd, ax ? 3 : 1, &v, &pct))) return 0;
-    if (!wf_site_box_scroller(d, (int)(nd - d->node))) return 0;
     o = ax ? ov_axis(nd->ov[0], nd->ov[1]) : ov_axis(nd->ov[1], nd->ov[0]);
     return o == WF_SITE_OV_AUTO || o == WF_SITE_OV_SCROLL ? o : 0;
 }
