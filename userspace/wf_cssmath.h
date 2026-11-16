@@ -39,4 +39,17 @@ int wf_css_math_px(const char *s, int vw, int vh, int em_px, int rem_px, int *px
 /* Lot 90: "N.NNunit" (at most two decimals, half away from zero) for a
  * value in thousandths; the length, -1 when cap is too small. */
 int wf_css_token(int milli, const char *unit, char *out, int cap);
+/* Lot 109: s (a length or a math function) as a box scroller length
+ * (height, width and their limits): as wf_css_math_px, and ex, ch and lh
+ * are 5/16, 8/16 and 10/16 of em_px (the 8x8 font's x height, advance
+ * and normal line height at 16 px: WF_CSSPROP_EX_NUM, WE_CHAR_W,
+ * WE_LINE_H); % is of the containing block, unknown here. 1 and *px (px
+ * thousandths) when there is no percentage; 2 and out (cap bytes) the
+ * value as the engine's math reads it when there is one: "N%" or
+ * "calc(N% + Mpx)" (integers, half away from zero, at most
+ * WF_CSSMATH_LIT), or min()/max()/clamp() of those when it mixes them
+ * (one such function, not nested and not in an arithmetic); 0 for an
+ * empty string; -1 otherwise. */
+#define WF_CSSMATH_LIT 2000       /* webeng.h WE_MATH_LITERAL_MAX */
+int wf_css_math_box(const char *s, int vw, int vh, int em_px, int rem_px, int *px, char *out, int cap);
 #endif

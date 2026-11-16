@@ -1162,9 +1162,10 @@ static int cp_rgba(const char *v, cp_rgba_t *o);
 
 /* Lot 108: relative colours (CSS Color 5): rgb(), rgba(), hsl(), hsla(),
  * oklab() and oklch() with "from" and an origin colour first; the
- * function (0 rgb, 1 hsl, 2 oklab, 3 oklch) and in *at the index after
- * "from" and its space, -1 when v[0..n) does not start one */
-static const char *const cp_relf[] = {"rgb", "hsl", "oklab", "oklch", 0};
+ * function (0 rgb, 1 hsl, 2 oklab, 3 oklch; Lot 109: 4 hwb, 5 lab, 6 lch,
+ * 7 color) and in *at the index after "from" and its space, -1 when
+ * v[0..n) does not start one */
+static const char *const cp_relf[] = {"rgb", "hsl", "oklab", "oklch", "hwb", "lab", "lch", "color", 0};
 
 static int cp_rel_head(const char *v, int n, int *at) {
     int k;
@@ -2347,8 +2348,12 @@ static void cp_mix_comps(int m, const cp_rgba_t *x, long long *v, int *miss) {
         else if (mx == r) v[0] = cp_div(600000 * (g - b) + (g < b ? 3600000 : 0) * d, d, 0);
         else if (mx == g) v[0] = cp_div(600000 * (b - r) + 1200000 * d, d, 0);
         else v[0] = cp_div(600000 * (r - g) + 2400000 * d, d, 0);
+        /* Lot 109: unclamped channels (a relative colour's origin) can
+         * give a negative saturation: the hue turned by 180 deg, the
+         * saturation's absolute value (CSS Color 4 sample code) */
+        if (d && den < 0) v[0] = v[0] >= 1800000 ? v[0] - 1800000 : v[0] + 1800000;
         if (m == 11) {
-            v[1] = den > 0 ? cp_div(d * 1000000, den, 0) : 0;
+            v[1] = den > 0 ? cp_div(d * 1000000, den, 0) : den < 0 ? cp_div(d * 1000000, -den, 0) : 0;
             v[2] = cp_div((mx + mn) * 1000000, 2 * u, 0);
         } else {
             v[1] = cp_div(mn * 1000000, u, 0);
@@ -2386,10 +2391,13 @@ static void cp_mix_comps(int m, const cp_rgba_t *x, long long *v, int *miss) {
 static int cp_mix_core(int m, int hm, cp_rgba_t *x, const long long *p, cp_rgba_t *o);
 
 /* Lot 108: the channel keyword s[a..b) of relative function fn (0..2 its
- * channels in order: r g b, h s l, l a b, l c h; 3 alpha), else -1 */
+ * channels in order: r g b, h s l, l a b, l c h; 3 alpha), else -1.
+ * Lot 109: h w b, l a b, l c h; color() is fn 7 + its cp_mixn space m,
+ * r g b, or x y z for the xyz spaces (m 8..10) */
 static int cp_rel_kw(int fn, const char *s, int a, int b) {
-    static const char kw[4][4] = {"rgb", "hsl", "lab", "lch"};
+    static const char kw[9][4] = {"rgb", "hsl", "lab", "lch", "hwb", "lab", "lch", "rgb", "xyz"};
     int k;
+    if (fn > 7) fn = 7 + (fn >= 15);
     if (b - a == 1)
         for (k = 0; k < 3; k++) if (cp_low(s[a]) == kw[fn][k]) return k;
     return cp_eqn(s + a, b - a, "alpha") ? 3 : -1;
@@ -2403,21 +2411,36 @@ static int cp_rel_kw(int fn, const char *s, int a, int b) {
  * values) and h in deg (0..360, 0 when powerless); alpha of 0..1. A
  * missing component of the origin is 0 */
 static void cp_rel_kv(int fn, const cp_rgba_t *x, long long *kv) {
+    static const signed char sp[7] = {0, 11, 7, 14, 12, 6, 13};
     long long c[3];
-    int k, miss = 0;
+    int k, miss = 0, m = fn >= 7 ? fn - 7 : sp[fn];
+    cp_rgba_t y = *x;
     kv[3] = x->a;
-    if (!fn) {
-        for (k = 0; k < 3; k++) kv[k] = x->c[k];
+    /* Lot 109: an origin outside the sRGB gamut keeps its unclamped
+     * channels (CSS Color 5: the origin is converted, not mapped): its
+     * linear values sRGB-encoded (odd around 0) for rgb, hsl and hwb
+     * (their values from those channels) and color(srgb); inside the
+     * gamut those are its channels */
+    if ((!m || cp_mixs[m] == -2) && x->lin_ok) {
+        for (k = 0; k < 3; k++) c[k] = cp_encq(CP_SP_P3, x->lin[k]);
+        for (k = 0; k < 3; k++) y.c[k] = (long long)cp_wdiv(cp_wmul(cp_w(c[k]), fn == 7 ? CP_S : 255 * CP_S), CP_Q, 0).lo;
+        if (!m) {
+            for (k = 0; k < 3; k++) kv[k] = y.c[k];
+            return;
+        }
+    }
+    if (!m) {
+        for (k = 0; k < 3; k++) kv[k] = fn ? cp_div(x->c[k], 255, 0) : x->c[k];
         return;
     }
-    cp_mix_comps(fn == 1 ? 11 : fn == 2 ? 7 : 14, x, c, &miss);
-    if (fn == 1) {
+    cp_mix_comps(m, &y, c, &miss);
+    if (cp_mixs[m] == -2) {
         for (k = 0; k < 3; k++) kv[k] = c[k];
         return;
     }
     kv[0] = cp_div(c[0] * CP_S, CP_Q, 0);
     kv[1] = cp_div(c[1] * CP_S, CP_Q, 0);
-    if (fn == 2) kv[2] = cp_div(c[2] * CP_S, CP_Q, 0);
+    if (cp_mixh[m] != 2) kv[2] = cp_div(c[2] * CP_S, CP_Q, 0);
     else kv[2] = (miss & 64) ? 0 : c[2] < 0 ? c[2] + 3600000 : c[2];
 }
 
@@ -2465,9 +2488,9 @@ static int cp_rel_arg(int fn, const char *s, int a, int b, const long long *kv, 
  * origin's when left out. The colour is the absolute one written with
  * those values (so it is clamped and converted as that one is) */
 static int cp_rel(const char *v, int n, int fn, int i, cp_rgba_t *o, int depth) {
-    static const char *const names[] = {"rgb(", "hsl(", "oklab(", "oklch("};
+    static const char *const names[] = {"rgb(", "hsl(", "oklab(", "oklch(", "hwb(", "lab(", "lch(", "color("};
     char org[WF_CSSPROP_VAL], buf[WF_CSSPROP_VAL], arg[WF_CSSPROP_VAL];
-    int ta[5], tb[5], nt = 0, slash = -1, len = 0, k, d, a;
+    int ta[6], tb[6], nt = 0, slash = -1, len = 0, k, d, a, c = fn == 7;
     long long kv[4];
     cp_rgba_t x;
     if (depth > 3) return 0;
@@ -2480,7 +2503,7 @@ static int cp_rel(const char *v, int n, int fn, int i, cp_rgba_t *o, int depth) 
             i++;
             continue;
         }
-        if (nt >= 5) return 0;
+        if (nt >= 5 + c) return 0;
         a = i;
         d = 0;
         while (i < n - 1 && (d || (!cp_sp(v[i]) && v[i] != '/'))) {
@@ -2496,18 +2519,28 @@ static int cp_rel(const char *v, int n, int fn, int i, cp_rgba_t *o, int depth) 
         tb[nt] = i;
         nt++;
     }
-    if (!(nt == 4 && slash < 0) && !(nt == 5 && slash == 4)) return 0;
+    if (!(nt == 4 + c && slash < 0) && !(nt == 5 + c && slash == 4 + c)) return 0;
+    if (c) {
+        /* Lot 109: color(from C space ...): a space of cp_mixn, its
+         * channels r g b or x y z (m 8..10); the absolute color() refuses
+         * one that is no rgb or xyz space (lab, hsl and the others) */
+        for (k = 0; cp_mixn[k] && !cp_eqn(v + ta[1], tb[1] - ta[1], cp_mixn[k]); k++) {}
+        if (!cp_mixn[k]) return 0;
+        fn = 7 + k;
+    }
     if (tb[0] - ta[0] >= (int)sizeof(org)) return 0;
     for (k = ta[0]; k < tb[0]; k++) org[k - ta[0]] = v[k];
     org[tb[0] - ta[0]] = 0;
     if (!cp_rgba_d(org, &x, depth + 1)) return 0;
     cp_rel_kv(fn, &x, kv);
-    if (!cp_put(buf, &len, (int)sizeof(buf), names[fn], cp_len(names[fn]))) return 0;
-    for (k = 1; k < 5; k++) {
-        if (k == 4 && nt == 4) {
+    if (!cp_put(buf, &len, (int)sizeof(buf), names[c ? 7 : fn], cp_len(names[c ? 7 : fn])) ||
+        (c && (!cp_put(buf, &len, (int)sizeof(buf), v + ta[1], tb[1] - ta[1]) || !cp_put(buf, &len, (int)sizeof(buf), " ", 1))))
+        return 0;
+    for (k = 1 + c; k < 5 + c; k++) {
+        if (k == 4 + c && nt == 4 + c) {
             if (cp_fmt(kv[3], "", arg, (int)sizeof(arg)) < 0) return 0;
         } else if (cp_rel_arg(fn, v, ta[k], tb[k], kv, arg, (int)sizeof(arg)) < 0) return 0;
-        if (!cp_put(buf, &len, (int)sizeof(buf), k == 4 ? " / " : k > 1 ? " " : "", k == 4 ? 3 : k > 1) ||
+        if (!cp_put(buf, &len, (int)sizeof(buf), k == 4 + c ? " / " : k > 1 + c ? " " : "", k == 4 + c ? 3 : k > 1 + c) ||
             !cp_put(buf, &len, (int)sizeof(buf), arg, cp_len(arg)))
             return 0;
     }

@@ -89,7 +89,7 @@ static void test_l108_rel_invalid(void) {
     TEST_ASSERT_EQUAL_STRING("0", col("rgb(from red r g b))"));
     TEST_ASSERT_EQUAL_STRING("0", col("rgb(from red r g calc(b)"));
     TEST_ASSERT_EQUAL_STRING("0", col("rgb(from red) r g b)"));
-    TEST_ASSERT_EQUAL_STRING("0", col("hwb(from red h w b)"));          /* only rgb, hsl, oklab and oklch */
+    TEST_ASSERT_EQUAL_STRING("0", col("hwba(from red h w b)"));         /* Lot 109 (converted from hwb(from), now valid): an a only after rgb and hsl */
     TEST_ASSERT_EQUAL_STRING("0", col("rgb(from currentcolor r g b)")); /* no current colour */
     TEST_ASSERT_EQUAL_STRING("0", col("oklaba(from red l a b)"));       /* an a only after rgb and hsl */
     TEST_ASSERT_EQUAL_STRING("0", col("rgb(fromxred r g b)"));          /* from and a space */

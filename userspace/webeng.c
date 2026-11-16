@@ -1524,12 +1524,23 @@ static int parse_pack(const char *v, int len, int distribution, int stretch) {
     return -1;
 }
 
-static int parse_dimension(const char *v, int len, int *number, int *percent) {
+/* Lot 109: a px value up to px_max (a percentage up to 2000) */
+static int parse_dim_max(const char *v, int len, int px_max, int *number, int *percent) {
     int end = len;
     *percent = len > 0 && v[len - 1] == '%';
     if (*percent) end--;
     else if (len >= 2 && value_is(v + len - 2, 2, "px")) end -= 2;
-    return bounded_uint(v, end, 2000, number);
+    return bounded_uint(v, end, *percent ? 2000 : px_max, number);
+}
+
+static int parse_dimension(const char *v, int len, int *number, int *percent) {
+    return parse_dim_max(v, len, 2000, number, percent);
+}
+
+/* Lot 109: a height, min-height or max-height in px up to WE_LAYOUT_MAX
+ * (int16 sizes; the most a math height reaches) */
+static int parse_height(const char *v, int len, int *number, int *percent) {
+    return parse_dim_max(v, len, WE_LAYOUT_MAX, number, percent);
 }
 
 static int parse_placement(const char *v, int len, uint8_t *start, uint8_t *span) {
@@ -2961,6 +2972,7 @@ static int legacy_length_valid(int slot, const char *v, int len) {
     }
     if (slot == WE_LEN_BASIS && (value_is(v, len, "auto") || value_is(v, len, "content"))) return 1;
     if (slot == WE_LEN_HEIGHT && value_is(v, len, "auto")) return 1;
+    if (slot == WE_LEN_HEIGHT || slot == WE_LEN_MIN_H || slot == WE_LEN_MAX_H) return parse_height(v, len, &a, &b) == 0;
     if (slot >= WE_LEN_LEFT && slot <= WE_LEN_BOTTOM) return parse_len(v, len, &a, 0) == 0;
     return parse_dimension(v, len, &a, &b) == 0 && (slot < WE_LEN_ROW_GAP || !b);
 }
@@ -5138,7 +5150,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             n->height = -1; n->height_percent = 0;
             n->height_intrinsic = (uint8_t)(value_is(v, vl, "min-content") ? 1 : 2);
         }
-        else if (parse_dimension(v, vl, &number, &percent)) diag(d, "height refused", -1);
+        else if (parse_height(v, vl, &number, &percent)) diag(d, "height refused", -1);
         else {
             n->height = percent ? -1 : (int16_t)number;
             n->height_pct = (int16_t)number;
@@ -5147,7 +5159,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         }
     } else if (w_eq(prop, "min-height") || w_eq(prop, "max-height")) {
         int number, percent;
-        if (parse_dimension(v, vl, &number, &percent)) diag(d, "height limit refused", -1);
+        if (parse_height(v, vl, &number, &percent)) diag(d, "height limit refused", -1);
         else if (w_eq(prop, "min-height")) {
             n->min_height = percent ? -1 : (int16_t)number;
             n->min_height_pct = (int16_t)number;

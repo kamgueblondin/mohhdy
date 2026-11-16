@@ -1277,6 +1277,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 109: one boot of make qemu-lot109
+  lot109-reader-box:
+    name: QEMU box scrollers in ex/lh/percent and relative lab/lch/hwb/color (Lot 109)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 109 boot
+        run: make qemu-lot109
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot109-reader-box-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 108: one boot of make qemu-lot108
   lot108-reader-x:
     name: QEMU box scrollers along x, min-height and relative colours (Lot 108)

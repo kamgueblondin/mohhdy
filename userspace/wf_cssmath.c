@@ -3,7 +3,7 @@
  * string. */
 #include "wf_cssmath.h"
 
-typedef struct { int px, em, len; } mv_t;     /* thousandths; len 0: a plain number */
+typedef struct { int px, em, len, mix; } mv_t;     /* thousandths; len 0: a plain number */
 
 typedef struct {
     const char *s;
@@ -11,6 +11,11 @@ typedef struct {
     /* Lot 90: ctx set: em and % are em_px thousandths of a px each, rem
      * is rem_px; every value is then a px value */
     int ctx, em_px, rem_px;
+    /* Lot 109: box set (with ctx): ex, ch and lh are em_px fractions, %
+     * is the em part (1/1000 % of the containing block), a min()/max()/
+     * clamp() mixing parts is written to out (mix 1 then) */
+    int box, olen, cap;
+    char *out;
 } mp_t;
 
 static char lc(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
@@ -81,7 +86,7 @@ static int number(mp_t *p, int *out) {
 static mv_t with_unit(mp_t *p, int n) {
     mv_t v;
     int vw = p->vw > 0 ? p->vw : 1024, vh = p->vh > 0 ? p->vh : 768;
-    v.px = v.em = 0;
+    v.px = v.em = v.mix = 0;
     v.len = 1;
     if (pre(p->s + p->i, "px")) { p->i += 2; v.px = n; }
     else if (pre(p->s + p->i, "pt")) { p->i += 2; v.px = div_milli(mul_milli(n, 4000, &p->bad), 3000, &p->bad); }
@@ -92,6 +97,16 @@ static mv_t with_unit(mp_t *p, int n) {
     else if (pre(p->s + p->i, "vmax")) { p->i += 4; v.px = mul_milli(n, (vw > vh ? vw : vh) * 10, &p->bad); }
     else if (pre(p->s + p->i, "vw")) { p->i += 2; v.px = mul_milli(n, vw * 10, &p->bad); }
     else if (pre(p->s + p->i, "vh")) { p->i += 2; v.px = mul_milli(n, vh * 10, &p->bad); }
+    else if (p->box && (pre(p->s + p->i, "ex") || pre(p->s + p->i, "ch") || pre(p->s + p->i, "lh"))) {
+        /* Lot 109: the font's metrics (wf_cssprop.h, webeng.h at 16 px):
+         * ex 5/16 em (inked rows of "x"), ch 8/16 em (WE_CHAR_W), lh
+         * 10/16 em (WE_LINE_H, line-height normal) */
+        int k = p->s[p->i] == 'e' || p->s[p->i] == 'E' ? 5 : p->s[p->i] == 'c' || p->s[p->i] == 'C' ? 8 : 10;
+        int x = mul_milli(n, p->em_px, &p->bad);
+        p->i += 2;
+        v.px = x / 16 * k + x % 16 * k / 16;
+    }
+    else if (p->s[p->i] == '%' && p->box) { p->i++; v.em = n; }
     else if (p->s[p->i] == '%') { p->i++; if (p->ctx) v.px = mul_milli(n / 100, p->em_px, &p->bad); else v.em = n / 100; }
     else if ((p->s[p->i] >= 'a' && p->s[p->i] <= 'z') || (p->s[p->i] >= 'A' && p->s[p->i] <= 'Z')) p->bad = 1;
     else { v.len = 0; v.px = n; }
@@ -118,12 +133,60 @@ static int args(mp_t *p, mv_t *a, int cap) {
 static int one_part(const mv_t *a, int n) {
     int i, px = 0, em = 0;
     for (i = 0; i < n; i++) {
-        if (a[i].len != a[0].len) return 0;   /* a number against a length */
+        if (a[i].len != a[0].len || a[i].mix) return 0;   /* a number against a length; Lot 109: a mixed one */
         if (a[i].px) px = 1;
         if (a[i].em) em = 1;
     }
     if (px && em) return 0;
     return em ? 2 : 1;
+}
+
+/* Lot 109: "N%", "Npx" or "calc(N% + Mpx)" for a value with both parts
+ * (integers, rounded half away from zero, at most WF_CSSMATH_LIT: the
+ * engine's math literals) at p->out */
+static void put(mp_t *p, const char *t) {
+    while (*t) {
+        if (p->olen + 1 >= p->cap) { p->bad = 1; return; }
+        p->out[p->olen++] = *t++;
+    }
+    p->out[p->olen] = 0;
+}
+
+static void put_int(mp_t *p, int milli, const char *unit) {
+    char t[16];
+    int r = (abs_i(milli) + 500) / 1000, k = 15;
+    if (r > WF_CSSMATH_LIT) { p->bad = 1; return; }
+    t[k] = 0;
+    do { t[--k] = (char)('0' + r % 10); r /= 10; } while (r);
+    put(p, t + k);
+    put(p, unit);
+}
+
+static void put_lin(mp_t *p, mv_t v) {
+    if (!v.em) { if (v.px < 0) put(p, "-"); put_int(p, v.px, "px"); return; }
+    if (v.px) put(p, "calc(");
+    if (v.em < 0) put(p, "-");
+    put_int(p, v.em, "%");
+    if (!v.px) return;
+    put(p, v.px < 0 ? " - " : " + ");
+    put_int(p, v.px, "px)");
+}
+
+/* Lot 109: a min()/max()/clamp() of lengths mixing px and % (box mode
+ * only, one per value, not nested, not in an arithmetic): written as
+ * the engine reads it */
+static mv_t mixed(mp_t *p, const mv_t *a, int n, const char *fn) {
+    mv_t v;
+    int k;
+    v.px = v.em = 0;
+    v.len = v.mix = 1;
+    if (!p->box || p->olen) { p->bad = 1; return v; }
+    /* a mixed argument wrote out already (p->olen) */
+    for (k = 0; k < n; k++) if (!a[k].len) { p->bad = 1; return v; }
+    put(p, fn);
+    for (k = 0; k < n; k++) { if (k) put(p, ", "); put_lin(p, a[k]); }
+    put(p, ")");
+    return v;
 }
 
 static int key(mv_t v, int part) { return part == 2 ? v.em : v.px; }
@@ -133,7 +196,7 @@ static int key(mv_t v, int part) { return part == 2 ? v.em : v.px; }
 static mv_t factor(mp_t *p) {
     mv_t v, a[8];
     int n, k, part;
-    v.px = v.em = v.len = 0;
+    v.px = v.em = v.len = v.mix = 0;
     ws(p);
     if (++p->depth > WF_CSSMATH_DEPTH) { p->bad = 1; return v; }
     if (p->s[p->i] == '(' || pre(p->s + p->i, "calc(")) {
@@ -147,7 +210,7 @@ static mv_t factor(mp_t *p) {
         n = args(p, a, 8);
         if (!p->bad) {
             part = one_part(a, n);
-            if (!part) p->bad = 1;
+            if (!part) { p->depth--; return mixed(p, a, n, is_min ? "min(" : "max("); }
             v = a[0];
             for (k = 1; k < n && !p->bad; k++)
                 if (is_min ? key(a[k], part) < key(v, part) : key(a[k], part) > key(v, part)) v = a[k];
@@ -158,7 +221,7 @@ static mv_t factor(mp_t *p) {
         if (!p->bad && n != 3) p->bad = 1;
         if (!p->bad) {
             part = one_part(a, 3);
-            if (!part) p->bad = 1;
+            if (!part) { p->depth--; return mixed(p, a, 3, "clamp("); }
             /* max(MIN, min(VAL, MAX)): MIN wins over MAX */
             v = a[1];
             if (key(a[2], part) < key(v, part)) v = a[2];
@@ -187,6 +250,7 @@ static mv_t term(mp_t *p) {
         p->i++;
         w = factor(p);
         if (p->bad) return v;
+        if (v.mix || w.mix) { p->bad = 1; return v; }
         if (op == '*') {
             if (!w.len) { v.px = mul_milli(v.px, w.px, &p->bad); v.em = mul_milli(v.em, w.px, &p->bad); }
             else if (!v.len) { int k = v.px; v.px = mul_milli(w.px, k, &p->bad); v.em = mul_milli(w.em, k, &p->bad); v.len = 1; }
@@ -217,7 +281,7 @@ static mv_t expr(mp_t *p) {
         }
         p->i++;
         w = term(p);
-        if (w.len != v.len) { p->bad = 1; return v; }   /* a number plus a length */
+        if (w.len != v.len || v.mix || w.mix) { p->bad = 1; return v; }   /* a number plus a length */
         if (op == '+') { v.px += w.px; v.em += w.em; }
         else { v.px -= w.px; v.em -= w.em; }
         if (!in_range(v)) { p->bad = 1; return v; }
@@ -262,7 +326,7 @@ int wf_css_math(const char *s, int vw, int vh, char *out, int cap) {
     out[0] = 0;
     if (!wf_css_is_math(s)) return 0;
     p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
-    p.ctx = 0; p.em_px = p.rem_px = 0;
+    p.ctx = 0; p.em_px = p.rem_px = 0; p.box = 0; p.olen = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i] || !v.len) return -1;
@@ -280,11 +344,33 @@ int wf_css_math_px(const char *s, int vw, int vh, int em_px, int rem_px, int *px
     if (!s[0]) return 0;
     if (em_px <= 0 || em_px > WF_CSSMATH_MAX || rem_px <= 0 || rem_px > WF_CSSMATH_MAX) return -1;
     p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
-    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px;
+    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px; p.box = 0; p.olen = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i]) return -1;
     if (!v.len && v.px) return -1;              /* a plain number other than 0 */
     *px = v.px;
     return 1;
+}
+
+/* Lot 109: a box scroller length, see wf_cssmath.h */
+int wf_css_math_box(const char *s, int vw, int vh, int em_px, int rem_px, int *px, char *out, int cap) {
+    mp_t p;
+    mv_t v;
+    if (!s || !px || !out || cap <= 0) return -1;
+    *px = 0;
+    out[0] = 0;
+    if (!s[0]) return 0;
+    if (em_px <= 0 || em_px > WF_CSSMATH_MAX || rem_px <= 0 || rem_px > WF_CSSMATH_MAX) return -1;
+    p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
+    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px;
+    p.box = 1; p.olen = 0; p.cap = cap; p.out = out;
+    v = factor(&p);
+    ws(&p);
+    if (p.bad || p.s[p.i] || (!v.len && v.px)) { out[0] = 0; return -1; }
+    if (v.mix) return 2;
+    if (!v.em) { *px = v.px; return 1; }
+    put_lin(&p, v);
+    if (p.bad) { out[0] = 0; return -1; }
+    return 2;
 }

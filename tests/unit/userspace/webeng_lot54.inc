@@ -110,7 +110,7 @@ static void test_l54_block_height_limits_and_invalid_values(void) {
     lot52_render("<body style='margin:0'><div id=a style='height:10px;min-height:30px;min-height:bogus'></div>"
         "<div id=b style='height:80px;max-height:20px;max-height:-1px'></div>"
         "<div id=c style='min-height:40px;max-height:20px'></div>"
-        "<div id=d style='min-height:2001px;max-height:999999999999px'></div>"
+        "<div id=d style='min-height:16001px;max-height:999999999999px'></div>"
         "<div id=e style='min-height:0;max-height:0'>word</div></body>", 200);
     TEST_ASSERT_EQUAL(30, lot52_node("a")->h);
     TEST_ASSERT_EQUAL(30, lot52_node("b")->y);
@@ -119,6 +119,7 @@ static void test_l54_block_height_limits_and_invalid_values(void) {
     TEST_ASSERT_EQUAL(40, lot52_node("c")->h);
     TEST_ASSERT_EQUAL(-1, lot52_node("d")->min_height);
     TEST_ASSERT_EQUAL(-1, lot52_node("d")->max_height);
+    /* Lot 109 (converted from min-height:2001px): refused past WE_LAYOUT_MAX */
     TEST_ASSERT_EQUAL(0, lot52_node("e")->h);
     TEST_ASSERT_TRUE(lot52_has_diag("height limit refused"));
 }

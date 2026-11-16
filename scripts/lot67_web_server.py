@@ -136,6 +136,10 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       max-width and min-height read by a named x
                       timeline, relative colours (rgb() and hsl() from
                       an origin, in keyframes too)
+  /lot109/box.html    Lot 109: box scrollers sized in ex, lh and a
+                      percentage inside clamp() (against a box scroller
+                      parent), relative lab(), lch(), hwb() and color(),
+                      an out-of-gamut origin kept unclamped
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -794,6 +798,40 @@ LOT108_PAGES = {
 }
 
 
+# Lot 109: reader page with box scrollers sized in ex / lh / a percentage
+# in clamp() and relative lab/lch/hwb/color() (tests/scripts/test_qemu_lot109.py)
+LOT109_FILL = "".join("<p>line109 %d</p>" % i for i in range(12))
+LOT109_PAGES = {
+    "/lot109/box.html": (
+        "<!doctype html><html><head><title>Lot 109 box</title><style>"
+        "@keyframes k109 { from { color: #000000 } to { color: #ffffff } }\n"
+        "@keyframes c109 { from { color: lab(from #000000 l a b) } to { color: lch(from #ffffff l c h) } }\n"
+        "#o109 { overflow: auto; height: 20ex }\n"
+        "#i109 { animation: k109 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "#p109 { overflow: auto; height: 12lh; scroll-timeline: --p109 }\n"
+        "#q109 { overflow: auto; height: clamp(20%, calc(50% + 2ch), 90%) }\n"
+        "#s109 { animation: k109 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "#t109 { animation: k109 1000ms linear; animation-timeline: --p109 }\n"
+        "#l109 { color: lab(from #336699 l a b) }\n"
+        "#h109 { color: lch(from #336699 l c calc(h + 180)) }\n"
+        "#w109 { color: hwb(from #808080 h calc(w + 20) b) }\n"
+        "#x109 { color: color(from red display-p3 r g b) }\n"
+        "#u109 { color: rgb(from color(display-p3 1 0 0) calc(r - 40) g b) }\n"
+        "#c109 { animation: c109 1000ms linear }\n"
+        "</style></head><body><main><h1>Box 109</h1>"
+        "<div id=\"o109\"><p id=\"i109\">ikeep109</p>" + LOT109_FILL + "</div>"
+        "<div id=\"p109\"><div id=\"q109\"><p id=\"s109\">skeep109</p>" + LOT109_FILL + "</div>"
+        "<p id=\"t109\">tkeep109</p>" + LOT109_FILL + "</div>"
+        "<p id=\"l109\">lkeep109</p>"
+        "<p id=\"h109\">hkeep109</p>"
+        "<p id=\"w109\">wkeep109</p>"
+        "<p id=\"x109\">xkeep109</p>"
+        "<p id=\"u109\">ukeep109</p>"
+        "<p id=\"c109\">ckeep109</p>"
+        "<p>fin109</p></main></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -1025,6 +1063,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT108_PAGES:
             self._send(200, LOT108_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT109_PAGES:
+            self._send(200, LOT109_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
