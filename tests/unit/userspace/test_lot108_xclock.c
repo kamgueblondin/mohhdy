@@ -1124,7 +1124,7 @@ static void test_l108_xclock_15(void) {
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: #000000 } to { color: #ffffff } } #b { height: 0; overflow: hidden; overflow: scroll } #o { height: initial; overflow: auto !important; overflow-y: Auto !important } #o { max-width: 99.99%; min-height: 1in } #b { width: calc(50% + 10px); max-width: 0em } #o { scroll-timeline: --s block; view-timeline: --v x } #b { scroll-timeline: --s inline } #i { animation: k 1s linear; animation-timeline: --s }", 0);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:0px;overflow-x:scroll;max-width:0px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:0px;overflow-x:scroll;width:calc(50% + 10px);max-width:0px\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("0 0 0 0 1 1", counts());
     TEST_ASSERT_EQUAL_STRING("00001", flags());
     geo_root(1000, 1000);
@@ -1166,7 +1166,7 @@ static void test_l108_xclock_16(void) {
     geo2(5, 4, 30, 0, 0, 0, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: #000000 } to { color: #ffffff } } #b { height: px; overflow-x: SCROLL } html { height: 487px !important; overflow: visible } #o { overflow-x: SCROLL !important; height: 100%; overflow: hidden } div { overflow: none; overflow-x: auto } #o { max-width: calc(50% + 10px) } #b { overflow-x: visible; min-height: 40000% } #o { scroll-timeline-name: --s; scroll-timeline-axis: x } #i { animation: k 1s linear both; animation-timeline: view(x auto 20%) }", 0);
     TEST_ASSERT_EQUAL_STRING(" style=\"color:#ebebeb\"", style_of("i"));
-    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:scroll;max-width:calc(50% + 10px)\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("1 0 1 1 0 1", counts());
     TEST_ASSERT_EQUAL_STRING("00010", flags());
@@ -2589,7 +2589,7 @@ static void test_l108_xclock_37(void) {
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: #000000 } to { color: #ffffff } } #b { overflow: auto } #b { overflow-x: scroll; width: 250%; max-width: 2ch } #o { view-timeline: --v inline } #i { view-timeline: --v x; animation: k 1s linear both; animation-timeline: --v }", 1);
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:scroll;width:250%\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:scroll;width:250%;max-width:16px\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING("0 0 0 0 1 1", counts());
     TEST_ASSERT_EQUAL_STRING("00001", flags());
     geo_root(682, 682);

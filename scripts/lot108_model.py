@@ -71,7 +71,7 @@ def passed(nodes, i, scr):
         t = "overflow-y:%s" % M5.OV_NAME[y]
         for name, h in (("height", hs[0]), ("max-height", hs[1]), ("min-height", slot(8))):
             if h is not None:
-                t += ";%s:%d%s" % (name, h[0], "%" if h[1] else "px")
+                t += ";%s:%s" % (name, L7.box_text(h))
         parts.append(t)
     x = M5.ov_axis(ox, oy)
     ws = [slot(6), slot(7)]
@@ -79,7 +79,7 @@ def passed(nodes, i, scr):
         t = "overflow-x:%s" % M5.OV_NAME[x]
         for name, w in (("width", ws[0]), ("max-width", ws[1])):
             if w is not None:
-                t += ";%s:%d%s" % (name, w[0], "%" if w[1] else "px")
+                t += ";%s:%s" % (name, L7.box_text(w))
         parts.append(t)
     return ";".join(parts)
 
@@ -375,3 +375,16 @@ def rel_rgba(v):
         return None
     r = L103.full(t)
     return None if r is None else (r[0], r[1])
+
+
+# Lot 109: relative lab(), lch(), hwb() and color(), and the unclamped
+# channels of an origin outside the sRGB gamut (lot109_model); the Lot 108
+# functions above stay its rgb(), hsl(), oklab() and oklch() values
+def rel_head(v):
+    import lot109_model as M9
+    return M9.rel_head(v)
+
+
+def rel_rgba(v):
+    import lot109_model as M9
+    return M9.rel_rgba(v)

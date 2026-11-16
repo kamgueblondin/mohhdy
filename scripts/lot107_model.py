@@ -24,7 +24,7 @@ VW, VH = 640, 480
 SP = " \t\n\r"
 ABS = {"px": F(1), "in": F(96), "cm": F(9600, 254), "mm": F(960, 254), "q": F(240, 254), "pt": F(4, 3),
        "pc": F(16)}
-REL = ("em", "rem", "vw", "vh", "vmin", "vmax")
+REL = ("em", "rem", "vw", "vh", "vmin", "vmax", "ex", "ch", "lh")   # Lot 109: ex, ch, lh
 TOK = 12            # WF_SITE_TOK
 
 
@@ -206,8 +206,11 @@ def height_val(v, mx=False):
         return ("kept",)
     for f in ("calc(", "min(", "max(", "clamp(", "fit-content("):
         if v.startswith(f) and v.endswith(")") and len(v) > len(f):
-            if f != "fit-content(" and "%" not in v and math_px(v) is not None:
-                return ("tok", "len", v)
+            # Lot 109: lot109_model.math_box (ex, ch, lh; a percentage
+            # goes to the layout, kind "expr")
+            r = _box(v, 16, 16) if f != "fit-content(" else None
+            if r is not None:
+                return ("tok", "len" if r[0] == "px" else "expr", v)
             return ("kept",)
     nu = num_unit(v)
     if nu is None:
@@ -245,10 +248,22 @@ def box_len(slot, em=16, rem=16):
     if slot[1] == "%":
         whole = slot[2].split(".")[0] or "0"
         return (min(int(whole), HMAX), True)
-    px = math_px(slot[2], em, rem)
-    if px is None:
+    r = _box(slot[2], em, rem)
+    if r is None:
         return None
-    return (min(floor_px(max(px, F(0))), HMAX), False)
+    if r[0] == "expr":
+        return (r[1], "expr")       # Lot 109: the engine's expression
+    return (min(floor_px(max(r[1], F(0))), HMAX), False)
+
+
+def _box(v, em, rem):
+    import lot109_model as M9
+    return M9.math_box(v, em, rem)
+
+
+def box_text(h):
+    """Lot 109: a box_len value as the reader writes it"""
+    return h[0] if h[1] == "expr" else "%d%s" % (h[0], "%" if h[1] else "px")
 
 
 def sc_cascade(decls):
@@ -297,7 +312,7 @@ def passed(nodes, i, scr):
     t = "overflow-y:%s" % M5.OV_NAME[y]
     for name, h in (("height", hs[0]), ("max-height", hs[1])):
         if h is not None:
-            t += ";%s:%d%s" % (name, h[0], "%" if h[1] else "px")
+            t += ";%s:%s" % (name, box_text(h))
     return t
 
 
@@ -390,13 +405,14 @@ def sp_inset(slot, em, rem):
         if q != math_floor(q):
             raise Unsure()
         return ("len", math_floor(q))
-    if slot[0] != "tok":
+    if slot[0] != "tok" or slot[1] == "expr":
         return ("auto", 0)
     if slot[1] == "%":
         return ("pct", math_floor(F(slot[2] or "0") * 10000))
-    px = math_px(slot[2], em, rem)
-    if px is None:
+    r = _box(slot[2], em, rem)      # Lot 109: ex, ch and lh resolve
+    if r is None:
         return ("auto", 0)
+    px = r[1] if r[0] == "px" else F(0)
     if px < 0:
         return ("len", 0)
     t = px * 1000

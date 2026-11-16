@@ -111,8 +111,9 @@ static void test_l107_heights(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:42px\"", style_of("b"));
     prep("#b { overflow: auto; height: calc(10px - 50px) } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:0px\"", style_of("b"));
+    /* Lot 109 (converted): a percentage goes to the layout */
     prep("#b { overflow: auto; height: calc(50% + 10px) } " RD);
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:calc(50% + 10px)\"", style_of("b"));
     prep("#b { overflow: auto; height: fit-content(10px) } " RD);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     prep("#b { overflow: auto; height: calc(10px + 1) } " RD);
@@ -124,10 +125,14 @@ static void test_l107_heights(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:64px\"", style_of("b"));
     /* a kept unit the reader does not resolve wins the cascade and
      * passes nothing; an invalid value is dropped */
-    prep("#b { overflow: auto; height: 100px } #b { height: 10ex } " RD);
+    prep("#b { overflow: auto; height: 100px } #b { height: 10cap } " RD);
     TEST_ASSERT_EQUAL(0, node("b")->hpx);
     TEST_ASSERT_EQUAL_STRING("", node("b")->htok);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    /* Lot 109 (converted from 10ex above): ex resolves (5/16 em) */
+    prep("#b { overflow: auto; height: 100px } #b { height: 10ex } " RD);
+    TEST_ASSERT_EQUAL_STRING("~10ex", node("b")->htok);
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:50px\"", style_of("b"));
     prep("#b { overflow: auto; height: 100px } #b { height: -1em; height: 1.2.3em; height: 1em% } " RD);
     TEST_ASSERT_EQUAL(101, node("b")->hpx);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:100px\"", style_of("b"));
@@ -198,10 +203,11 @@ static void test_l107_padding_parse(void) {
          "scroll-padding: none; scroll-padding: fit-content(1px); scroll-padding: min-content }");
     TEST_ASSERT_EQUAL_STRING("#70000", node("o")->sptok[0]);
     TEST_ASSERT_EQUAL_STRING("#70000", node("o")->sptok[3]);
-    /* the block and inline shorthands; a math with % is auto */
+    /* the block and inline shorthands; a math with % is auto (Lot 109,
+     * converted: kept as "@N", which an inset reads as auto) */
     prep("#o { scroll-padding-inline: 5% auto; scroll-padding-block: calc(10% + 1px) 0 }");
     n = node("o");
-    TEST_ASSERT_EQUAL_STRING("", n->sptok[0]);
+    TEST_ASSERT_EQUAL('@', n->sptok[0][0]);
     TEST_ASSERT_EQUAL_STRING("#0", n->sptok[1]);
     TEST_ASSERT_EQUAL_STRING("%5", n->sptok[2]);
     TEST_ASSERT_EQUAL_STRING("", n->sptok[3]);

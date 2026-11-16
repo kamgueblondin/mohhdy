@@ -258,6 +258,7 @@ enum {
     WF_SITE_OV_AUTO = 4,          /* overlay too (a legacy alias) */
     WF_SITE_OV_SCROLL = 5
 };
+#define WF_SITE_BOXEX 64            /* Lot 109: a box length the engine resolves (calc(N% + Mpx)) */
 #define WF_SITE_HMAX 30000          /* Lot 105: the largest height passed on, px */
 #define WF_SITE_ALONGS 17           /* Lot 98: WF_CSSANIM_LONGS + WF_CSSTRANS_LONGS slots per element (Lot 102: 17) */
 #define WF_SITE_TLS 6               /* Lot 101: the timeline longhand slots (Lot 102: timeline-scope, slot 4; Lot 104: view-timeline-inset, 5) */

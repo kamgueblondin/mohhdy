@@ -1247,6 +1247,23 @@ static int long_given(const wf_site_node_t *nd) {
 
 static int tok_px(const wf_site_t *d, const char *t, int em, int root, int *ok);
 
+/* Lot 109: token t of height_val ("~L", "=N" or "@N") as a box scroller
+ * length against em and the root size (wf_css_math_box): the px
+ * thousandths, or ex (WF_SITE_BOXEX bytes) the engine's expression of
+ * one with a percentage (0 then); *ok 0 when it does not resolve */
+static int tok_box(const wf_site_t *d, const char *t, int em, char *ex, int *ok) {
+    int v = 0, e = 0, k = 1;
+    const char *s = t + 1;
+    *ok = 0;
+    if (t[0] != '~') {
+        while (t[k] >= '0' && t[k] <= '9') e = e * 10 + (t[k++] - '0');
+        if (e < 1 || e > d->nlongs) return 0;
+        s = d->lpool[e - 1];
+    }
+    *ok = wf_css_math_box(s, d->vw, d->vh, em, d->root_fs, &v, ex, WF_SITE_BOXEX) > 0;
+    return v;
+}
+
 /* Lot 107: the height (mx 0) or max-height (mx 1) element nd passes on
  * (Lot 108: mx 2 width, 3 max-width, 4 min-height, WF_SITE_K_SX0 slots):
  * 1 with *v in px (*pct 0) or in % of the containing block (*pct 1, the
@@ -1254,11 +1271,12 @@ static int tok_px(const wf_site_t *d, const char *t, int em, int root, int *ok);
  * a math function in px against the element's font size, the root's and
  * the viewport (a negative math result is 0, wf_css_math_px resolves
  * at most 10000 px); 0 when it passes none */
-static int box_len(const wf_site_t *d, const wf_site_node_t *nd, int mx, int *v, int *pct) {
+static int box_len(const wf_site_t *d, const wf_site_node_t *nd, int mx, int *v, int *pct, char *ex) {
     int px = mx >= 2 ? nd->xpx[mx - 2] : mx ? nd->mpx : nd->hpx, r, ok, k;
     const char *t = mx >= 2 ? nd->xtok[mx - 2] : mx ? nd->mtok : nd->htok;
     *v = 0;
     *pct = 0;
+    ex[0] = 0;
     if (px) { *v = px - 1; return 1; }
     if (t[0] == '%') {
         for (k = 1, r = 0; t[k] >= '0' && t[k] <= '9'; k++) if (r <= WF_SITE_HMAX) r = r * 10 + (t[k] - '0');
@@ -1266,10 +1284,10 @@ static int box_len(const wf_site_t *d, const wf_site_node_t *nd, int mx, int *v,
         *pct = 1;
         return 1;
     }
-    if (t[0] != '~' && t[0] != '=') return 0;
-    r = tok_px(d, t[0] == '~' ? t + 1 : t, d->fs[nd - d->node], d->root_fs, &ok);
+    if (t[0] != '~' && t[0] != '=' && t[0] != '@') return 0;
+    r = tok_box(d, t, d->fs[nd - d->node], ex, &ok);
     if (!ok) return 0;
-    /* at most 10000 px (WF_CSSMATH_MAX), under WF_SITE_HMAX */
+    /* an expression in ex (v 0); at most 10000 px (WF_CSSMATH_MAX), under WF_SITE_HMAX */
     *v = r < 0 ? 0 : r / 1000;
     return 1;
 }
@@ -1282,10 +1300,18 @@ static int ov_axis(int self, int other);
  * overflow along x, with a width or a max-width */
 static int box_passed(const wf_site_t *d, const wf_site_node_t *nd, int ax) {
     int o, v, pct;
+    char ex[WF_SITE_BOXEX];
     /* scr is never set on html or body (their timelines are the root's) */
-    if (!nd->scr || (!box_len(d, nd, ax ? 2 : 0, &v, &pct) && !box_len(d, nd, ax ? 3 : 1, &v, &pct))) return 0;
+    if (!nd->scr || (!box_len(d, nd, ax ? 2 : 0, &v, &pct, ex) && !box_len(d, nd, ax ? 3 : 1, &v, &pct, ex))) return 0;
     o = ax ? ov_axis(nd->ov[0], nd->ov[1]) : ov_axis(nd->ov[1], nd->ov[0]);
     return o == WF_SITE_OV_AUTO || o == WF_SITE_OV_SCROLL ? o : 0;
+}
+
+/* Lot 109: a box_len value: the engine's expression ex, else v in px or % */
+static int box_app(char *out, int cap, int n, int v, int pct, const char *ex) {
+    if (ex[0]) return app(out, cap, n, ex);
+    n = app_u(out, cap, n, (unsigned)v);
+    return app(out, cap, n, pct ? "%" : "px");
 }
 
 int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
@@ -1380,21 +1406,18 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
     if (box) {
         /* Lot 105: a scroll box in the layout (Lot 74), so the timeline
          * has a scroller to read */
+        static const int hx[3] = {0, 1, 4};
+        static const char *const hn[3] = {";height:", ";max-height:", ";min-height:"};
         int v, pct, mx;
+        char ex[WF_SITE_BOXEX];
         if (any) n = app(out, cap, n, ";");
         n = app(out, cap, n, box == WF_SITE_OV_AUTO ? "overflow-y:auto" : "overflow-y:scroll");
-        /* Lot 107: a relative height in px or %, and max-height */
-        for (mx = 0; mx < 2; mx++) {
-            if (!box_len(d, nd, mx, &v, &pct)) continue;
-            n = app(out, cap, n, mx ? ";max-height:" : ";height:");
-            n = app_u(out, cap, n, (unsigned)v);
-            n = app(out, cap, n, pct ? "%" : "px");
-        }
-        /* Lot 108: min-height with them */
-        if (box_len(d, nd, 4, &v, &pct)) {
-            n = app(out, cap, n, ";min-height:");
-            n = app_u(out, cap, n, (unsigned)v);
-            n = app(out, cap, n, pct ? "%" : "px");
+        /* Lot 107: a relative height in px or %, and max-height; Lot 108:
+         * min-height with them */
+        for (mx = 0; mx < 3; mx++) {
+            if (!box_len(d, nd, hx[mx], &v, &pct, ex)) continue;
+            n = app(out, cap, n, hn[mx]);
+            n = box_app(out, cap, n, v, pct, ex);
         }
         any = 1;
     }
@@ -1402,13 +1425,13 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
         /* Lot 108: a box scroller along x (the engine scrolls it along x
          * too), with its width and max-width */
         int v, pct, mx;
+        char ex[WF_SITE_BOXEX];
         if (any) n = app(out, cap, n, ";");
         n = app(out, cap, n, xbox == WF_SITE_OV_AUTO ? "overflow-x:auto" : "overflow-x:scroll");
         for (mx = 2; mx < 4; mx++) {
-            if (!box_len(d, nd, mx, &v, &pct)) continue;
+            if (!box_len(d, nd, mx, &v, &pct, ex)) continue;
             n = app(out, cap, n, mx == 3 ? ";max-width:" : ";width:");
-            n = app_u(out, cap, n, (unsigned)v);
-            n = app(out, cap, n, pct ? "%" : "px");
+            n = box_app(out, cap, n, v, pct, ex);
         }
     }
     n = app(out, cap, n, "\"");
@@ -2068,6 +2091,7 @@ static int tok_pool(wf_site_t *d, const char *val, char *tok);
 
 static int height_val(const wf_site_t *d, const char *v, int mx, int *px, char *tok) {
     int q, k = 0, dg = 0, dot = 0, u;
+    char mo[WF_SITE_BOXEX];
     *px = 0;
     tok[0] = 0;
     if (wf_csslen_abs(v, &q)) {
@@ -2084,13 +2108,13 @@ static int height_val(const wf_site_t *d, const char *v, int mx, int *px, char *
             int m = slen(fn[f]), j;
             for (j = 0; j < m && v[j] == fn[f][j]; j++) {}
             if (j == m && l > m && v[l - 1] == ')') {
-                int pct = 0, r;
-                for (j = 0; j < l; j++) if (v[j] == '%') pct = 1;
+                int r, q = d ? wf_css_math_box(v, d->vw, d->vh, 16000, 16000, &r, mo, (int)sizeof(mo)) : -1;
                 /* Lot 107: a math function without a percentage that
                  * resolves (at 16 px) is kept to resolve it later
-                 * (fit-content() does not resolve) */
-                if (!pct && d && wf_css_math_px(v, d->vw, d->vh, 16000, 16000, &r) == 1)
-                    (void)tok_pool((wf_site_t *)d, v, tok);
+                 * (fit-content() does not resolve). Lot 109: with ex, ch
+                 * and lh; one with a percentage as "@N" (the engine
+                 * resolves it against the containing block) */
+                if (q > 0 && tok_pool((wf_site_t *)d, v, tok) && q == 2) tok[0] = '@';
                 return 1;
             }
         }
@@ -2111,7 +2135,7 @@ static int height_val(const wf_site_t *d, const char *v, int mx, int *px, char *
     {
         /* Lot 107: a font or viewport unit: "~L" when it fits, else the
          * pool */
-        static const char *const un[] = {"em", "rem", "vw", "vh", "vmin", "vmax", 0};
+        static const char *const un[] = {"em", "rem", "vw", "vh", "vmin", "vmax", "ex", "ch", "lh", 0};
         int f;
         for (f = 0; un[f]; f++) if (eq(v + u, un[f])) break;
         if (!un[f]) return 1;
@@ -4593,7 +4617,8 @@ static void sp_inset(const wf_site_t *d, int s, int side, unsigned char *k, int 
     } else if (t[0] == '~' || t[0] == '=') {
         /* one that does not resolve (past 10000 px) is 0, as auto
          * (tok_px gives 0 then) */
-        r = tok_px(d, t[0] == '~' ? t + 1 : t, d->fs[s], d->root_fs, &ok);
+        char ex[WF_SITE_BOXEX];
+        r = tok_box(d, t, d->fs[s], ex, &ok);
         (void)ok;
         *k = WF_CSSTL_I_LEN; *v = r > 0 ? r * 10 : 0;
     }

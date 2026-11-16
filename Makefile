@@ -1736,6 +1736,13 @@ qemu-lot107: $(OS_IMAGE) pack-initrd disk
 qemu-lot108: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot108.py
 
+# Lot 109: box scrollers sized in ex / lh and a percentage inside clamp()
+# (resolved by the engine against a box scroller parent), relative lab(),
+# lch(), hwb() and color(), unclamped origins (tests/scripts/test_qemu_lot109.py)
+.PHONY: qemu-lot109
+qemu-lot109: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot109.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

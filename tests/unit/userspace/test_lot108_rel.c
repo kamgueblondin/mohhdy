@@ -22,7 +22,7 @@ static void test_l108_rel_0(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from rgb(22 51 251 / 120%) -30 calc((s + h) / 2) s / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 000000 255", col("rgba(from black calc(r / 4) calc(r) b / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(from black calc(r / 4) calc(r) b / alpha)"));
-    TEST_ASSERT_EQUAL_STRING("1 808080 255", col("hsla(from oklab(0 0 -0.1) h h 50)"));
+    TEST_ASSERT_EQUAL_STRING("1 4500ff 255", col("hsla(from oklab(0 0 -0.1) h h 50)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from oklab(0 0 -0.1) h h 50)"));
     TEST_ASSERT_EQUAL_STRING("1 413200 255", col("oklab(from lch(60 40 120) calc(l / 2) a l)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklab(from lch(60 40 120) calc(l / 2) a l)"));
@@ -70,7 +70,7 @@ static void test_l108_rel_2(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(from cornsilk 50% calc(g + 100) calc(alpha * 1.5) / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 000000 128", col("rgb(from hsla(from hsl(-27deg, 85%, -7.43%, 0.5) 400 calc(alpha) calc((s + l) / 2)) r calc(alpha * 0.25) b)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from hsla(from hsl(-27deg, 85%, -7.43%, 0.5) 400 calc(alpha) calc((s + l) / 2)) r calc(alpha * 0.25) b)"));
-    TEST_ASSERT_EQUAL_STRING("1 7b013e 255", col("hsl(from oklab(0.5 0.05 200) -30 calc(s - 1) calc(l - 0.5))"));
+    TEST_ASSERT_EQUAL_STRING("1 000000 255", col("hsl(from oklab(0.5 0.05 200) -30 calc(s - 1) calc(l - 0.5))"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsl(from oklab(0.5 0.05 200) -30 calc(s - 1) calc(l - 0.5))"));
     TEST_ASSERT_EQUAL_STRING("1 81459a 255", col("oklch(from oklab(0.5 0.1 -0.1) l calc((c + c) / 2) h)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklch(from oklab(0.5 0.1 -0.1) l calc((c + c) / 2) h)"));
@@ -131,7 +131,7 @@ static void test_l108_rel_4(void) {
 }
 
 static void test_l108_rel_5(void) {
-    TEST_ASSERT_EQUAL_STRING("1 006467 255", col("rgb(from OKLCH(from rebeccapurple calc(l) c 200 / 1) calc(r) calc((G + b) / 2) b)"));
+    TEST_ASSERT_EQUAL_STRING("1 006f75 255", col("rgb(from OKLCH(from rebeccapurple calc(l) c 200 / 1) calc(r) calc((G + b) / 2) b)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from OKLCH(from rebeccapurple calc(l) c 200 / 1) calc(r) calc((G + b) / 2) b)"));
     TEST_ASSERT_EQUAL_STRING("1 ffffff 102", col("hsl(from #61e6 calc(h) s calc((l + h) / 2))"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsl(from #61e6 calc(h) s calc((l + h) / 2))"));
@@ -239,7 +239,7 @@ static void test_l108_rel_9(void) {
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from black h calc(s + 1px) l / calc(alpha - 0.25))"));
     TEST_ASSERT_EQUAL_STRING("0", col("oklab(fromoklch(0.7 -0.05 30) l -0.1 calc(b))"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, "oklab(fromoklch(0.7 -0.05 30) l -0.1 calc(b))"));
-    TEST_ASSERT_EQUAL_STRING("1 000000 255", col("rgb(from oklab(0 -0.05 200) r calc(g * 0.5) r / alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 00ff00 255", col("rgb(from oklab(0 -0.05 200) r calc(g * 0.5) r / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from oklab(0 -0.05 200) r calc(g * 0.5) r / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 000000 0", col("hsla(from hsla(0.25turn, 76%, 100%, 100%) calc(h / 4) 100 -10 / none)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from hsla(0.25turn, 76%, 100%, 100%) calc(h / 4) 100 -10 / none)"));
@@ -300,7 +300,7 @@ static void test_l108_rel_12(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklab(from mediumspringgreen -0.1 a calc((b + l) / 2))"));
     TEST_ASSERT_EQUAL_STRING("0", col("oklab(from rgb(180 153 93 / 0.098) calc(a / 4) 0.1 calc(b + 1px))"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, "oklab(from rgb(180 153 93 / 0.098) calc(a / 4) 0.1 calc(b + 1px))"));
-    TEST_ASSERT_EQUAL_STRING("1 008d14 255", col("rgba(from oklab(0.7 0.2 200) -20 calc(g - 10) calc(b + 20)/alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 00ff00 255", col("rgba(from oklab(0.7 0.2 200) -20 calc(g - 10) calc(b + 20)/alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(from oklab(0.7 0.2 200) -20 calc(g - 10) calc(b + 20)/alpha)"));
     TEST_ASSERT_EQUAL_STRING("0", col("hsl(from oklab(0.5 0 0) 30deg 0 calc(l + 30deg) / calc(alpha / 2))"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, "hsl(from oklab(0.5 0 0) 30deg 0 calc(l + 30deg) / calc(alpha / 2))"));
@@ -331,7 +331,7 @@ static void test_l108_rel_13(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from OKLAB(from hsla(-261.6 2.3% 19% / 2) l a a / 50%) l calc(s / 2) 50 / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 000000 255", col("hsla(from dimgrey h s 0)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from dimgrey h s 0)"));
-    TEST_ASSERT_EQUAL_STRING("1 ff0bff 255", col("rgba( from  color(display-p3 1 0 0) calc(r + 45) g 100% / alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 ff00ff 255", col("rgba( from  color(display-p3 1 0 0) calc(r + 45) g 100% / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba( from  color(display-p3 1 0 0) calc(r + 45) g 100% / alpha)"));
     TEST_ASSERT_EQUAL_STRING("0", col("rgb(from hwb(120 10% 20%) r calc(g + 1px) calc(b + 1px)/alpha)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from hwb(120 10% 20%) r calc(g + 1px) calc(b + 1px)/alpha)"));
@@ -392,7 +392,7 @@ static void test_l108_rel_16(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(from rgb(64.6, 251, 205.47) 12.5 calc((g + b) / 2) b)"));
     TEST_ASSERT_EQUAL_STRING("1 ffabc0 255", col("oklab(from limegreen calc(l + 0.1) calc(alpha * 1.5 - 0.05) b)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklab(from limegreen calc(l + 0.1) calc(alpha * 1.5 - 0.05) b)"));
-    TEST_ASSERT_EQUAL_STRING("1 000000 255", col("hsla(from oklch(0 0.1 0) 0.5turn s l / 1)"));
+    TEST_ASSERT_EQUAL_STRING("1 000101 255", col("hsla(from oklch(0 0.1 0) 0.5turn s l / 1)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from oklch(0 0.1 0) 0.5turn s l / 1)"));
     TEST_ASSERT_EQUAL_STRING("1 7f41ca 0", col("hsla(from #4b237cac h s calc(l * 2 - 10) / 0)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from #4b237cac h s calc(l * 2 - 10) / 0)"));
@@ -432,7 +432,7 @@ static void test_l108_rel_17(void) {
 static void test_l108_rel_18(void) {
     TEST_ASSERT_EQUAL_STRING("1 020202 255", col("oklch(from hsla(0.25turn 102.4% 0.4% / 150%) l 0 h)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklch(from hsla(0.25turn 102.4% 0.4% / 150%) l 0 h)"));
-    TEST_ASSERT_EQUAL_STRING("1 000b00 255", col("rgb(from color(display-p3 1 0 0) calc(alpha / 10) g calc(b * 0 - 0.5) / alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 000000 255", col("rgb(from color(display-p3 1 0 0) calc(alpha / 10) g calc(b * 0 - 0.5) / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from color(display-p3 1 0 0) calc(alpha / 10) g calc(b * 0 - 0.5) / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 7f02cc 61", col("HSLA(from rgb(205 1 130 / 24%) calc(h - 45) calc(s - 0.5) l)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "HSLA(from rgb(205 1 130 / 24%) calc(h - 45) calc(s - 0.5) l)"));
@@ -476,7 +476,7 @@ static void test_l108_rel_19(void) {
 }
 
 static void test_l108_rel_20(void) {
-    TEST_ASSERT_EQUAL_STRING("1 000000 255", col("hsl(from oklab(1 0 30) 30deg calc(S / 8) h)"));
+    TEST_ASSERT_EQUAL_STRING("1 ffffff 255", col("hsl(from oklab(1 0 30) 30deg calc(S / 8) h)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsl(from oklab(1 0 30) 30deg calc(S / 8) h)"));
     TEST_ASSERT_EQUAL_STRING("1 ffbd38 255", col("hsl(from hsla(513.41deg 91% 16%) 400 h calc(L + 45))"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsl(from hsla(513.41deg 91% 16%) 400 h calc(L + 45))"));
@@ -551,7 +551,7 @@ static void test_l108_rel_23(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsl(from oklch(0.9 0.05 0) h calc(alpha / 2) h)"));
     TEST_ASSERT_EQUAL_STRING("1 2a000b 255", col("oklch( from  rgb(167 81 118 / 1.5) calc(c + 0.05) c calc(h + 10)/alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklch( from  rgb(167 81 118 / 1.5) calc(c + 0.05) c calc(h + 10)/alpha)"));
-    TEST_ASSERT_EQUAL_STRING("1 a97070 255", col("hsla(from oklab(1 0.2 -0.1) h 25% calc(l - 45) / alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 7fb288 255", col("hsla(from oklab(1 0.2 -0.1) h 25% calc(l - 45) / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from oklab(1 0.2 -0.1) h 25% calc(l - 45) / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 000000 255", col("hsl(from oklab(0.25 0.05 -0.1) h calc(s + 45) 0)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsl(from oklab(0.25 0.05 -0.1) h calc(s + 45) 0)"));
@@ -572,7 +572,7 @@ static void test_l108_rel_24(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklab(from hwb(467.37 64 88.8% /23%) 1.5 a b / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 9933a3 255", col("rgb(from rebeccapurple b g calc(b + 10) / 1)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from rebeccapurple b g calc(b + 10) / 1)"));
-    TEST_ASSERT_EQUAL_STRING("1 00ff00 255", col("rgb(from oklch(0 0.1 200) g 255 b)"));
+    TEST_ASSERT_EQUAL_STRING("1 00ff01 255", col("rgb(from oklch(0 0.1 200) g 255 b)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from oklch(0 0.1 200) g 255 b)"));
     TEST_ASSERT_EQUAL_STRING("0", col("rgba(from hsla(-194deg, 78%, 54.9925%, 1) 12.5 calc(g + 10%) calc(b * 1.5)/0.5)"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(from hsla(-194deg, 78%, 54.9925%, 1) 12.5 calc(g + 10%) calc(b * 1.5)/0.5)"));
@@ -599,7 +599,7 @@ static void test_l108_rel_25(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from oklch(1 0.05 -0.1) 240 s 100)"));
     TEST_ASSERT_EQUAL_STRING("1 b7005c 0", col("oklch(from rgb(105 60 198 / 0) l 0.4 0)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklch(from rgb(105 60 198 / 0) l 0.4 0)"));
-    TEST_ASSERT_EQUAL_STRING("1 001f00 255", col("rgb(from oklab(0.25 0 0.1) calc(b * 1.5) g b / alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 001c00 255", col("rgb(from oklab(0.25 0 0.1) calc(b * 1.5) g b / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from oklab(0.25 0 0.1) calc(b * 1.5) g b / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 000000 128", col("oklab(from RGB(from hsla(6.2832rad 83% 63% / 150%) r 0 b) 0 l b/0.5)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklab(from RGB(from hsla(6.2832rad 83% 63% / 150%) r 0 b) 0 l b/0.5)"));
@@ -607,7 +607,7 @@ static void test_l108_rel_25(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(from white calc(alpha + 10) 255 b)"));
     TEST_ASSERT_EQUAL_STRING("1 280f0f 255", col("hsl(from gainsboro h calc(ALPHA + 45) calc(l / 8) / 1)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsl(from gainsboro h calc(ALPHA + 45) calc(l / 8) / 1)"));
-    TEST_ASSERT_EQUAL_STRING("1 1b0000 255", col("hsla(from oklch(from red calc(l / 5) c calc(h)) none calc(s * 1.5) l / alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 210000 255", col("hsla(from oklch(from red calc(l / 5) c calc(h)) none calc(s * 1.5) l / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from oklch(from red calc(l / 5) c calc(h)) none calc(s * 1.5) l / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 000000 255", col("rgb(from hsla(from rebeccapurple l calc(s / 4) none) g g -20 / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from hsla(from rebeccapurple l calc(s / 4) none) g g -20 / alpha)"));
@@ -643,7 +643,7 @@ static void test_l108_rel_27(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(from hsl(from hwb(206 10.1% 84%) calc(alpha * 0.5) s calc((l + s) / 2)) calc(r * 0.25 - 100) none 128)"));
     TEST_ASSERT_EQUAL_STRING("0", col("oklch(from rgb(193 123 188 / 0) calc(l + 30deg) calc(c * 0.25 - 0.1) calc(h - 20))"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, "oklch(from rgb(193 123 188 / 0) calc(l + 30deg) calc(c * 0.25 - 0.1) calc(h - 20))"));
-    TEST_ASSERT_EQUAL_STRING("1 ffff80 255", col("rgba(from oklab(1 0.1 200) r g calc(b * 0.5) / alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 00ff00 255", col("rgba(from oklab(1 0.1 200) r g calc(b * 0.5) / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(from oklab(1 0.1 200) r g calc(b * 0.5) / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 fb5c99 128", col("rgb(from oklch(0.7 0.2 0.1) r calc(G) calc((b + b) / 2)/0.5)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from oklch(0.7 0.2 0.1) r calc(G) calc((b + b) / 2)/0.5)"));
@@ -670,7 +670,7 @@ static void test_l108_rel_28(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklab(from oklab(0.5 0.05 0) calc(l * 2) a calc(b + 0.2)/0.5)"));
     TEST_ASSERT_EQUAL_STRING("1 504e11 255", col("hsla(from oklab(0.25 0 -0.1) calc(h / 4) s l / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from oklab(0.25 0 -0.1) calc(h / 4) s l / alpha)"));
-    TEST_ASSERT_EQUAL_STRING("1 808080 255", col("rgba(from oklab(from hwb(30 88 36.407%) alpha a -50%) calc(b / 2) calc(g / 2) 128 / alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 c37b80 255", col("rgba(from oklab(from hwb(30 88 36.407%) alpha a -50%) calc(b / 2) calc(g / 2) 128 / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(from oklab(from hwb(30 88 36.407%) alpha a -50%) calc(b / 2) calc(g / 2) 128 / alpha)"));
     TEST_ASSERT_EQUAL_STRING("0", col("hsl(from white h s calc(alpha + 10%))"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, "hsl(from white h s calc(alpha + 10%))"));
@@ -781,7 +781,7 @@ static void test_l108_rel_33(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsl(from black none s calc(L - 10)/alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 000000 255", col("hsla(from darkkhaki 120 s -10)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from darkkhaki 120 s -10)"));
-    TEST_ASSERT_EQUAL_STRING("1 ff800a 128", col("rgb(from oklab(0.9 0.1 200) calc(r) 128 calc(b * 0.25) / calc(alpha * 0.5))"));
+    TEST_ASSERT_EQUAL_STRING("1 008000 128", col("rgb(from oklab(0.9 0.1 200) calc(r) 128 calc(b * 0.25) / calc(alpha * 0.5))"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from oklab(0.9 0.1 200) calc(r) 128 calc(b * 0.25) / calc(alpha * 0.5))"));
     TEST_ASSERT_EQUAL_STRING("1 b30081 255", col("oklab(from darkmagenta 50% 0.4 b)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklab(from darkmagenta 50% 0.4 b)"));
@@ -798,7 +798,7 @@ static void test_l108_rel_33(void) {
 }
 
 static void test_l108_rel_34(void) {
-    TEST_ASSERT_EQUAL_STRING("1 ffffff 255", col("rgb(from oklab(1 0.05 200) r g b)"));
+    TEST_ASSERT_EQUAL_STRING("1 00ff00 255", col("rgb(from oklab(1 0.05 200) r g b)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from oklab(1 0.05 200) r g b)"));
     TEST_ASSERT_EQUAL_STRING("1 b48a00 0", col("oklch(from hsla(1turn 38% 61.861% / 0) calc(l) 50% 90deg / calc(alpha - 0.25))"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklch(from hsla(1turn 38% 61.861% / 0) calc(l) 50% 90deg / calc(alpha - 0.25))"));
@@ -810,11 +810,11 @@ static void test_l108_rel_34(void) {
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from #6f8 r g 100%)"));
     TEST_ASSERT_EQUAL_STRING("1 000000 187", col("hsla(from #abfb calc((S + l) / 2) h 0)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from #abfb calc((S + l) / 2) h 0)"));
-    TEST_ASSERT_EQUAL_STRING("1 0a0000 255", col("rgba(from oklab(0 0.05 30) calc(r + 10) g b / alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 00ff00 255", col("rgba(from oklab(0 0.05 30) calc(r + 10) g b / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(from oklab(0 0.05 30) calc(r + 10) g b / alpha)"));
     TEST_ASSERT_EQUAL_STRING("0", col("rgba(fromoklab(0.25 0.05 0) 0 none calc(b * 0.5) / calc(alpha - 0.25))"));
     TEST_ASSERT_EQUAL(0, wf_cssprop_match(WF_CSSPROP_COLOR, "rgba(fromoklab(0.25 0.05 0) 0 none calc(b * 0.5) / calc(alpha - 0.25))"));
-    TEST_ASSERT_EQUAL_STRING("1 c00000 255", col("hsla(from oklch(0.7 0.2 200) none calc((s + h) / 2) calc((L + l) / 2))"));
+    TEST_ASSERT_EQUAL_STRING("1 510000 255", col("hsla(from oklch(0.7 0.2 200) none calc((s + h) / 2) calc((L + l) / 2))"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "hsla(from oklch(0.7 0.2 200) none calc((s + h) / 2) calc((L + l) / 2))"));
     TEST_ASSERT_EQUAL_STRING("1 ffde00 255", col("rgb(from oklch(0.9 -0.05 30) 100% calc(g) 0)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from oklch(0.9 -0.05 30) 100% calc(g) 0)"));
@@ -867,7 +867,7 @@ static void test_l108_rel_36(void) {
 }
 
 static void test_l108_rel_37(void) {
-    TEST_ASSERT_EQUAL_STRING("1 ff33ff 255", col("rgb(from oklab(1 0.05 0) 100% calc(g / 5) b / alpha)"));
+    TEST_ASSERT_EQUAL_STRING("1 ff30fe 255", col("rgb(from oklab(1 0.05 0) 100% calc(g / 5) b / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "rgb(from oklab(1 0.05 0) 100% calc(g / 5) b / alpha)"));
     TEST_ASSERT_EQUAL_STRING("1 000000 255", col("oklab(from hwb(54 100% 100%) 0 calc(a) calc((b + a) / 2) / alpha)"));
     TEST_ASSERT_EQUAL(1, wf_cssprop_match(WF_CSSPROP_COLOR, "oklab(from hwb(54 100% 100%) 0 calc(a) calc((b + a) / 2) / alpha)"));
