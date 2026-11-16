@@ -1729,6 +1729,13 @@ qemu-lot106: $(OS_IMAGE) pack-initrd disk
 qemu-lot107: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot107.py
 
+# Lot 108: box scrollers along x (overflow-x with width and max-width,
+# the horizontal bar and web-bscroll on it), min-height, scroll timelines
+# on the inline axis, relative colours (tests/scripts/test_qemu_lot108.py)
+.PHONY: qemu-lot108
+qemu-lot108: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot108.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

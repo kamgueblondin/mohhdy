@@ -270,11 +270,13 @@ static void test_l105_box_clock(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of(5));
     TEST_ASSERT_EQUAL(0, g_d.node[4].scr);
     TEST_ASSERT_EQUAL(0, g_d.geom_live);
-    /* an inline or x axis: no effect */
+    /* an inline or x axis (Lot 108, converted): the box scroller is read
+     * along x; this geometry has no range along x (svx 0): no effect */
     prep(KF "#b { overflow: auto; height: 50px; scroll-timeline: --s x } "
          "#i { animation: k 1000ms linear; animation-timeline: --s, scroll(nearest inline) }");
     TEST_ASSERT_EQUAL_STRING("", style_of(5));
-    TEST_ASSERT_EQUAL(0, g_d.node[4].scr);
+    TEST_ASSERT_EQUAL(1, g_d.node[4].scr);
+    TEST_ASSERT_EQUAL(1, g_d.geom_live);
     /* no geometry: idle, but the box is still asked for */
     wf_site_set_geom(0);
     prep(KF "#b { overflow: auto; height: 50px } #i { animation: k 1000ms linear; animation-timeline: scroll(nearest) }");

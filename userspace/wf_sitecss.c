@@ -1024,6 +1024,18 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
         scopy(t == 2 ? nd->htok : nd->mtok, WF_SITE_TOK, v ? "" : r->tok, v ? 0 : slen(r->tok));
         return;
     }
+    if (r->kind >= WF_SITE_K_SX0 && r->kind < WF_SITE_K_SX0 + WF_SITE_SXS) {
+        /* Lot 108: width, max-width and min-height, the strongest wins,
+         * kept as height and max-height are */
+        int t = r->kind - WF_SITE_K_SX0, k, v = 0;
+        if (rank < nd->sxrank[t]) return;
+        nd->sxrank[t] = rank;
+        if (r->tok[0] >= '0' && r->tok[0] <= '9')
+            for (k = 0; r->tok[k]; k++) v = v * 10 + (r->tok[k] - '0');
+        nd->xpx[t] = v;
+        scopy(nd->xtok[t], WF_SITE_TOK, v ? "" : r->tok, v ? 0 : slen(r->tok));
+        return;
+    }
     if (r->kind >= WF_SITE_K_SP0 && r->kind < WF_SITE_K_SP0 + WF_SITE_SPS) {
         /* Lot 107: scroll-padding per logical side, the strongest wins */
         int t = r->kind - WF_SITE_K_SP0;
@@ -1235,15 +1247,16 @@ static int long_given(const wf_site_node_t *nd) {
 
 static int tok_px(const wf_site_t *d, const char *t, int em, int root, int *ok);
 
-/* Lot 107: the height (mx 0) or max-height (mx 1) element nd passes on:
+/* Lot 107: the height (mx 0) or max-height (mx 1) element nd passes on
+ * (Lot 108: mx 2 width, 3 max-width, 4 min-height, WF_SITE_K_SX0 slots):
  * 1 with *v in px (*pct 0) or in % of the containing block (*pct 1, the
  * integer part), both at most WF_SITE_HMAX; a font or viewport length or
  * a math function in px against the element's font size, the root's and
  * the viewport (a negative math result is 0, wf_css_math_px resolves
  * at most 10000 px); 0 when it passes none */
 static int box_len(const wf_site_t *d, const wf_site_node_t *nd, int mx, int *v, int *pct) {
-    int px = mx ? nd->mpx : nd->hpx, r, ok, k;
-    const char *t = mx ? nd->mtok : nd->htok;
+    int px = mx >= 2 ? nd->xpx[mx - 2] : mx ? nd->mpx : nd->hpx, r, ok, k;
+    const char *t = mx >= 2 ? nd->xtok[mx - 2] : mx ? nd->mtok : nd->htok;
     *v = 0;
     *pct = 0;
     if (px) { *v = px - 1; return 1; }
@@ -1261,27 +1274,32 @@ static int box_len(const wf_site_t *d, const wf_site_node_t *nd, int mx, int *v,
     return 1;
 }
 
+static int ov_axis(int self, int other);
+
 /* Lot 105: the overflow along y the reader passes on for element nd (a
  * box scroller a timeline reads, auto or scroll along y, with a height it
- * passes on), else 0. Lot 107: or a max-height */
-static int box_passed(const wf_site_t *d, const wf_site_node_t *nd) {
-    int y, v, pct;
-    if (!nd->scr || (!box_len(d, nd, 0, &v, &pct) && !box_len(d, nd, 1, &v, &pct))) return 0;
-    y = wf_site_box_scroller(d, (int)(nd - d->node));
-    return y == WF_SITE_OV_AUTO || y == WF_SITE_OV_SCROLL ? y : 0;
+ * passes on), else 0. Lot 107: or a max-height. Lot 108: ax 1 the
+ * overflow along x, with a width or a max-width */
+static int box_passed(const wf_site_t *d, const wf_site_node_t *nd, int ax) {
+    int o, v, pct;
+    if (!nd->scr || (!box_len(d, nd, ax ? 2 : 0, &v, &pct) && !box_len(d, nd, ax ? 3 : 1, &v, &pct))) return 0;
+    if (!wf_site_box_scroller(d, (int)(nd - d->node))) return 0;
+    o = ax ? ov_axis(nd->ov[0], nd->ov[1]) : ov_axis(nd->ov[1], nd->ov[0]);
+    return o == WF_SITE_OV_AUTO || o == WF_SITE_OV_SCROLL ? o : 0;
 }
 
 int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
     const wf_site_node_t *nd = node_by_start(d, offset);
-    int n = 0, any = 0, box;
+    int n = 0, any = 0, box, xbox;
     if (!out || cap < 8) return 0;
     out[0] = 0;
     if (!nd) return 0;
-    box = box_passed(d, nd);
+    box = box_passed(d, nd, 0);
+    xbox = box_passed(d, nd, 1);     /* Lot 108 */
     if (!nd->color_set && nd->weight != 2 && nd->align < 2 && !nd->margin_set && !nd->pad_set &&
         nd->italic != 2 && nd->deco < 2 && nd->transform < 2 && nd->ws < 2 && !nd->bg_set &&
         nd->tok_val[0] != 2 && nd->tok_val[1] != 2 && nd->tok_val[2] != 2 && nd->tok_val[3] != 2 &&
-        !long_given(nd) && !box) return 0;
+        !long_given(nd) && !box && !xbox) return 0;
     n = app(out, cap, n, " style=\"");
     if (nd->color_set) { n = app(out, cap, n, "color:"); n = app_hex(out, cap, n, nd->color); any = 1; }
     if (nd->weight == 2) { if (any) n = app(out, cap, n, ";"); n = app(out, cap, n, "font-weight:bold"); any = 1; }
@@ -1369,6 +1387,26 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
         for (mx = 0; mx < 2; mx++) {
             if (!box_len(d, nd, mx, &v, &pct)) continue;
             n = app(out, cap, n, mx ? ";max-height:" : ";height:");
+            n = app_u(out, cap, n, (unsigned)v);
+            n = app(out, cap, n, pct ? "%" : "px");
+        }
+        /* Lot 108: min-height with them */
+        if (box_len(d, nd, 4, &v, &pct)) {
+            n = app(out, cap, n, ";min-height:");
+            n = app_u(out, cap, n, (unsigned)v);
+            n = app(out, cap, n, pct ? "%" : "px");
+        }
+        any = 1;
+    }
+    if (xbox) {
+        /* Lot 108: a box scroller along x (the engine scrolls it along x
+         * too), with its width and max-width */
+        int v, pct, mx;
+        if (any) n = app(out, cap, n, ";");
+        n = app(out, cap, n, xbox == WF_SITE_OV_AUTO ? "overflow-x:auto" : "overflow-x:scroll");
+        for (mx = 2; mx < 4; mx++) {
+            if (!box_len(d, nd, mx, &v, &pct)) continue;
+            n = app(out, cap, n, mx == 3 ? ";max-width:" : ";width:");
             n = app_u(out, cap, n, (unsigned)v);
             n = app(out, cap, n, pct ? "%" : "px");
         }
@@ -2342,7 +2380,9 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
              * the cascade (Lot 107: percentages, font and viewport units
              * and math functions without a percentage are passed) */
             int sh = eq(prop, "overflow"), q = sh ? 0 : eq(prop, "overflow-x") ? 1 : eq(prop, "overflow-y") ? 2 :
-                                                     eq(prop, "height") ? 3 : eq(prop, "max-height") ? 4 : -1;
+                                                     eq(prop, "height") ? 3 : eq(prop, "max-height") ? 4 :
+                                                     eq(prop, "width") ? 5 : eq(prop, "max-width") ? 6 :
+                                                     eq(prop, "min-height") ? 7 : -1;
             if (q >= 0) {
                 int ini = eq(val, "initial") || eq(val, "unset"), ok = 1, kw[2] = {WF_SITE_OV_VISIBLE, 0}, nk = 0, px = 0;
                 proto->revert = WF_SITE_RV_NONE;
@@ -2364,13 +2404,14 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                     }
                     if (!nk) ok = 0;
                 } else if (q >= 3 && !ini) {
-                    ok = height_val(d, val, q == 4, &px, proto->tok);
+                    /* Lot 108: max-width takes none like max-height */
+                    ok = height_val(d, val, q == 4 || q == 6, &px, proto->tok);
                 }
                 if (ok) {
                     if (q >= 3) {
                         /* Lot 107: max-height in slot 3; tok holds a
                          * token from height_val when px is 0 */
-                        proto->kind = (uint8_t)(WF_SITE_K_SC0 + q - 1);
+                        proto->kind = (uint8_t)(q >= 5 ? WF_SITE_K_SX0 + q - 5 : WF_SITE_K_SC0 + q - 1);
                         /* the value is the text (val unused): none when empty */
                         if (px > 0) {
                             /* px + 1 (at most WF_SITE_HMAX + 1), as decimal text */
@@ -4478,14 +4519,17 @@ int wf_site_scroller_of(const wf_site_t *d, int i) {
  * src -1 is the root, else box scroller src, which runs on its own scroll
  * range and offset from the geometry (4); with the GUI position the root
  * runs on the geometry's range and sc_y */
-static int scroll_clock(wf_site_t *d, int src, const wf_cssanim_t *a, int *ms) {
+/* Lot 108: ax 1 along x (the inline axis, horizontal-tb), on a box
+ * scroller's own range and offset along x (svx, x_rg, x_sc) */
+static int scroll_clock(wf_site_t *d, int src, const wf_cssanim_t *a, int *ms, int ax) {
     long long r;
     const wf_geom_box_t *b;
     if (src >= 0) {
         d->node[src].scr = 1;
         d->geom_live = 1;
-        if (!g_geom || !g_geom->box[src].ok || !g_geom->box[src].sv) return 0;
+        if (!g_geom || !g_geom->box[src].ok || !(ax ? g_geom->box[src].svx : g_geom->box[src].sv)) return 0;
         b = &g_geom->box[src];
+        if (ax) return wf_cssanim_scroll_px_ms(a, (long long)b->x_rg * 1000000, (long long)b->x_sc * 1000000, ms) ? 4 : 0;
         return wf_cssanim_scroll_px_ms(a, (long long)b->s_rg * 1000000, (long long)b->s_sc * 1000000, ms) ? 4 : 0;
     }
     if (d->scroll_gui) d->geom_live = 1;
@@ -4603,11 +4647,13 @@ static int anim_clock(wf_site_t *d, int i, const wf_cssanim_t *a, int *ms) {
         /* Lot 105: nearest is the nearest box scroller, else the root
          * (none for the root element); self the root element or a box
          * scroller */
-        if (a->tlaxis != WF_CSSTL_BLOCK && a->tlaxis != WF_CSSTL_Y) return 0;
+        /* Lot 108: the inline or x axis on a box scroller (the root
+         * scrolls along y only) */
+        int ax = a->tlaxis == WF_CSSTL_INLINE || a->tlaxis == WF_CSSTL_X;
         if (a->tlsrc == WF_CSSANIM_SC_SELF) s = scroll_src(d, i);
         else if (a->tlsrc == WF_CSSANIM_SC_NEAREST) s = d->node[i].parent < 0 ? -2 : wf_site_scroller_of(d, i);
         else s = -1;
-        return s < -1 ? 0 : scroll_clock(d, s, a, ms);
+        return s < -1 || (ax && s < 0) ? 0 : scroll_clock(d, s, a, ms, ax);
     }
     /* Lot 104: view(), the element itself is the subject */
     if (a->timeline == WF_CSSANIM_TL_VIEW) return view_clock(d, i, a->tlaxis, a->vik, a->viv, a, ms);
@@ -4617,9 +4663,10 @@ static int anim_clock(wf_site_t *d, int i, const wf_cssanim_t *a, int *ms) {
         if (s == 2) return view_clock(d, q, t.axis, t.ik, t.iv, a, ms);
         if (s) {
             /* Lot 105: a box scroller too */
+            int ax = t.axis == WF_CSSTL_INLINE || t.axis == WF_CSSTL_X;     /* Lot 108 */
             s = scroll_src(d, q);
-            if (s < -1 || (t.axis != WF_CSSTL_BLOCK && t.axis != WF_CSSTL_Y)) return 0;
-            return scroll_clock(d, s, a, ms);
+            if (s < -1 || (ax && s < 0)) return 0;
+            return scroll_clock(d, s, a, ms, ax);
         }
         if (tl_scoped_at(d, q, a->tlname)) return 0;
     }

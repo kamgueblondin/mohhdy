@@ -5,8 +5,9 @@
  * else the root (the viewport of we_layout_viewport). Positions are taken
  * from the scroller's content start: the page origin for the root, the
  * padding edge of a box scroller moved back by its scroll offset (its
- * children were shifted by it, scroll_apply). A box scroller scrolls
- * along y only. The block and inline axes are those of the scroller's
+ * children were shifted by it, scroll_apply). Lot 108: a box scroller
+ * scrolls along y, x or both; the nearest scroller is the nearest
+ * ancestor that scrolls along either axis. The block and inline axes are those of the scroller's
  * writing mode (the root element's for the root); in vertical-rl the
  * block offset is taken from the block start (the right edge of the
  * scroller's content box, of the root element for the root), the inline
@@ -49,10 +50,11 @@ static int geom_body_el(const we_doc_t *d) {
  * sy) and range (rx, ry); 1 when the scroller is the root; its writing
  * mode in *wm */
 /* Lot 105: the nearest ancestor of node i that scrolls vertically, -1
- * for the root */
+ * for the root. Lot 108: or horizontally */
 static int geom_scroller(const we_doc_t *d, int i) {
     int s;
-    for (s = d->nodes[i].parent; s >= 0 && !overflow_scrollable(&d->nodes[s]); s = d->nodes[s].parent) {}
+    for (s = d->nodes[i].parent; s >= 0 && !overflow_scrollable(&d->nodes[s]) && !overflow_scrollable_x(&d->nodes[s]);
+         s = d->nodes[s].parent) {}
     return s;
 }
 
@@ -63,7 +65,18 @@ static void geom_own(const we_doc_t *d, int s, int *vp, int *sc, int *rg) {
     int view = scroll_view_h(c), content = scroll_content_bottom(d, s) + c->box_scroll_y;
     *vp = view;
     *sc = c->box_scroll_y;
-    *rg = content > view ? content - view : 0;
+    /* Lot 108: a box scroller along x only has no range along y */
+    *rg = overflow_scrollable(c) && content > view ? content - view : 0;
+}
+
+/* Lot 108: the same along x (scroll_view_w, box_scroll_x, the content
+ * width scroll_apply measured) */
+static void geom_own_x(const we_doc_t *d, int s, int *vp, int *sc, int *rg) {
+    const we_node_t *c = &d->nodes[s];
+    int view = scroll_view_w(c), content = c->box_cw;
+    *vp = view;
+    *sc = c->box_scroll_x;
+    *rg = overflow_scrollable_x(c) && content > view ? content - view : 0;
 }
 
 static int geom_phys(const we_doc_t *d, int i, int *r, int *wm) {
@@ -90,12 +103,9 @@ static int geom_phys(const we_doc_t *d, int i, int *r, int *wm) {
     {
         const we_node_t *c = &d->nodes[s];
         int left = c->x + box_edge(c, 3) + c->padding[3], top = c->y + box_edge(c, 0) + c->padding[0];
-        int w = c->w - box_edge(c, 1) - box_edge(c, 3) - c->padding[1] - c->padding[3];
-        r[0] = n->x - left;
+        r[0] = n->x - (left - c->box_scroll_x);
         r[1] = n->y - (top - c->box_scroll_y);
-        r[4] = w > 0 ? w : 0;
-        r[6] = 0;
-        r[8] = 0;
+        geom_own_x(d, s, &r[4], &r[6], &r[8]);    /* Lot 108 */
         geom_own(d, s, &r[5], &r[7], &r[9]);
     }
     return 0;
@@ -130,6 +140,9 @@ int we_geom(const we_doc_t *d, int node, wf_geom_box_t *g) {
     g->sv = (unsigned char)overflow_scrollable(&d->nodes[node]);
     g->s_vp = g->s_sc = g->s_rg = 0;
     if (g->sv) geom_own(d, node, &g->s_vp, &g->s_sc, &g->s_rg);
+    g->svx = (unsigned char)overflow_scrollable_x(&d->nodes[node]);     /* Lot 108 */
+    g->x_vp = g->x_sc = g->x_rg = 0;
+    if (g->svx) geom_own_x(d, node, &g->x_vp, &g->x_sc, &g->x_rg);
     return 0;
 }
 

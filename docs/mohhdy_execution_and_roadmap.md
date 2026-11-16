@@ -7,6 +7,17 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 108 (16 November 2026, base ae7df5a, PR 265 merged)
+
+US-031 partial, phase3_complete=false. Box scrollers scroll along x too
+(overflow-x auto or scroll, a bar and web-bscroll along x, width,
+max-width and min-height passed by the reader); scroll and view timelines
+run on the inline axis of a box scroller; relative colour syntax (rgb(),
+hsl(), oklab(), oklch() from an origin colour). A QEMU page
+(`make qemu-lot108`, CI job lot108-reader-x) checks it. US-068/073,
+US-076, US-080 and US-081 stay partial. US-078 and US-097 stay simule.
+See docs/lot108_plan.md.
+
 ### Lot 107 (15 November 2026, base 1ba29cf, PR 264 merged)
 
 US-031 partial, phase3_complete=false. Box scrollers take heights in

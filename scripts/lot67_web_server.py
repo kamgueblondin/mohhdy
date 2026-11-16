@@ -131,6 +131,11 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       inside), view() with the auto insets from the root's
                       scroll-padding, the body's own animated colour, a
                       legacy pair past the end (cubic-bezier overshoot)
+  /lot108/x.html      Lot 108: a box scroller along x (overflow-x: auto,
+                      width) read by scroll(nearest inline), one with
+                      max-width and min-height read by a named x
+                      timeline, relative colours (rgb() and hsl() from
+                      an origin, in keyframes too)
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -761,6 +766,33 @@ LOT107_PAGES = {
 }
 
 
+# Lot 108: reader page with box scrollers along x, min-height and relative
+# colours (tests/scripts/test_qemu_lot108.py)
+LOT108_WIDE = "aaaaaaaaaa bbbbbbbbbb cccccccccc dddddddddd eeeeeeeeee ffffffffff gggggggggg"
+LOT108_FILL = "".join("<p>line108 %d</p>" % i for i in range(12))
+LOT108_PAGES = {
+    "/lot108/x.html": (
+        "<!doctype html><html><head><title>Lot 108 x</title><style>"
+        "@keyframes k108 { from { color: #000000 } to { color: #ffffff } }\n"
+        "@keyframes c108 { from { color: rgb(from red r g b) } to { color: rgb(from red b g r) } }\n"
+        "#o108 { overflow-x: auto; width: 300px }\n"
+        "#i108 { white-space: nowrap; animation: k108 1000ms linear; animation-timeline: scroll(nearest inline) }\n"
+        "#m108 { overflow: auto; max-width: 15em; height: 2em; min-height: 5em; scroll-timeline: --x108 x }\n"
+        "#n108 { white-space: nowrap; animation: k108 1000ms linear; animation-timeline: --x108 }\n"
+        "#r108 { color: rgb(from #336699 r g calc(b - 16)) }\n"
+        "#h108 { color: hsl(from rgb(from red b g r) calc(h - 120) s calc(l - 10)) }\n"
+        "#c108 { animation: c108 1000ms linear }\n"
+        "</style></head><body><main><h1>X 108</h1>"
+        "<div id=\"o108\"><p id=\"i108\">ikeep108 " + LOT108_WIDE + "</p></div>"
+        "<div id=\"m108\"><p id=\"n108\">nkeep108 " + LOT108_WIDE + "</p><p>m108 a</p><p>m108 b</p></div>"
+        "<p id=\"r108\">rkeep108</p>"
+        "<p id=\"h108\">hkeep108</p>"
+        "<p id=\"c108\">ckeep108</p>"
+        + LOT108_FILL +
+        "<p>fin108</p></main></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -989,6 +1021,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT107_PAGES:
             self._send(200, LOT107_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT108_PAGES:
+            self._send(200, LOT108_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
