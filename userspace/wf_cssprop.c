@@ -1160,6 +1160,26 @@ static int cp_named_at(const char *v, int n) {
 typedef struct { long long c[3], a; int miss; long long lin[3]; int lin_ok; long long ok[3]; int ok_ok; } cp_rgba_t;
 static int cp_rgba(const char *v, cp_rgba_t *o);
 
+/* Lot 108: relative colours (CSS Color 5): rgb(), rgba(), hsl(), hsla(),
+ * oklab() and oklch() with "from" and an origin colour first; the
+ * function (0 rgb, 1 hsl, 2 oklab, 3 oklch) and in *at the index after
+ * "from" and its space, -1 when v[0..n) does not start one */
+static const char *const cp_relf[] = {"rgb", "hsl", "oklab", "oklch", 0};
+
+static int cp_rel_head(const char *v, int n, int *at) {
+    int k;
+    for (k = 0; cp_relf[k]; k++) {
+        int l = cp_len(cp_relf[k]), i;
+        if (n <= l + 1 || !cp_eqn(v, l, cp_relf[k])) continue;
+        i = l + (k < 2 && cp_low(v[l]) == 'a');      /* rgba( and hsla( too */
+        if (v[i] != '(') continue;
+        for (i++; i < n && cp_sp(v[i]); i++) {}
+        if (i + 5 < n && cp_eqn(v + i, 4, "from") && cp_sp(v[i + 4])) { *at = i + 5; return k; }
+        return -1;
+    }
+    return -1;
+}
+
 static int cp_color(const char *v) {
     static const char *const fns[] = {"rgb(", "rgba(", "hsl(", "hsla(", 0};
     cp_rgba_t t;
@@ -1176,6 +1196,7 @@ static int cp_color(const char *v) {
         (n > 6 && (cp_eqn(v, 6, "oklab(") || cp_eqn(v, 6, "oklch(") || cp_eqn(v, 6, "color("))) ||
         (n > 10 && cp_eqn(v, 10, "color-mix(")))
         return cp_rgba(v, &t);
+    if (cp_rel_head(v, n, &k) >= 0) return cp_rgba(v, &t);      /* Lot 108 */
     for (k = 0; fns[k]; k++) {
         int m = cp_len(fns[k]), i, depth = 0;
         if (n <= m || !cp_eqn(v, m, fns[k])) continue;
@@ -2344,7 +2365,9 @@ static void cp_mix_comps(int m, const cp_rgba_t *x, long long *v, int *miss) {
         long long a = v[1], b = v[2];
         v[1] = (long long)cp_isqrt(cp_wadd(cp_wmul(cp_w(a), a), cp_wmul(cp_w(b), b)));
         v[2] = cp_atan2(b, a);
-        if (m == 13 ? v[1] * 10000 <= 15 * CP_Q : v[1] * 1000000 <= 4 * CP_Q) *miss |= 64;
+        /* Lot 108: compared without the product (a chroma past 9 from a
+         * relative colour's origin overflowed it); exact for an integer */
+        if (m == 13 ? v[1] <= 15 * CP_Q / 10000 : v[1] <= 4 * CP_Q / 1000000) *miss |= 64;
     }
 }
 
@@ -2361,6 +2384,136 @@ static void cp_mix_comps(int m, const cp_rgba_t *x, long long *v, int *miss) {
  * and the result is converted back (gamut-mapped); the missing
  * components of both stay missing */
 static int cp_mix_core(int m, int hm, cp_rgba_t *x, const long long *p, cp_rgba_t *o);
+
+/* Lot 108: the channel keyword s[a..b) of relative function fn (0..2 its
+ * channels in order: r g b, h s l, l a b, l c h; 3 alpha), else -1 */
+static int cp_rel_kw(int fn, const char *s, int a, int b) {
+    static const char kw[4][4] = {"rgb", "hsl", "lab", "lch"};
+    int k;
+    if (b - a == 1)
+        for (k = 0; k < 3; k++) if (cp_low(s[a]) == kw[fn][k]) return k;
+    return cp_eqn(s + a, b - a, "alpha") ? 3 : -1;
+}
+
+/* Lot 108: the values of the keywords of function fn for the origin x,
+ * in 1/10000: r g b of 0..255 (its channels, gamut-mapped as painted);
+ * h in deg (0..360, 0 when powerless), s and l of 0..100 (from the
+ * channels, exact); oklab l a b and oklch l c (from its OKLab values,
+ * exact for an oklab() or oklch() origin, else from its linear sRGB
+ * values) and h in deg (0..360, 0 when powerless); alpha of 0..1. A
+ * missing component of the origin is 0 */
+static void cp_rel_kv(int fn, const cp_rgba_t *x, long long *kv) {
+    long long c[3];
+    int k, miss = 0;
+    kv[3] = x->a;
+    if (!fn) {
+        for (k = 0; k < 3; k++) kv[k] = x->c[k];
+        return;
+    }
+    cp_mix_comps(fn == 1 ? 11 : fn == 2 ? 7 : 14, x, c, &miss);
+    if (fn == 1) {
+        for (k = 0; k < 3; k++) kv[k] = c[k];
+        return;
+    }
+    kv[0] = cp_div(c[0] * CP_S, CP_Q, 0);
+    kv[1] = cp_div(c[1] * CP_S, CP_Q, 0);
+    if (fn == 2) kv[2] = cp_div(c[2] * CP_S, CP_Q, 0);
+    else kv[2] = (miss & 64) ? 0 : c[2] < 0 ? c[2] + 3600000 : c[2];
+}
+
+/* Lot 108: one argument s[a..b) of a relative colour into out (cap
+ * bytes): a keyword as its value; a math function with the keywords
+ * replaced by their values (a negative one in parentheses) as its result
+ * ("N[.dddd]" and the unit); any other token as it is. -1 when it does
+ * not fit or the math function has no known value */
+static int cp_rel_arg(int fn, const char *s, int a, int b, const long long *kv, char *out, int cap) {
+    char t[WF_CSSPROP_VAL], f[24];
+    int len = 0, i = a, kw = cp_rel_kw(fn, s, a, b), l;
+    cp_q_t q;
+    out[0] = 0;
+    if (kw >= 0) return cp_fmt(kv[kw], "", out, cap);
+    for (l = a; l < b && s[l] != '('; l++) {}
+    if (l == b) return cp_put(out, &len, cap, s + a, b - a) ? len : -1;
+    t[0] = 0;
+    while (i < b) {
+        int j = i;
+        if (cp_ident(s[i]) && !cp_digit(s[i]) && (i == a || !(cp_ident(s[i - 1]) || s[i - 1] == '.'))) {
+            while (j < b && cp_ident(s[j])) j++;
+            kw = cp_rel_kw(fn, s, i, j);
+            if (kw >= 0) {
+                if (cp_fmt(kv[kw], "", f, (int)sizeof(f)) < 0) return -1;
+                if ((kv[kw] < 0 && !cp_put(t, &len, (int)sizeof(t), "(", 1)) ||
+                    !cp_put(t, &len, (int)sizeof(t), f, cp_len(f)) ||
+                    (kv[kw] < 0 && !cp_put(t, &len, (int)sizeof(t), ")", 1)))
+                    return -1;
+            } else if (!cp_put(t, &len, (int)sizeof(t), s + i, j - i)) return -1;
+            i = j;
+            continue;
+        }
+        if (!cp_put(t, &len, (int)sizeof(t), s + i, 1)) return -1;
+        i++;
+    }
+    cp_mwhole(t, &q);
+    if (!q.t || !cp_known(&q)) return -1;
+    return cp_fmt_q(&q, out, cap);
+}
+
+/* Lot 108: the relative colour v[0..n) of function fn, its origin from
+ * v[i] (after "from"): the origin, then three arguments and an optional
+ * "/ alpha" (spaces only; a comma fails), each a number, percentage, angle,
+ * none, a keyword of fn or a math function of them; the alpha is the
+ * origin's when left out. The colour is the absolute one written with
+ * those values (so it is clamped and converted as that one is) */
+static int cp_rel(const char *v, int n, int fn, int i, cp_rgba_t *o, int depth) {
+    static const char *const names[] = {"rgb(", "hsl(", "oklab(", "oklch("};
+    char org[WF_CSSPROP_VAL], buf[WF_CSSPROP_VAL], arg[WF_CSSPROP_VAL];
+    int ta[5], tb[5], nt = 0, slash = -1, len = 0, k, d, a;
+    long long kv[4];
+    cp_rgba_t x;
+    if (depth > 3) return 0;
+    for (;;) {
+        while (i < n - 1 && cp_sp(v[i])) i++;
+        if (i >= n - 1) break;
+        if (v[i] == '/') {
+            if (slash >= 0) return 0;
+            slash = nt;
+            i++;
+            continue;
+        }
+        if (nt >= 5) return 0;
+        a = i;
+        d = 0;
+        while (i < n - 1 && (d || (!cp_sp(v[i]) && v[i] != '/'))) {
+            /* a comma or a stray ')' at the top level makes the absolute
+             * colour below invalid (a legacy comma form takes no "/"; a
+             * negative depth runs to the end and fails below) */
+            if (v[i] == '(') d++;
+            else if (v[i] == ')') d--;
+            i++;
+        }
+        if (d) return 0;
+        ta[nt] = a;
+        tb[nt] = i;
+        nt++;
+    }
+    if (!(nt == 4 && slash < 0) && !(nt == 5 && slash == 4)) return 0;
+    if (tb[0] - ta[0] >= (int)sizeof(org)) return 0;
+    for (k = ta[0]; k < tb[0]; k++) org[k - ta[0]] = v[k];
+    org[tb[0] - ta[0]] = 0;
+    if (!cp_rgba_d(org, &x, depth + 1)) return 0;
+    cp_rel_kv(fn, &x, kv);
+    if (!cp_put(buf, &len, (int)sizeof(buf), names[fn], cp_len(names[fn]))) return 0;
+    for (k = 1; k < 5; k++) {
+        if (k == 4 && nt == 4) {
+            if (cp_fmt(kv[3], "", arg, (int)sizeof(arg)) < 0) return 0;
+        } else if (cp_rel_arg(fn, v, ta[k], tb[k], kv, arg, (int)sizeof(arg)) < 0) return 0;
+        if (!cp_put(buf, &len, (int)sizeof(buf), k == 4 ? " / " : k > 1 ? " " : "", k == 4 ? 3 : k > 1) ||
+            !cp_put(buf, &len, (int)sizeof(buf), arg, cp_len(arg)))
+            return 0;
+    }
+    if (!cp_put(buf, &len, (int)sizeof(buf), ")", 1)) return 0;
+    return cp_rgba_d(buf, o, depth + 1);
+}
 
 static int cp_mix(const char *v, int n, cp_rgba_t *o, int depth) {
     int pa[3], pb[3], ha[4], hb[4], k, m = -1, hm = 0, nh;
@@ -2490,7 +2643,7 @@ void wf_cssprop_set_current(int on, unsigned int rgb, int alpha) {
 }
 
 static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
-    int n = cp_len(v), k;
+    int n = cp_len(v), k, i;
     o->a = CP_S;
     o->miss = 0;
     o->lin_ok = 0;
@@ -2520,6 +2673,8 @@ static int cp_rgba_d(const char *v, cp_rgba_t *o, int depth) {
         return 1;
     }
     if (!n || v[n - 1] != ')') return 0;     /* Lot 100: a function ends at its ')' */
+    k = cp_rel_head(v, n, &i);      /* Lot 108: relative colours */
+    if (k >= 0) return cp_rel(v, n, k, i, o, depth);
     if ((n > 5 && cp_eqn(v, 4, "rgb(")) || (n > 6 && cp_eqn(v, 5, "rgba("))) {
         int ta[4], tb[4], got = cp_color_toks(v, n, v[3] == '(' ? 4 : 5, ta, tb), pct;
         long long x;

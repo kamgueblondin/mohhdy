@@ -242,10 +242,14 @@ enum {
     WF_SITE_K_SC0 = 52,
     /* Lot 107: scroll-padding by logical side (slot = kind -
      * WF_SITE_K_SP0: block-start, block-end, inline-start, inline-end) */
-    WF_SITE_K_SP0 = 56
+    WF_SITE_K_SP0 = 56,
+    /* Lot 108: width, max-width and min-height of a box scroller (slot =
+     * kind - WF_SITE_K_SX0) */
+    WF_SITE_K_SX0 = 60
 };
 #define WF_SITE_SCS 4               /* Lot 105: the scroller slots (overflow-x, overflow-y, height; Lot 107: max-height) */
 #define WF_SITE_SPS 4               /* Lot 107: the scroll-padding sides */
+#define WF_SITE_SXS 3               /* Lot 108: width, max-width, min-height */
 /* Lot 105: overflow keywords (0: not set, visible) */
 enum {
     WF_SITE_OV_VISIBLE = 1,
@@ -377,6 +381,11 @@ typedef struct {
      * as above ("%N", "~L", "=N"; "" auto) and the ranks */
     char sptok[WF_SITE_SPS][WF_SITE_TOK];
     int sprank[WF_SITE_SPS];
+    /* Lot 108: width, max-width and min-height (WF_SITE_K_SX0) like hpx
+     * and htok: px + 1 of an absolute length, else a token; the ranks */
+    int xpx[WF_SITE_SXS];
+    char xtok[WF_SITE_SXS][WF_SITE_TOK];
+    int sxrank[WF_SITE_SXS];
 } wf_site_node_t;
 
 typedef struct {

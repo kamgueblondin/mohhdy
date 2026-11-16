@@ -23,7 +23,12 @@
  * body are never box scrollers), so the body can be a view timeline
  * subject; the reader view writes no mark on html or body. The root
  * element (html) has no box here: it has no ancestor scroll container,
- * so its view timeline is inactive (CSS Scroll-driven Animations 1). */
+ * so its view timeline is inactive (CSS Scroll-driven Animations 1).
+ *
+ * Lot 108: a box scroller may scroll along x too (svx, x_vp, x_sc, x_rg);
+ * the nearest scroller of an element is its nearest ancestor that scrolls
+ * along either axis, and a box scroller's scroll offset and range along x
+ * are given (sc_*, rg_* on the inline axis in horizontal-tb). */
 #ifndef WF_GEOM_H
 #define WF_GEOM_H
 
@@ -41,6 +46,8 @@ typedef struct {
     unsigned char sv;            /* Lot 105: 1 when the element is a box scroller itself */
     int sm;                      /* Lot 105: the nearest box scroller's reader index + 1, 0 none (root, unmarked) */
     int s_vp, s_sc, s_rg;        /* Lot 105: its own scrollport height, scroll offset and range along y (sv) */
+    unsigned char svx;           /* Lot 108: 1 when the element is a box scroller along x (overflow-x auto or scroll) */
+    int x_vp, x_sc, x_rg;        /* Lot 108: its own scrollport width, scroll offset and range along x (svx) */
 } wf_geom_box_t;
 
 typedef struct {

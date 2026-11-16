@@ -445,15 +445,16 @@ def clock(a, nodes, i, ms, c):
         if tl[0] == "view":
             return view_clock(a, nodes, i, tl[1], tl[2], c)
         _, src, axis = tl
-        if axis not in ("block", "y"):
-            return None
+        # Lot 108, converted: the inline or x axis on a box scroller (the
+        # root scrolls along y only)
+        ax = axis in ("inline", "x")
         if src == "self":
             s = M5.scroll_src(nodes, i)
         elif src == "nearest":
             s = -2 if nd["parent"] < 0 else M5.scroller_of(nodes, i)
         else:
             s = -1
-        return None if s < -1 else M5.scroll_clock(a, s, c)
+        return None if s < -1 or (ax and s < 0) else M5.scroll_clock(a, s, c, ax)
     if tl == "none":
         return None
     q = i
@@ -463,9 +464,10 @@ def clock(a, nodes, i, ms, c):
             if d[0] == 2:
                 return view_clock(a, nodes, q, d[1], d[2], c)
             s = M5.scroll_src(nodes, q)
-            if s < -1 or d[1] not in ("block", "y"):
+            ax = d[1] in ("inline", "x")     # Lot 108, converted
+            if s < -1 or (ax and s < 0):
                 return None
-            return M5.scroll_clock(a, s, c)
+            return M5.scroll_clock(a, s, c, ax)
         if M4.scoped_at(nodes, q, tl):
             return None
         q = nodes[q]["parent"]

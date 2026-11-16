@@ -120,6 +120,7 @@ typedef struct {
     char target[WE_TARGET_MAX];   /* the URL fragment: the :target element id, "" none */
     char scroll_id[WE_BOXSCROLL_MAX][WE_TARGET_MAX];
     int16_t scroll_y[WE_BOXSCROLL_MAX];
+    int16_t scroll_x[WE_BOXSCROLL_MAX];   /* Lot 108: the offsets along x */
     uint8_t nscroll;
 } we_forms_t;
 /* we_form_click / we_form_key results */
@@ -434,6 +435,8 @@ typedef struct {
     uint16_t ftarget_off, ftarget_len; /* Lot 76: formtarget= */
     uint16_t faccept_off, faccept_len; /* Lot 77: accept= on type=file */
     int16_t box_scroll_y;      /* lot 74: overflow box scroll offset */
+    int16_t box_scroll_x;      /* Lot 108: the same along x (overflow-x auto or scroll) */
+    int16_t box_cw;            /* Lot 108: its content width (scroll_apply, before the display list is clipped) */
     /* Lot 75: caret-color, user-select, pointer-events, scroll-margin/padding */
     uint8_t caret_set, user_select, pointer_events, scroll_m_set, scroll_p_set;
     uint32_t caret;

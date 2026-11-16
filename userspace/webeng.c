@@ -5366,7 +5366,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->auto_col_floor = n->auto_row_floor = n->auto_col_cap = n->auto_row_cap = -1;
         n->relative = n->absolute = n->flex_reverse = n->margin_auto = n->border_collapse = 0;
         n->fixed = n->sticky = 0;
-        n->table_fixed = 0; n->box_scroll_y = 0; n->accent_set = n->appearance = 0;
+        n->table_fixed = 0; n->box_scroll_y = n->box_scroll_x = n->box_cw = 0; n->accent_set = n->appearance = 0;
         n->border_style = n->collapse_cell = 0;
         border_edges_reset(n);
         n->item_order = 0;

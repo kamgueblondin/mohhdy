@@ -139,8 +139,8 @@ def sc_cascade(decls):
     declarations [(rank, prop, value)] (rank: a tuple, larger wins).
     Lot 107, converted: max-height and the heights that are not absolute
     lengths are kept too (scripts/lot107_model.py)"""
-    import lot107_model as L107
-    return L107.sc_cascade(decls)
+    import lot108_model as L108     # Lot 108, converted: width, max-width, min-height
+    return L108.sc_cascade(decls)
 
 
 def sc_cascade_lot105(decls):
@@ -199,8 +199,8 @@ def passed(nodes, i, scr):
     """the style text the reader adds for node i (a box scroller it
     passes on), or "". Lot 107, converted: relative heights and
     max-height (scripts/lot107_model.py)"""
-    import lot107_model as L107
-    return L107.passed(nodes, i, scr)
+    import lot108_model as L108     # Lot 108, converted: along x too, min-height
+    return L108.passed(nodes, i, scr)
 
 
 def passed_lot105(nodes, i, scr):
@@ -225,15 +225,20 @@ class Ctx(M4.Ctx):
         self.live = False
 
 
-def scroll_clock(a, src, c):
+def scroll_clock(a, src, c, ax=False):
+    """Lot 108, converted: ax (the inline or x axis) runs a box scroller
+    on its own range and offset along x (svx, x_rg, x_sc)"""
     g = c.geom
     if src >= 0:
         c.scr.add(src)
         c.live = True
         b = g["box"].get(src) if g else None
-        if not b or not b.get("sv"):
+        if not b or not b.get("svx" if ax else "sv"):
             return None
-        t = M4.scroll_px_ms(a, b["s_rg"] * U, b["s_sc"] * U)
+        if ax:
+            t = M4.scroll_px_ms(a, b["x_rg"] * U, b["x_sc"] * U)
+        else:
+            t = M4.scroll_px_ms(a, b["s_rg"] * U, b["s_sc"] * U)
         return None if t is None else ("box", t)
     if c.gui:
         c.live = True
@@ -300,15 +305,16 @@ def clock(a, nodes, i, ms, c):
         if tl[0] == "view":
             return view_clock(a, nodes, i, tl[1], tl[2], c)
         _, src, axis = tl
-        if axis not in ("block", "y"):
-            return None
+        # Lot 108, converted: the inline or x axis on a box scroller (the
+        # root scrolls along y only)
+        ax = axis in ("inline", "x")
         if src == "self":
             s = scroll_src(nodes, i)
         elif src == "nearest":
             s = -2 if nd["parent"] < 0 else scroller_of(nodes, i)
         else:
             s = -1
-        return None if s < -1 else scroll_clock(a, s, c)
+        return None if s < -1 or (ax and s < 0) else scroll_clock(a, s, c, ax)
     if tl == "none":
         return None
     q = i
@@ -318,9 +324,10 @@ def clock(a, nodes, i, ms, c):
             if d[0] == 2:
                 return view_clock(a, nodes, q, d[1], d[2], c)
             s = scroll_src(nodes, q)
-            if s < -1 or d[1] not in ("block", "y"):
+            ax = d[1] in ("inline", "x")     # Lot 108, converted
+            if s < -1 or (ax and s < 0):
                 return None
-            return scroll_clock(a, s, c)
+            return scroll_clock(a, s, c, ax)
         if M4.scoped_at(nodes, q, tl):
             return None
         q = nodes[q]["parent"]
