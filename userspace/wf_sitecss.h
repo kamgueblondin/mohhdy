@@ -404,6 +404,7 @@ typedef struct {
     /* Lot 111: line-height as its token (WF_SITE_K_LH) and its rank */
     char lhtok[WF_SITE_TOK];
     int lhrank;
+    uint8_t lh_rv;      /* Lot 112: as rv for line-height (revert, revert-layer) */
 } wf_site_node_t;
 
 typedef struct {
@@ -551,6 +552,14 @@ typedef struct {
     int lh[WF_SITE_NODES];
     int lhv[WF_SITE_NODES];
     uint8_t lhk[WF_SITE_NODES];
+    /* Lot 112: the root element's lh (as lh: + 1, 0 normal) for rlh; what
+     * the style attribute passes the engine (lhx: 0 nothing, 1 normal,
+     * else px 10..40) and whether the element's own or an ancestor's line
+     * height is not normal (lhe: the engine then has a px line height,
+     * which its children inherit) */
+    int root_lh;
+    uint8_t lhx[WF_SITE_NODES];
+    uint8_t lhe[WF_SITE_NODES];
     int len_resolved, len_dropped;   /* lengths the reader resolved; out of bounds there */
     /* Lot 97 */
     wf_site_kf_t kf[WF_SITE_KFS];

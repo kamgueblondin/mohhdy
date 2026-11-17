@@ -293,9 +293,13 @@ static void test_l110_op_anim(void) {
     /* keyframe values clamped when taken: 2 is 1 */
     prep_at("@keyframes f { from { opacity: -1 } to { opacity: 2 } } #o { animation: f 1s linear }", 500);
     TEST_ASSERT_EQUAL_STRING(" style=\"opacity:50%\"", style_of("o"));
-    /* a keyframe that is no opacity value is left out (the own value) */
-    prep_at("@keyframes f { from { opacity: 0 } to { opacity: calc(1) } } #o { opacity: 0.5; animation: f 1s linear }", 500);
+    /* a keyframe that is no opacity value is left out (the own value);
+     * Lot 112 (converted): calc(1) is a value now (was left out), so the
+     * left-out keyframe is a length */
+    prep_at("@keyframes f { from { opacity: 0 } to { opacity: 1px } } #o { opacity: 0.5; animation: f 1s linear }", 500);
     TEST_ASSERT_EQUAL_STRING(" style=\"opacity:25%\"", style_of("o"));
+    prep_at("@keyframes f { from { opacity: 0 } to { opacity: calc(1) } } #o { opacity: 0.5; animation: f 1s linear }", 500);
+    TEST_ASSERT_EQUAL_STRING(" style=\"opacity:50%\"", style_of("o"));
     /* add on the own value, clamped after */
     prep_at("@keyframes f { to { opacity: 0.6 } } #o { opacity: 0.5; animation: f 1s linear; animation-composition: add }", 500);
     TEST_ASSERT_EQUAL_STRING(" style=\"opacity:100%\"", style_of("o"));     /* 1.05 */

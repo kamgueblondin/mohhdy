@@ -430,7 +430,7 @@ def op_keyframes(rng, name):
             decls.append("animation-composition: %s" % fc)
         rng.shuffle(decls)
         blocks.append("%s { %s }" % (G98.offset_sel(rng, o), "; ".join(decls)))
-        n = M.op_num(v.strip().lower())
+        n = M.op_kf(v.strip().lower())     # Lot 112: math too (was op_num)
         if n is not None:
             frames.append((o, M.op_text(n), fe, fc))
     return "@keyframes %s { %s }" % (name, " ".join(blocks)), frames

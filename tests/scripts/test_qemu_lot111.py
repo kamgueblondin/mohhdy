@@ -14,6 +14,9 @@ timeline --b111) and #v111 (view()) find the body: #000000, #000000 and
 no colour before any click; "web-bscroll 637 100" (317): #808080 and
 #v111 #848484; "web-bscroll 637 190" (602): #f2f2f2; "web-bscroll 637
 20" (63): #191919.
+Lot 112: the body's line-height is normal (html's 20px now reaches the
+engine, which would change the geometry); node lines end with
+"lh normal".
 Opacity in the report's node lines (Lot 111): #o111 opacity: calc(0.25 +
 0.5) is "opacity 0.7500", #a111 opacity: var(--a) with --a: 40% on the
 body is "opacity 0.4000", #t111 opacity: 0.9 then revert-layer goes back
@@ -48,9 +51,11 @@ SRV_LOG = os.path.join(g.LOG_DIR, "lot111-web-server.log")
 need, refuse = l88.need, l88.refuse
 KEEP = ["ikeep111", "nkeep111", "vkeep111", "okeep111", "akeep111", "tkeep111"]
 ANIM = "css-anim keyframes 1 animated 0 transitioned 0 font 0 at 500ms scroll 2 pos 0 color %d 0 view 1 need 2 geom 2 box 3\n"
-FIXED = ["node p #o111 display auto opacity 0.7500\n", "node p #a111 display auto opacity 0.4000\n",
-         "node p #t111 display auto color #c80000 opacity 0.2000\n"]
-NEVER = ["node p #o111 display auto\n", "node p #a111 display auto\n", "#640000", "opacity 0.9000",
+# Lot 112 (converted): node lines end with " lh normal" (the body's
+# line-height normal under html's 20px, passed to the engine)
+FIXED = ["node p #o111 display auto opacity 0.7500 lh normal\n", "node p #a111 display auto opacity 0.4000 lh normal\n",
+         "node p #t111 display auto color #c80000 opacity 0.2000 lh normal\n"]
+NEVER = ["node p #o111 display auto lh normal\n", "node p #a111 display auto lh normal\n", "#640000", "opacity 0.9000",
          "node p #o111 display auto color", "node p #a111 display auto color"]
 
 
@@ -59,7 +64,7 @@ def say(msg):
 
 
 def node(i, c):
-    return "node p #%s display auto color %s\n" % (i, c)
+    return "node p #%s display auto color %s lh normal\n" % (i, c)
 
 
 def css(mon, proc):
@@ -67,7 +72,7 @@ def css(mon, proc):
 
 
 def view(c):
-    return node("v111", c) if c else "node p #v111 display auto\n"
+    return node("v111", c) if c else "node p #v111 display auto lh normal\n"
 
 
 def step_reader(mon, proc, u):

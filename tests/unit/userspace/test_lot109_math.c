@@ -15,7 +15,7 @@ static const char *mb(const char *s, int em, int rem) {
 }
 
 static void test_l109_math_0(void) {
-    TEST_ASSERT_EQUAL_STRING("2 0 max(0px, calc(78% - 12px), calc(92% - 3px))", mb("max(0ch, calc(32.125% - 9.2pt + 46%), calc(92% - 2pt))", 24000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(0px, calc(92% - 3px))", mb("max(0ch, calc(32.125% - 9.2pt + 46%), calc(92% - 2pt))", 24000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(16% - 100px), 29%, calc(6% + 10px))", mb("clamp(calc(0.5 * (32% - 16lh)), calc(29% - 0vw), calc((45% + 12vw) / 8))", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(calc(13% - 4px), 752px)", mb("max(calc(0.5 * (25.2% - 5.75pt)), 47rem)", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(282% - 720px), 44%, calc(48% - 322px))", mb("clamp(calc(3 * (94% - 50vh)), 44%, calc(48% - 20.125rem))", 24000, 16000));
@@ -29,7 +29,7 @@ static void test_l109_math_0(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 calc(50% - 65px)", mb("calc(50% - 13ex)", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(60%, calc(162% - 480px))", mb("max(calc(40% * 1.5), calc(3 * (54% - 5em)))", 32000, 20000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("min(50%, 2)", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(63% - 134px), calc(71% - 91px))", mb("min(calc(3 * (21% - 7vw)), calc(65% - 19vh + 6%))", 16000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(63% - 134px)", mb("min(calc(3 * (21% - 7vw)), calc(65% - 19vh + 6%))", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(71% - 44px)", mb("calc(20% - 14ex + 51%)", 10000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 40000 ", mb("2.5em", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 196000 ", mb("39.2lh", 8000, 16000));
@@ -48,10 +48,10 @@ static void test_l109_math_1(void) {
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(10% / 0)", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 859000 ", mb("calc(42ex + 34pc)", 24000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 172500 ", mb("calc(17.25lh)", 16000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(44% + 177px), calc(97% + 34px), calc(5% - 40px))", mb("max(calc((88% + 22.125pc) / 2), calc(97% + 7vh), calc(0.5 * (10.25% - 5rem)))", 20000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(44% + 177px), calc(97% + 34px))", mb("max(calc((88% + 22.125pc) / 2), calc(97% + 7vh), calc(0.5 * (10.25% - 5rem)))", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 441000 ", mb("441px", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 15000 ", mb("calc(10px + 5px)", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(23% + 46px), calc(14% + 11px))", mb("max(calc((46% + 19vh) / 2), calc((70% + 4.5em) / 5))", 12000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(23% + 46px)", mb("max(calc((46% + 19vh) / 2), calc((70% + 4.5em) / 5))", 12000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(39% + 320px), 186px, calc(4% + 3px))", mb("clamp(calc(50vw + 39.25%), 29vw, calc((30.75% + 23px) / 8))", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 30000 ", mb("calc(30px)", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 19250 ", mb("calc(5lh - 9pt)", 10000, 16000));
@@ -61,10 +61,11 @@ static void test_l109_math_1(void) {
 }
 
 static void test_l109_math_2(void) {
-    TEST_ASSERT_EQUAL_STRING("2 0 min(102%, calc(9% - 149px), calc(-11% + 832px))", mb("min(calc(34% * 3), calc(4% - 31.125vh + 5.2%), calc(52pc - 11%))", 20000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(61px, calc(30% + 187px), calc(18% + 48px))", mb("max(12.25ex, calc(30% + 39vh), calc(3pc + 18%))", 16000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(9% - 149px), calc(-11% + 832px))", mb("min(calc(34% * 3), calc(4% - 31.125vh + 5.2%), calc(52pc - 11%))", 20000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(30% + 187px)", mb("max(12.25ex, calc(30% + 39vh), calc(3pc + 18%))", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(45px, 10%)", mb("min(7vw, calc(41% * 0.25))", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 55%", mb("calc(55%)", 16000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(10% - 80px)", mb("min(calc(2 * (5% - 40px)), calc(37% * 0.5), calc(99% * 2))", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(24% + 100px), 29%, 63%)", mb("clamp(calc(40ex + 24%), 29.125%, 63%)", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 249375 ", mb("calc(37ex + 29.5ex)", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 29%", mb("calc(29%)", 8000, 20000));
@@ -73,20 +74,22 @@ static void test_l109_math_2(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 15%", mb("calc(10% * 1.5)", 24000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 870000 ", mb("calc(34ex + 26.5lh)", 32000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 60625 ", mb("12.125lh", 8000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(59% + 768px), calc(10% + 22px), 6%)", mb("max(calc(48ch + 59%), calc((20% + 7vw) / 2), calc(3% * 2))", 32000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(72px, calc(39% + 140px))", mb("max(15vh, calc(39.25% + 8.75pc))", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(9% + 123px), 37%)", mb("min(calc(9.2% + 20.5ch), calc(38.2lh + 17%), 37%)", 12000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(59% + 768px)", mb("max(calc(48ch + 59%), calc((20% + 7vw) / 2), calc(3% * 2))", 32000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(39% + 140px)", mb("max(15vh, calc(39.25% + 8.75pc))", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(-95% + 225px)", mb("calc(18lh - 95%)", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 150%", mb("calc(75% * 2)", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(15% - 440px), 680px, calc(114% - 29px))", mb("clamp(calc(0.5 * (30% - 55pc)), 34em, calc(40% - 6vh + 74%))", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 98400 ", mb("calc(28lh - 5.2em)", 8000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 calc(16% - 168px)", mb("calc(16% - 35vh)", 10000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(25% + 26px), 53%)", mb("min(calc(25.125% + 25.75px), 53%)", 10000, 20000));
 }
 
 static void test_l109_math_3(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(16% - 168px)", mb("calc(16% - 35vh)", 10000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(25% + 26px), 53%)", mb("min(calc(25.125% + 25.75px), 53%)", 10000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(-80% + 528px)", mb("calc(33pc - 80%)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(68% + 30px)", mb("calc(30.25px + 68%)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 76500 ", mb("19.125ch", 8000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(90% + 570px)", mb("max(calc(38lh + 90%), calc(19.25% - 33pc + 29%), calc((22% + 15.75ex) / 4))", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(123%, calc(130% - 30px))", mb("max(calc(82% * 1.5), calc(2 * (65% - 2lh)))", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(267% - 941px), calc(35% + 275px))", mb("min(calc(3 * (89% - 49vw)), calc((70% + 55ch) / 2))", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("fit-content", 12000, 20000));
@@ -101,12 +104,12 @@ static void test_l109_math_3(void) {
     TEST_ASSERT_EQUAL_STRING("1 348000 ", mb("29ch", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 300000 ", mb("calc(30lh)", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 185000 ", mb("37lh", 8000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 7%", mb("calc(29.2% * 0.25)", 10000, 20000));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("px", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 291250 ", mb("calc(29.125lh)", 16000, 16000));
 }
 
 static void test_l109_math_4(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 7%", mb("calc(29.2% * 0.25)", 10000, 20000));
+    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("px", 10000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 291250 ", mb("calc(29.125lh)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 21%", mb("calc(83% * 0.25)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 50%", mb("calc(50%)", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("0.5in", 10000, 20000));
@@ -116,7 +119,7 @@ static void test_l109_math_4(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 38%", mb("calc(38%)", 32000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(3% + 4px)", mb("calc((23% + 30px) / 8)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(1% - 31px)", mb("calc(1% - 23.5pt)", 16000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(19% + 124px), 57%, 17%)", mb("max(calc((97% + 31rem) / 5), 57%, 17%)", 16000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(19% + 124px), 57%)", mb("max(calc((97% + 31rem) / 5), 57%, 17%)", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(48px, calc(6% + 33px), 28%)", mb("max(8ch, calc((23% + 22.25ch) / 4), 28%)", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(50% + 1px), 11px)", mb("calc(min(50%, 10px) + 1px)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(1ex + 1)", 24000, 16000));
@@ -124,12 +127,12 @@ static void test_l109_math_4(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 1%", mb("calc(1%)", 8000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(2% + 55px)", mb("calc((16% + 55ch) / 8)", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(118% - 140px), calc(64% + 860px))", mb("min(calc(44% - 8.75pc + 74%), calc(43em + 64%))", 20000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 calc(0% - 57px)", mb("calc(0.25% - 57px)", 24000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 -5000 ", mb("calc(15ch - 26ex)", 8000, 16000));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("--x", 20000, 16000));
 }
 
 static void test_l109_math_5(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(0% - 57px)", mb("calc(0.25% - 57px)", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 -5000 ", mb("calc(15ch - 26ex)", 8000, 16000));
+    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("--x", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 450000 ", mb("45ex", 32000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(7% - 302px)", mb("calc(7% - 30.2ch)", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 151000 ", mb("calc(15ex + 15.2ex)", 16000, 16000));
@@ -145,21 +148,22 @@ static void test_l109_math_5(void) {
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("auto", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 277500 ", mb("18.5lh", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("min(50%, 2)", 12000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(10%, 20px, 2px)", mb("min(min(10%, 1lh), 2px)", 32000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(10%, 2px)", mb("min(min(10%, 1lh), 2px)", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(50% - 248px)", mb("calc(48% - 15.5rem + 2%)", 24000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(33% - 166px), 144px)", mb("min(calc(33% - 26vw), calc(9pc + 0%))", 8000, 16000));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("max(10%, 1lh) * 2", 12000, 16000));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("max(10%, 1lh) * 2", 8000, 16000));
 }
 
 static void test_l109_math_6(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(33% - 166px), 144px)", mb("min(calc(33% - 26vw), calc(9pc + 0%))", 8000, 16000));
+    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("max(10%, 1lh) * 2", 12000, 16000));
+    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("max(10%, 1lh) * 2", 8000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(22% + 155px)", mb("max(calc(32.2vh + 22%), calc(14% * 0.5), calc(2% - 32.75lh))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 19%", mb("calc(19%)", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(162% - 264px)", mb("calc(3 * (54% - 22ch))", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(29% - 47px)", mb("calc(29% - 35.2pt)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 37500 ", mb("3lh", 20000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(32% - 38px), calc(41% + 192px))", mb("min(calc(31.125% - 8vh + 1%), calc(41% + 12rem))", 12000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(32% - 38px)", mb("min(calc(31.125% - 8vh + 1%), calc(41% + 12rem))", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(8% + 46px)", mb("calc((39% + 48vh) / 5)", 8000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(1% - 40px), calc(44% - 20px))", mb("min(calc(1% - 6.25vw), calc(44% - 19.75px))", 32000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(1% - 40px)", mb("min(calc(1% - 6.25vw), calc(44% - 19.75px))", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(11% + 60px), 48%, calc(10% - 1632px))", mb("clamp(calc((53% + 40lh) / 5), calc(96% * 0.5), calc(2 * (5% - 51rem)))", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(9% - 72px)", mb("calc(8% - 11.25vw + 1%)", 8000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(33% + 19px), calc(23% + 95px), 60px)", mb("clamp(calc(14.125pt + 33%), calc((91% + 19rem) / 4), 6em)", 10000, 20000));
@@ -169,22 +173,22 @@ static void test_l109_math_6(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 max(calc(2% + 1px), calc(95% - 54px))", mb("max(calc((19% + 5pt) / 8), calc(83% - 54px + 12%))", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(3% + 441px), 26%)", mb("min(calc(36.75ch + 3%), calc(13% * 2))", 24000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 -18250 ", mb("calc(10.75lh - 15vh)", 8000, 20000));
+}
+
+static void test_l109_math_7(void) {
     TEST_ASSERT_EQUAL_STRING("1 17000 ", mb("calc(26ex - 14.125ch)", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 7%", mb("calc(7%)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(15% + 720px)", mb("calc(48lh + 15%)", 24000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(118% - 31px)", mb("calc(51% - 23pt + 67%)", 32000, 16000));
-}
-
-static void test_l109_math_7(void) {
     TEST_ASSERT_EQUAL_STRING("1 -70625 ", mb("calc(13ex - 27.125ex)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 105000 ", mb("calc(21lh)", 8000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(30% + 467px), calc(144% - 96px), 21%)", mb("max(calc(29.2rem + 30.125%), calc(83% - 20vh + 61%), 21%)", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(30% + 467px), calc(144% - 96px))", mb("max(calc(29.2rem + 30.125%), calc(83% - 20vh + 61%), 21%)", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 147%", mb("calc(49% * 3)", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(50%, calc(12% + 76px))", mb("min(50%, calc(57pt + 12%))", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 120000 ", mb("calc(2 * 3em)", 20000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(57%, calc(20% - 40px))", mb("max(57%, calc(0.5 * (40% - 16.5vh)))", 20000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 57%", mb("max(57%, calc(0.5 * (40% - 16.5vh)))", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(23% + 33px)", mb("calc((46% + 10.25vw) / 2)", 12000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(74% + 402px), calc(4% + 23px))", mb("max(calc(25.125pc + 74%), calc((19% + 22.75ex) / 5))", 16000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(74% + 402px)", mb("max(calc(25.125pc + 74%), calc((19% + 22.75ex) / 5))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(-26% + 201px)", mb("calc(20.125em - 26%)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("min(10%, 1q)", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(24% - 102px)", mb("calc(2 * (12% - 3.2pc))", 16000, 16000));
@@ -192,14 +196,14 @@ static void test_l109_math_7(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 31%", mb("calc(10.25% * 3)", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 313600 ", mb("39.2ch", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 107500 ", mb("calc(43ex + 0ch)", 8000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 48000 ", mb("calc(39ch - 28lh)", 24000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 clamp(160px, calc(17% - 16px), 11%)", mb("clamp(8em, calc(0.5 * (34.2% - 24.25pt)), 11%)", 20000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(10%, 10px, 2px)", mb("min(min(10%, 1lh), 2px)", 16000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 594375 ", mb("calc(36.25ex + 43ex)", 24000, 16000));
 }
 
 static void test_l109_math_8(void) {
-    TEST_ASSERT_EQUAL_STRING("2 0 min(3%, 160px, 120px)", mb("min(calc(5.25% * 0.5), 10pc, 24ch)", 10000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 48000 ", mb("calc(39ch - 28lh)", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 clamp(160px, calc(17% - 16px), 11%)", mb("clamp(8em, calc(0.5 * (34.2% - 24.25pt)), 11%)", 20000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(10%, 2px)", mb("min(min(10%, 1lh), 2px)", 16000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 594375 ", mb("calc(36.25ex + 43ex)", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(3%, 120px)", mb("min(calc(5.25% * 0.5), 10pc, 24ch)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 416250 ", mb("calc(5ex + 53lh)", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(50% + 10px)", mb("calc(50% + 10px)", 8000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 58000 ", mb("calc(9.5ch + 8ex)", 8000, 16000));
@@ -211,17 +215,17 @@ static void test_l109_math_8(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 max(calc(20% + 414px), 37%)", mb("max(calc(20.125% + 33.125lh), 37%)", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(50% - 4px), -37%)", mb("min(calc(50% - 0.25em), calc(0ch - 37%))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(50% * 2%)", 12000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(30% + 400px), 0px, 77%)", mb("min(calc(30% + 40ex), 0pt, 77%)", 32000, 20000));
+    TEST_ASSERT_EQUAL_STRING("1 0 ", mb("min(calc(30% + 40ex), 0pt, 77%)", 32000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(6% + 43px), calc(17% + 137px), 36%)", mb("clamp(calc((45% + 54vw) / 8), calc((84% + 34.2rem) / 5), 35.75%)", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(17% - 228px), calc(-55% + 333px), calc(66% - 52px))", mb("clamp(calc(0.5 * (34% - 38ch)), calc(52vw - 55%), calc(3 * (22% - 17.2px)))", 24000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(19% + 90px), calc(9% + 54px), calc(134% - 42px))", mb("max(calc((93% + 45lh) / 5), calc(54px + 9%), calc(2 * (67% - 21.2px)))", 16000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(3% + 5px), calc(80% - 12px), 0px)", mb("clamp(calc((23% + 8ch) / 8), calc(43% - 8.75pt + 37%), 0%)", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(99% + 320px), 46px)", mb("min(calc(50vw + 99%), 9.5vh)", 10000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(50% + 1px), 11px)", mb("calc(min(50%, 10px) + 1px)", 20000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 376000 ", mb("376px", 16000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(19% + 90px), calc(134% - 42px))", mb("max(calc((93% + 45lh) / 5), calc(54px + 9%), calc(2 * (67% - 21.2px)))", 16000, 16000));
 }
 
 static void test_l109_math_9(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(3% + 5px), calc(80% - 12px), 0px)", mb("clamp(calc((23% + 8ch) / 8), calc(43% - 8.75pt + 37%), 0%)", 10000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 45600 ", mb("min(calc(50vw + 99%), 9.5vh)", 10000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(50% + 1px), 11px)", mb("calc(min(50%, 10px) + 1px)", 20000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 376000 ", mb("376px", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(7% + 53px)", mb("calc((36% + 55vh) / 5)", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 15%", mb("calc(15%)", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(114px, 15%, calc(6% + 31px))", mb("clamp(7.125pc, 15%, calc((31% + 31lh) / 5))", 8000, 16000));
@@ -238,13 +242,13 @@ static void test_l109_math_9(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 min(36%, calc(46% - 768px), 848px)", mb("min(36%, calc(2 * (23% - 24rem)), 53pc)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 160000 ", mb("10em", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 317500 ", mb("31.75ex", 32000, 16000));
+}
+
+static void test_l109_math_10(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 calc(15% - 272px)", mb("calc(0.5 * (30.5% - 34pc))", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 536250 ", mb("calc(37.75lh + 31.75ex)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(30% + 14px)", mb("calc(29.75% + 13.75px)", 10000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(74% + 40px)", mb("calc(4em + 74%)", 10000, 16000));
-}
-
-static void test_l109_math_10(void) {
     TEST_ASSERT_EQUAL_STRING("1 256000 ", mb("max(16pc, 39vw)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(3% + 7px)", mb("calc((25.25% + 40pt) / 8)", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(218px, calc(18% - 108px))", mb("max(34vw, calc(3 * (6% - 27pt)))", 8000, 20000));
@@ -261,13 +265,13 @@ static void test_l109_math_10(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 192%", mb("calc(64% * 3)", 32000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 20%", mb("calc(10% * 2)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(50% * 2%)", 20000, 16000));
+}
+
+static void test_l109_math_11(void) {
     TEST_ASSERT_EQUAL_STRING("1 96000 ", mb("24ch", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(calc(99% - 308px), calc(90% - 27px))", mb("max(calc(51% - 19.25pc + 48%), calc(90% - 20pt))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 224125 ", mb("calc(49ch + 11.25ex)", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(153% - 56px), 94%)", mb("min(calc(90% - 22.25ex + 63%), 94%)", 8000, 16000));
-}
-
-static void test_l109_math_11(void) {
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(50% * 2%)", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(37px, calc(1% + 6px))", mb("max(37px, calc((10% + 10.75vh) / 8))", 12000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 11%", mb("calc(43% * 0.25)", 24000, 16000));
@@ -281,16 +285,16 @@ static void test_l109_math_11(void) {
     TEST_ASSERT_EQUAL_STRING("1 212500 ", mb("calc(45ex + 6.25pc)", 8000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(-44% + 81px)", mb("calc(10.125ch - 44%)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("max(10%, 1lh) * 2", 16000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(22% - 97px), calc(86% + 256px))", mb("max(calc(0.5 * (44% - 12.125rem)), calc(40vw + 86%))", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(86% + 256px)", mb("max(calc(0.5 * (44% - 12.125rem)), calc(40vw + 86%))", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 0 ", mb("0em", 32000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 0 ", mb("calc(33.125ch - 53ex)", 20000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(10%, 15px, 2px)", mb("min(min(10%, 1lh), 2px)", 24000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(48% + 275px), calc(10% - 59px), calc(44% + 328px))", mb("clamp(calc(17.2pc + 48%), calc(10% - 19ex), calc(20.5pc + 44%))", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 11%", mb("calc(11.125%)", 20000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 30000 ", mb("calc(35ex - 27ex)", 12000, 16000));
 }
 
 static void test_l109_math_12(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 min(10%, 2px)", mb("min(min(10%, 1lh), 2px)", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(48% + 275px), calc(10% - 59px), calc(44% + 328px))", mb("clamp(calc(17.2pc + 48%), calc(10% - 19ex), calc(20.5pc + 44%))", 10000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 11%", mb("calc(11.125%)", 20000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 30000 ", mb("calc(35ex - 27ex)", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("--x", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 -611250 ", mb("calc(12.2ex - 55lh)", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 206250 ", mb("calc(34ex + 32ex)", 10000, 20000));
@@ -299,7 +303,6 @@ static void test_l109_math_12(void) {
     TEST_ASSERT_EQUAL_STRING("1 21000 ", mb("calc(44ex - 9pc)", 12000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 262000 ", mb("calc(26.2lh)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(6% + 28px)", mb("calc((31.2% + 28.25ex) / 5)", 16000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(330px, calc(-6% + 114px), calc(-97% + 147px))", mb("max(16.5rem, calc(15.2lh - 6%), calc(39.25ex - 97%))", 12000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 32000 ", mb("5vmax", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(10%, calc(36% - 34px))", mb("max(10%, calc(11% - 2.25lh + 25.125%))", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(11% + 64px)", mb("calc((56% + 16lh) / 5)", 32000, 20000));
@@ -308,15 +311,15 @@ static void test_l109_math_12(void) {
     TEST_ASSERT_EQUAL_STRING("1 15000 ", mb("1.5ch", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(67% + 825px), calc(69% - 102px))", mb("min(calc(67% + 55lh), calc(22% - 16vw + 47%))", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(-7% + 10px)", mb("calc(2ch - 7%)", 10000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(37%, 864px, calc(124% - 90px))", mb("min(37%, 54pc, calc(2 * (62% - 33.75pt)))", 16000, 20000));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("0.5in", 24000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(72%, calc(50% - 324px))", mb("min(calc(48% * 1.5), calc(35% - 27em + 15%))", 12000, 16000));
 }
 
 static void test_l109_math_13(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 min(37%, 864px, calc(124% - 90px))", mb("min(37%, 54pc, calc(2 * (62% - 33.75pt)))", 16000, 20000));
+    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("0.5in", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(50% - 324px)", mb("min(calc(48% * 1.5), calc(35% - 27em + 15%))", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 93585 ", mb("calc(4.125lh + 15.2vh)", 8000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(50% - 96px)", mb("calc(1.25% - 12em + 49%)", 8000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(75% - 480px), calc(6% + 11px), calc(110% - 15px))", mb("max(calc(75% - 30rem), calc((32% + 55px) / 5), calc(29% - 15.2px + 81%))", 12000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(6% + 11px), calc(110% - 15px))", mb("max(calc(75% - 30rem), calc((32% + 55px) / 5), calc(29% - 15.2px + 81%))", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 50000 ", mb("clamp(10px, 5em, 50px)", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(calc(112% - 186px), calc(-98% + 85px), calc(39% - 1px))", mb("max(calc(55% - 29vw + 57%), calc(17.75vh - 98%), calc(13% - 1.2px + 26%))", 24000, 20000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("clamp(10%, 2ch)", 20000, 16000));
@@ -328,15 +331,15 @@ static void test_l109_math_13(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 min(432px, calc(4% + 5px))", mb("min(27rem, calc((30% + 43px) / 8))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(25% - 213px)", mb("calc(12% - 33.25vw + 13%)", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(87% - 412px)", mb("calc(3% - 25.75pc + 84%)", 24000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(39% - 69px), 42%)", mb("min(calc(39.25% - 52pt), calc(14% * 3))", 20000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(178% - 28px), calc(22% - 624px))", mb("max(calc(2 * (89% - 14px)), calc(12% - 26em + 10%))", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(39% - 69px)", mb("min(calc(39.25% - 52pt), calc(14% * 3))", 20000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(178% - 28px)", mb("max(calc(2 * (89% - 14px)), calc(12% - 26em + 10%))", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(-59% + 700px)", mb("calc(35rem - 59%)", 32000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 calc(22% + 51px)", mb("calc((87% + 12.75pc) / 4)", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 636000 ", mb("calc(59lh + 9.2ex)", 16000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 -96000 ", mb("calc(23ch - 28lh)", 16000, 20000));
 }
 
 static void test_l109_math_14(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(22% + 51px)", mb("calc((87% + 12.75pc) / 4)", 10000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 636000 ", mb("calc(59lh + 9.2ex)", 16000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 -96000 ", mb("calc(23ch - 28lh)", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(3%, calc(-78% + 170px))", mb("min(calc(11% * 0.25), calc(26.5vw - 78%))", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(3000px + 1%)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 696000 ", mb("29em", 24000, 20000));
@@ -344,22 +347,22 @@ static void test_l109_math_14(void) {
     TEST_ASSERT_EQUAL_STRING("1 203000 ", mb("203px", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 306000 ", mb("25.5ch", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 114750 ", mb("calc(23.5ex + 11.2lh)", 8000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(10%, 6px, 2px)", mb("min(min(10%, 1lh), 2px)", 10000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(10%, 2px)", mb("min(min(10%, 1lh), 2px)", 10000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 -14200 ", mb("calc(33ex - 28vw)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 73000 ", mb("calc(45ch - 26.75ch)", 8000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(27% + 480px)", mb("calc(30rem + 27%)", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 26%", mb("calc(52% * 0.5)", 8000, 20000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("max(calc(0.5 * (50% - 38vh)), calc(2 * (31% - 44em)), 32ch)", 24000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(25% - 156px), calc(78% - 9px), calc(81% - 1485px))", mb("min(calc(0.5 * (50% - 13em)), calc(78% - 9.125px), calc(3 * (27% - 33lh)))", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(25% - 156px), calc(81% - 1485px))", mb("min(calc(0.5 * (50% - 13em)), calc(78% - 9.125px), calc(3 * (27% - 33lh)))", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(93% + 19px)", mb("calc(3ex + 93%)", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(-95% + 48px)", mb("calc(3pc - 95%)", 12000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(88px, 75px, 2%)", mb("min(18.25vh, 56pt, calc(4% * 0.5))", 32000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 825000 ", mb("55lh", 24000, 20000));
-    TEST_ASSERT_EQUAL_STRING("1 820575 ", mb("calc(33.5lh + 38.2rem)", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 clamp(10%, -98px, calc(159% - 600px))", mb("clamp(calc(20% * 0.5), calc(0.5 * (0% - 12.2pc)), calc(3 * (53% - 32ex)))", 20000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(75px, 2%)", mb("min(18.25vh, 56pt, calc(4% * 0.5))", 32000, 16000));
 }
 
 static void test_l109_math_15(void) {
+    TEST_ASSERT_EQUAL_STRING("1 825000 ", mb("55lh", 24000, 20000));
+    TEST_ASSERT_EQUAL_STRING("1 820575 ", mb("calc(33.5lh + 38.2rem)", 10000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 clamp(10%, -98px, calc(159% - 600px))", mb("clamp(calc(20% * 0.5), calc(0.5 * (0% - 12.2pc)), calc(3 * (53% - 32ex)))", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 240000 ", mb("10em", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 855000 ", mb("calc(57lh)", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 25000 ", mb("25px", 8000, 16000));
@@ -377,22 +380,22 @@ static void test_l109_math_15(void) {
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(1ex+1lh)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(84% - 864px), 27%)", mb("min(calc(26.75% - 54rem + 57%), 27%)", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(100% - 6px)", mb("calc(80% - 6.125px + 20%)", 10000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 calc(8% + 132px)", mb("calc((16.2% + 55vh) / 2)", 16000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(42%, calc(57% - 924px))", mb("min(42%, calc(3 * (19.125% - 19.25pc)))", 32000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 calc(5% + 13px)", mb("calc((18.125% + 13ch) / 4)", 8000, 20000));
 }
 
 static void test_l109_math_16(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(8% + 132px)", mb("calc((16.2% + 55vh) / 2)", 16000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(42%, calc(57% - 924px))", mb("min(42%, calc(3 * (19.125% - 19.25pc)))", 32000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(5% + 13px)", mb("calc((18.125% + 13ch) / 4)", 8000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(4% + 55px)", mb("calc((21.25% + 17.125pc) / 5)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 168%", mb("calc(56% * 3)", 10000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(4% - 38px)", mb("calc(0.5 * (8% - 4.75ch))", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 -116000 ", mb("calc(16ch - 37.2ex)", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(15% + 17px), calc(108% - 10px))", mb("min(calc((74% + 13.75ex) / 5), calc(2 * (54% - 5px)))", 20000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(49% - 231px), calc(41% - 346px))", mb("max(calc(49% - 36.125vw), calc(41% - 54vw))", 8000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(49% - 231px)", mb("max(calc(49% - 36.125vw), calc(41% - 54vw))", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(320px, calc(13% - 35px))", mb("max(20rem, calc(0.5 * (25.5% - 14ex)))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(4% + 29px), calc(173% - 64px))", mb("min(calc((30.5% + 48vh) / 8), calc(92% - 10vw + 81%))", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(42% - 1824px)", mb("calc(2 * (21% - 57rem))", 32000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(33% - 88px), 0px, 39%)", mb("max(calc(11.75% - 5.5pc + 21%), 0ch, calc(13% * 3))", 16000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 39%", mb("max(calc(11.75% - 5.5pc + 21%), 0ch, calc(13% * 3))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 420000 ", mb("calc(44lh - 13ch)", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(58% - 275px)", mb("calc(58% - 22lh)", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(158% - 240px)", mb("calc(2 * (79% - 7.5pc))", 10000, 20000));
@@ -400,12 +403,12 @@ static void test_l109_math_16(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 139%", mb("139%", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("fit-content", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(4% + 45px)", mb("calc((35% + 22.5rem) / 8)", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 685000 ", mb("calc(34.25lh)", 32000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 265000 ", mb("calc(19ex + 34ex)", 16000, 20000));
-    TEST_ASSERT_EQUAL_STRING("1 695000 ", mb("calc(26.5ch + 43ch)", 20000, 20000));
 }
 
 static void test_l109_math_17(void) {
+    TEST_ASSERT_EQUAL_STRING("1 685000 ", mb("calc(34.25lh)", 32000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 265000 ", mb("calc(19ex + 34ex)", 16000, 20000));
+    TEST_ASSERT_EQUAL_STRING("1 695000 ", mb("calc(26.5ch + 43ch)", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(11% + 5px)", mb("calc((55% + 26.75px) / 5)", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 24000 ", mb("5vmin", 10000, 20000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("min(10%, 1q)", 16000, 16000));
@@ -423,12 +426,12 @@ static void test_l109_math_17(void) {
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(2001% + 1ex)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(20% - 96px), calc(44% - 394px), calc(15% - 43px))", mb("min(calc(0.5 * (40% - 30vw)), calc(2 * (22% - 26.25ex)), calc(15% - 43px))", 24000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(3% + 44px)", mb("calc((11.2% + 28.125lh) / 4)", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 calc(5% + 60px)", mb("calc(5% + 45pt)", 8000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(29% - 29px), 10%, calc(75% - 57px))", mb("max(calc(0.5 * (58% - 44pt)), calc(39% * 0.25), calc(47% - 43pt + 28%))", 16000, 20000));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(10% / 0)", 8000, 20000));
 }
 
 static void test_l109_math_18(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(5% + 60px)", mb("calc(5% + 45pt)", 8000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(29% - 29px), 10%, calc(75% - 57px))", mb("max(calc(0.5 * (58% - 44pt)), calc(39% * 0.25), calc(47% - 43pt + 28%))", 16000, 20000));
+    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("calc(10% / 0)", 8000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 58000 ", mb("calc(16ex - 42px)", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 -19500 ", mb("calc(19.75ch - 23ch)", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 528750 ", mb("calc(55lh + 15.5lh)", 12000, 16000));
@@ -445,56 +448,53 @@ static void test_l109_math_18(void) {
     TEST_ASSERT_EQUAL_STRING("1 8000 ", mb("calc(6pt)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("initial", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(8% - 480px)", mb("calc(8% - 30rem)", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(192px, calc(12% + 198px))", mb("max(12pc, calc(12% + 31vw))", 12000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(63% - 736px), calc(17% + 260px), 96px)", mb("min(calc(63% - 46pc), calc(26lh + 17.25%), 15vw)", 16000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 512125 ", mb("calc(2.25lh + 24.2em)", 20000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 calc(17% + 624px)", mb("calc(17.25% + 52ch)", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(12% + 198px)", mb("max(12pc, calc(12% + 31vw))", 12000, 16000));
 }
 
 static void test_l109_math_19(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(63% - 736px), 96px)", mb("min(calc(63% - 46pc), calc(26lh + 17.25%), 15vw)", 16000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 512125 ", mb("calc(2.25lh + 24.2em)", 20000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(17% + 624px)", mb("calc(17.25% + 52ch)", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 12%", mb("calc(49% * 0.25)", 16000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 14%", mb("calc(9.25% * 1.5)", 24000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(-48% + 125px), calc(54% - 156px), 147%)", mb("max(calc(20lh - 48%), calc(18.2% - 31.2ch + 36.125%), calc(98% * 1.5))", 10000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(4%, calc(12% + 5px))", mb("min(4%, calc((96% + 27.25pt) / 8))", 20000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(-48% + 125px), 147%)", mb("max(calc(20lh - 48%), calc(18.2% - 31.2ch + 36.125%), calc(98% * 1.5))", 10000, 20000));
+    TEST_ASSERT_EQUAL_STRING("2 0 4%", mb("min(4%, calc((96% + 27.25pt) / 8))", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(-66% + 688px), 14px)", mb("min(calc(43pc - 66%), 14.25px)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(-57% + 24px)", mb("calc(3ch - 57%)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(calc(100% + 392px), 102%)", mb("max(calc(100% + 24.5rem), calc(51% * 2))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(68% - 745px), 32%)", mb("min(calc(2 * (34% - 37.25ex)), 32%)", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(14%, calc(-20% + 72px))", mb("min(14%, calc(15vh - 20%))", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(15% - 169px)", mb("calc(15% - 28.125ch)", 12000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(60% - 48px), 33%, calc(36% - 156px))", mb("min(calc(2 * (30.125% - 3ch)), 33%, calc(0.5 * (72% - 31.125lh)))", 16000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(33%, calc(36% - 156px))", mb("min(calc(2 * (30.125% - 3ch)), 33%, calc(0.5 * (72% - 31.125lh)))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 25000 ", mb("calc(100px / 4)", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 5%", mb("calc(5%)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("min(50%, 2)", 20000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 337500 ", mb("45lh", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(244px, calc(2% + 1px))", mb("max(15.25rem, calc((8% + 6.25px) / 5))", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(52%, 15px)", mb("min(52%, 4ex)", 12000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 calc(-10% + 261px)", mb("calc(26.125ch - 10%)", 20000, 16000));
-    TEST_ASSERT_EQUAL_STRING("1 0 ", mb("calc(0% * 1.5)", 24000, 20000));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("clamp(10%, 2ch)", 24000, 16000));
 }
 
 static void test_l109_math_20(void) {
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(-10% + 261px)", mb("calc(26.125ch - 10%)", 20000, 16000));
+    TEST_ASSERT_EQUAL_STRING("1 0 ", mb("calc(0% * 1.5)", 24000, 20000));
+    TEST_ASSERT_EQUAL_STRING("-1 0 ", mb("clamp(10%, 2ch)", 24000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 min(55%, calc(84% - 704px))", mb("min(55%, calc(49% * 1.5), calc(68% - 35.2rem + 16%))", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(19% + 28px)", mb("calc((93% + 28lh) / 5)", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(174% - 155px), 5%)", mb("min(calc(2 * (87% - 58pt)), calc(20.125% * 0.25))", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(-31% + 180px)", mb("calc(18em - 31%)", 10000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(1% - 40px)", mb("calc(1% - 40px)", 32000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 min(calc(65% + 76px), calc(83% - 91px))", mb("min(calc(57pt + 65%), calc(9% - 14.2vw + 74%))", 8000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 max(calc(15% - 156px), calc(57% - 90px))", mb("max(calc(11% - 31.2ex + 4%), calc(57% - 14vw))", 16000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(57% - 90px)", mb("max(calc(11% - 31.2ex + 4%), calc(57% - 14vw))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 -256250 ", mb("calc(5ex - 46ex)", 20000, 20000));
     TEST_ASSERT_EQUAL_STRING("1 138750 ", mb("37ex", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 419750 ", mb("calc(9ex + 24.125rem)", 12000, 16000));
+    TEST_ASSERT_EQUAL_STRING("2 0 calc(13% - 53px)", mb("min(calc(39% * 0.5), calc(13.2% - 11vh))", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(153% - 173px)", mb("calc(3 * (51% - 12vh))", 12000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 4800 ", mb("min(1vw, 1vh)", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("1 157250 ", mb("calc(23.2ex + 4.125lh)", 16000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 max(78%, 896px, calc(4% + 365px))", mb("max(calc(26% * 3), 56pc, calc(57vw + 4%))", 8000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(27% + 1344px), 150%, 3%)", mb("clamp(calc(56em + 27%), calc(50% * 3), calc(6% * 0.5))", 24000, 16000));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(96% + 220px)", mb("calc(22lh + 96%)", 16000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 15%", mb("calc(30% * 0.5)", 16000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(41%, calc(13% + 67px))", mb("min(calc(27.5% * 1.5), calc(13.25% + 14vh))", 12000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 clamp(calc(45% - 38px), 49%, calc(-59% + 171px))", mb("clamp(calc(45% - 38px), 49%, calc(17.125lh - 59%))", 16000, 20000));
-    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(15% + 32px), 21%)", mb("min(calc(15% + 24pt), calc(83% * 0.25))", 10000, 16000));
-    TEST_ASSERT_EQUAL_STRING("2 0 calc(13% + 5px)", mb("calc((67% + 18pt) / 5)", 24000, 16000));
 }
 
 int main(void) {

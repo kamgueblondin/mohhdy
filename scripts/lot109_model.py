@@ -18,6 +18,9 @@ import lot107_model as L7
 LIT = 2000          # the engine's math literal bound (WE_MATH_LITERAL_MAX)
 LIMIT = 10000       # px or % a value may reach (WF_CSSMATH_MAX)
 FONT = {"ex": F(5, 16), "ch": F(8, 16), "lh": F(10, 16)}
+# Lot 112: rlh, the root element's line height in px (None: normal, 10/16
+# of the root's font size, the rem)
+RLH = [None]
 
 
 class Unsure(L7.Unsure):
@@ -35,6 +38,8 @@ def unit_len(u, em, rem):
         return (F(0), F(1))
     if u in FONT:
         return (FONT[u] * em, F(0))
+    if u == "rlh":
+        return (RLH[0] if RLH[0] is not None else F(rem) * F(10, 16), F(0))
     k = L7.unit_px(u, em, rem)
     return None if k is None else (k, F(0))
 
@@ -138,6 +143,8 @@ class _Box:
             self.fail()
         if u in FONT:
             self.chk(n * self.em)       # the C takes n em first
+        if u == "rlh" and RLH[0] is None:
+            self.chk(n * self.rem)      # Lot 112: n rem, then 10/16 of it
         self.chk(n * k[0], n * k[1])
         return (n * k[0], n * k[1], True, False)
 

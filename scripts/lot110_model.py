@@ -121,6 +121,16 @@ def op_num(text):
     return int(v * 10000)       # v >= 0: truncation is the floor
 
 
+def op_kf(text):
+    """Lot 112: an opacity keyframe value: op_num, or a math function of a
+    number or a percentage (lot111_model.op_math) as in a declaration"""
+    n = op_num(text)
+    if n is None:
+        import lot111_model as L111
+        n = L111.op_math(text)
+    return n
+
+
 def op_text(v):
     if v >= 10000:
         return "1"
@@ -161,6 +171,8 @@ def op_cascade(decls):
         # rules only and no layer they leave nothing (no user-agent
         # opacity)
         got = (4, 0) if v in ("revert", "revert-layer") else op_decl(v)
+        if got is None and "var(" in v:
+            got = (1, 10000)    # Lot 112: no custom property here: unset
         if got is None:
             continue
         if best is None or rank >= best[0]:

@@ -100,8 +100,11 @@ static void test_l109_pct_math(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:clamp(5px, 20%, 20px)\"", style_of("b"));
     prep("#b { overflow: auto; height: 10px; min-height: calc(25% + 1ch) } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:10px;min-height:calc(25% + 8px)\"", style_of("b"));
+    /* Lot 112 (converted, was max(50%, 1px, 32px)): 32px covers 1px */
     prep("#b { overflow: auto; height: max(50%, 1px, 2em) } " RD);
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:max(50%, 1px, 32px)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:max(50%, 32px)\"", style_of("b"));
+    prep("#b { overflow: auto; height: max(50%, calc(10% + 1px), 2em) } " RD);
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:max(50%, calc(10% + 1px), 32px)\"", style_of("b"));
     /* integers, half away from zero; signs */
     prep("#b { overflow: auto; height: calc(10.5% + 0.5px) } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:calc(11% + 1px)\"", style_of("b"));
@@ -180,8 +183,11 @@ static void test_l109_pct_refused(void) {
      * arguments, a nested min() of the same kind is flattened */
     prep("#b { overflow: auto; height: calc(min(50%, 10px) + 1px) } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(calc(50% + 1px), 11px)\"", style_of("b"));
+    /* Lot 112 (converted, was min(50%, 1px, 2px)): 1px covers 2px */
     prep("#b { overflow: auto; height: min(min(50%, 1px), 2px) } " RD);
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(50%, 1px, 2px)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(50%, 1px)\"", style_of("b"));
+    prep("#b { overflow: auto; height: min(min(50%, 1px), calc(2px - 10%)) } " RD);
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(50%, 1px, calc(-10% + 2px))\"", style_of("b"));
 }
 
 /* scroll-padding: ex, ch, lh resolve; a percentage in math is auto */

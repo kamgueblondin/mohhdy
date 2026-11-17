@@ -362,7 +362,7 @@ static void test_l110_op_12(void) {
     TEST_ASSERT_EQUAL(0, g_d.op_transitioned);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     prep("@starting-style { #o { opacity: inherit } } #o { opacity: 12.5%; opacity: var(--o); transition: opacity 1000ms linear } #i { opacity: 20% }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"opacity:12%\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL_STRING(" style=\"opacity:20%\"", style_of("i"));
     TEST_ASSERT_EQUAL(0, g_d.op_animated);
     TEST_ASSERT_EQUAL(0, g_d.op_transitioned);
@@ -1646,7 +1646,7 @@ static void test_l110_op_59(void) {
 
 static void test_l110_op_60(void) {
     prep("@keyframes k { 33.33% { opacity: -0.2 } 75% { animation-timing-function: ease-in; opacity: inherit } } #o { opacity: 50%; opacity: var(--o); animation-name: j, k; animation-duration: 500ms, 1s; animation-iteration-count: infinite }", 500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"opacity:20%\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"opacity:40%\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.op_animated);
     TEST_ASSERT_EQUAL(0, g_d.op_transitioned);
@@ -2420,8 +2420,8 @@ static void test_l110_op_88(void) {
     TEST_ASSERT_EQUAL(0, g_d.op_transitioned);
     TEST_ASSERT_EQUAL(0, g_d.prop_composed);
     prep("@keyframes k { 0% { opacity: calc(0.5) } 50% { animation-composition: add; opacity: 50 % } 75% { opacity: 12.5% } } #o { opacity: 33.333%; animation-name: j, k; animation-duration: 500ms, 1s; animation-composition: ACCUMULATE } #i { opacity: inherit }", 500);
-    TEST_ASSERT_EQUAL_STRING(" style=\"opacity:47%\"", style_of("o"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"opacity:47%\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"opacity:48%\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"opacity:48%\"", style_of("i"));
     TEST_ASSERT_EQUAL(1, g_d.op_animated);
     TEST_ASSERT_EQUAL(0, g_d.op_transitioned);
     TEST_ASSERT_EQUAL(1, g_d.prop_composed);

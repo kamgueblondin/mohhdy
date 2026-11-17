@@ -1758,6 +1758,13 @@ qemu-lot110: $(OS_IMAGE) pack-initrd disk
 qemu-lot111: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot111.py
 
+# Lot 112: line-height passed to the engine (20 px lines, 2rlh), the body's
+# range from it, line-height unset by var(), revert-layer, var() in opacity
+# keyframes (tests/scripts/test_qemu_lot112.py)
+.PHONY: qemu-lot112
+qemu-lot112: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot112.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

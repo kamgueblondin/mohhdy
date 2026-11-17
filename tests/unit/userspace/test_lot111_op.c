@@ -164,7 +164,7 @@ static void test_l111_op_2(void) {
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(7500, op_of("i"));
     TEST_ASSERT_EQUAL(-1, op_of("q"));
-    TEST_ASSERT_EQUAL(10000, op_of("body"));
+    TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; @layer a { body { opacity: calc(50% / 4) } } @layer a { #o { opacity: calc((0.1 + 0.2) * 2); opacity: unset } } body { --a: 0.25 } p { opacity: var(--a, 0.5) } body { all: initial } #o { --a: 0.3 }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(3000, op_of("i"));
@@ -244,7 +244,7 @@ static void test_l111_op_4(void) {
     prep("@layer a, b; @layer b { #q { opacity: 70% } } #q { opacity: clamp(0, 0.35, 1); opacity: calc(var(--a) * 2) } @layer a { #i { opacity: min(var(--a), 0.3); opacity: calc(-1 * 20%) } } #o { --a: 0.8 } #i { opacity: 1; opacity: initial !important }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
-    TEST_ASSERT_EQUAL(3500, op_of("q"));
+    TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; @layer b { div { opacity: calc(0.2 - 0.5) } } @layer b { #o { all: unset; all: initial } } p { opacity: clamp(10%, 50%, 40%); opacity: calc(1 / 0) } #o { --a: 0.3 }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
@@ -258,7 +258,7 @@ static void test_l111_op_4(void) {
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; @layer b { div { opacity: calc(50% / 4) } } @layer b { p { opacity: calc(0.25 + 0.5) } } div { opacity: min(0.2, 0.7) !important; all: revert-layer } #i { opacity: var(--n) } body { all: revert !important; opacity: calc(1 / 0) }");
     TEST_ASSERT_EQUAL(2000, op_of("o"));
-    TEST_ASSERT_EQUAL(7500, op_of("i"));
+    TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(7500, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #q { --a: 0.3; --b: 40% } #o { --a: calc(0.1 * 3) } #q { opacity: 0.1 } #i { opacity: inherit } @layer a { #o { opacity: revert-layer; opacity: 70% } } @layer a { div { opacity: var(--a, 0.5) } } #q { opacity: calc(30% * 2) }");
@@ -301,7 +301,7 @@ static void test_l111_op_5(void) {
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; @layer a { p { all: initial } } @layer b { #q { all: unset !important } } @layer b { p { opacity: calc(var(--b) / 2); opacity: var(--n, var(--a)) } } #o { all: inherit; opacity: revert } @layer a { #i { opacity: 0.25 } } #q { --a: 0.8; --b: 40% }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
-    TEST_ASSERT_EQUAL(2500, op_of("i"));
+    TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #o { --a: 0.3; --b: calc(0.1 * 3); --p: 20% } #q { opacity: revert-layer } #i { opacity: var(--a); opacity: calc(var(--b) / 2) } @layer a { body { opacity: unset; opacity: calc(var(--p) + 10%) } }");
@@ -361,7 +361,7 @@ static void test_l111_op_6(void) {
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(0, op_of("i"));
     TEST_ASSERT_EQUAL(-1, op_of("q"));
-    TEST_ASSERT_EQUAL(3500, op_of("body"));
+    TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #i { --a: 0.25; --b: 0.8 } #i { opacity: var(--a) } #i { opacity: calc((0.1 + 0.2) * 2); opacity: unset !important } body { --a: calc(0.1 * 3) } #o { --a: 1.5; --p: 20% } #o { opacity: revert; opacity: calc(50% / 4) } #q { --a: 0.8 } @layer a { body { opacity: max(0.1, 50%) } }");
     TEST_ASSERT_EQUAL(1250, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
@@ -383,7 +383,7 @@ static void test_l111_op_6(void) {
     TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; div { opacity: calc(var(--b) / 2) !important; opacity: calc(-1 * 20%) } #o { opacity: calc(0.9 / 2) } @layer a { #q { opacity: 1 } } div { opacity: calc(var(--a) * 2) } @layer a { #o { all: initial; opacity: inherit } }");
-    TEST_ASSERT_EQUAL(4500, op_of("o"));
+    TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(10000, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
@@ -414,7 +414,7 @@ static void test_l111_op_7(void) {
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(5000, op_of("q"));
-    TEST_ASSERT_EQUAL(1000, op_of("body"));
+    TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; @layer b { div { opacity: unset !important } } @layer b { p { opacity: calc(1 / 0) } }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
@@ -436,7 +436,7 @@ static void test_l111_op_7(void) {
     TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #q { opacity: var(--b) } div { opacity: 0.25 } div { opacity: calc(var(--b) / 2); opacity: var(--b) } #o { opacity: calc(0.5 + 10%) } @layer b { #o { opacity: calc(30% * 2) } } #o { --a: nonsense } #q { --a: 0.25 }");
-    TEST_ASSERT_EQUAL(2500, op_of("o"));
+    TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
@@ -535,7 +535,7 @@ static void test_l111_op_9(void) {
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(-1, op_of("q"));
-    TEST_ASSERT_EQUAL(2500, op_of("body"));
+    TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #i { --a: 0.25; --b: 0.8 } @layer b { div { opacity: 0.5 } } body { --a: 40% } @layer b { p { all: inherit } }");
     TEST_ASSERT_EQUAL(5000, op_of("o"));
     TEST_ASSERT_EQUAL(5000, op_of("i"));
@@ -562,7 +562,7 @@ static void test_l111_op_10(void) {
     prep("@layer a, b; p { opacity: 0.1; opacity: var(--b) } #i { opacity: revert } @layer a { body { opacity: calc(0.5px) } } div { opacity: 0.1 !important }");
     TEST_ASSERT_EQUAL(1000, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
-    TEST_ASSERT_EQUAL(1000, op_of("q"));
+    TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #i { opacity: calc(50% / 4) } #q { --a: 1.5 } body { opacity: 0.5 } body { --a: calc(0.1 * 3); --b: nonsense } div { opacity: inherit !important; opacity: revert-layer } body { opacity: calc(0.5) }");
     TEST_ASSERT_EQUAL(5000, op_of("o"));
@@ -595,7 +595,7 @@ static void test_l111_op_10(void) {
     TEST_ASSERT_EQUAL(2000, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; @layer b { body { opacity: 0 } } #o { opacity: calc(var(--a) * 2) !important } @layer b { div { opacity: unset; opacity: 0.1 } } @layer a { div { all: initial } }");
-    TEST_ASSERT_EQUAL(1000, op_of("o"));
+    TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(0, op_of("body"));
@@ -638,7 +638,7 @@ static void test_l111_op_11(void) {
     TEST_ASSERT_EQUAL(2000, op_of("q"));
     TEST_ASSERT_EQUAL(0, op_of("body"));
     prep("@layer a, b; body { --a: 0.8 } @layer b { #o { opacity: 0; opacity: calc(var(--b) / 2) } } #i { --a: 1.5; --b: 0.3; --p: 20% } @layer b { div { all: revert-layer } } body { opacity: calc(0.5) } @layer a { p { opacity: var(--n, 0.4) } } #q { --a: 0.8 }");
-    TEST_ASSERT_EQUAL(0, op_of("o"));
+    TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(4000, op_of("i"));
     TEST_ASSERT_EQUAL(4000, op_of("q"));
     TEST_ASSERT_EQUAL(5000, op_of("body"));
@@ -646,9 +646,9 @@ static void test_l111_op_11(void) {
     TEST_ASSERT_EQUAL(2500, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(0, op_of("q"));
-    TEST_ASSERT_EQUAL(0, op_of("body"));
+    TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #o { opacity: calc(var(--b) / 2) !important; opacity: 70% } @layer a { #i { opacity: var(--a) } } @layer b { div { opacity: var(--a, 0.5) } } @layer b { #i { all: revert } } body { all: initial } #q { --a: calc(0.1 * 3); --b: 1.5 } body { --a: 0.25; --p: 20% }");
-    TEST_ASSERT_EQUAL(7000, op_of("o"));
+    TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
@@ -698,7 +698,7 @@ static void test_l111_op_12(void) {
     prep("@layer a, b; #q { opacity: 0.1; opacity: var(--a, 0.5) } #o { all: revert-layer } #o { opacity: min(var(--a), 0.3) } #o { opacity: min(var(--a), 0.3) } @layer b { #q { opacity: calc(var(--b) / 2) !important; opacity: calc(30% * 2) } } @layer b { #i { opacity: var(--b) } }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
-    TEST_ASSERT_EQUAL(5000, op_of("q"));
+    TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #i { opacity: revert } @layer b { #o { all: revert-layer; opacity: var(--n, 0.4) !important } } p { opacity: var(--a); all: revert }");
     TEST_ASSERT_EQUAL(4000, op_of("o"));
@@ -803,7 +803,7 @@ static void test_l111_op_14(void) {
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; body { opacity: 0; all: revert-layer } p { all: unset } @layer a { div { opacity: inherit } } #q { all: revert-layer !important; all: revert } #i { opacity: calc(1 - 0.75); opacity: var(--n, var(--a)) }");
     TEST_ASSERT_EQUAL(10000, op_of("o"));
-    TEST_ASSERT_EQUAL(2500, op_of("i"));
+    TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; p { opacity: calc(var(--b) / 2) } #o { --a: nonsense; --p: 20% } body { --a: nonsense } @layer b { #o { opacity: var(--n, var(--a)) } } #i { --a: 0.8; --p: 20% }");
@@ -814,7 +814,7 @@ static void test_l111_op_14(void) {
     prep("@layer a, b; #q { opacity: var(--a) } @layer b { div { all: revert-layer } } @layer b { p { opacity: 0.5; opacity: calc(0.2 - 0.5) } }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(0, op_of("i"));
-    TEST_ASSERT_EQUAL(0, op_of("q"));
+    TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
 }
 
@@ -828,7 +828,7 @@ static void test_l111_op_15(void) {
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(10000, op_of("q"));
-    TEST_ASSERT_EQUAL(4000, op_of("body"));
+    TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #o { opacity: calc(0.25 + 0.5) !important; opacity: max(20%, 35%) } #q { --a: nonsense; --b: 1.5; --p: 20% } @layer a { #q { opacity: 0.5 } }");
     TEST_ASSERT_EQUAL(7500, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
@@ -860,7 +860,7 @@ static void test_l111_op_15(void) {
     TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; div { opacity: 1 } #o { all: revert-layer } @layer a { #i { opacity: var(--n, var(--a)) !important; opacity: calc((0.1 + 0.2) * 2) } } body { --a: 0.8; --b: 0.8; --p: 35% } #o { opacity: var(--n, 0.4); opacity: var(--n) } body { all: revert; opacity: var(--a) }");
-    TEST_ASSERT_EQUAL(4000, op_of("o"));
+    TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(8000, op_of("i"));
     TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(8000, op_of("body"));
@@ -894,8 +894,8 @@ static void test_l111_op_16(void) {
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; @layer a { div { opacity: var(--n, var(--a)) } } #q { opacity: min(var(--a), 0.3); opacity: calc(var(--b) / 2) } #q { opacity: max(20%, 35%) } @layer a { p { all: inherit; opacity: calc(var(--b) / 2) } } #q { opacity: calc(var(--a) * 2); opacity: revert-layer } #o { --a: 0.25; --p: 0.2 }");
     TEST_ASSERT_EQUAL(2500, op_of("o"));
-    TEST_ASSERT_EQUAL(2500, op_of("i"));
-    TEST_ASSERT_EQUAL(10000, op_of("q"));
+    TEST_ASSERT_EQUAL(-1, op_of("i"));
+    TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; @layer a { p { opacity: clamp(10%, 50%, 40%) } } #i { opacity: 70% } p { opacity: unset } @layer b { body { opacity: initial } } #i { opacity: revert-layer }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
@@ -1000,17 +1000,17 @@ static void test_l111_op_18(void) {
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; @layer b { div { opacity: initial } } @layer a { #o { opacity: calc(2 * 30%) } } #q { --a: 0.8 } @layer b { p { opacity: calc(50% / 4); opacity: calc(var(--b) / 2) } } @layer a { body { opacity: var(--n); opacity: calc(10% * 10%) } } #o { opacity: calc(0.5) }");
     TEST_ASSERT_EQUAL(5000, op_of("o"));
-    TEST_ASSERT_EQUAL(1250, op_of("i"));
-    TEST_ASSERT_EQUAL(1250, op_of("q"));
+    TEST_ASSERT_EQUAL(-1, op_of("i"));
+    TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #o { --a: 0.25; --p: 0.2 } @layer a { div { opacity: inherit; opacity: calc(0.5) !important } } #q { --a: nonsense } @layer a { div { opacity: clamp(0, 0.35, 1); all: inherit } } body { --a: nonsense; --b: 1.5; --p: 0.2 } #q { opacity: calc(var(--a) * 2) } p { all: revert-layer } @layer a { #q { opacity: var(--n, 0.4) } }");
     TEST_ASSERT_EQUAL(5000, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
-    TEST_ASSERT_EQUAL(4000, op_of("q"));
+    TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; #o { --a: calc(0.1 * 3) } p { opacity: calc(var(--p) + 10%) } @layer b { #i { opacity: calc(0.5) } }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
-    TEST_ASSERT_EQUAL(5000, op_of("i"));
+    TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
     prep("@layer a, b; @layer a { #o { opacity: revert } } #o { --a: 40% } @layer a { #o { opacity: initial; opacity: revert-layer } }");
@@ -1032,7 +1032,7 @@ static void test_l111_op_18(void) {
 
 static void test_l111_op_19(void) {
     prep("@layer a, b; @layer a { #o { opacity: var(--n, 0.4); opacity: calc(50% / 4) !important } } @layer b { #i { opacity: max(20%, 35%); opacity: revert-layer } } #q { --a: 40% } @layer a { #o { opacity: 0.1; opacity: calc(var(--a) * 2) !important } } @layer b { #q { all: inherit } } #i { --a: calc(0.1 * 3); --b: 1.5 } @layer a { #q { opacity: calc(0.5 + 10%); all: revert-layer } }");
-    TEST_ASSERT_EQUAL(1250, op_of("o"));
+    TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(10000, op_of("q"));
     TEST_ASSERT_EQUAL(-1, op_of("body"));
@@ -1044,7 +1044,7 @@ static void test_l111_op_19(void) {
     prep("@layer a, b; body { opacity: calc(0.5px) } body { opacity: clamp(0, 0.35, 1) !important } @layer b { #q { opacity: min(var(--a), 0.3); opacity: calc(var(--p) + 10%) } } body { all: revert } @layer a { #q { opacity: min(1, calc(0.3 * 2)) } } p { all: revert-layer }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
-    TEST_ASSERT_EQUAL(6000, op_of("q"));
+    TEST_ASSERT_EQUAL(-1, op_of("q"));
     TEST_ASSERT_EQUAL(3500, op_of("body"));
     prep("@layer a, b; #i { opacity: inherit } @layer a { div { opacity: calc(50% / 4) } } #i { --a: 40%; --b: 40%; --p: 20% } @layer a { p { opacity: 0.1; opacity: 0.1 !important } } @layer b { #o { all: initial } } body { opacity: 0.25; opacity: 0.5 }");
     TEST_ASSERT_EQUAL(-1, op_of("o"));
@@ -1133,7 +1133,7 @@ static void test_l111_op_20(void) {
     TEST_ASSERT_EQUAL(0, op_of("o"));
     TEST_ASSERT_EQUAL(-1, op_of("i"));
     TEST_ASSERT_EQUAL(2500, op_of("q"));
-    TEST_ASSERT_EQUAL(6000, op_of("body"));
+    TEST_ASSERT_EQUAL(-1, op_of("body"));
 }
 
 static void test_l111_op_21(void) {

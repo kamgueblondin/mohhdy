@@ -68,4 +68,15 @@ int wf_css_math_box_lh(const char *s, int vw, int vh, int em_px, int rem_px, int
  * px: 1 and *px (px thousandths), -1 otherwise (0 for an empty string is
  * -1 here) */
 int wf_css_math_box_at(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int basis, int *px);
+/* Lot 112: the inputs of a box length in one place: the viewport, em,
+ * rem, the element's line height (lh) and the root element's (rlh) in px
+ * thousandths, each negative for line-height normal (10/16 of em_px,
+ * 10/16 of rem_px for rlh), and the basis of a percentage (negative: the
+ * containing block is unknown) */
+typedef struct {
+    int vw, vh, em_px, rem_px, lh_px, rlh_px, basis;
+} wf_css_box_ctx_t;
+/* Lot 112: wf_css_math_box_lh or, with a basis, wf_css_math_box_at (out
+ * may then be 0), with rlh against c->rlh_px */
+int wf_css_math_box_ctx(const char *s, const wf_css_box_ctx_t *c, int *px, char *out, int cap);
 #endif

@@ -25,8 +25,9 @@ typedef struct {
     int box, olen, cap;
     char *out;
     /* Lot 111: lh against this line height (px thousandths) when >= 0,
-     * else line-height normal (10/16 em) */
-    int lh_px;
+     * else line-height normal (10/16 em); Lot 112: rlh against the root's
+     * (else 10/16 rem) */
+    int lh_px, rlh_px;
     /* Lot 111: % of this basis (px thousandths) when >= 0 (box mode) */
     int basis;
     /* Lot 111: the trees of mixed values */
@@ -113,6 +114,12 @@ static mv_t with_unit(mp_t *p, int n) {
     else if (pre(p->s + p->i, "vmax")) { p->i += 4; v.px = mul_milli(n, (vw > vh ? vw : vh) * 10, &p->bad); }
     else if (pre(p->s + p->i, "vw")) { p->i += 2; v.px = mul_milli(n, vw * 10, &p->bad); }
     else if (pre(p->s + p->i, "vh")) { p->i += 2; v.px = mul_milli(n, vh * 10, &p->bad); }
+    else if (p->box && pre(p->s + p->i, "rlh")) {
+        /* Lot 112: the root element's line height */
+        p->i += 3;
+        if (p->rlh_px >= 0) v.px = mul_milli(n, p->rlh_px, &p->bad);
+        else { int x = mul_milli(n, p->rem_px, &p->bad); v.px = x / 16 * 10 + x % 16 * 10 / 16; }
+    }
     else if (p->box && (pre(p->s + p->i, "ex") || pre(p->s + p->i, "ch") || pre(p->s + p->i, "lh"))) {
         /* Lot 109: the font's metrics (wf_cssprop.h, webeng.h at 16 px):
          * ex 5/16 em (inked rows of "x"), ch 8/16 em (WE_CHAR_W), lh
@@ -195,8 +202,6 @@ static void put_lin(mp_t *p, mv_t v) {
     put_int(p, v.px, "px)");
 }
 
-static int key(mv_t v, int part);
-
 /* Lot 111: a new tree node, or -1 (bad) */
 static int mx_new(mp_t *p, int op, int px, int em) {
     mx_t *x;
@@ -219,15 +224,22 @@ static mv_t mx_val(mp_t *p, int x) {
     return v;
 }
 
+/* Lot 112: leaf b is never below leaf a (op MX_MIN: a can stand for b
+ * in a min()) when a's px and % parts are both at most b's, as a % is of
+ * a size that is never negative; the first of equal ones stays */
+static int mx_cover(const mx_t *a, const mx_t *b, int op) {
+    if (op == MX_MIN) return a->px <= b->px && a->em <= b->em;
+    return a->px >= b->px && a->em >= b->em;
+}
+
 /* Lot 111: min (op MX_MIN) or max of the trees kid[0..n): a kid of the
- * same op gives its own kids (min(a, min(b, c)) is min(a, b, c)); leaves
- * that share one part are compared as CSS has it (the first of equal
- * ones), one kid is the value itself */
+ * same op gives its own kids (min(a, min(b, c)) is min(a, b, c)); one kid
+ * is the value itself. Lot 112: a leaf covered by another leaf goes
+ * (mx_cover: min(10px, 20px, 5%) is min(10px, 5%), min(3px, calc(10% +
+ * 5px)) is 3px), so more values fit the engine's bounds */
 static int mx_op(mp_t *p, int op, const int *kid, int n) {
-    int k, j, x, all = 1;
-    mv_t a[MX_KIDS];
-    int flat[MX_KIDS], m = 0;
-    a[0].px = a[0].em = 0;      /* n >= 1 here; for gcc's -Wmaybe-uninitialized */
+    int k, j, x;
+    int flat[MX_KIDS], m = 0, keep = 0;
     if (p->bad) return -1;
     for (k = 0; k < n; k++) {
         const mx_t *t = &p->mx[kid[k] < 0 ? 0 : kid[k]];
@@ -237,18 +249,17 @@ static int mx_op(mp_t *p, int op, const int *kid, int n) {
         else flat[m++] = kid[k];
     }
     for (k = 0; k < m; k++) {
-        if (p->mx[flat[k]].op != MX_LIN) all = 0;
-        a[k].px = p->mx[flat[k]].px; a[k].em = p->mx[flat[k]].em; a[k].len = 1; a[k].mix = 0;
-    }
-    if (all) {
-        int part = one_part(a, m);
-        if (part) {
-            x = 0;
-            for (k = 1; k < m; k++)
-                if (op == MX_MIN ? key(a[k], part) < key(a[x], part) : key(a[k], part) > key(a[x], part)) x = k;
-            return flat[x];
+        const mx_t *b = &p->mx[flat[k]];
+        int gone = 0;
+        for (j = 0; j < m && !gone && b->op == MX_LIN; j++) {
+            const mx_t *a = &p->mx[flat[j]];
+            if (j == k || a->op != MX_LIN || !mx_cover(a, b, op)) continue;
+            /* of two equal leaves the later one goes */
+            gone = j < k || !mx_cover(b, a, op);
         }
+        if (!gone) flat[keep++] = flat[k];
     }
+    m = keep;
     if (m == 1) return flat[0];
     x = mx_new(p, op, 0, 0);
     if (x < 0) return -1;
@@ -507,7 +518,7 @@ int wf_css_math(const char *s, int vw, int vh, char *out, int cap) {
     out[0] = 0;
     if (!wf_css_is_math(s)) return 0;
     p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
-    p.ctx = 0; p.em_px = p.rem_px = 0; p.box = 0; p.olen = 0; p.lh_px = -1; p.basis = -1; p.nmx = 0;
+    p.ctx = 0; p.em_px = p.rem_px = 0; p.box = 0; p.olen = 0; p.lh_px = p.rlh_px = -1; p.basis = -1; p.nmx = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i] || !v.len) return -1;
@@ -525,7 +536,7 @@ int wf_css_math_px(const char *s, int vw, int vh, int em_px, int rem_px, int *px
     if (!s[0]) return 0;
     if (em_px <= 0 || em_px > WF_CSSMATH_MAX || rem_px <= 0 || rem_px > WF_CSSMATH_MAX) return -1;
     p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
-    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px; p.box = 0; p.olen = 0; p.lh_px = -1; p.basis = -1; p.nmx = 0;
+    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px; p.box = 0; p.olen = 0; p.lh_px = p.rlh_px = -1; p.basis = -1; p.nmx = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i]) return -1;
@@ -534,40 +545,58 @@ int wf_css_math_px(const char *s, int vw, int vh, int em_px, int rem_px, int *px
     return 1;
 }
 
-static int box_run(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int basis, int *px, char *out,
-                   int cap);
+static int box_run(const char *s, const wf_css_box_ctx_t *c, int *px, char *out, int cap);
+
+static wf_css_box_ctx_t box_ctx(int vw, int vh, int em_px, int rem_px, int lh_px, int basis) {
+    wf_css_box_ctx_t c;
+    c.vw = vw; c.vh = vh; c.em_px = em_px; c.rem_px = rem_px; c.lh_px = lh_px; c.rlh_px = -1; c.basis = basis;
+    return c;
+}
 
 /* Lot 109: a box scroller length, see wf_cssmath.h */
 int wf_css_math_box(const char *s, int vw, int vh, int em_px, int rem_px, int *px, char *out, int cap) {
-    return wf_css_math_box_lh(s, vw, vh, em_px, rem_px, -1, px, out, cap);
+    wf_css_box_ctx_t c = box_ctx(vw, vh, em_px, rem_px, -1, -1);
+    return box_run(s, &c, px, out, cap);
 }
 
 /* Lot 111: with the element's line height, see wf_cssmath.h */
 int wf_css_math_box_lh(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int *px, char *out, int cap) {
-    return box_run(s, vw, vh, em_px, rem_px, lh_px, -1, px, out, cap);
+    wf_css_box_ctx_t c = box_ctx(vw, vh, em_px, rem_px, lh_px, -1);
+    return box_run(s, &c, px, out, cap);
 }
 
 /* Lot 111: with percentages of a known basis, see wf_cssmath.h */
 int wf_css_math_box_at(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int basis, int *px) {
-    char out[4];
+    wf_css_box_ctx_t c = box_ctx(vw, vh, em_px, rem_px, lh_px, basis);
     if (px) *px = 0;
-    if (basis < 0 || basis > WF_CSSMATH_MAX) return -1;
-    return box_run(s, vw, vh, em_px, rem_px, lh_px, basis, px, out, (int)sizeof(out)) == 1 ? 1 : -1;
+    if (basis < 0) return -1;
+    return wf_css_math_box_ctx(s, &c, px, 0, 0);
 }
 
-static int box_run(const char *s, int vw, int vh, int em_px, int rem_px, int lh_px, int basis, int *px, char *out,
-                   int cap) {
+/* Lot 112: see wf_cssmath.h */
+int wf_css_math_box_ctx(const char *s, const wf_css_box_ctx_t *c, int *px, char *out, int cap) {
+    char o[4];
+    if (px) *px = 0;
+    if (!c) return -1;
+    if (c->basis < 0) return box_run(s, c, px, out, cap);
+    if (c->basis > WF_CSSMATH_MAX) return -1;
+    return box_run(s, c, px, o, (int)sizeof(o)) == 1 ? 1 : -1;
+}
+
+static int box_run(const char *s, const wf_css_box_ctx_t *c, int *px, char *out, int cap) {
     mp_t p;
     mv_t v;
     if (!s || !px || !out || cap <= 0) return -1;
     *px = 0;
     out[0] = 0;
     if (!s[0]) return 0;
-    if (em_px <= 0 || em_px > WF_CSSMATH_MAX || rem_px <= 0 || rem_px > WF_CSSMATH_MAX || lh_px > WF_CSSMATH_MAX)
+    if (c->em_px <= 0 || c->em_px > WF_CSSMATH_MAX || c->rem_px <= 0 || c->rem_px > WF_CSSMATH_MAX ||
+        c->lh_px > WF_CSSMATH_MAX || c->rlh_px > WF_CSSMATH_MAX)
         return -1;
-    p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
-    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px;
-    p.box = 1; p.olen = 0; p.cap = cap; p.out = out; p.lh_px = lh_px < 0 ? -1 : lh_px; p.basis = basis; p.nmx = 0;
+    p.s = s; p.i = 0; p.depth = 0; p.vw = c->vw; p.vh = c->vh; p.bad = 0;
+    p.ctx = 1; p.em_px = c->em_px; p.rem_px = c->rem_px;
+    p.box = 1; p.olen = 0; p.cap = cap; p.out = out; p.lh_px = c->lh_px < 0 ? -1 : c->lh_px;
+    p.rlh_px = c->rlh_px < 0 ? -1 : c->rlh_px; p.basis = c->basis; p.nmx = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i] || (!v.len && v.px)) { out[0] = 0; return -1; }

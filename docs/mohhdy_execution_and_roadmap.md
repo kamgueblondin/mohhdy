@@ -7,6 +7,18 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 112 (17 November 2026, base 48709b8, PR 269 merged)
+
+US-031 partial, phase3_complete=false. The reader passes line-height to
+the engine (whole px within its bounds, or normal); line-height takes
+math functions with percentages or numbers, rlh, all, revert and
+revert-layer; mixed min()/max() drop the arguments another one covers;
+var() in opacity, color and background-color keyframes is the animated
+element's; var() invalid at computed-value time is unset for opacity and
+line-height. webeng.c unchanged. A QEMU page (`make qemu-lot112`, CI job
+lot112-reader-lh) checks it. US-068/073, US-076, US-080 and US-081 stay
+partial. US-078 and US-097 stay simule. See docs/lot112_plan.md.
+
 ### Lot 111 (16 November 2026, base f9668e2, PR 268 merged)
 
 US-031 partial, phase3_complete=false. The reader reads line-height and
