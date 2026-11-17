@@ -1078,7 +1078,7 @@ static jv ev(js_vm_t *vm, uint32_t env, uint32_t n) {
     }
     case N_CLASS: return eval_class(vm, env, n);
     case N_REGEX: {
-        uint32_t r = js_regexp_new(vm, x->a, x->b);
+        uint32_t r = js_regexp_lit(vm, x->a, x->b, &x->c);
         return r ? jv_obj(r) : jv_undef();
     }
     case N_UNARY: return eval_unary(vm, env, n);

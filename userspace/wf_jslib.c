@@ -147,16 +147,23 @@ jv js_iter_values(js_vm_t *vm, jv v, uint32_t *arr_out) {
 }
 
 uint32_t js_join(js_vm_t *vm, uint32_t arr, uint32_t sep) {
-    uint32_t acc = vm->s_empty, i, len;
+    uint32_t i, len;
+    js_sb_t b;
     jv a = jv_obj(arr);
     js_length_of(vm, a, &len);
+    js_sb_init(vm, &b);
     for (i = 0; i < len && !vm->ctl; i++) {
         jv v = js_get_v(vm, a, jv_int((int32_t)i));
         if (vm->ctl) break;
-        if (i) acc = js_str_cat(vm, acc, sep);
-        if (!jv_is_nullish(v)) acc = js_str_cat(vm, acc, js_to_string(vm, v));
+        if (i) js_sb_str(vm, &b, sep);
+        if (!jv_is_nullish(v)) {
+            uint32_t s = js_to_string(vm, v);
+            if (vm->ctl) break;
+            js_sb_str(vm, &b, s);
+        }
     }
-    return acc;
+    if (vm->ctl) return vm->s_empty;
+    return js_sb_finish(vm, &b);
 }
 
 /* ---- Object ---- */

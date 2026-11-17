@@ -302,12 +302,32 @@ uint32_t js_json_stringify(js_vm_t *vm, jv v, jv replacer, jv space, int *undef)
 jv js_iter_values(js_vm_t *vm, jv v, uint32_t *arr_out);   /* spread/for-of source as an array */
 uint32_t js_join(js_vm_t *vm, uint32_t arr, uint32_t sep);
 
+/* a growing byte buffer in the arena (wf_jslib2.c); the old block is
+ * left behind on growth, so a build costs at most twice its size */
+typedef struct { uint32_t ref, len, cap; } js_sb_t;
+void js_sb_init(js_vm_t *vm, js_sb_t *b);
+void js_sb_put(js_vm_t *vm, js_sb_t *b, const char *s, int n);
+void js_sb_str(js_vm_t *vm, js_sb_t *b, uint32_t str);
+void js_sb_ch(js_vm_t *vm, js_sb_t *b, char c);
+uint32_t js_sb_finish(js_vm_t *vm, js_sb_t *b);
+
 /* ---- wf_jsre.c ---- */
 int js_regexp_init(js_vm_t *vm);
 uint32_t js_regexp_new(js_vm_t *vm, uint32_t source, uint32_t flags);
+/* a literal: the compiled program is kept in *cache for the next evaluation */
+uint32_t js_regexp_lit(js_vm_t *vm, uint32_t source, uint32_t flags, uint32_t *cache);
 /* exec at lastIndex rules; returns the match array or null */
 jv js_regexp_exec(js_vm_t *vm, uint32_t re, uint32_t str);
 int js_is_regexp(js_vm_t *vm, jv v);
+#define JS_RE_MAXCAP 32
+/* find the first match at or after byte start; caps gets 2 * ncap
+ * offsets (start, end; -1 when a group did not take part). 1 on a
+ * match, 0 on none, -1 when the run aborted (budget) */
+int js_regexp_search(js_vm_t *vm, uint32_t re, uint32_t str, int start, int *caps);
+int js_regexp_ncap(js_vm_t *vm, uint32_t re);      /* groups + 1 */
+int js_regexp_global(js_vm_t *vm, uint32_t re);
+/* the exec() result array for a match */
+jv js_regexp_result(js_vm_t *vm, uint32_t re, uint32_t str, const int *caps);
 
 #define JARG(i) ((i) < argc ? argv[(i)] : jv_undef())
 #define JCK(vm) do { if ((vm)->ctl) return jv_undef(); } while (0)
