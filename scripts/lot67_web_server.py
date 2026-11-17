@@ -939,6 +939,35 @@ LOT112_PAGES = {
 }
 
 
+# Lot 113 (US-031): a page whose content comes from its inline scripts (the
+# JavaScript subset of the page pass, web-js on): DOM edits, document.write,
+# DOMContentLoaded, a timer, a regex, JSON, and a script that throws (the
+# next one still runs); with web-js off the page is the static one
+# (tests/scripts/test_qemu_lot113.py)
+LOT113_PAGES = {
+    "/lot113/js.html": (
+        "<!doctype html><html><head><title>Lot 113 js</title></head><body>"
+        "<h1 id=\"h\">static113</h1><noscript><p>nojs113</p></noscript>"
+        "<ul id=\"list\"></ul><p id=\"w\">wait113</p>"
+        "<script>\n"
+        "var items = ['alpha113', 'beta113', 'gamma113'];\n"
+        "var ul = document.getElementById('list');\n"
+        "items.forEach(function (s, i) { var li = document.createElement('li'); li.textContent = (i + 1) + '. ' + s; ul.appendChild(li); });\n"
+        "document.getElementById('h').textContent = 'dynamic113 ' + [1, 2, 3].map(x => x * x).join('+');\n"
+        "document.write('<p id=\"dw\">written113 ' + JSON.stringify({n: 42}) + '</p>');\n"
+        "console.log('log113', items.length);\n"
+        "</script>"
+        "<script>\n"
+        "document.addEventListener('DOMContentLoaded', function () {\n"
+        "  document.getElementById('w').textContent = 'ready113 ' + document.querySelectorAll('#list li').length; });\n"
+        "setTimeout(function () { var p = document.createElement('p');\n"
+        "  p.textContent = 'timer113 ' + /(\\d+)-(\\d+)/.exec('10-20')[2]; document.body.appendChild(p); }, 10);\n"
+        "missing113();\n"
+        "</script>"
+        "<p>fin113</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -1182,6 +1211,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT112_PAGES:
             self._send(200, LOT112_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT113_PAGES:
+            self._send(200, LOT113_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

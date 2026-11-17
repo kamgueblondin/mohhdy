@@ -1765,6 +1765,11 @@ qemu-lot111: $(OS_IMAGE) pack-initrd disk
 qemu-lot112: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot112.py
 
+# Lot 113 (US-031): the JavaScript subset, page script pass and js REPL
+.PHONY: qemu-lot113
+qemu-lot113: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot113.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py
