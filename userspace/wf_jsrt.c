@@ -726,7 +726,10 @@ static jv string_own(js_vm_t *vm, uint32_t s, uint32_t key, int *found) {
     return jv_undef();
 }
 
-jv js_get(js_vm_t *vm, jv objv, uint32_t key) {
+jv js_get(js_vm_t *vm, jv objv, uint32_t key) { return js_get_recv(vm, objv, key, objv); }
+
+/* [[Get]] with a receiver: accessors run with recv as this (super.x) */
+jv js_get_recv(js_vm_t *vm, jv objv, uint32_t key, jv recv) {
     uint32_t o;
     int depth = 0, found;
     switch (objv.t) {
@@ -776,7 +779,7 @@ jv js_get(js_vm_t *vm, jv objv, uint32_t key) {
         if (p) {
             if (p->flags & P_ACCESSOR) {
                 if (!p->v.a) return jv_undef();
-                return js_call(vm, jv_obj(p->v.a), objv, 0, 0);
+                return js_call(vm, jv_obj(p->v.a), recv, 0, 0);
             }
             return p->v;
         }

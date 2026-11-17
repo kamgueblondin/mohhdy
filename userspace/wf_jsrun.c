@@ -761,8 +761,16 @@ static jv eval_call(js_vm_t *vm, uint32_t env, uint32_t n) {
         if (NODE(cn->a)->k == N_SUPER) {
             jv base = super_base(vm, env, &thisv);
             if (vm->ctl) return jv_undef();
-            if (cn->k == N_MEMBER) fn = js_get(vm, base, NODE(callee)->b);
-            else { key = ev(vm, env, NODE(callee)->b); if (vm->ctl) return jv_undef(); fn = js_get_v(vm, base, key); }
+            if (jv_is_nullish(base)) fn = js_get(vm, base, cn->k == N_MEMBER ? NODE(callee)->b : vm->s_empty);
+            else if (cn->k == N_MEMBER) fn = js_get_recv(vm, base, NODE(callee)->b, thisv);
+            else {
+                uint32_t k;
+                key = ev(vm, env, NODE(callee)->b);
+                if (vm->ctl) return jv_undef();
+                k = js_to_key(vm, key);
+                if (vm->ctl) return jv_undef();
+                fn = js_get_recv(vm, base, k, thisv);
+            }
         } else {
             thisv = ev(vm, env, cn->a);
             if (vm->ctl) return jv_undef();
@@ -1116,11 +1124,15 @@ static jv ev(js_vm_t *vm, uint32_t env, uint32_t n) {
         if (NODE(x->a)->k == N_SUPER) {
             jv thisv, base = super_base(vm, env, &thisv);
             if (vm->ctl) return jv_undef();
-            if (x->k == N_MEMBER) return js_get(vm, base, x->b);
+            if (jv_is_nullish(base)) return js_get(vm, base, x->k == N_MEMBER ? x->b : vm->s_empty);
+            if (x->k == N_MEMBER) return js_get_recv(vm, base, x->b, thisv);
             {
                 jv key = ev(vm, env, NODE(n)->b);
+                uint32_t k;
                 if (vm->ctl) return jv_undef();
-                return js_get_v(vm, base, key);
+                k = js_to_key(vm, key);
+                if (vm->ctl) return jv_undef();
+                return js_get_recv(vm, base, k, thisv);
             }
         }
         o = ev(vm, env, x->a);

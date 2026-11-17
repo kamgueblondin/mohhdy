@@ -266,6 +266,7 @@ uint32_t js_typeof(js_vm_t *vm, jv v);
 
 /* properties through the prototype chain and host hooks */
 jv js_get(js_vm_t *vm, jv obj, uint32_t key);
+jv js_get_recv(js_vm_t *vm, jv obj, uint32_t key, jv recv);
 jv js_get_v(js_vm_t *vm, jv obj, jv key);
 jv js_get_c(js_vm_t *vm, jv obj, const char *name);
 int js_put(js_vm_t *vm, jv obj, uint32_t key, jv v);

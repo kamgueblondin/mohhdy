@@ -532,7 +532,8 @@ int wf_jsdom_roundtrip(const char *html, int n, char *out, int out_max) {
 }
 
 /* ---- selectors: compounds of tag, #id, .class, [attr op value],
- * :first-child, :last-child, :not(simple), with the descendant, >, + and ~
+ * :first-child, :last-child, :only-child, :root, :empty, :checked, :disabled,
+ * :enabled, :not(simple), with the descendant, >, + and ~
  * combinators, and comma lists ---- */
 
 static int attr_val(int k, const char *name, const char **v, int *vl) {
@@ -644,6 +645,18 @@ static int match_compound(int k, const char *s, int a, int b) {
                 i = e < b ? e + 1 : b;
             } else if (l == 4 && s[st] == 'r') {      /* root */
                 if (g_n[k].parent < 0 || g_n[g_n[k].parent].type != DN_DOC) return 0;
+            } else if (l == 7 && s[st] == 'c') {      /* checked */
+                if (attr_find(k, "checked", 7) < 0 && attr_find(k, "selected", 8) < 0) return 0;
+            } else if (l == 8 && s[st] == 'd') {      /* disabled */
+                if (attr_find(k, "disabled", 8) < 0) return 0;
+            } else if (l == 7 && s[st] == 'e' && s[st + 1] == 'n') {  /* enabled */
+                if (attr_find(k, "disabled", 8) >= 0) return 0;
+            } else if (l == 5 && s[st] == 'e') {      /* empty */
+                int c;
+                for (c = g_n[k].first; c >= 0; c = g_n[c].next)
+                    if (g_n[c].type == DN_ELEM || (g_n[c].type == DN_TEXT && g_n[c].text_len)) return 0;
+            } else if (l == 10 && s[st] == 'o' && s[st + 3] == 'y') {  /* only-child */
+                if (prev_elem(k) >= 0 || next_elem(k) >= 0) return 0;
             } else {
                 return -1;
             }
@@ -734,7 +747,7 @@ static int walk_next(int k, int root) {
 
 /* ---- the JavaScript side ---- */
 
-enum { HK_NODE = 0, HK_STYLE = 1, HK_CLASSLIST = 2 };
+enum { HK_NODE = 0, HK_STYLE = 1, HK_CLASSLIST = 2, HK_DATASET = 3, HK_CHILDREN = 4, HK_CHILDNODES = 5 };
 
 enum {
     K_nodeType, K_nodeName, K_tagName, K_id, K_className, K_textContent, K_innerText, K_innerHTML, K_outerHTML,
@@ -762,7 +775,7 @@ typedef struct {
     js_vm_t *vm;
     uint32_t key[K_COUNT];
     uint32_t reflect[24];
-    uint32_t p_node, p_style, p_classlist;
+    uint32_t p_node, p_style, p_classlist, p_coll;
     int doc;
     char ready[16];
     uint32_t cookie;            /* the document.cookie string */
@@ -886,7 +899,8 @@ static void set_text(js_vm_t *vm, int k, uint32_t s) {
     remove_children(k);
     if (!JSTR(vm, s)->len) return;
     t = text_node_from(vm, s, node_in_list(k, k_raw));
-    if (t < 0 || dom_bound(vm)) return;
+    if (t < 0) { dom_bound(vm); return; }
+    if (dom_bound(vm)) return;
     insert_before(k, t, -1);
 }
 
@@ -938,17 +952,6 @@ static uint32_t tag_upper(js_vm_t *vm, int k) {
         b[i] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
     }
     return js_str_new(vm, b, n);
-}
-
-static jv child_list(js_vm_t *vm, int k, int elems_only) {
-    uint32_t a = js_array_new(vm, 8);
-    int c;
-    if (!a) return jv_undef();
-    for (c = g_n[k].first; c >= 0; c = g_n[c].next) {
-        if (elems_only && g_n[c].type != DN_ELEM) continue;
-        js_array_push(vm, a, node_obj(vm, c));
-    }
-    return jv_obj(a);
 }
 
 static jv sub_obj(js_vm_t *vm, int k, int kind, uint32_t proto) {
@@ -1257,8 +1260,8 @@ static int node_get(js_vm_t *vm, int k, uint32_t key, jv *out) {
     case K_outerHTML: if (d->type != DN_ELEM) return 0; *out = jv_str(serialize_js(vm, k, 1)); return 1;
     case K_parentNode: *out = node_obj(vm, d->parent); return 1;
     case K_parentElement: *out = node_obj(vm, d->parent >= 0 && g_n[d->parent].type == DN_ELEM ? d->parent : -1); return 1;
-    case K_children: *out = child_list(vm, k, 1); return 1;
-    case K_childNodes: *out = child_list(vm, k, 0); return 1;
+    case K_children: *out = sub_obj(vm, k, HK_CHILDREN, g_rt.p_coll); return 1;      /* live, as in browsers */
+    case K_childNodes: *out = sub_obj(vm, k, HK_CHILDNODES, g_rt.p_coll); return 1;
     case K_firstChild: *out = node_obj(vm, d->first); return 1;
     case K_lastChild: *out = node_obj(vm, d->last); return 1;
     case K_firstElementChild:
@@ -1281,7 +1284,7 @@ static int node_get(js_vm_t *vm, int k, uint32_t key, jv *out) {
     }
     case K_style: if (d->type != DN_ELEM) return 0; *out = sub_obj(vm, k, HK_STYLE, g_rt.p_style); return 1;
     case K_classList: if (d->type != DN_ELEM) return 0; *out = sub_obj(vm, k, HK_CLASSLIST, g_rt.p_classlist); return 1;
-    case K_dataset: if (d->type != DN_ELEM) return 0; *out = sub_obj(vm, k, 3, 0); return 1;
+    case K_dataset: if (d->type != DN_ELEM) return 0; *out = sub_obj(vm, k, HK_DATASET, 0); return 1;
     case K_value:
         if (d->type != DN_ELEM) return 0;
         if (name_is(k, "textarea")) *out = jv_str(text_content(vm, k));
@@ -1415,24 +1418,30 @@ static int node_set(js_vm_t *vm, int k, uint32_t key, jv val) {
         for (eq = 0; eq < e && v[eq] != '='; eq++) {}
         if (eq >= e) return 1;
         js_sb_init(vm, &b);
-        {   /* existing pairs other than this name */
+        {   /* an existing pair of this name is replaced in place (it keeps its order) */
             const char *cv = JSTR(vm, cur)->s;
-            int cl = (int)JSTR(vm, cur)->len, any = 0, na = trim_l(v, 0, eq), nb = trim_r(v, na, eq);
+            int cl = (int)JSTR(vm, cur)->len, any = 0, done = 0, na = trim_l(v, 0, eq), nb = trim_r(v, na, eq);
+            int va = trim_l(v, 0, e), vb = trim_r(v, va, e);
             while (pos < cl) {
-                int st = trim_l(cv, pos, cl), en = st, ceq, ce;
+                int st = trim_l(cv, pos, cl), en = st, ceq, ce, same, q;
                 while (en < cl && cv[en] != ';') en++;
                 for (ceq = st; ceq < en && cv[ceq] != '='; ceq++) {}
                 ce = trim_r(cv, st, ceq);
-                if (en > st && !span_eq_ci(cv + st, ce - st, v + na, nb - na)) {
+                same = ce - st == nb - na;
+                for (q = 0; same && q < nb - na; q++) if (cv[st + q] != v[na + q]) same = 0;
+                if (en > st) {
                     if (any) js_sb_put(vm, &b, "; ", 2);
-                    js_sb_put(vm, &b, cv + st, trim_r(cv, st, en) - st);
+                    if (same) { js_sb_put(vm, &b, v + va, vb - va); done = 1; }
+                    else js_sb_put(vm, &b, cv + st, trim_r(cv, st, en) - st);
                     any = 1;
                 }
                 pos = en + 1;
             }
-            if (any) js_sb_put(vm, &b, "; ", 2);
+            if (!done) {
+                if (any) js_sb_put(vm, &b, "; ", 2);
+                js_sb_put(vm, &b, v + va, vb - va);
+            }
         }
-        js_sb_put(vm, &b, v + trim_l(v, 0, e), trim_r(v, 0, e) - trim_l(v, 0, e));
         g_rt.cookie = js_sb_finish(vm, &b);
         return 1;
     }
@@ -1484,7 +1493,7 @@ static int dom_get(js_vm_t *vm, jv obj, uint32_t key, jv *out) {
         }
         return 0;
     }
-    case 3: {      /* dataset */
+    case HK_DATASET: {
         char b[72];
         int n, f;
         uint32_t v;
@@ -1493,6 +1502,22 @@ static int dom_get(js_vm_t *vm, jv obj, uint32_t key, jv *out) {
         b[n] = 0;
         v = attr_get_js(vm, k, b, &f);
         *out = f ? jv_str(v) : jv_undef();
+        return 1;
+    }
+    case HK_CHILDREN: case HK_CHILDNODES: {
+        uint32_t idx;
+        int c, i = 0, elems = o->x1 == HK_CHILDREN;
+        if (key == g_rt.key[K_length]) {
+            for (c = g_n[k].first; c >= 0; c = g_n[c].next) if (!elems || g_n[c].type == DN_ELEM) i++;
+            *out = jv_int(i);
+            return 1;
+        }
+        if (!js_str_index_key(vm, key, &idx)) return 0;
+        for (c = g_n[k].first; c >= 0; c = g_n[c].next) {
+            if (elems && g_n[c].type != DN_ELEM) continue;
+            if ((uint32_t)i++ == idx) { *out = node_obj(vm, c); return 1; }
+        }
+        *out = jv_undef();
         return 1;
     }
     default: return 0;
@@ -1523,7 +1548,7 @@ static int dom_set(js_vm_t *vm, jv obj, uint32_t key, jv val) {
             return 1;
         }
         return 1;
-    case 3: {
+    case HK_DATASET: {
         char b[72];
         int n;
         s = js_to_string(vm, val);
@@ -1842,7 +1867,8 @@ static jv node_method(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic)
     }
     case M_cloneNode: {
         int nk = clone_node(k, js_truthy(vm, JARG(0)), 0);
-        if (nk < 0 || dom_bound(vm)) return jv_undef();
+        if (nk < 0) { dom_bound(vm); return jv_undef(); }
+        if (dom_bound(vm)) return jv_undef();
         return node_obj(vm, nk);
     }
     case M_contains: { int o = obj_node(vm, JARG(0)); return jv_bool(o >= 0 && is_ancestor(k, o)); }
@@ -1881,7 +1907,8 @@ static jv node_method(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic)
         for (i = 0; i < (int)t->len; i++) nm[i] = lower(t->s[i]);
         nm[t->len] = 0;
         nk = elem_new(nm);
-        if (nk < 0 || dom_bound(vm)) return jv_undef();
+        if (nk < 0) { dom_bound(vm); return jv_undef(); }
+        if (dom_bound(vm)) return jv_undef();
         g_n[nk].inserted = 1;          /* created scripts do not run */
         return node_obj(vm, nk);
     }
@@ -1890,13 +1917,15 @@ static jv node_method(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic)
         s = js_to_string(vm, JARG(0));
         JCK(vm);
         nk = text_node_from(vm, s, magic == M_createComment);
-        if (nk < 0 || dom_bound(vm)) return jv_undef();
+        if (nk < 0) { dom_bound(vm); return jv_undef(); }
+        if (dom_bound(vm)) return jv_undef();
         if (magic == M_createComment) g_n[nk].type = DN_COMMENT;
         return node_obj(vm, nk);
     }
     case M_createDocumentFragment: {
         int nk = node_new(DN_FRAG);
-        if (nk < 0 || dom_bound(vm)) return jv_undef();
+        if (nk < 0) { dom_bound(vm); return jv_undef(); }
+        if (dom_bound(vm)) return jv_undef();
         return node_obj(vm, nk);
     }
     case M_matches: case M_closest: {
@@ -1929,6 +1958,44 @@ static jv node_method(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic)
     }
 }
 
+/* live children / childNodes: item(i), forEach(fn, thisArg) */
+static jv coll_method(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic) {
+    js_obj_t *o;
+    int k, c, i = 0, elems;
+    if (thisv.t != JT_OBJ || JOBJ(vm, thisv.a)->cls != JS_CLASS_HOST ||
+        (JOBJ(vm, thisv.a)->x1 != HK_CHILDREN && JOBJ(vm, thisv.a)->x1 != HK_CHILDNODES))
+        return js_throw_err(vm, JE_TYPE, "Illegal invocation: not a NodeList");
+    o = JOBJ(vm, thisv.a);
+    k = (int)o->x0;
+    elems = o->x1 == HK_CHILDREN;
+    if (magic == 0) {
+        int want = js_to_int32(vm, JARG(0));
+        JCK(vm);
+        for (c = g_n[k].first; c >= 0; c = g_n[c].next) {
+            if (elems && g_n[c].type != DN_ELEM) continue;
+            if (i++ == want) return node_obj(vm, c);
+        }
+        return jv_null();
+    }
+    if (!js_is_callable(vm, JARG(0))) return js_throw_err(vm, JE_TYPE, "forEach: callback is not a function");
+    {   /* a snapshot, as NodeList.forEach on a live list visits by index */
+        uint32_t arr = js_array_new(vm, 8), n, j;
+        if (!arr) return jv_undef();
+        for (c = g_n[k].first; c >= 0; c = g_n[c].next)
+            if (!elems || g_n[c].type == DN_ELEM) js_array_push(vm, arr, node_obj(vm, c));
+        n = JOBJ(vm, arr)->alen;
+        for (j = 0; j < n && !vm->ctl; j++) {
+            jv a[3];
+            a[0] = js_array_get(vm, arr, j);
+            a[1] = jv_int((int32_t)j);
+            a[2] = thisv;
+            js_call(vm, argv[0], JARG(1), a, 3);
+        }
+    }
+    (void)argc;
+    return jv_undef();
+}
+
 /* style methods: setProperty, getPropertyValue, removeProperty */
 static jv style_method(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic) {
     int k;
@@ -1954,6 +2021,7 @@ static jv style_method(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic
 /* ---- events ---- */
 
 static uint32_t g_p_event;
+static int g_onload_first;     /* window.onload came from <body onload>: its slot is first */
 
 static void logc(js_vm_t *vm, const char *s) { js_log_put(vm, s, dlen(s)); }
 
@@ -2024,15 +2092,37 @@ static jv listener_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic)
     return jv_undef();
 }
 
+/* the on<type> handler property of a target; 1 when the run must stop */
+static int fire_handler(js_vm_t *vm, jv target, jv ev, uint32_t type) {
+    const js_str_t *t = JSTR(vm, type);
+    char nm[48];
+    int q;
+    jv h;
+    if (t->len >= 40) return 0;
+    nm[0] = 'o'; nm[1] = 'n';
+    for (q = 0; q < (int)t->len; q++) nm[2 + q] = t->s[q];
+    h = js_get(vm, target, js_intern(vm, nm, (int)t->len + 2));
+    if (vm->ctl == CTL_THROW) report_throw(vm);
+    if (!vm->ctl && js_is_callable(vm, h)) {
+        jv r;
+        if (g_rt.st) g_rt.st->events++;
+        r = js_call(vm, h, target, &ev, 1);
+        report_throw(vm);
+        if (!vm->ctl && r.t == JT_BOOL && !r.a) js_put(vm, ev, js_intern(vm, "defaultPrevented", 16), jv_bool(1));
+    }
+    return vm->ctl != 0;
+}
+
 /* run the listeners of one target for ev; returns 1 when propagation stopped */
 static int fire_on(js_vm_t *vm, jv target, jv ev, uint32_t type) {
     uint32_t *lp = listeners_of(vm, target), i, len;
-    uint32_t on;
-    jv h;
-    char nm[48];
+    int handler_first;
     const js_str_t *t = JSTR(vm, type);
     js_put(vm, ev, js_intern(vm, "currentTarget", 13), target);
     if (vm->ctl) return 1;
+    handler_first = g_onload_first && target.t == JT_OBJ && target.a == vm->global && t->len == 4 && t->s[0] == 'l' &&
+                    t->s[1] == 'o' && t->s[2] == 'a' && t->s[3] == 'd';
+    if (handler_first && fire_handler(vm, target, ev, type)) return 1;
     if (lp && *lp) {
         len = JOBJ(vm, *lp)->alen;           /* listeners added while firing wait for the next event */
         for (i = 0; i < len && !vm->ctl; i++) {
@@ -2051,23 +2141,7 @@ static int fire_on(js_vm_t *vm, jv target, jv ev, uint32_t type) {
         }
     }
     if (vm->ctl) return 1;
-    /* the on<type> property */
-    if (t->len < 40) {
-        int q;
-        nm[0] = 'o'; nm[1] = 'n';
-        for (q = 0; q < (int)t->len; q++) nm[2 + q] = t->s[q];
-        on = js_intern(vm, nm, (int)t->len + 2);
-        h = js_get(vm, target, on);
-        if (vm->ctl == CTL_THROW) report_throw(vm);
-        if (!vm->ctl && js_is_callable(vm, h)) {
-            jv r;
-            if (g_rt.st) g_rt.st->events++;
-            r = js_call(vm, h, target, &ev, 1);
-            report_throw(vm);
-            if (r.t == JT_BOOL && !r.a) js_put(vm, ev, js_intern(vm, "defaultPrevented", 16), jv_bool(1));
-        }
-    }
-    if (vm->ctl) return 1;
+    if (!handler_first && fire_handler(vm, target, ev, type)) return 1;
     return js_truthy(vm, js_get_c(vm, ev, "cancelBubble"));
 }
 
@@ -2168,7 +2242,7 @@ static jv click_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic) {
 
 /* ---- timers (virtual clock: they run after load in due order) ---- */
 
-typedef struct { jv fn; uint32_t due, delay, seq; int id, interval, runs, active; } dtimer_t;
+typedef struct { jv fn; uint32_t due, delay, seq; int id, interval, runs, active, raf; } dtimer_t;
 static dtimer_t g_t[WF_DOM_TIMERS];
 static int g_tid;
 static uint32_t g_tseq, g_now;
@@ -2203,6 +2277,7 @@ static jv timer_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic) {
         g_t[slot].seq = g_tseq++;
         g_t[slot].id = ++g_tid;
         g_t[slot].interval = magic == 1;
+        g_t[slot].raf = magic == 3;
         g_t[slot].runs = 0;
         g_t[slot].active = 1;
         return jv_int(g_t[slot].id);
@@ -2396,7 +2471,10 @@ static int realm_setup(js_vm_t *vm, int doc, const char *url) {
     g_rt.p_style = plain_obj(vm);
     g_rt.p_classlist = plain_obj(vm);
     g_p_event = plain_obj(vm);
-    if (!g_rt.p_node || !g_rt.p_style || !g_rt.p_classlist || !g_p_event) return -1;
+    g_rt.p_coll = plain_obj(vm);
+    if (!g_rt.p_node || !g_rt.p_style || !g_rt.p_classlist || !g_p_event || !g_rt.p_coll) return -1;
+    js_def_native(vm, g_rt.p_coll, "item", coll_method, 1, 0);
+    js_def_native(vm, g_rt.p_coll, "forEach", coll_method, 1, 1);
     for (i = 0; i < M_COUNT; i++) js_def_native(vm, g_rt.p_node, m_names[i], node_method, m_nargs[i], (uint32_t)i);
     js_def_native(vm, g_rt.p_node, "addEventListener", listener_fn, 2, 0);
     js_def_native(vm, g_rt.p_node, "removeEventListener", listener_fn, 2, 1);
@@ -2614,29 +2692,31 @@ static int run_scripts(js_vm_t *vm, int doc, wf_jspage_stats_t *st) {
     return 0;
 }
 
+/* <body onload="..."> sets window.onload when the body is parsed, so its
+ * handler slot comes before the listeners scripts add (fire_on) */
+static int body_onload(js_vm_t *vm, int doc, wf_jspage_stats_t *st) {
+    int html = find_child(doc, "html"), body = html < 0 ? -1 : find_child(html, "body"), f, rc;
+    uint32_t code;
+    js_sb_t b;
+    g_onload_first = 0;
+    if (body < 0 || !bool_attr(body, "onload")) return 0;
+    code = attr_get_js(vm, body, "onload", &f);
+    js_sb_init(vm, &b);
+    js_sb_put(vm, &b, "window.onload=function(event){", 30);
+    js_sb_str(vm, &b, code);
+    js_sb_put(vm, &b, "\n};", 3);
+    code = js_sb_finish(vm, &b);
+    if (vm->ctl) return 1;
+    js_set_budget(vm, WF_DOM_SCRIPT_BUDGET);
+    rc = js_eval(vm, JSTR(vm, code)->s, (int)JSTR(vm, code)->len, 0);
+    g_onload_first = rc == JS_OK;
+    return after_run(vm, rc, st, 0);
+}
+
 static int run_load(js_vm_t *vm, int doc, wf_jspage_stats_t *st) {
-    int html = find_child(doc, "html"), body = html < 0 ? -1 : find_child(html, "body");
     set_ready("interactive");
     if (fire_event(vm, node_obj(vm, doc), "DOMContentLoaded", 1, st)) return 1;
     set_ready("complete");
-    /* <body onload="..."> is window.onload unless a script set it */
-    if (body >= 0 && bool_attr(body, "onload")) {
-        jv cur = js_get_c(vm, jv_obj(vm->global), "onload");
-        if (!js_is_callable(vm, cur)) {
-            int f, rc;
-            uint32_t code = attr_get_js(vm, body, "onload", &f);
-            js_sb_t b;
-            js_sb_init(vm, &b);
-            js_sb_put(vm, &b, "window.onload=function(event){", 30);
-            js_sb_str(vm, &b, code);
-            js_sb_put(vm, &b, "\n};", 3);
-            code = js_sb_finish(vm, &b);
-            if (vm->ctl) return 1;
-            js_set_budget(vm, WF_DOM_SCRIPT_BUDGET);
-            rc = js_eval(vm, JSTR(vm, code)->s, (int)JSTR(vm, code)->len, 0);
-            if (after_run(vm, rc, st, 0)) return 1;
-        }
-    }
     return fire_event(vm, jv_obj(vm->global), "load", 0, st);
 }
 
@@ -2661,7 +2741,11 @@ static int run_timers(js_vm_t *vm, wf_jspage_stats_t *st) {
         }
         st->timers++;
         js_set_budget(vm, WF_DOM_SCRIPT_BUDGET);
-        rc = js_call_value(vm, fn, jv_obj(vm->global), 0, 0, 0);
+        {
+            jv ts = jv_int((int32_t)g_now);     /* requestAnimationFrame gets the virtual time */
+            int raf = g_t[best].raf;
+            rc = js_call_value(vm, fn, jv_obj(vm->global), raf ? &ts : 0, raf ? 1 : 0, 0);
+        }
         if (after_run(vm, rc, st, 0)) return 1;
     }
 }
@@ -2685,7 +2769,7 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
     g_calls = 0;
     if (realm_setup(vm, doc, url) != 0) { g_rt.st = 0; return -1; }
     set_ready("loading");
-    if (!run_scripts(vm, doc, st) && !run_load(vm, doc, st)) run_timers(vm, st);
+    if (!body_onload(vm, doc, st) && !run_scripts(vm, doc, st) && !run_load(vm, doc, st)) run_timers(vm, st);
     if (!st->scripts) { g_rt.st = 0; return 0; }
     o.out = out;
     o.n = 0;
