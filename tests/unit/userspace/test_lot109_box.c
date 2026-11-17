@@ -91,7 +91,7 @@ static void test_l109_box_1(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("5 0 0 0 0 0 0 1 8000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-y:auto;height:calc(47% + 29px);overflow-x:scroll;max-width:10px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-y:auto;height:calc(47% + 29px);overflow-x:scroll;max-width:20px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { min-height: 5vmin !important; max-height: 53ch; overflow: scroll } #o { max-width: calc(2 * (20% - 6rem)); max-height: min(32vh, 56%, calc(2 * (39% - 8.5ex))); overflow-x: hidden; overflow-y: clip }  #i { animation: k 1s linear; animation-timeline: scroll(nearest y) }");
     TEST_ASSERT_EQUAL(2, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("2 3 0 0 0 0 0 0 16000", sc_of(3));
@@ -181,7 +181,7 @@ static void test_l109_box_3(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("5 5 0 0 0 0 0 1 12000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:12px;overflow-y:scroll;max-height:112px;min-height:339px;overflow-x:scroll;width:87px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:12px;overflow-y:scroll;max-height:150px;min-height:452px;overflow-x:scroll;width:116px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow-y: auto; overflow-y: auto; height: 250%; max-width: 35.2ex } #b { max-width: min(calc(95% - 11pc + 85%), calc(0.5 * (80% - 42vw))); overflow-y: scroll !important; overflow: hidden }  #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("0 4 0 0 0 0 0 0 16000", sc_of(3));
@@ -233,7 +233,7 @@ static void test_l109_box_4(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("5 5 0 0 0 0 0 1 20000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:181px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:174px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow-x: clip; max-width: 13lh !important; width: inherit !important; max-width: 1ex } #b { width: min(21ex, calc(66% * 0.5)) !important; width: 56lh; overflow: visible }  #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("3 0 0 0 0 0 0 0 16000", sc_of(3));
@@ -251,7 +251,7 @@ static void test_l109_box_4(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { width: +4em; overflow: visible; max-width: calc(34.2px); height: 39lh } #o { overflow-y: auto; overflow-x: hidden !important; height: 9ex; width: 50%; max-height: 20ex } html { font-size: 20px } #o { font-size: 20px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("2 4 0 0 0 0 0 1 20000", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:20px;overflow-y:auto;height:56px;max-height:125px\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:20px;overflow-y:auto;height:54px;max-height:120px\"", style_of("o"));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("1 1 0 0 0 0 0 0 20000", sc_of(4));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
@@ -323,7 +323,7 @@ static void test_l109_box_6(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("0 5 0 0 0 0 0 1 12000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:12px;overflow-y:scroll;height:156px;max-height:0%;min-height:238%;overflow-x:auto;width:285px;max-width:40%\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:12px;overflow-y:scroll;height:208px;max-height:0%;min-height:238%;overflow-x:auto;width:285px;max-width:40%\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { overflow: auto; width: -10px; max-width: max(42rem, 56rem) } div { height: 49ch; min-height: calc(89% - 40ex); width: min-content !important; max-width: max(calc(58ch + 32%), calc(2% + 25ch)) } #o { min-height: 27ch; max-width: calc(38lh + 8.2rem) !important; overflow: clip; max-height: calc(10% - 30.75vh + 25%) }  #i { animation: k 1s linear; animation-timeline: scroll(nearest y) }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("3 3 0 0 0 0 0 0 16000", sc_of(3));
@@ -368,7 +368,7 @@ static void test_l109_box_7(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("1 5 0 0 0 0 0 1 10000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;overflow-y:scroll;max-height:112px;min-height:920px;overflow-x:auto;width:20px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;overflow-y:scroll;max-height:112px;min-height:1030px;overflow-x:auto;width:20px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { min-height: max(10%, 2em); max-width: 15ch !important; overflow: visible; width: max(10%, 1lh) * 2; overflow-x: auto } #b { width: 267px; overflow-y: scroll; max-width: calc(); height: 2lh } #b { font-size: 32px } #i { animation: k 1s linear; animation-timeline: scroll(nearest y) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("4 1 0 0 0 0 0 0 16000", sc_of(3));
@@ -389,7 +389,7 @@ static void test_l109_box_7(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("2 4 0 0 0 0 0 1 10000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:145px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:232px\"", style_of("b"));
 }
 
 static void test_l109_box_8(void) {
@@ -406,14 +406,14 @@ static void test_l109_box_8(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("1 4 0 0 0 0 0 1 8000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-x:auto;width:108px;max-width:calc(-32% + 620px)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-x:auto;width:216px;max-width:calc(-32% + 620px)\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow-y: hidden; overflow-x: scroll; width: max(17.25px, 62%, calc(28% * 0.5)); min-height: 218%; width: 2.5em; max-width: min(calc(89% + 32ex), calc(5.2% + 47pc), calc(37.125% - 58pt + 44%)) } #b { overflow: auto; max-width: 11ex; min-height: 4ex; width: 33.5ch } html { font-size: 12px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(2, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("5 2 0 0 0 0 0 0 12000", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("4 4 0 0 0 0 0 1 12000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:201px;max-width:41px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:268px;max-width:55px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { width: calc(50% + 10px); overflow: auto; overflow-y: hidden !important; width: max(10%, 1lh) * 2 } div { overflow-y: auto; max-width: 10ch } #o { overflow-x: visible; max-width: 2lh; width: calc(6%); min-height: 24% } #o { font-size: 20px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("1 4 0 0 0 0 0 0 20000", sc_of(3));
@@ -465,14 +465,14 @@ static void test_l109_box_9(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("5 0 0 0 0 0 0 1 10000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;overflow-y:auto;max-height:214px;overflow-x:scroll;width:220px;max-width:1%\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;overflow-y:auto;max-height:334px;overflow-x:scroll;width:352px;max-width:1%\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { min-height: 46ch; max-height: 7.75rem !important; width: calc(2em - 4px) } div { width: calc(81% * 0.25) !important; max-width: calc(10% / 0); overflow-x: hidden } #o { max-width: calc(2001% + 1ex); overflow-x: visible; width: 207% } html { font-size: 20px } #b { font-size: 46px } #i { animation: k 1s linear; animation-timeline: scroll(nearest y) }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("1 0 0 0 0 0 0 0 20000", sc_of(3));
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("2 0 0 0 0 0 0 1 46000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:46px;overflow-y:auto;max-height:155px;min-height:1058px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:46px;overflow-y:auto;max-height:155px;min-height:1104px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { overflow: hidden auto; max-width: calc(31ch + 39rem) !important; min-height: 39ch; max-width: 15.13vh } #o { width: max(35%, calc(19pt + 26%)); overflow-y: scroll } html { font-size: 20px } #o { font-size: 8px } #b { font-size: 32px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("0 5 0 0 0 0 0 0 8000", sc_of(3));
@@ -500,7 +500,7 @@ static void test_l109_box_10(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { max-width: fit-content; min-height: calc(2 * (3% - 28rem)); max-width: 38ex; width: calc(34.75% * 0.5); height: 40000% } div { max-height: 0%; overflow-x: visible } #o { max-width: 5.125ex; overflow-x: scroll } html { font-size: 24px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("5 0 0 0 0 0 0 1 24000", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:0%;overflow-x:scroll;max-width:38px\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:0%;overflow-x:scroll;max-width:41px\"", style_of("o"));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("1 0 0 0 0 0 0 0 24000", sc_of(4));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
@@ -756,7 +756,7 @@ static void test_l109_box_16(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { width: calc(0%); overflow-x: scroll; max-width: calc(55ex + 4ex) } html { font-size: 12px } #b { font-size: 8px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("5 0 0 0 0 0 0 1 12000", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:scroll;width:0px;max-width:221px\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:scroll;width:0px;max-width:295px\"", style_of("o"));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("0 0 0 0 0 0 0 0 8000", sc_of(4));
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px\"", style_of("b"));
@@ -766,7 +766,7 @@ static void test_l109_box_16(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:32px\"", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("5 1 0 0 0 0 0 1 8000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-x:scroll;width:145px;max-width:84px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-x:scroll;width:290px;max-width:168px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { min-height: 2.5em; height: 50%; min-height: 12.5%; overflow-y: visible !important; width: 40000px } #b { overflow-x: auto; overflow-x: clip; max-width: 12.5px } div { height: calc(10px + 1); max-width: 8.125ch; width: 470px; overflow: auto hidden; width: calc(53lh + 18lh) } #b { font-size: 20px } #i { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("4 1 0 0 30001 0 0 0 16000", sc_of(3));
@@ -780,7 +780,7 @@ static void test_l109_box_16(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:20px\"", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("4 4 0 0 0 0 0 1 20000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:76%;min-height:1%;overflow-x:auto;width:175px;max-width:max(calc(8% + 43px), 53%)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:76%;min-height:1%;overflow-x:auto;width:168px;max-width:max(calc(8% + 43px), 53%)\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { width: calc(2001% + 1ex); overflow-x: clip; max-width: calc(23lh - 40%) } #b { max-width: 30lh; overflow: hidden } html { font-size: 12px } #i { animation: k 1s linear; animation-timeline: scroll(nearest y) }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("3 0 0 0 0 0 0 0 12000", sc_of(3));
@@ -901,7 +901,7 @@ static void test_l109_box_19(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("5 0 0 0 563 0 0 1 8000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-y:auto;height:10px;overflow-x:scroll;width:562px;max-width:220px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-y:auto;height:10px;overflow-x:scroll;width:562px;max-width:440px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { overflow-x: scroll; overflow-x: hidden; width: 75pt } #o { max-height: 0%; overflow: visible; width: 24lh !important } #b { font-size: 10px } #i { animation: k 1s linear; animation-timeline: scroll(nearest block) }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("1 1 0 0 0 0 0 0 16000", sc_of(3));
@@ -939,7 +939,7 @@ static void test_l109_box_20(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:24px\"", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("4 4 0 0 0 0 0 1 24000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:570px;overflow-x:auto;max-width:260px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:570px;overflow-x:auto;max-width:279px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow: visible; max-width: 25ex } #b { max-width: calc(20.25%); overflow: scroll; max-height: 46lh; width: 206px } #o { font-size: 10px } #i { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("1 1 0 0 0 0 0 0 10000", sc_of(3));
@@ -950,7 +950,7 @@ static void test_l109_box_20(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { height: 40000%; width: calc(44lh + 3.75lh) } #o { max-width: 16ex; width: 17ch; overflow: auto hidden } html { font-size: 11px } #i { animation: k 1s linear; animation-timeline: scroll(nearest block) }");
     TEST_ASSERT_EQUAL(2, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("4 2 0 0 0 0 0 1 11000", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:93px;max-width:55px\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:136px;max-width:80px\"", style_of("o"));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("0 0 0 0 0 0 0 0 11000", sc_of(4));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
@@ -1019,7 +1019,7 @@ static void test_l109_box_21(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:20px\"", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("0 5 0 30001 0 0 0 1 12000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:12px;overflow-y:scroll;height:calc(1% + 90px);max-height:30000px;overflow-x:auto;width:58px;max-width:45px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:12px;overflow-y:scroll;height:calc(1% + 120px);max-height:30000px;overflow-x:auto;width:58px;max-width:45px\"", style_of("b"));
 }
 
 static void test_l109_box_22(void) {
@@ -1057,7 +1057,7 @@ static void test_l109_box_22(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("1 5 0 0 491 0 0 1 12000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:12px;overflow-x:auto;width:490px;max-width:63px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:12px;overflow-x:auto;width:490px;max-width:85px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { max-width: 0ex; width: 35.75ch; overflow-x: auto; height: 43ex; overflow-x: auto } #b { overflow-x: hidden; width: calc(2 * (69% - 13.75rem)); max-width: calc(99%) } html { font-size: 8px } #o { font-size: 24px } #i { animation: k 1s linear; animation-timeline: scroll(nearest y) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("4 0 0 0 0 0 0 0 24000", sc_of(3));
@@ -1095,7 +1095,7 @@ static void test_l109_box_23(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("4 0 0 0 0 0 0 1 12000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:12px;overflow-y:auto;max-height:282px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:12px;overflow-y:auto;max-height:376px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { width: 0.5em; max-width: 10vw; overflow: scroll } #o { overflow: auto; max-width: 20vh; width: calc(63%); overflow-y: clip; min-height: 100px } #b { font-size: 10px } #i { animation: k 1s linear; animation-timeline: scroll(nearest block) }");
     TEST_ASSERT_EQUAL(2, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("4 3 0 0 0 0 101 0 16000", sc_of(3));
@@ -1230,7 +1230,7 @@ static void test_l109_box_26(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("5 5 0 0 0 0 0 1 10000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:312px;max-height:calc(43% - 53px);min-height:162px;overflow-x:scroll;width:77px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:312px;max-height:calc(43% - 53px);min-height:260px;overflow-x:scroll;width:77px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { overflow: visible scroll; min-height: calc(10px - 20px); overflow-y: hidden; max-width: calc(35.5ex + 39.5em) } #o { overflow-x: auto; height: 33.3vh; width: 10px 20px; overflow-x: clip !important; max-width: min(10%, 1q) }  #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("3 0 0 0 0 0 0 0 16000", sc_of(3));
@@ -1241,7 +1241,7 @@ static void test_l109_box_26(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { width: 18ex; min-height: 36.75ch; max-width: 10vw; overflow-x: auto } #b { max-height: 22.2lh } html { font-size: 8px } #i { animation: k 1s linear; animation-timeline: scroll(nearest block) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("4 0 0 0 0 0 0 1 8000", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:45px;max-width:64px\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:90px;max-width:64px\"", style_of("o"));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("0 0 0 0 0 0 0 0 8000", sc_of(4));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
@@ -1299,7 +1299,7 @@ static void test_l109_box_28(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:20px\"", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("0 5 0 0 0 0 0 1 20000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:123%;max-width:162px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:123%;max-width:156px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow-y: hidden; height: +4em; width: calc(53ex - 11vw); overflow: hidden auto } #b { width: calc(3%); overflow: auto hidden; max-height: 5vmax }  #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("2 4 0 0 0 0 0 0 16000", sc_of(3));
@@ -1313,7 +1313,7 @@ static void test_l109_box_28(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(2, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("4 2 0 0 0 0 0 1 10000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;max-width:175px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;max-width:280px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { max-width: 10vw; width: 8.75lh; height: min(calc((12.2% + 28ex) / 5), 7%) !important } #o { overflow-x: hidden } #o { font-size: 18px } #b { font-size: 32px } #i { animation: k 1s linear; animation-timeline: scroll(nearest block) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("2 0 0 0 0 0 0 1 18000", sc_of(3));
@@ -1331,7 +1331,7 @@ static void test_l109_box_28(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow-y: auto; max-width: 8.5ex; overflow-x: scroll; width: 36.75lh } #b { width: calc(18.25ch + 5lh); overflow-x: visible; max-height: 0; min-height: calc(22ch + 38.5lh) } #o { font-size: 8px } #b { font-size: 10px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("5 4 0 0 0 0 0 1 8000", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-x:scroll;width:183px;max-width:21px\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-x:scroll;width:183px;max-width:42px\"", style_of("o"));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("1 0 0 1 0 0 0 0 10000", sc_of(4));
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px\"", style_of("b"));
@@ -1358,7 +1358,7 @@ static void test_l109_box_29(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:20px\"", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("2 4 0 0 0 0 0 1 8000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-y:auto;height:188px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;overflow-y:auto;height:376px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { max-height: min(calc(31vw - 15%), calc((37% + 16.75pt) / 4)) !important; overflow: scroll; width: 224%; min-height: 272% !important; overflow-y: auto } #o { height: calc(94% + 46em); max-width: 0.5em; width: 6.16vmin; overflow: scroll } html { font-size: 32px } #b { font-size: 32px } #i { animation: k 1s linear; animation-timeline: scroll(nearest y) }");
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("5 5 0 0 0 0 0 0 32000", sc_of(3));
@@ -1400,7 +1400,7 @@ static void test_l109_box_30(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { max-width: 72%; height: 20vh; width: calc(10px + 5px); overflow-x: visible !important } #o { width: 39ch; max-width: calc(); overflow-x: scroll; max-height: unset } html { font-size: 12px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("5 0 0 0 0 0 0 1 12000", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:scroll;width:234px\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:scroll;width:312px\"", style_of("o"));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("1 0 0 0 0 0 0 0 12000", sc_of(4));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
@@ -1431,7 +1431,7 @@ static void test_l109_box_31(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { max-width: 10vw !important; width: calc(40lh + 14.25ch); overflow-x: scroll } #b { max-width: min(10px, 20px); min-height: 12.5vh; width: 37ch } html { font-size: 10px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("5 0 0 0 0 0 0 1 10000", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:scroll;width:321px;max-width:64px\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:scroll;width:364px;max-width:64px\"", style_of("o"));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("0 0 0 0 0 0 0 0 10000", sc_of(4));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
@@ -1441,7 +1441,7 @@ static void test_l109_box_31(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("1 5 0 0 0 0 0 1 10000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:18px;overflow-x:auto;max-width:calc(2% + 40px)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:30px;overflow-x:auto;max-width:calc(2% + 40px)\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow-x: auto; height: clamp(42%, 38em, calc(16% * 0.25)); width: 46ch !important } #b { overflow: clip; min-height: 2.25ex; width: +4em; overflow-y: scroll } #b { font-size: 10px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("4 0 0 0 0 0 0 0 16000", sc_of(3));
@@ -1486,7 +1486,7 @@ static void test_l109_box_32(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("2 5 0 0 576 0 97 1 10000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;overflow-y:scroll;height:calc(111% - 85px);max-height:calc(28% - 127px);min-height:96px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;overflow-y:scroll;height:calc(111% - 136px);max-height:calc(28% - 127px);min-height:96px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow-x: scroll; max-width: 35vmax; width: calc(35ex + 25.75%); overflow: scroll } #b { max-width: 10vw; overflow-y: hidden; overflow-x: auto !important } html { font-size: 10px } #i { animation: k 1s linear; animation-timeline: scroll(nearest block) }");
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("5 5 0 0 0 0 0 0 10000", sc_of(3));

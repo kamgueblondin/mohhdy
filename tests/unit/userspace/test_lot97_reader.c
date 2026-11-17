@@ -237,14 +237,15 @@ static void test_l97_animations(void) {
     TEST_ASSERT_EQUAL_STRING("10px", nv("o"));
     prep(PN "@keyframes k { from { --p: 0px } to { --p: red } } #o { --p: 20px; animation: k 1000ms linear }", 500);
     TEST_ASSERT_EQUAL_STRING("10px", nv("o"));
-    /* with the universal syntax the matcher takes anything: !important and
-     * var() frames are still left out (the own value z fills 100%) */
+    /* with the universal syntax the matcher takes anything: !important
+     * frames are still left out (the own value z fills 100%); Lot 112: a
+     * var() frame is the element's value (w, discrete past 50%) */
     prep("@property --p { syntax: '*'; inherits: false } @keyframes k { from { --p: x } to { --p: y !important } } "
          "#o { --p: z; animation: k 1000ms linear }", 750);
     TEST_ASSERT_EQUAL_STRING("z", nv("o"));
     prep("@property --p { syntax: '*'; inherits: false } @keyframes k { from { --p: x } to { --p: var(--q) } } "
          "#o { --p: z; --q: w; animation: k 1000ms linear }", 750);
-    TEST_ASSERT_EQUAL_STRING("z", nv("o"));
+    TEST_ASSERT_EQUAL_STRING("w", nv("o"));
     /* at a frame offset the next segment applies (its step-start jumps) */
     prep(PN "@keyframes k { from { --p: 0px } 50% { --p: 50px; animation-timing-function: step-start } to { --p: 100px } } "
          "#o { animation: k 1000ms linear }", 500);

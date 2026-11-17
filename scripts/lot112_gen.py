@@ -346,6 +346,7 @@ def dom_val(rng, depth=0):
     return "calc(%s * %s)" % (inner, rng.choice(["2", "-1", "0.5", "3"]))
 
 
+@M9.legacy     # Lot 112: wf_css_math_box keeps the 16 px proportions
 def write_dom():
     rng = random.Random(11202)
     cases, seen, mixed = [], set(), 0
@@ -555,8 +556,331 @@ def write_ckf():
     return len(cases)
 
 
+# ------------------------------------------------- Lot 112 (second part)
+# font-size with ex, ch, lh and rlh; ex and ch of the font the engine draws
+FN_HTML = ["16px", "20px", "12px", "2ex", "1.5ch", "1rlh", "2lh", "calc(1ex + 10px)", "3ch"]
+FN_EL = ["16px", "20px", "24px", "18px", "8px", "40px", "1.5em", "2ex", "3ch", "1.5ch", "0.5ex", "2lh", "1.5lh",
+         "1rlh", "2rlh", "calc(1ex + 4px)", "calc(2ch - 2px)", "max(1lh, 12px)", "min(3ex, 2rlh)", "calc(1lh + 1ch)",
+         "clamp(8px, 2ex, 40px)", "calc(50% + 1ex)", "-1ex", "0ch", "calc(1ex - 20px)", "calc(1rlh * 2)", "10ex",
+         "4.5ch", "calc(100% - 1ch)", "0.75lh"]
+FN_LH = ["normal", "1.5", "20px", "2ex", "3ch", "calc(1ch + 4px)", "2rlh", "150%", "1.25", "4ex", "calc(2ex + 1ch)"]
+FN_H = ["4ex", "3ch", "calc(2ex + 1ch)", "10ch", "max(3ex, 2ch)", "2.5ex", "calc(1lh + 2ex)", "6ch"]
+FN_PLAIN = __import__("re").compile(r"(\d+(\.\d+)?|\.\d+)(px|em)")
+
+
+def font_case(rng):
+    """(css, font sizes of html, #o and #i, line heights of body, #o and #i,
+    #o's height or -1)"""
+    fs, lhd = {}, {}
+    for el in ELS:
+        if rng.random() < (0.35 if el == "html" else 0.4 if el == "body" else 0.75):
+            fs[el] = rng.choice(FN_HTML if el == "html" else FN_EL)
+        if rng.random() < (0.3 if el in ("html", "#i") else 0.25):
+            lhd[el] = rng.choice(FN_LH)
+    hgt = rng.choice(FN_H)
+    blocks = []
+    for el in ELS:
+        ds = []
+        if el in fs:
+            ds.append("font-size: %s" % fs[el])
+        if el in lhd:
+            ds.append("line-height: %s" % lhd[el])
+        if el == "#o":
+            ds += ["overflow: auto", "height: %s" % hgt]
+        if ds:
+            blocks.append("%s { %s }" % (el, "; ".join(ds)))
+    rng.shuffle(blocks)
+    css = ("@keyframes k { from { color: #000000 } to { color: #ffffff } } " + " ".join(blocks) +
+           " #i { animation: k 1s linear; animation-timeline: scroll(nearest) }")
+    fsz, comp, out = {}, {}, {}
+    root, rlh = 16000, M.ROOT_LH_INIT
+    for el in ELS:
+        p = PARENT[el]
+        pf = fsz[p] if p else 16000
+        plh = (out[p] - 1 if out[p] else None) if p else None
+        f = pf
+        if el in fs:
+            v = fs[el]
+            m = FN_PLAIN.fullmatch(v)
+            if m:
+                f = int(M11._F(m.group(1)) * 1000) if m.group(3) == "px" else int(M11._F(m.group(1)) * pf)
+            else:
+                r = M.fs_metric(v, pf, 16000 if el == "html" else root, plh, rlh)
+                f = pf if r is None else r
+        fsz[el] = f
+        if el == "html":
+            root = f
+        decl = M.lh_decl(lhd[el]) if el in lhd else None
+        pc = comp[p] if p else None
+        comp[el] = M.with_rlh(rlh, M11.lh_comp, decl, f, root, pc, pf)
+        out[el] = M11.lh_px(comp[el], f) + 1 if comp[el][0] else 0
+        if el == "html":
+            rlh = out[el] - 1 if out[el] else None
+    lh_o = out["#o"] - 1 if out["#o"] else None
+    h = M.with_rlh(rlh, M11.box_len_lh, hgt, fsz["#o"], root, lh_o)
+    hv = -1 if h is None else min(max(h, 0) // 1000, M5.HMAX)
+    return css, (fsz["html"], fsz["#o"], fsz["#i"]), (out["body"], out["#o"], out["#i"]), hv
+
+
+def write_font():
+    rng = random.Random(11206)
+    cases, seen = [], set()
+    while len(cases) < 160:
+        try:
+            css, f3, lh3, h = font_case(rng)
+        except UNSURE:
+            continue
+        if css in seen or len(css) > 1500:
+            continue
+        seen.add(css)
+        cases.append(["prep(%s);" % cstr(css),
+                      "TEST_ASSERT_EQUAL_STRING(%s, fs3());" % cstr("%d %d %d" % f3),
+                      "TEST_ASSERT_EQUAL_STRING(%s, lh3());" % cstr("%d %d %d" % lh3),
+                      "TEST_ASSERT_EQUAL(%d, height_of(\"o\"));" % h])
+    o = [HEADER % "Lot 112: font-size with ex, ch, lh and rlh; ex and ch of the engine's font"] + [
+        '#include "../../framework/unity.h"', "#include <string.h>", "#include <stdio.h>", '#include "wf_sitecss.h"', "",
+        "static wf_site_t g_d;", "static char g_html[2048];", "static char g_o[512];", "",
+        "static void prep(const char *css) {",
+        "    snprintf(g_html, sizeof(g_html), \"<html><head><style>%s</style></head><body>\"",
+        "             \"<div id=o><p id=i>i</p></div></body></html>\", css);",
+        "    TEST_ASSERT_EQUAL(0, wf_site_prepare_ext(&g_d, g_html, (int)strlen(g_html), 640, 480, 0, 0));",
+        "    TEST_ASSERT_EQUAL(5, g_d.nnodes);",
+        "}", "",
+        "/* the font sizes of html, #o and #i (px thousandths) */",
+        "static const char *fs3(void) {",
+        "    snprintf(g_o, sizeof(g_o), \"%d %d %d\", g_d.fs[0], g_d.fs[3], g_d.fs[4]);",
+        "    return g_o;",
+        "}", "",
+        "/* the line heights of body, #o and #i (px thousandths + 1, 0 normal) */",
+        "static const char *lh3(void) {",
+        "    snprintf(g_o, sizeof(g_o), \"%d %d %d\", g_d.lh[2], g_d.lh[3], g_d.lh[4]);",
+        "    return g_o;",
+        "}", "",
+        "/* the height (px) in the style passed for the element with that id,",
+        " * -1 when it has none */",
+        "static int height_of(const char *id) {",
+        "    int i, v = -1;",
+        "    const char *h;",
+        "    g_o[0] = 0;",
+        "    for (i = 0; i < g_d.nnodes; i++)",
+        "        if (!strcmp(g_d.node[i].id, id)) wf_site_style_attr(&g_d, g_d.node[i].start, g_o, (int)sizeof(g_o));",
+        "    h = strstr(g_o, \";height:\");",
+        "    if (!h) h = strstr(g_o, \"\\\"height:\");",
+        "    if (h) sscanf(h + 8, \"%d\", &v);",
+        "    return v;",
+        "}", ""]
+    names = chunks(o, "test_l112_font", cases, 10)
+    finish(o, names, "test_lot112_font.c")
+    return len(cases)
+
+
+# var() invalid at computed-value time: unset for every property the
+# reader keeps. Each case is checked against the same sheet with the
+# declaration written as the model says it stands (the substituted value,
+# or unset): the node lines of the report and the style attributes match.
+UN_PROPS = [
+    ("color", ["#102030", "rgb(1 2 3)", "teal"], ["12px", "nosuch", "bold"], ["#ff0000", "blue"]),
+    ("background-color", ["#203040", "silver", "transparent"], ["12px", "nosuch"], ["#00ff00"]),
+    ("font-size", ["20px", "1.5em", "x-large"], ["red", "-3px", "nosuch"], ["12px", "2em"]),
+    ("text-align", ["center", "right"], ["12px", "middle"], ["left", "center"]),
+    ("font-weight", ["bold"], ["heavy", "12px"], ["bold", "normal"]),
+    ("display", ["none", "inline", "block"], ["12px", "nosuch"], ["block", "inline"]),
+    ("font-style", ["italic"], ["slanted"], ["italic", "normal"]),
+    ("text-decoration", ["underline", "line-through"], ["blink2"], ["underline"]),
+    ("text-transform", ["uppercase", "lowercase"], ["12px"], ["capitalize", "uppercase"]),
+    ("white-space", ["nowrap", "pre"], ["wrapit"], ["pre", "normal"]),
+    ("visibility", ["hidden"], ["12px"], ["hidden", "visible"]),
+    ("letter-spacing", ["2px", "normal"], ["red", "99px"], ["1px"]),
+    ("text-indent", ["10px", "1em"], ["red", "-999px"], ["5px"]),
+    ("margin", ["4px", "1px 2px"], ["red"], ["8px"]),
+    ("padding", ["3px", "2px 4px"], ["red", "-1px"], ["6px"]),
+    ("list-style-type", ["square", "decimal"], ["12px"], ["circle"]),
+    ("background", ["#ff0000", "#00ff00 none"], ["12px"], ["#0000ff"]),
+]
+
+
+def un_valid(prop, good, bad):
+    """the property's check for a substituted text: the curated lists"""
+    def ok(t):
+        if t in good:
+            return True
+        if t in bad:
+            return False
+        raise M7.Unsure("not curated: %s" % t)
+    return ok
+
+
+def unset_case(rng):
+    prop, good, bad, earlier = rng.choice(UN_PROPS)
+    env_o, env_i = {}, {}
+    defs_o, defs_i = [], []
+    if rng.random() < 0.6:
+        v = rng.choice(good + bad)
+        defs_o.append(("--x", v))
+        env_o["--x"] = v
+    if rng.random() < 0.4:
+        v = rng.choice(good + bad)
+        defs_i.append(("--y", v))
+        env_i["--y"] = v
+    env = dict(env_o)
+    env.update(env_i)
+    ref = rng.choice(["var(--x)", "var(--y)", "var(--z)", "var(--z, %s)" % rng.choice(good + bad), "var(--x, var(--y))",
+                      "var(--z, var(--x))"])
+    o_own = []
+    if rng.random() < 0.6:
+        o_own.append((prop, rng.choice(good)))
+    i_own = [(prop, rng.choice(earlier))] if rng.random() < 0.7 else []
+    got = M.unset_or_value(ref, env, un_valid(prop, good, bad))
+
+    def sheet(last):
+        ob = ["%s: %s" % d for d in defs_o + o_own]
+        ib = ["%s: %s" % d for d in defs_i + i_own] + ["%s: %s" % (prop, last)]
+        t = ""
+        if ob:
+            t += "#o { %s } " % "; ".join(ob)
+        return t + "#i { %s }" % "; ".join(ib)
+    return sheet(ref), sheet(got), got
+
+
+def write_unset():
+    rng = random.Random(11207)
+    cases, seen, nun = [], set(), 0
+    while len(cases) < 150:
+        try:
+            a, b, got = unset_case(rng)
+        except UNSURE:
+            continue
+        if a in seen:
+            continue
+        seen.add(a)
+        nun += got == "unset"
+        cases.append(["same(%s, %s);" % (cstr(a), cstr(b))])
+    o = [HEADER % "Lot 112: var() invalid at computed-value time is unset for every property"] + [
+        '#include "../../framework/unity.h"', "#include <string.h>", "#include <stdio.h>", '#include "wf_sitecss.h"', "",
+        "static wf_site_t g_d;", "static char g_html[2048];", "static char g_a[4096], g_b[4096], g_r[16384];", "",
+        "/* the node lines of the report and the style attributes of #o and #i */",
+        "static void facts(const char *css, char *out, int cap) {",
+        "    int i, n = 0;",
+        "    char *p, *e;",
+        "    snprintf(g_html, sizeof(g_html), \"<html><head><style>%s</style></head><body>\"",
+        "             \"<div id=o><p id=i>i</p></div></body></html>\", css);",
+        "    TEST_ASSERT_EQUAL(0, wf_site_prepare_ext(&g_d, g_html, (int)strlen(g_html), 640, 480, 0, 0));",
+        "    out[0] = 0;",
+        "    for (i = 0; i < g_d.nnodes; i++) {",
+        "        char s[512];",
+        "        s[0] = 0;",
+        "        wf_site_style_attr(&g_d, g_d.node[i].start, s, (int)sizeof(s));",
+        "        n += snprintf(out + n, (size_t)(cap - n), \"%d:%s|\", i, s);",
+        "    }",
+        "    TEST_ASSERT_TRUE(wf_site_report(&g_d, g_r, (int)sizeof(g_r)) > 0);",
+        "    for (p = g_r; (p = strstr(p, \"node \")) != 0 && n < cap - 1; p = e) {",
+        "        e = strchr(p, '\\n');",
+        "        if (!e) e = p + strlen(p);",
+        "        n += snprintf(out + n, (size_t)(cap - n), \"%.*s|\", (int)(e - p), p);",
+        "    }",
+        "}", "",
+        "/* the sheet with var() and the sheet as the model reads it agree */",
+        "static void same(const char *with_var, const char *as_read) {",
+        "    facts(with_var, g_a, (int)sizeof(g_a));",
+        "    facts(as_read, g_b, (int)sizeof(g_b));",
+        "    TEST_ASSERT_EQUAL_STRING(g_b, g_a);",
+        "}", ""]
+    names = chunks(o, "test_l112_unset", cases, 10)
+    finish(o, names, "test_lot112_unset.c")
+    return "%d (%d unset)" % (len(cases), nun)
+
+
+# var() in a registered property's keyframes: the element's values below
+# its animations. Checked against the same sheet with each keyframe
+# declaration as the model reads it (substituted, or left out).
+RK_SYN = [
+    ("'<length>'", "0px", ["10px", "25px", "4em", "calc(5px + 1em)"], ["red", "nosuch", "5"]),
+    ("'<color>'", "#000000", ["#ff0000", "teal", "rgb(0 0 255)"], ["12px", "nosuch"]),
+    ("'<number>'", "0", ["2", "0.5", "calc(1 + 2)"], ["3px", "red"]),
+    ("'<percentage>'", "0%", ["50%", "20%"], ["5px", "x"]),
+]
+
+
+def rkf_case(rng):
+    syn, ini, good, bad = rng.choice(RK_SYN)
+    env = {}
+    defs_o, defs_b = [], []
+    for name in ("--a", "--b"):
+        if rng.random() < 0.6:
+            v = rng.choice(good + bad)
+            (defs_o if rng.random() < 0.7 else defs_b).append((name, v))
+    for k, v in defs_b + defs_o:
+        env[k] = v
+
+    def matches(t):
+        if t in good:
+            return True
+        if t in bad:
+            return False
+        raise M7.Unsure("not curated: %s" % t)
+    offs = sorted(rng.sample([0, 5000, 10000, 2500], rng.randrange(1, 4)))
+    va, vb = [], []
+    for off in offs:
+        v = rng.choice(["var(--a)", "var(--b)", "var(--c)", "var(--c, %s)" % rng.choice(good), "var(--a, var(--b))",
+                        rng.choice(good)])
+        r = M.reg_frame(v, env, matches)
+        sel = "from" if off == 0 else "to" if off == 10000 else "%d%%" % (off // 100)
+        va.append("%s { --p: %s }" % (sel, v))
+        vb.append("%s { --p: %s }" % (sel, r) if r is not None else "%s { }" % sel)
+    own = "--p: %s; " % rng.choice(good) if rng.random() < 0.5 else ""
+    anim = rng.choice(["k 1000ms linear", "k 2000ms linear", "k 1000ms ease-in", "k 1000ms linear 250ms"])
+    ms = rng.choice([0, 250, 500, 750, 900])
+
+    def sheet(frames):
+        t = "@property --p { syntax: %s; inherits: false; initial-value: %s } " % (syn, ini)
+        t += "@keyframes k { %s } " % " ".join(frames)
+        if defs_b:
+            t += "body { %s } " % "; ".join("%s: %s" % d for d in defs_b)
+        t += "#o { %s%sanimation: %s }" % (own, "".join("%s: %s; " % d for d in defs_o), anim)
+        return t
+    return sheet(va), sheet(vb), ms
+
+
+def write_rkf():
+    rng = random.Random(11208)
+    cases, seen = [], set()
+    while len(cases) < 120:
+        try:
+            a, b, ms = rkf_case(rng)
+        except UNSURE:
+            continue
+        if (a, ms) in seen:
+            continue
+        seen.add((a, ms))
+        cases.append(["same(%s, %s, %d);" % (cstr(a), cstr(b), ms)])
+    o = [HEADER % "Lot 112: var() in a registered property's keyframes"] + [
+        '#include "../../framework/unity.h"', "#include <string.h>", "#include <stdio.h>", '#include "wf_sitecss.h"', "",
+        "static wf_site_t g_d;", "static char g_html[2048];", "static char g_a[256], g_b[256];", "",
+        "/* --p on #o and #i at the reader clock ms */",
+        "static void value(const char *css, int ms, char *out, int cap) {",
+        "    const char *o, *i;",
+        "    wf_site_set_time(ms);",
+        "    snprintf(g_html, sizeof(g_html), \"<html><head><style>%s</style></head><body>\"",
+        "             \"<div id=o><p id=i>i</p></div></body></html>\", css);",
+        "    TEST_ASSERT_EQUAL(0, wf_site_prepare_ext(&g_d, g_html, (int)strlen(g_html), 640, 480, 0, 0));",
+        "    wf_site_set_time(0);",
+        "    o = wf_site_node_var(&g_d, 3, \"--p\");",
+        "    i = wf_site_node_var(&g_d, 4, \"--p\");",
+        "    snprintf(out, (size_t)cap, \"%s|%s|%d\", o ? o : \"(none)\", i ? i : \"(none)\", g_d.prop_animated);",
+        "}", "",
+        "/* the sheet with var() and the sheet as the model reads it agree */",
+        "static void same(const char *with_var, const char *as_read, int ms) {",
+        "    value(with_var, ms, g_a, (int)sizeof(g_a));",
+        "    value(as_read, ms, g_b, (int)sizeof(g_b));",
+        "    TEST_ASSERT_EQUAL_STRING(g_b, g_a);",
+        "}", ""]
+    names = chunks(o, "test_l112_rkf", cases, 10)
+    finish(o, names, "test_lot112_rkf.c")
+    return len(cases)
+
+
 if __name__ == "__main__":
-    which = sys.argv[1:] or ["lh", "lflow", "dom", "opk", "ckf"]
+    which = sys.argv[1:] or ["lh", "lflow", "dom", "opk", "ckf", "font", "unset", "rkf"]
     out = []
     if "lh" in which:
         out.append("lh %d" % write_lh())
@@ -568,4 +892,10 @@ if __name__ == "__main__":
         out.append("opk %d" % write_opk())
     if "ckf" in which:
         out.append("ckf %d" % write_ckf())
+    if "font" in which:
+        out.append("font %d" % write_font())
+    if "unset" in which:
+        out.append("unset %s" % write_unset())
+    if "rkf" in which:
+        out.append("rkf %d" % write_rkf())
     print(", ".join(out))

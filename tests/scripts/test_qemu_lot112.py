@@ -23,8 +23,17 @@ Node lines end with the line height passed to the engine: "lh 20"
 (keyframes from var(--a) 0.2 to calc(var(--a) * 3), at 500 ms) and
 "color #ff8080" (keyframes from var(--c) #ff0000 to #ffffff). The
 counts: "color N 0" is 3 (#i112, #n112, #k112) plus #r112 when it is in
-view, "opacity 1 0" the one opacity animation, "animated 0" (no
-registered property), "keyframes 3" (k112, o112, c112).
+view, "opacity 1 0" the one opacity animation, "animated 1" (the
+registered --m112), "keyframes 4" (k112, o112, c112, m112).
+The second part of the lot, in three paragraphs that replace three
+filler lines (each still 20 px high, so the geometry above is unchanged):
+#g112 (18px, #0000ff) holds #f112 (font-size: 2ex, the x height of the
+18px font the engine draws: scale 5, 6 px, so 12px; 11px with the 16 px
+proportions; its color: var(--bad112) is unset, so #0000ff inherited,
+not #00ff00) and #e112 (3ch: the 10 px advance, 30px; 27px before);
+#h112 (font-size: calc(1lh + 2px), the body's 20 px line: 22px); #m112
+(the registered --m112 animated from var(--c112) #00ff00 to #ffffff at
+500 ms: #80ff80; #808080 when the var() frame was left out).
 No guest clock is involved (no -rtc option).
 """
 from __future__ import print_function
@@ -49,12 +58,18 @@ import test_qemu_lot88 as l88  # noqa: E402  (boot, stop, need, refuse, keep_log
 ROOT = g.ROOT
 SRV_LOG = os.path.join(g.LOG_DIR, "lot112-web-server.log")
 need, refuse = l88.need, l88.refuse
-KEEP = ["ikeep112", "nkeep112", "rkeep112", "ukeep112", "tkeep112", "kkeep112"]
-ANIM = "css-anim keyframes 3 animated 0 transitioned 0 font 0 at 500ms scroll 2 pos 0 color %d 0 opacity 1 0 view 1 need 2 geom 2 box 3\n"
+KEEP = ["ikeep112", "nkeep112", "rkeep112", "ukeep112", "tkeep112", "kkeep112", "gkeep112", "fkeep112", "ekeep112",
+        "hkeep112", "mkeep112"]
+ANIM = "css-anim keyframes 4 animated 1 transitioned 0 font 0 at 500ms scroll 2 pos 0 color %d 0 opacity 1 0 view 1 need 2 geom 2 box 3\n"
 FIXED = ["node p #u112 display auto lh 20\n", "node p #t112 display auto lh 18\n",
-         "node p #k112 display auto color #ff8080 opacity 0.4000 lh 20\n"]
+         "node p #k112 display auto color #ff8080 opacity 0.4000 lh 20\n",
+         "node p #g112 display auto color #0000ff size 18px lh 20\n",
+         "node span #f112 display auto color #0000ff size 12px lh 20\n",
+         "node span #e112 display auto size 30px lh 20\n", "node p #h112 display auto size 22px lh 20\n",
+         "node p #m112 display auto color #80ff80 lh 20\n"]
 NEVER = ["lh 40", "lh normal", "node p #k112 display auto lh 20\n", "opacity 0.8000", "opacity 0.2000", "#808080 opacity",
-         "#u112 display auto lh 15"]
+         "#u112 display auto lh 15", "#f112 display auto color #00ff00", "size 11px", "size 27px",
+         "#m112 display auto color #808080", "#h112 display auto lh"]
 
 
 def say(msg):
@@ -93,7 +108,9 @@ def step_reader(mon, proc, u):
     lw.run(mon, proc, "web-css off", "web-css off", 20)
     say("reader: line heights in the engine (20 px lines, 2rlh 30 px), body range 952: #808080 / #r112 #8e8e8e at "
         "476, #999999 / #f7f7f7 at 571, #f2f2f2 at 904; #u112 lh 20 (var() unset), #t112 lh 18 (revert-layer), "
-        "#k112 opacity 0.4000 and #ff8080 (var() in keyframes)")
+        "#k112 opacity 0.4000 and #ff8080 (var() in keyframes); #f112 12px and #e112 30px (ex and ch of the "
+        "engine's font), #h112 22px (lh in font-size), #f112 #0000ff (var() unset), #m112 #80ff80 (var() in a "
+        "registered property's keyframes)")
 
 
 def boot(hp):

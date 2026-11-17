@@ -379,9 +379,10 @@ static void test_l111_body(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:100px;overflow-x:auto;width:300px\"", style_of("body"));
     prep("html { overflow: hidden; width: min(80%, 400px) } body { overflow: auto; max-width: 50%; height: 100px } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:100px;overflow-x:auto;max-width:200px\"", style_of("body"));
-    /* html's width auto: left to the engine (the viewport's width) */
+    /* html's width auto: Lot 112: the viewport's width, in px (was left
+     * to the engine, which lays it out the same) */
     prep("html { overflow: hidden } body { overflow: auto; width: 25%; height: 100px } " RD);
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:100px;overflow-x:auto;width:25%\"", style_of("body"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:100px;overflow-x:auto;width:160px\"", style_of("body"));
 }
 
 int main(void) {

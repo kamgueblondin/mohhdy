@@ -75,6 +75,10 @@ int wf_css_math_box_at(const char *s, int vw, int vh, int em_px, int rem_px, int
  * containing block is unknown) */
 typedef struct {
     int vw, vh, em_px, rem_px, lh_px, rlh_px, basis;
+    /* Lot 112: ex and ch of the element's actual font (px thousandths,
+     * the engine's glyph metrics for its font size), each negative for the
+     * 16 px proportions (5/16 and 8/16 of em_px) */
+    int ex_px, ch_px;
 } wf_css_box_ctx_t;
 /* Lot 112: wf_css_math_box_lh or, with a basis, wf_css_math_box_at (out
  * may then be 0), with rlh against c->rlh_px */

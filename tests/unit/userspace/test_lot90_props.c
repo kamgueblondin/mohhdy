@@ -225,7 +225,9 @@ static void test_invalid_is_inherited(void) {
          "<div id=o><p id=p>p<span id=s>s</span></p></div><p id=q>q</p>");
     TEST_ASSERT_EQUAL_STRING("(none)", nv("p", "--b"));
     TEST_ASSERT_EQUAL_STRING("11px", fs_tok("p"));
-    TEST_ASSERT_EQUAL_STRING("", fs_tok("s"));
+    /* Lot 112: invalid at computed-value time is unset: font-size
+     * inherits p's 11px (was dropped: no font-size of its own) */
+    TEST_ASSERT_EQUAL_STRING("11px", fs_tok("s"));
     TEST_ASSERT_EQUAL_STRING("5px", fs_tok("q"));
 }
 

@@ -142,3 +142,66 @@ def col_frame(text, env, colour_match):
     if not raw or "!" in raw or len(raw) >= 128 or not colour_match(raw):
         return None
     return raw
+
+
+# ------------------------------------------------- Lot 112 (second part)
+# CSS Values 4, 6.1.1: font-relative lengths in font-size are of the
+# parent element's font (em, ex, ch), lh of the parent's line height and
+# rlh of the root's (the initial value, normal, in the root's own
+# font-size); a percentage is of the parent's font size. ex and ch are
+# the metrics of the font the engine draws (lot109_model.font_unit). A
+# plain length must be above 0; a math function below the reader's 1/1000
+# px or above 96 px keeps the parent's size, as the Lot 89 bounds do.
+import re as _re  # noqa: E402
+
+FS_LO, FS_HI = 1, 96000
+_FS_PLAIN = _re.compile(r"([+-]?(\d+(\.\d+)?|\.\d+))(ex|ch|lh|rlh)")
+
+
+def fs_metric(t, pf, rem, plh, rlh):
+    """font-size value t (with ex, ch, lh or rlh) of an element whose
+    parent has font size pf, line height plh (px thousandths, None for
+    normal), the root's font size rem and line height rlh (None normal):
+    the font size in px thousandths, None when it keeps the parent's"""
+    m = _FS_PLAIN.fullmatch(t)
+    if m and _F(m.group(1)) <= 0:
+        return None
+    # the declaration must resolve at 16px (as written: no var(), no
+    # unknown unit, at most 10000 px)
+    if with_rlh(None, L111.box_len_lh_at, t, 16000, 16000, None, 16000) is None:
+        return None
+    v = with_rlh(rlh, L111.box_len_lh_at, t, pf, rem, plh, pf)
+    if v is None or v < FS_LO or v > FS_HI:
+        return None
+    return v
+
+
+# CSS Variables 1, 3.1: a declaration whose var() substitution fails, or
+# whose substituted value the property does not take, is invalid at
+# computed-value time: the property is unset (inherited properties
+# inherit, the others take their initial value), whatever the earlier
+# declarations said.
+def unset_or_value(text, env, valid):
+    """the value a declaration text with var() stands for: the
+    substituted text when it is one the property takes (valid(text)),
+    else "unset" (invalid at computed-value time)"""
+    t = L111.subst(text, env)
+    if t is None or not valid(t.strip()):
+        return "unset"
+    return t.strip()
+
+
+# CSS Animations 1 and CSS Variables 1: var() in a keyframe of a
+# registered custom property is the animated element's value below its
+# own animations; invalid after substitution (no value, or not of the
+# property's syntax): the frame's declaration is left out.
+def reg_frame(text, env, matches):
+    """a registered property's keyframe value with var(): the substituted
+    text, None when the declaration is left out"""
+    t = L111.subst(text, env) if "var(" in text else text
+    if t is None:
+        return None
+    t = t.strip()
+    if not t or "!" in t or not matches(t):
+        return None
+    return t

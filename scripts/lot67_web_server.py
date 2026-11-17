@@ -905,6 +905,7 @@ LOT111_PAGES = {
 # keyframes
 # (tests/scripts/test_qemu_lot112.py)
 LOT112_FILL = "".join("<p>line112 %d</p>" % i for i in range(12))
+LOT112_FILL9 = "".join("<p>line112 %d</p>" % i for i in range(9))
 LOT112_PAGES = {
     "/lot112/lh.html": (
         "<!doctype html><html><head><title>Lot 112 lh</title><style>"
@@ -921,9 +922,18 @@ LOT112_PAGES = {
         "@layer l112 { #t112 { line-height: 18px } }\n"
         "#t112 { line-height: 3; line-height: revert-layer }\n"
         "#k112 { --a: 0.2; --c: #ff0000; animation: o112 1000ms linear, c112 1000ms linear }\n"
+        "@property --m112 { syntax: '<color>'; inherits: false; initial-value: #000000 }\n"
+        "@keyframes m112 { from { --m112: var(--c112) } to { --m112: #ffffff } }\n"
+        "#g112 { font-size: 18px; color: #0000ff }\n"
+        "#f112 { font-size: 2ex; color: #00ff00; color: var(--bad112) }\n"
+        "#e112 { font-size: 3ch }\n"
+        "#h112 { font-size: calc(1lh + 2px) }\n"
+        "#m112 { --c112: #00ff00; color: var(--m112); animation: m112 1000ms linear }\n"
         "</style></head><body><h1>Body 112</h1>"
         "<p id=\"i112\">ikeep112</p><p id=\"n112\">nkeep112</p>" + LOT112_FILL +
-        "<p id=\"r112\">rkeep112</p>" + LOT112_FILL +
+        "<p id=\"r112\">rkeep112</p>" + LOT112_FILL9 +
+        "<p id=\"g112\">gkeep112 <span id=\"f112\">fkeep112</span> <span id=\"e112\">ekeep112</span></p>"
+        "<p id=\"h112\">hkeep112</p><p id=\"m112\">mkeep112</p>" +
         "<p id=\"u112\">ukeep112</p><p id=\"t112\">tkeep112</p><p id=\"k112\">kkeep112</p>"
         "<p>fin112</p></body></html>"),
 }

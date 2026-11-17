@@ -142,6 +142,7 @@ OLD_H = G7.h_value
 
 
 # ------------------------------------------------------------- math suite
+@M.legacy     # Lot 112: wf_css_math_box keeps the 16 px proportions
 def write_math():
     rng = random.Random(10901)
     cases, seen = [], set()

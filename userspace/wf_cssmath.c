@@ -28,6 +28,8 @@ typedef struct {
      * else line-height normal (10/16 em); Lot 112: rlh against the root's
      * (else 10/16 rem) */
     int lh_px, rlh_px;
+    /* Lot 112: ex and ch against these (px thousandths) when >= 0 */
+    int ex_px, ch_px;
     /* Lot 111: % of this basis (px thousandths) when >= 0 (box mode) */
     int basis;
     /* Lot 111: the trees of mixed values */
@@ -130,6 +132,9 @@ static mv_t with_unit(mp_t *p, int n) {
         v.px = x / 16 * k + x % 16 * k / 16;
         /* Lot 111: lh of an element with a line height of its own */
         if (k == 10 && p->lh_px >= 0) v.px = mul_milli(n, p->lh_px, &p->bad);
+        /* Lot 112: ex and ch of the element's actual font */
+        if (k == 5 && p->ex_px >= 0) v.px = mul_milli(n, p->ex_px, &p->bad);
+        if (k == 8 && p->ch_px >= 0) v.px = mul_milli(n, p->ch_px, &p->bad);
     }
     else if (p->s[p->i] == '%' && p->box) {
         p->i++;
@@ -518,7 +523,7 @@ int wf_css_math(const char *s, int vw, int vh, char *out, int cap) {
     out[0] = 0;
     if (!wf_css_is_math(s)) return 0;
     p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
-    p.ctx = 0; p.em_px = p.rem_px = 0; p.box = 0; p.olen = 0; p.lh_px = p.rlh_px = -1; p.basis = -1; p.nmx = 0;
+    p.ctx = 0; p.em_px = p.rem_px = 0; p.box = 0; p.olen = 0; p.lh_px = p.rlh_px = p.ex_px = p.ch_px = -1; p.basis = -1; p.nmx = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i] || !v.len) return -1;
@@ -536,7 +541,7 @@ int wf_css_math_px(const char *s, int vw, int vh, int em_px, int rem_px, int *px
     if (!s[0]) return 0;
     if (em_px <= 0 || em_px > WF_CSSMATH_MAX || rem_px <= 0 || rem_px > WF_CSSMATH_MAX) return -1;
     p.s = s; p.i = 0; p.depth = 0; p.vw = vw; p.vh = vh; p.bad = 0;
-    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px; p.box = 0; p.olen = 0; p.lh_px = p.rlh_px = -1; p.basis = -1; p.nmx = 0;
+    p.ctx = 1; p.em_px = em_px; p.rem_px = rem_px; p.box = 0; p.olen = 0; p.lh_px = p.rlh_px = p.ex_px = p.ch_px = -1; p.basis = -1; p.nmx = 0;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i]) return -1;
@@ -549,7 +554,7 @@ static int box_run(const char *s, const wf_css_box_ctx_t *c, int *px, char *out,
 
 static wf_css_box_ctx_t box_ctx(int vw, int vh, int em_px, int rem_px, int lh_px, int basis) {
     wf_css_box_ctx_t c;
-    c.vw = vw; c.vh = vh; c.em_px = em_px; c.rem_px = rem_px; c.lh_px = lh_px; c.rlh_px = -1; c.basis = basis;
+    c.vw = vw; c.vh = vh; c.em_px = em_px; c.rem_px = rem_px; c.lh_px = lh_px; c.rlh_px = -1; c.basis = basis; c.ex_px = c.ch_px = -1;
     return c;
 }
 
@@ -591,12 +596,13 @@ static int box_run(const char *s, const wf_css_box_ctx_t *c, int *px, char *out,
     out[0] = 0;
     if (!s[0]) return 0;
     if (c->em_px <= 0 || c->em_px > WF_CSSMATH_MAX || c->rem_px <= 0 || c->rem_px > WF_CSSMATH_MAX ||
-        c->lh_px > WF_CSSMATH_MAX || c->rlh_px > WF_CSSMATH_MAX)
+        c->lh_px > WF_CSSMATH_MAX || c->rlh_px > WF_CSSMATH_MAX || c->ex_px > WF_CSSMATH_MAX || c->ch_px > WF_CSSMATH_MAX)
         return -1;
     p.s = s; p.i = 0; p.depth = 0; p.vw = c->vw; p.vh = c->vh; p.bad = 0;
     p.ctx = 1; p.em_px = c->em_px; p.rem_px = c->rem_px;
     p.box = 1; p.olen = 0; p.cap = cap; p.out = out; p.lh_px = c->lh_px < 0 ? -1 : c->lh_px;
     p.rlh_px = c->rlh_px < 0 ? -1 : c->rlh_px; p.basis = c->basis; p.nmx = 0;
+    p.ex_px = c->ex_px < 0 ? -1 : c->ex_px; p.ch_px = c->ch_px < 0 ? -1 : c->ch_px;
     v = factor(&p);
     ws(&p);
     if (p.bad || p.s[p.i] || (!v.len && v.px)) { out[0] = 0; return -1; }

@@ -121,12 +121,50 @@ static void test_l112_op_frames(void) {
     TEST_ASSERT_EQUAL(20, nth("p", 1)->transparency);
 }
 
+/* ex and ch of the engine's own font, and font-size in ex, ch, lh and rlh */
+static void test_l112_font_layout(void) {
+    reduce("#a { font-size: 18px; line-height: 3ch } #b { font-size: 24px; line-height: 4ex } "
+           "#c { font-size: 8px; line-height: 2ch }", P3);
+    TEST_ASSERT_EQUAL(30, nth("p", 0)->h);
+    TEST_ASSERT_EQUAL(32, nth("p", 1)->h);
+    TEST_ASSERT_EQUAL(16, nth("p", 2)->h);
+    /* the engine's glyph advance is the ch the reader took */
+    TEST_ASSERT_EQUAL(18, nth("p", 0)->font_px);
+    reduce("body { font-size: 24px; line-height: 30px } #a { font-size: 2ex } #b { font-size: 1lh } "
+           "#c { font-size: 1.5ch }", P3);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "<p style=\"font-size:16px;line-height:30px\">a</p>"));
+    TEST_ASSERT_EQUAL(16, nth("p", 0)->font_px);
+    TEST_ASSERT_EQUAL(30, nth("p", 1)->font_px);
+    TEST_ASSERT_EQUAL(18, nth("p", 2)->font_px);
+    reduce("html { line-height: 12px } #a { font-size: 3rlh }", P3);
+    TEST_ASSERT_EQUAL(36, nth("p", 0)->font_px);
+}
+
+/* var() unset, a registered property's keyframes with var(), html's
+ * width auto */
+static void test_l112_unset_layout(void) {
+    reduce("body { color: #ff0000 } #a { color: #0000ff; color: var(--u) } #b { --c: 1px; color: #0000ff; color: var(--c) }", P3);
+    TEST_ASSERT_EQUAL((int)nth("body", 0)->color, (int)nth("p", 0)->color);
+    TEST_ASSERT_EQUAL((int)nth("body", 0)->color, (int)nth("p", 1)->color);
+    wf_html_set_csstime(500);
+    reduce("@property --x { syntax: '<color>'; inherits: false; initial-value: #000000 } "
+           "@keyframes f { from { --x: var(--c) } to { --x: #ffffff } } #a { --c: #ff0000; color: var(--x); animation: f 1s linear }", P3);
+    wf_html_set_csstime(0);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "<p style=\"color:#ff8080\">a</p>"));
+    reduce("html { overflow: hidden } body { overflow: auto; width: 25%; height: 100px } " TL,
+           "<div id=o><p id=i>i</p></div>");
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "width:160px"));
+    TEST_ASSERT_EQUAL(160, nth("body", 0)->w);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_l112_lh_layout);
     RUN_TEST(test_l112_rlh_layout);
     RUN_TEST(test_l112_dom_layout);
     RUN_TEST(test_l112_op_frames);
+    RUN_TEST(test_l112_font_layout);
+    RUN_TEST(test_l112_unset_layout);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

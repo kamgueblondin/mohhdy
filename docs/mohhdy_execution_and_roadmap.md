@@ -17,7 +17,12 @@ var() in opacity, color and background-color keyframes is the animated
 element's; var() invalid at computed-value time is unset for opacity and
 line-height. webeng.c unchanged. A QEMU page (`make qemu-lot112`, CI job
 lot112-reader-lh) checks it. US-068/073, US-076, US-080 and US-081 stay
-partial. US-078 and US-097 stay simule. See docs/lot112_plan.md.
+partial. US-078 and US-097 stay simule. A second commit adds ex and ch
+of the engine's actual font, ex/ch/lh/rlh in font-size, var() in
+registered properties' keyframes, var() invalid at computed-value time
+unset for every property kind, and the body's percentage width against
+an html width left auto (no engine, kernel or ABI change). See
+docs/lot112_plan.md.
 
 ### Lot 111 (16 November 2026, base f9668e2, PR 268 merged)
 

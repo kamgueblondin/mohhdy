@@ -1279,7 +1279,7 @@ jobs:
 
   # Lot 112: one boot of make qemu-lot112
   lot112-reader-lh:
-    name: QEMU line-height in the engine, rlh, var() unset and opacity keyframes (Lot 112)
+    name: QEMU line-height in the engine, rlh, var() unset and keyframes, ex/ch of the engine font, lh in font-size (Lot 112)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

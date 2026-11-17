@@ -82,6 +82,8 @@ def body_pct(nodes, i, h, vh=VH, ax=0):
     em, rem = nodes[p].get("fs", 16), nodes[p].get("rem", 16)
     if ax:
         hv = L111.html_len(sc[6], em, rem, L111.VW) if len(sc) > 6 else None
+        if hv is None and all(len(sc) <= k or sc[k] is None for k in (6, 7)):
+            hv = L111.VW     # Lot 112: html's width auto is the viewport's (no html margin in these pages)
     elif len(sc) > 3:
         hv = L111.html_len(sc[3], em, rem, vh)
     else:

@@ -569,7 +569,7 @@ def lh_comp_lot111(decl, f, root, parent_comp, parent_f):
 # block (the viewport) or an expression of those, and the body's
 # percentage then has a value in px; html's auto height leaves it as it
 # is (auto); html's auto width is the viewport's, which the layout gives
-# anyway (left as it is). Each percentage literal of an expression is
+# anyway (Lot 112: then in px as well, lot110_model.body_pct). Each percentage literal of an expression is
 # taken in px thousandths cut toward zero (the reader's math), the
 # result in whole px cut toward zero, below 0 is 0.
 _PCT = _re.compile(r"(?<![\w.])([+-]?)(\d+(?:\.\d+)?|\.\d+)%")
