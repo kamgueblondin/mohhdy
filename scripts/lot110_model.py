@@ -68,21 +68,26 @@ def box_of(nodes, q, g):
     return g.get("body") if is_body(nodes, q) else g["box"].get(q)
 
 
-def body_pct(nodes, i, h, vh=VH):
+def body_pct(nodes, i, h, vh=VH, ax=0):
     """box_len value h (value, pct) of node i with a body percentage made
-    px against html's height"""
+    px against html's height. Lot 111, converted: html's height may be an
+    expression with a percentage, and ax 1 takes a width against html's
+    width (lot111_model.html_len)"""
     import lot107_model as L7
+    import lot111_model as L111
     if h is None or h[1] is not True or not is_body(nodes, i) or nodes[i]["parent"] < 0:
         return h
     p = nodes[i]["parent"]
     sc = nodes[p]["sc"]
-    if len(sc) > 3:
-        hh = L7.box_len(sc[3], nodes[p].get("fs", 16), nodes[p].get("rem", 16))
+    em, rem = nodes[p].get("fs", 16), nodes[p].get("rem", 16)
+    if ax:
+        hv = L111.html_len(sc[6], em, rem, L111.VW) if len(sc) > 6 else None
+    elif len(sc) > 3:
+        hv = L111.html_len(sc[3], em, rem, vh)
     else:
-        hh = (sc[2] - 1, False) if sc[2] else None
-    if hh is None or hh[1] == "expr":
+        hv = sc[2] - 1 if sc[2] else None
+    if hv is None:
         return h
-    hv = vh * hh[0] // 100 if hh[1] else hh[0]
     hv = min(hv, M5.HMAX)
     return (min(hv * h[0] // 100, M5.HMAX), False)
 
@@ -125,6 +130,18 @@ def op_text(v):
 
 
 def op_decl(v):
+    """op_decl_lot110 converted by Lot 111: a math function of a number
+    or a percentage is a value too (lot111_model.op_math)"""
+    got = op_decl_lot110(v)
+    if got is None and v not in ("revert", "revert-layer"):
+        import lot111_model as L111
+        n = L111.op_math(v)
+        if n is not None:
+            return (2, n)
+    return got
+
+
+def op_decl_lot110(v):
     """("val", code, value) of one opacity declaration value or None:
     code 1 initial/unset, 2 a value, 3 inherit"""
     if v == "inherit":
@@ -140,12 +157,15 @@ def op_cascade(decls):
     [(rank, value, important)], (0, 10000, False) when none"""
     best = None
     for rank, v, imp in decls:
-        got = op_decl(v)
+        # Lot 111: revert and revert-layer win like a value; with author
+        # rules only and no layer they leave nothing (no user-agent
+        # opacity)
+        got = (4, 0) if v in ("revert", "revert-layer") else op_decl(v)
         if got is None:
             continue
         if best is None or rank >= best[0]:
             best = (rank, got, imp)
-    if best is None:
+    if best is None or best[1][0] == 4:
         return (0, 10000, False)
     return (best[1][0], best[1][1], best[2])
 

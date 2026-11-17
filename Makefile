@@ -1750,6 +1750,14 @@ qemu-lot109: $(OS_IMAGE) pack-initrd disk
 qemu-lot110: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot110.py
 
+# Lot 111: the Lot 110 page with html's height max(20lh, min(10%, 40px))
+# (lh against html's line-height, a nested mixed min()), opacity from
+# calc(), var() and revert-layer in the report, a relative colour with a
+# missing origin component (tests/scripts/test_qemu_lot111.py)
+.PHONY: qemu-lot111
+qemu-lot111: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot111.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

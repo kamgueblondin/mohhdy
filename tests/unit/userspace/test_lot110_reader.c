@@ -201,11 +201,12 @@ static void test_l110_body_pct(void) {
     /* html in viewport units or em: px */
     prep("html { overflow: hidden; height: 50vh } body { overflow: auto; height: 50% } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:120px\"", style_of("body"));
-    /* html auto or an expression with a percentage: left as it is */
+    /* html auto: left as it is (Lot 111: an html height given as an
+     * expression is resolved against the viewport, 50% of 480 - 20) */
     prep("html { overflow: hidden } body { overflow: auto; height: 50% } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:50%\"", style_of("body"));
     prep("html { overflow: hidden; height: calc(100% - 20px) } body { overflow: auto; height: 50% } " RD);
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:50%\"", style_of("body"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:230px\"", style_of("body"));
     /* the body's own px or expression is not touched */
     prep("html { overflow: hidden; height: 400px } body { overflow: auto; height: 300px } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:300px\"", style_of("body"));
@@ -227,9 +228,10 @@ static void test_l110_op_values(void) {
         {"0.5", "50"}, {".25", "25"}, {"+.75", "75"}, {"1", "100"}, {"0", "0"}, {"-0.5", "0"}, {"-0", "0"},
         {"2", "100"}, {"100000000", "100"}, {"50%", "50"}, {"50.5%", "50"}, {"0.505", "50"}, {"150%", "100"},
         {"-10%", "0"}, {"0.009", "0"}, {"0.0199", "1"}, {"99.99%", "99"}, {"0.99999", "99"}, {"1000000%", "100"},
-        {"7%", "7"}, {"0.07", "7"}};
-    static const char *const bad[] = {"calc(0.5)", "0.5px", "1e-1", "5.", ".", "%", "half", "50 %", "+-1", "--x",
-                                      "0.5 0.5", "none", "revert", "1.5.5", ""};
+        {"7%", "7"}, {"0.07", "7"}, {"calc(0.5)", "50"}};     /* Lot 111: calc(0.5) is a value */
+    /* Lot 111: calc(0.5) is a value (above) and revert rolls back (below) */
+    static const char *const bad[] = {"0.5px", "1e-1", "5.", ".", "%", "half", "50 %", "+-1", "--x",
+                                      "0.5 0.5", "none", "1.5.5", ""};
     char css[160], want[64];
     int k;
     for (k = 0; k < (int)(sizeof(c) / sizeof(c[0])); k++) {
@@ -243,6 +245,9 @@ static void test_l110_op_values(void) {
         prep(css);
         TEST_ASSERT_EQUAL_STRING(" style=\"opacity:30%\"", style_of("o"));
     }
+    /* Lot 111: revert leaves no author opacity: 1, not written */
+    prep("#o { opacity: 0.3; opacity: revert }");
+    TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     /* initial and unset: 1, not written; the strongest wins */
     prep("#o { opacity: 0.3; opacity: initial }");
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));

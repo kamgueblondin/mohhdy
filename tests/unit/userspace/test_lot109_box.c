@@ -39,7 +39,7 @@ static void test_l109_box_0(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:28px\"", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("4 1 0 0 0 0 0 1 28000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:max(calc(79% + 32px), calc(7% + 65px));min-height:0px;overflow-x:auto;width:542px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:max(calc(79% + 32px), calc(7% + 65px));min-height:0px;overflow-x:auto;width:542px;max-width:min(calc(50% + 1px), 11px)\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { min-height: calc(44lh + 1%); min-height: calc(10px + 1); width: calc(100px / 4); overflow-x: visible; overflow-y: auto; max-height: 3lh } #o { width: +30%; overflow: clip } html { font-size: 20px } #b { font-size: 24px } #i { animation: k 1s linear; animation-timeline: scroll(nearest inline) }");
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("3 3 0 0 0 0 0 0 20000", sc_of(3));
@@ -451,7 +451,7 @@ static void test_l109_box_9(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("5 5 0 0 0 0 0 1 16000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:424px;max-height:106%;min-height:10px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:scroll;height:424px;max-height:106%;min-height:10px;overflow-x:scroll;width:min(10%, 10px, 2px)\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { overflow-x: clip; width: 14.5ex; overflow-y: auto } #o { overflow: scroll; width: 16.25lh; max-width: calc(10px - 20px) }  #i { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL(5, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("5 5 0 0 0 0 0 0 16000", sc_of(3));
@@ -1531,7 +1531,7 @@ static void test_l109_box_33(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("5 1 0 0 0 0 0 1 16000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(calc(50% + 1px), 11px);min-height:clamp(calc(112% - 361px), 5%, 63%)\"", style_of("b"));
 }
 
 int main(void) {

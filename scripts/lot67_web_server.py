@@ -144,6 +144,12 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       (html overflow hidden, body 50% of html's 400px),
                       read by scroll(nearest), a named timeline and
                       view(); opacity, animated and transitioned
+  /lot111/box.html    Lot 111: the body box scroller 50% of an html
+                      height given as max(20lh, min(10%, 40px)) with
+                      html's line-height 20px; opacity from calc(),
+                      var() and revert-layer seen in the report; a
+                      relative colour whose origin has a missing red
+                      mixed with another colour
 Every request is logged on stdout ("REQ <scheme> <path>")."""
 import html, http.server, os, re, socketserver, ssl, sys, threading, urllib.parse
 
@@ -861,6 +867,33 @@ LOT110_PAGES = {
 }
 
 
+# Lot 111: the Lot 110 page with html's height an expression (lh against
+# html's line-height, a mixed min() nested in max()), opacity values from
+# calc(), var() and revert-layer, a relative colour with a missing origin
+# component (tests/scripts/test_qemu_lot111.py)
+LOT111_FILL = "".join("<p>line111 %d</p>" % i for i in range(12))
+LOT111_PAGES = {
+    "/lot111/box.html": (
+        "<!doctype html><html><head><title>Lot 111 box</title><style>"
+        "@keyframes k111 { from { color: #000000 } to { color: #ffffff } }\n"
+        "html { overflow: hidden; line-height: 20px; height: max(20lh, min(10%, 40px)) }\n"
+        "body { overflow: auto; height: 50%; margin: 0; scroll-timeline: --b111; --a: 40% }\n"
+        "#i111 { animation: k111 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "#n111 { animation: k111 1000ms linear; animation-timeline: --b111 }\n"
+        "#v111 { animation: k111 1000ms linear; animation-timeline: view() }\n"
+        "#o111 { opacity: calc(0.25 + 0.5) }\n"
+        "#a111 { opacity: var(--a) }\n"
+        "@layer l111 { #t111 { opacity: 0.2 } }\n"
+        "#t111 { opacity: 0.9; opacity: revert-layer; color: color-mix(in srgb, rgb(from rgb(none 0 0) r g b), "
+        "rgb(200 0 0)) }\n"
+        "</style></head><body><h1>Body 111</h1>"
+        "<p id=\"i111\">ikeep111</p><p id=\"n111\">nkeep111</p>" + LOT111_FILL +
+        "<p id=\"v111\">vkeep111</p>" + LOT111_FILL +
+        "<p id=\"o111\">okeep111</p><p id=\"a111\">akeep111</p><p id=\"t111\">tkeep111</p>"
+        "<p>fin111</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -1098,6 +1131,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT110_PAGES:
             self._send(200, LOT110_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT111_PAGES:
+            self._send(200, LOT111_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

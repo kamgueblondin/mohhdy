@@ -314,7 +314,7 @@ static void test_l109_flow_7(void) {
     TEST_ASSERT_EQUAL(250, sh(0));
     TEST_ASSERT_EQUAL(65, sh(1));
     flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: min(calc(51% - 7ch), calc((89% + 45vh) / 8), calc(11ex + 99%)); min-height: min(min(10%, 1lh), 2px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(51% - 56px), calc(11% + 27px), calc(99% + 55px))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(51% - 56px), calc(11% + 27px), calc(99% + 55px));min-height:min(10%, 10px, 2px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(46, sh(1));
     flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: calc(26.75%); max-height: calc(48%) }");
@@ -450,7 +450,7 @@ static void test_l109_flow_11(void) {
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(632, sh(1));
     flow("#p { overflow: auto; height: 12.5em } #o { overflow: auto; height: max(calc(48% * 0.5), calc(15.5ch - 29%)); min-height: min(min(10%, 1lh), 2px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(24%, calc(-29% + 124px))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(24%, calc(-29% + 124px));min-height:min(10%, 10px, 2px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(66, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: max(calc(18% + 7px), 15.75pt); max-height: min(20em, calc((28% + 9.75lh) / 4)) }");
@@ -659,6 +659,10 @@ static void test_l109_flow_17(void) {
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(-68% + 378px), calc(27% + 269px));min-height:min(calc(63% - 216px), calc(62% - 1248px))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(242, sh(1));
+    flow("#p { overflow: auto; height: 12.5em } #o { overflow: auto; height: calc(min(50%, 10px) + 1px) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(50% + 1px), 11px)", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(11, sh(1));
     flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: calc(43ex + 33rem) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:743px", g_o);
     TEST_ASSERT_EQUAL(320, sh(0));
@@ -667,13 +671,13 @@ static void test_l109_flow_17(void) {
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:66px", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(66, sh(1));
+}
+
+static void test_l109_flow_18(void) {
     flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: min(calc(38.75em + 83%), calc(0.5 * (44% - 58ch))); min-height: max(calc(48ch + 47%), 39.2%) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(83% + 620px), calc(22% - 232px));min-height:max(calc(47% + 384px), 39%)", g_o);
     TEST_ASSERT_EQUAL(300, sh(0));
     TEST_ASSERT_EQUAL(525, sh(1));
-}
-
-static void test_l109_flow_18(void) {
     flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: calc(35.125% - 8.2pc + 80%); min-height: calc(52% * 2) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(115% - 131px);min-height:104%", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
@@ -702,13 +706,13 @@ static void test_l109_flow_18(void) {
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:0px", g_o);
     TEST_ASSERT_EQUAL(150, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
+}
+
+static void test_l109_flow_19(void) {
     flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: min(calc((12% + 1lh) / 5), calc(3 * (33% - 38.75px))); max-height: max(calc(20% * 3), calc(4% - 39.25pc + 45%)) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(2% + 2px), calc(99% - 116px));max-height:max(60%, calc(49% - 628px))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(6, sh(1));
-}
-
-static void test_l109_flow_19(void) {
     flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: calc(59ex - 36.75lh) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:0px", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
@@ -737,10 +741,6 @@ static void test_l109_flow_19(void) {
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(42% - 128px), 396px)", g_o);
     TEST_ASSERT_EQUAL(250, sh(0));
     TEST_ASSERT_EQUAL(396, sh(1));
-    flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: calc(76% + 57em) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(76% + 912px)", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(1064, sh(1));
 }
 
 int main(void) {

@@ -1277,6 +1277,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 111: one boot of make qemu-lot111
+  lot111-reader-box:
+    name: QEMU lh, nested mixed min/max, opacity values and relative none (Lot 111)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 111 boot
+        run: make qemu-lot111
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot111-reader-box-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 110: one boot of make qemu-lot110
   lot110-reader-body:
     name: QEMU body as a box scroller and animated opacity (Lot 110)

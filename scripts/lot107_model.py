@@ -397,9 +397,20 @@ def sp_cascade(decls):
     return val
 
 
-def sp_inset(slot, em, rem):
+def sp_inset(slot, em, rem, view=None):
     """the view timeline inset (lot104_model form) an auto inset takes from
-    a scroll-padding side"""
+    a scroll-padding side. Lot 111, converted: a math function with a
+    percentage is of the scrollport along that axis (view px,
+    lot111_model.pct_at), cut toward zero to 1/1000 px, below 0 is 0"""
+    if slot[0] == "tok" and slot[1] == "expr" and view is not None:
+        import lot111_model as L111
+        px = L111.pct_at(slot[2], em, rem, view)
+        if px is None:
+            return ("len", 0)
+        t = max(px, F(0)) * 1000
+        if t != math_floor(t):
+            raise Unsure()
+        return ("len", math_floor(t) * 10)
     if slot[0] == "abs":
         q = slot[1] * 10000
         if q != math_floor(q):
@@ -445,7 +456,7 @@ def view_clock(a, nodes, q, axis, ins, c):
                 em, rem = nodes[sn].get("fs", 16), nodes[sn].get("rem", 16)
                 for e in (0, 1):
                     if ins[e][0] == "auto":
-                        ins[e] = sp_inset(sp[(0 if useb else 2) + e], em, rem)
+                        ins[e] = sp_inset(sp[(0 if useb else 2) + e], em, rem, b["vp_b"] if useb else b["vp_i"])
     return M6.view_clock(a, nodes, q, axis, tuple(ins), c)
 
 
