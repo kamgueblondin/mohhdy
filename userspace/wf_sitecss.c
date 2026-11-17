@@ -3,6 +3,7 @@
 #include "wf_cssmath.h"
 #include "wf_cssvar.h"
 #include "wf_cssbg.h"
+#include "../include/os_ui_scale.h"
 
 int wf_site_apply(wf_site_t *d);
 
@@ -948,12 +949,15 @@ static int *kind_rank(wf_site_node_t *nd, int kind) {
     case WF_SITE_K_LIMG: case WF_SITE_K_LPOS: case WF_SITE_K_BGCLIP: case WF_SITE_K_BGORIGIN:
         return &nd->lv_rank[kind - WF_SITE_K_BGIMG];
     case WF_SITE_K_OP: return &nd->oprank;      /* Lot 111: revert and revert-layer */
+    case WF_SITE_K_LH: return &nd->lhrank;      /* Lot 112 */
     default: return 0;
     }
 }
 
-/* Lot 111: the revert mark of kind (rv, or op_rv for opacity) */
+/* Lot 111: the revert mark of kind (rv, or op_rv for opacity; Lot 112:
+ * lh_rv for line-height) */
 static uint8_t *rv_at(wf_site_node_t *nd, int kind) {
+    if (kind == WF_SITE_K_LH) return &nd->lh_rv;
     return kind == WF_SITE_K_OP ? &nd->op_rv : &nd->rv[kind];
 }
 
@@ -983,6 +987,7 @@ static void reset_kind(wf_site_node_t *nd, int kind) {
         nd->lv_val[kind - WF_SITE_K_BGIMG] = 0;
         break;
     case WF_SITE_K_OP: nd->op = 0; nd->op_val = 0; break;
+    case WF_SITE_K_LH: nd->lhtok[0] = 0; break;     /* Lot 112 */
     default: return;
     }
     if (kind_rank(nd, kind)) *kind_rank(nd, kind) = 0;
@@ -1029,9 +1034,11 @@ static void paint_one(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox) 
         return;
     }
     if (r->kind == WF_SITE_K_LH) {
-        /* Lot 111: line-height, the strongest wins */
+        /* Lot 111: line-height, the strongest wins; Lot 112: a winning
+         * revert or revert-layer keeps its rank (resolve_reverts) */
         if (rank < nd->lhrank) return;
         nd->lhrank = rank;
+        nd->lh_rv = r->revert;
         scopy(nd->lhtok, WF_SITE_TOK, r->tok, slen(r->tok));
         return;
     }
@@ -1196,10 +1203,11 @@ static void all_kind(const wf_site_rule_t *r, int kind, wf_site_rule_t *out) {
 static void paint_rule(wf_site_t *d, int idx, const wf_site_rule_t *r, int prox, int only) {
     if (r->kind == WF_SITE_K_ALL) {
         int k;
-        /* Lot 111: opacity too (after the kinds of K_MAX) */
-        for (k = 1; k <= WF_SITE_K_MAX + 1; k++) {
+        /* Lot 111: opacity too (after the kinds of K_MAX); Lot 112: and
+         * line-height */
+        for (k = 1; k <= WF_SITE_K_MAX + 2; k++) {
             wf_site_rule_t one;
-            int kk = k > WF_SITE_K_MAX ? WF_SITE_K_OP : k;
+            int kk = k <= WF_SITE_K_MAX ? k : k == WF_SITE_K_MAX + 1 ? WF_SITE_K_OP : WF_SITE_K_LH;
             if (only && only != kk) continue;
             all_kind(r, kk, &one);
             paint_one(d, idx, &one, prox);
@@ -1288,7 +1296,32 @@ static void op_text(int v, char *out, int cap);
  * length against em and the root size (wf_css_math_box): the px
  * thousandths, or ex (WF_SITE_BOXEX bytes) the engine's expression of
  * one with a percentage (0 then); *ok 0 when it does not resolve */
-static int tok_box(const wf_site_t *d, const char *t, int em, int lh, char *ex, int *ok) {
+/* Lot 112: s as a box length (wf_css_math_box_ctx) against em, lh (+ 1,
+ * 0 normal), the root's font size and line height (rlh) and basis (px
+ * thousandths, negative: a percentage stays in ex) */
+/* Lot 112: ex and ch (px thousandths) of the font the engine draws for
+ * font size f (px thousandths): its font px (rounded; the engine's
+ * WE_FONT_PX_MIN 4 .. WE_FONT_PX_MAX 64 bounds give the same scale as the
+ * scale's own bounds), its scale q (webeng.c we_font_q: (px + 2) / 4
+ * within 4..16) and the 8x8 font scaled by q (os_ui_scale.h): ch the
+ * advance os_ui_char_w(q), ex the 5 inked rows of "x", os_ui_px(5, q) */
+static void font_metrics(int f, int *ex, int *ch) {
+    int px = f / 1000 + (f % 1000 >= 500), q;
+    q = os_ui_q_clamp((px + 2) / 4);
+    *ex = os_ui_px(5, q) * 1000;
+    *ch = os_ui_char_w(q) * 1000;
+}
+
+static int box_of(const wf_site_t *d, const char *s, int em, int lh, int basis, int *v, char *ex) {
+    wf_css_box_ctx_t c;
+    c.vw = d->vw; c.vh = d->vh; c.em_px = em; c.rem_px = d->root_fs;
+    c.lh_px = lh - 1; c.rlh_px = d->root_lh - 1; c.basis = basis;
+    /* Lot 112: ex and ch of the element's actual font (em is its size) */
+    font_metrics(em, &c.ex_px, &c.ch_px);
+    return wf_css_math_box_ctx(s, &c, v, ex, WF_SITE_BOXEX);
+}
+
+static int tok_box(const wf_site_t *d, const char *t, int em, int lh, int basis, char *ex, int *ok) {
     int v = 0, e = 0, k = 1;
     const char *s = t + 1;
     *ok = 0;
@@ -1297,8 +1330,9 @@ static int tok_box(const wf_site_t *d, const char *t, int em, int lh, char *ex, 
         if (e < 1 || e > d->nlongs) return 0;
         s = d->lpool[e - 1];
     }
-    /* Lot 111: lh against the element's line height (lh: d->lh) */
-    *ok = wf_css_math_box_lh(s, d->vw, d->vh, em, d->root_fs, lh - 1, &v, ex, WF_SITE_BOXEX) > 0;
+    /* Lot 111: lh against the element's line height (lh: d->lh); Lot
+     * 112: rlh against the root's, a percentage of basis when >= 0 */
+    *ok = box_of(d, s, em, lh, basis, &v, ex) > 0;
     return v;
 }
 
@@ -1323,7 +1357,7 @@ static int box_len(const wf_site_t *d, const wf_site_node_t *nd, int mx, int *v,
         return 1;
     }
     if (t[0] != '~' && t[0] != '=' && t[0] != '@') return 0;
-    r = tok_box(d, t, d->fs[nd - d->node], d->lh[nd - d->node], ex, &ok);
+    r = tok_box(d, t, d->fs[nd - d->node], d->lh[nd - d->node], -1, ex, &ok);
     if (!ok) return 0;
     /* an expression in ex (v 0); at most 10000 px (WF_CSSMATH_MAX), under WF_SITE_HMAX */
     *v = r < 0 ? 0 : r / 1000;
@@ -1365,7 +1399,7 @@ static int html_len(const wf_site_t *d, const wf_site_node_t *h, int mx, int bas
             if (e < 1 || e > d->nlongs) return 0;
             s = d->lpool[e - 1];
         }
-        if (wf_css_math_box_at(s, d->vw, d->vh, d->fs[q], d->root_fs, d->lh[q] - 1, basis * 1000, &r) != 1) return 0;
+        if (basis < 0 || box_of(d, s, d->fs[q], d->lh[q], basis * 1000, &r, 0) != 1) return 0;
         v = r < 0 ? 0 : r / 1000;
     } else if (pct) v = basis * v / 100;
     *px = v > WF_SITE_HMAX ? WF_SITE_HMAX : v;
@@ -1383,8 +1417,18 @@ static int html_len(const wf_site_t *d, const wf_site_node_t *h, int mx, int bas
  * html's width is auto */
 static void body_pct(const wf_site_t *d, const wf_site_node_t *nd, int ax, int *v, int *pct) {
     int p = nd->parent, hv;
+    const wf_site_node_t *h;
     if (!*pct || p < 0 || !site_body(d, (int)(nd - d->node))) return;
-    if (!html_len(d, &d->node[p], ax ? 2 : 0, ax ? d->vw : d->vh, &hv)) return;
+    h = &d->node[p];
+    if (!html_len(d, h, ax ? 2 : 0, ax ? d->vw : d->vh, &hv)) {
+        /* Lot 112: html's width auto (no width or max-width) fills the
+         * initial containing block, the viewport's width, when html has
+         * no margin or padding of its own (CSS 2, 10.3.3); html's height
+         * auto still leaves the body's percentage to the engine (auto,
+         * CSS 2 10.5) */
+        if (!ax || h->xtok[0][0] || h->xpx[1] || h->xtok[1][0] || h->margin_set || h->pad_set) return;
+        hv = d->vw;
+    }
     hv = hv * *v / 100;
     *v = hv > WF_SITE_HMAX ? WF_SITE_HMAX : hv;
     *pct = 0;
@@ -1408,7 +1452,7 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
     if (!nd->color_set && nd->weight != 2 && nd->align < 2 && !nd->margin_set && !nd->pad_set &&
         nd->italic != 2 && nd->deco < 2 && nd->transform < 2 && nd->ws < 2 && !nd->bg_set &&
         nd->tok_val[0] != 2 && nd->tok_val[1] != 2 && nd->tok_val[2] != 2 && nd->tok_val[3] != 2 &&
-        !long_given(nd) && !box && !xbox && nd->op_val < 2) return 0;
+        !long_given(nd) && !box && !xbox && nd->op_val < 2 && !d->lhx[nd - d->node]) return 0;
     n = app(out, cap, n, " style=\"");
     if (nd->color_set) { n = app(out, cap, n, "color:"); n = app_hex(out, cap, n, nd->color); any = 1; }
     if (nd->weight == 2) { if (any) n = app(out, cap, n, ";"); n = app(out, cap, n, "font-weight:bold"); any = 1; }
@@ -1470,6 +1514,15 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
             n = app(out, cap, n, nd->tok[t]);
             any = 1;
         }
+    }
+    if (d->lhx[nd - d->node]) {
+        /* Lot 112: the line height (lh_engine) */
+        int x = d->lhx[nd - d->node];
+        if (any) n = app(out, cap, n, ";");
+        n = app(out, cap, n, "line-height:");
+        if (x == 1) n = app(out, cap, n, "normal");
+        else { n = app_u(out, cap, n, (unsigned)x); n = app(out, cap, n, "px"); }
+        any = 1;
     }
     {
         /* Lot 90: the pool kinds, in the order the engine reads them
@@ -1605,6 +1658,12 @@ int wf_site_report(const wf_site_t *d, char *out, int cap) {
             n = app(out, cap, n, " opacity ");
             n = app(out, cap, n, ot);
         }
+        if (d->lhx[i]) {
+            /* Lot 112: the line height the style attribute passes on */
+            n = app(out, cap, n, " lh ");
+            if (d->lhx[i] == 1) n = app(out, cap, n, "normal");
+            else n = app_u(out, cap, n, (unsigned)d->lhx[i]);
+        }
         n = app(out, cap, n, "\n");
     }
     return n;
@@ -1738,10 +1797,11 @@ static int weight_val(const char *s) {
     int n = 0, i = 0;
     if (eq(s, "bold") || eq(s, "bolder")) return 2;
     if (eq(s, "normal") || eq(s, "lighter")) return 1;
-    while (s[i] >= '0' && s[i] <= '9') { n = n * 10 + s[i] - '0'; i++; }
-    if (i && n >= 600) return 2;
-    if (i && n > 0) return 1;
-    return 0;
+    while (s[i] >= '0' && s[i] <= '9' && n <= 1000) { n = n * 10 + s[i] - '0'; i++; }
+    /* Lot 112: a number 1..1000 and nothing after it (CSS Fonts 4, 2.2;
+     * "12px" was read as 12) */
+    if (!i || s[i] || n < 1 || n > 1000) return 0;
+    return n >= 600 ? 2 : 1;
 }
 
 static int align_val(const char *s) {
@@ -1959,7 +2019,7 @@ static int kind_inherits(int kind) {
     return kind == 2 || kind == 3 || kind == 4 || kind == WF_SITE_K_STYLE || kind == WF_SITE_K_VIS ||
            kind == WF_SITE_K_TRANSFORM || kind == WF_SITE_K_WS || kind == WF_SITE_K_LIST ||
            kind == WF_SITE_K_FSIZE || kind == WF_SITE_K_INDENT || kind == WF_SITE_K_LSPACE ||
-           kind == WF_SITE_K_LIMG || kind == WF_SITE_K_LPOS;
+           kind == WF_SITE_K_LIMG || kind == WF_SITE_K_LPOS || kind == WF_SITE_K_LH;
 }
 
 /* Lot 87: initial is a value like any other: inline, normal, start
@@ -1975,6 +2035,12 @@ static void initial_value(int kind, wf_site_rule_t *proto) {
         /* Lot 111: opacity 1 (the all shorthand) */
         proto->val = 1;
         proto->color = 10000;
+        return;
+    }
+    if (kind == WF_SITE_K_LH) {
+        /* Lot 112: line-height normal (the all shorthand) */
+        proto->val = 0;
+        scopy(proto->tok, WF_SITE_TOK, "n", 1);
         return;
     }
     switch (kind) {
@@ -2068,10 +2134,38 @@ static int has_rem(const char *v) {
 }
 
 /* one token kind: 1 and proto filled, 0 invalid */
+/* Lot 112: a font-size value with ex, ch, lh or rlh (a length or a math
+ * function the box math reads, wf_css_math_px does not): kept as written
+ * ("=N", as Lot 90's rem) and resolved against the parent (fs_px); a
+ * plain length must be above 0. 0 when it is none of these */
+static int fs_metric(const wf_site_t *d, const char *val) {
+    wf_css_box_ctx_t c;
+    int px = 0;
+    char o[4];
+    if (!d || wf_css_math_px(val, d->vw, d->vh, 16000, 16000, &px) == 1) return 0;
+    c.vw = d->vw; c.vh = d->vh; c.em_px = c.rem_px = c.basis = 16000;
+    c.lh_px = c.rlh_px = c.ex_px = c.ch_px = -1;
+    if (wf_css_math_box_ctx(val, &c, &px, o, (int)sizeof(o)) != 1) return 0;
+    return wf_css_is_math(val) || px > 0;
+}
+
 static int tok_decl(const wf_site_t *d, const char *prop, const char *val, wf_site_rule_t *proto) {
     char t[WF_SITE_TOK], m[WF_SITE_TOK];
     int kind = 0;
     t[0] = 0;
+    if (eq(prop, "font-size") && fs_metric(d, val)) {
+        int e = long_intern((wf_site_t *)d, val), k = 0, q = 1;
+        char r[8];
+        if (!e) return 0;
+        proto->kind = WF_SITE_K_FSIZE;
+        proto->val = 2;
+        proto->box_n = 0;
+        proto->tok[0] = '=';
+        while (e && k < 7) { r[k++] = (char)('0' + e % 10); e /= 10; }
+        while (k && q < WF_SITE_TOK - 1) proto->tok[q++] = r[--k];
+        proto->tok[q] = 0;
+        return 1;
+    }
     /* Lot 89: calc(), min(), max() and clamp() resolve to one length
      * token first (wf_cssmath.c), then go through the same bounds as a
      * written length; an expression that does not resolve is invalid */
@@ -2243,8 +2337,8 @@ static int height_val(const wf_site_t *d, const char *v, int mx, int *px, char *
     if (v[k]) return 0;
     {
         /* Lot 107: a font or viewport unit: "~L" when it fits, else the
-         * pool */
-        static const char *const un[] = {"em", "rem", "vw", "vh", "vmin", "vmax", "ex", "ch", "lh", 0};
+         * pool (Lot 112: rlh too) */
+        static const char *const un[] = {"em", "rem", "vw", "vh", "vmin", "vmax", "ex", "ch", "lh", "rlh", 0};
         int f;
         for (f = 0; un[f]; f++) if (eq(v + u, un[f])) break;
         if (!un[f]) return 1;
@@ -2475,8 +2569,20 @@ static int lh_val(const wf_site_t *d, const char *v, char *tok) {
         r = w > lim / 1000 ? lim : w * 1000 + f;
         return lh_digits(r > lim ? lim : r, tok + 1);
     }
-    /* a font or viewport length, or a math function */
-    if (!d || wf_css_math_box(v, d->vw, d->vh, 16000, 16000, &r, mo, (int)sizeof(mo)) != 1) return 0;
+    /* a font or viewport length, or a math function; Lot 112: with a
+     * percentage too (of the element's font size, lh_resolve), or of
+     * numbers (its value as a number), or of absolute lengths the box
+     * math does not read (in, cm, mm, q, pt, pc: px); below 0 is 0 (CSS
+     * Values 4 10.12; a number 0 and 0px give the same line heights) */
+    if (!d) return 0;
+    if (wf_css_math_box(v, d->vw, d->vh, 16000, 16000, &r, mo, (int)sizeof(mo)) < 1) {
+        char no[WF_CSSPROP_VAL];
+        int ty = 0;
+        if (wf_cssprop_math_eval(v, &ty, no, (int)sizeof(no)) != 1) return 0;
+        if (ty != WF_CSSPROP_NUMBER && ty != WF_CSSPROP_LENGTH) return 0;
+        if (no[0] == '-') return lh_val(0, "0", tok);
+        return lh_val(0, no, tok);
+    }
     if (slen(v) + 1 < WF_SITE_TOK) { tok[0] = '~'; scopy(tok + 1, WF_SITE_TOK - 1, v, slen(v)); return 1; }
     return tok_pool((wf_site_t *)d, v, tok);
 }
@@ -2491,7 +2597,7 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
          * property value of WF_SITE_VVAL bytes is still read (and counted as
          * a dropped custom property, as in Lot 90) now that both are 128 */
         char prop[WF_SITE_VNAME], val[WF_SITE_VAL + 1];
-        int a, b, imp = 0, vs, ve;
+        int a, b, imp = 0, vs, ve, had_var;
         i = skip_noise(body, n, i);
         a = i;
         while (i < n && body[i] != ':' && body[i] != ';' && body[i] != '}') i++;
@@ -2535,26 +2641,50 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             if (i < n && body[i] == ';') i++;
             continue;
         }
-        if (d && g_vnode < 0 && (prop_kind(prop) || eq(prop, "opacity")) && names_elem_var(d, val)) {
-            /* Lot 111: opacity as well */
+        if (d && g_vnode < 0 && (prop_kind(prop) || eq(prop, "opacity") || eq(prop, "line-height")) &&
+            names_elem_var(d, val)) {
+            /* Lot 111: opacity as well; Lot 112: and line-height */
             /* Lot 89: read again for each element (wf_site_apply) */
             proto->deferred = 1;
             scopy(proto->dprop, (int)sizeof(proto->dprop), prop, slen(prop));
             scopy(proto->draw, (int)sizeof(proto->draw), val, slen(val));
         }
+        had_var = d && wf_cssvar_count(val) > 0;      /* Lot 112 */
         if (d && expand_var(d, val, (int)sizeof(val)) < 0) {
+            if (!proto->deferred && (eq(prop, "opacity") || eq(prop, "line-height"))) {
+                /* Lot 112: invalid at computed-value time (CSS Variables
+                 * 1, 3.1): unset, opacity 1 (initial) and line-height
+                 * inherited (was dropped, the Lot 89 rule the other
+                 * properties keep) */
+                int op = eq(prop, "opacity");
+                proto->revert = WF_SITE_RV_NONE;
+                proto->box_n = 0;
+                proto->tok[0] = 0;
+                if (!op) scopy(proto->tok, WF_SITE_TOK, "i", 1);
+                proto->kind = (uint8_t)(op ? WF_SITE_K_OP : WF_SITE_K_LH);
+                proto->val = (uint8_t)op;
+                proto->color = op ? 10000u : 0u;
+                return 1;
+            }
             if (proto->deferred) {
                 /* no sheet-wide value: the kind alone, the value comes per
                  * element */
-                proto->kind = (uint8_t)(prop_kind(prop) ? prop_kind(prop) : WF_SITE_K_OP);
+                proto->kind = (uint8_t)(prop_kind(prop) ? prop_kind(prop) : eq(prop, "opacity") ? WF_SITE_K_OP : WF_SITE_K_LH);
                 proto->val = 0;
                 proto->box_n = 0;
                 proto->tok[0] = 0;
                 more_like(prop, proto, 0);
                 return 1;
             }
-            if (i < n && body[i] == ';') i++;
-            continue;
+            if (!prop_kind(prop)) {
+                if (i < n && body[i] == ';') i++;
+                continue;
+            }
+            /* Lot 112: invalid at computed-value time is unset for the
+             * other properties too (CSS Variables 1, 3.1; the Lot 89 rule
+             * dropped the declaration): inherit on the inherited kinds,
+             * initial on the others (the unset path below) */
+            scopy(val, (int)sizeof(val), "unset", 5);
         }
         {
             /* Lot 101: the scroll and view timeline names and axes, kept
@@ -2612,6 +2742,9 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                 int ty = 0;
                 if (wf_cssprop_math_eval(val, &ty, mo, (int)sizeof(mo)) == 1 && op_num(mo, &v)) k = 2;
             }
+            /* Lot 112: a value from var() that is no opacity is unset,
+             * 1 (invalid at computed-value time, CSS Variables 1 3.1) */
+            if (!k && !rv && had_var && !proto->deferred) k = 1;
             if (rv) {
                 /* Lot 111: revert and revert-layer (resolve_reverts) */
                 proto->revert = (uint8_t)rv;
@@ -2631,12 +2764,39 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                 proto->color = (uint32_t)v;
                 return 1;
             }
+            if (proto->deferred) {
+                /* Lot 112: the sheet-wide value of a per-element var() is
+                 * not an opacity: the value still comes per element (was
+                 * dropped) */
+                proto->revert = WF_SITE_RV_NONE;
+                proto->box_n = 0;
+                proto->tok[0] = 0;
+                proto->kind = WF_SITE_K_OP;
+                proto->val = 0;
+                return 1;
+            }
             /* anything else: no later branch takes opacity */
         }
         if (eq(prop, "line-height")) {
             /* Lot 111: line-height for lh (lh_val); anything else is
-             * dropped */
-            if (lh_val(d, val, proto->tok)) {
+             * dropped. Lot 112: revert and revert-layer (resolve_reverts) */
+            int rv = eq(val, "revert") ? WF_SITE_RV_ORIGIN : eq(val, "revert-layer") ? WF_SITE_RV_LAYER : 0;
+            if (rv) {
+                proto->revert = (uint8_t)rv;
+                proto->box_n = 0;
+                proto->tok[0] = 0;
+                proto->kind = WF_SITE_K_LH;
+                proto->val = 0;
+                return 1;
+            }
+            /* Lot 112: a per-element var() whose sheet-wide value is no
+             * line-height still comes per element (tok "", as opacity);
+             * another value from var() that is no line-height is unset
+             * (inherited: invalid at computed-value time) */
+            int lok = lh_val(d, val, proto->tok);
+            if (lok || had_var) {     /* a deferred value has var() */
+                if (proto->deferred) proto->tok[0] = 0;
+                else if (!lok) scopy(proto->tok, WF_SITE_TOK, "i", 1);
                 proto->revert = WF_SITE_RV_NONE;
                 proto->box_n = 0;
                 proto->kind = WF_SITE_K_LH;
@@ -2856,6 +3016,7 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             if (i < n && body[i] == ';') i++;
             continue;
         }
+    unset:
         if (prop_kind(prop) && (eq(val, "initial") || (eq(val, "unset") && !kind_inherits(prop_kind(prop))))) {
             initial_value(prop_kind(prop), proto);
             more_like(prop, proto, 1);
@@ -2944,6 +3105,14 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             return 1;
         } else if (tok_decl(d, prop, val, proto)) {
             return 1;
+        }
+        if (had_var && prop_kind(prop) && !eq(val, "unset")) {
+            /* Lot 112: a value from var() that the property does not take
+             * is unset too (invalid at computed-value time); a per-element
+             * var() (deferred) whose sheet-wide value does not fit is kept
+             * this way and read again per element (was dropped) */
+            scopy(val, (int)sizeof(val), "unset", 5);
+            goto unset;
         }
         if (i < n && body[i] == ';') i++;
     }
@@ -4426,9 +4595,10 @@ static void resolve_reverts(wf_site_t *d) {
     int i, kk, r, round;
     for (i = 0; i < d->nnodes; i++) {
         wf_site_node_t *nd = &d->node[i];
-        /* Lot 111: opacity after the kinds of K_MAX */
-        for (kk = 1; kk <= WF_SITE_K_MAX + 1; kk++) {
-            int k = kk > WF_SITE_K_MAX ? WF_SITE_K_OP : kk;
+        /* Lot 111: opacity after the kinds of K_MAX; Lot 112: then
+         * line-height */
+        for (kk = 1; kk <= WF_SITE_K_MAX + 2; kk++) {
+            int k = kk <= WF_SITE_K_MAX ? kk : kk == WF_SITE_K_MAX + 1 ? WF_SITE_K_OP : WF_SITE_K_LH;
             uint8_t *rv = rv_at(nd, k);
             for (round = 0; (*rv == WF_SITE_RV_LAYER || *rv == WF_SITE_RV_ORIGIN) &&
                             round < WF_SITE_LAYERS + 3; round++) {
@@ -4500,6 +4670,24 @@ static int tok_px(const wf_site_t *d, const char *t, int em, int root, int *ok) 
     return v;
 }
 
+/* Lot 112: font-size token t of element i against the parent's font size
+ * (parent) and the root's (rem): tok_px, else (a "=N" value with ex, ch,
+ * lh or rlh, which wf_css_math_px does not read) the box math against the
+ * parent's font (CSS Values 4 6.1.1: font-relative units in font-size
+ * are of the parent's font, lh of the parent's line height; rlh is the
+ * root's, the initial value in the root's own font-size; a percentage
+ * is of the parent's font size) */
+static int fs_px(const wf_site_t *d, int i, const char *t, int parent, int rem, int *ok) {
+    const wf_site_node_t *nd = &d->node[i];
+    int v = tok_px(d, t, parent, rem, ok), e = 0, k = 1;
+    int par = nd->parent >= 0 && nd->parent < i ? nd->parent : -1;
+    if (*ok || t[0] != '=') return v;
+    while (t[k] >= '0' && t[k] <= '9') e = e * 10 + (t[k++] - '0');
+    if (e < 1 || e > d->nlongs) return 0;
+    *ok = box_of(d, d->lpool[e - 1], parent, par >= 0 ? d->lh[par] : 0, parent, &v, 0) == 1;
+    return *ok ? v : 0;
+}
+
 /* Lot 111: a * b / den (a >= 0, b >= 0, den 1000 or 100000), toward
  * zero, at most WF_CSSMATH_MAX, in 32 bits (no 64-bit division in the
  * freestanding build): a = ah * 1000 + al, b = bh * 1000 + bl */
@@ -4538,7 +4726,8 @@ static void lh_resolve(wf_site_t *d, int i, int f) {
     else if (t[0] == 'p') { k = 2; v = n; }
     else if (t[0] == '~' || t[0] == '=') {
         char ex[WF_SITE_BOXEX];
-        int ok, r = tok_box(d, t, f, plh + 1, ex, &ok);
+        /* Lot 112: a percentage in it is of the element's font size */
+        int ok, r = tok_box(d, t, f, plh + 1, f, ex, &ok);
         if (ok) { k = 2; v = r < 0 ? 0 : r; }
         else { k = 0; v = 0; }      /* past 10000 px: normal */
     }
@@ -4547,10 +4736,27 @@ static void lh_resolve(wf_site_t *d, int i, int f) {
     d->lh[i] = k ? lh_px_of(k, v, f) + 1 : 0;
 }
 
+/* Lot 112: what element i passes the engine for line-height (lhx): its
+ * line height in whole px (truncated, within the engine's 10..40) when it
+ * is not normal, normal when an ancestor's is not (the engine inherits a
+ * px line height, and elements it does not keep pass nothing on), else
+ * nothing (the engine's own normal) */
+static void lh_engine(wf_site_t *d, int i) {
+    const wf_site_node_t *nd = &d->node[i];
+    int par = nd->parent >= 0 && nd->parent < i ? nd->parent : -1, px;
+    d->lhe[i] = (uint8_t)(d->lh[i] || (par >= 0 && d->lhe[par]));
+    if (!d->lh[i]) { d->lhx[i] = d->lhe[i]; return; }
+    px = (d->lh[i] - 1) / 1000;
+    d->lhx[i] = (uint8_t)(px < 10 ? 10 : px > 40 ? 40 : px);
+}
+
 static void resolve_lengths(wf_site_t *d) {
     static const int lo[3] = { 1, 0, -4000 }, hi[3] = { 96000, 255000, 16000 };
     int i, root = 16000;
     d->root_fs = 16000;
+    /* Lot 112: rlh in the root's own line-height is the initial value,
+     * normal at the initial 16px (as lh is, lh_resolve) */
+    d->root_lh = 10001;
     for (i = 0; i < d->nnodes; i++) {
         wf_site_node_t *nd = &d->node[i];
         int parent = (nd->parent >= 0 && nd->parent < i) ? d->fs[nd->parent] : 16000;
@@ -4563,13 +4769,15 @@ static void resolve_lengths(wf_site_t *d) {
             int k = fs_keyword(ft, parent);
             if (k) f = k;
             else {
-                int v = tok_px(d, ft, parent, rem, &ok);
+                int v = fs_px(d, i, ft, parent, rem, &ok);     /* Lot 112 */
                 if (ok && v >= lo[0] && v <= hi[0]) f = v;
             }
         }
         d->fs[i] = f;
         if (is_root) { root = f; d->root_fs = f; }
         lh_resolve(d, i, f);     /* Lot 111 */
+        if (is_root) d->root_lh = d->lh[i];     /* Lot 112 */
+        lh_engine(d, i);
         for (t = 0; t < 3; t++) {
             int slot = (WF_SITE_K_FSIZE - WF_SITE_K_LIST) + t, v;
             char *tk = nd->tok[slot];
@@ -4577,7 +4785,7 @@ static void resolve_lengths(wf_site_t *d) {
             if (tk[0] != '=' && !(t == 0 && ends_rem(tk) && rem != 16000)) continue;
             /* font-size against the parent, the other two against the
              * element's own size */
-            v = tok_px(d, tk, t == 0 ? parent : f, rem, &ok);
+            v = t == 0 ? fs_px(d, i, tk, parent, rem, &ok) : tok_px(d, tk, f, rem, &ok);
             if (!ok || v < lo[t] || v > hi[t] || wf_css_token(v, "px", tk, WF_SITE_TOK) < 0) {
                 nd->tok_val[slot] = 0;
                 tk[0] = 0;
@@ -4634,21 +4842,37 @@ static const wf_cssprop_t *op_prop(void) {
     return &p;
 }
 
+/* Lot 112: the document whose element (g_vnode) a keyframe's var()
+ * reads, set by op_anim, col_pass and anim_pass */
+static const wf_site_t *g_kfdoc;
+
 static int kf_take(const wf_cssprop_t *p, const char *s, int n, const wf_cssprop_fctx_t *fc, char *out, int cap) {
     char raw[WF_CSSPROP_VAL];
-    int a = 0, b = n, k;
+    int a = 0, b = n, k, var = 0;
     while (a < b && is_sp(s[a])) a++;
     while (b > a && is_sp(s[b - 1])) b--;
     if (b <= a || b - a >= (int)sizeof(raw)) return 0;
     slower(raw, (int)sizeof(raw), s + a, b - a);
     for (k = 0; raw[k]; k++) {
         if (raw[k] == '!') return 0;                                      /* !important: ignored in keyframes */
-        if (raw[k] == 'v' && raw[k + 1] == 'a' && raw[k + 2] == 'r' && raw[k + 3] == '(') return 0;
+        if (raw[k] == 'v' && raw[k + 1] == 'a' && raw[k + 2] == 'r' && raw[k + 3] == '(') var = 1;
+    }
+    /* Lot 112: var() in an opacity, color or background-color keyframe
+     * is the animated element's (g_kfdoc set by op_anim and col_pass;
+     * invalid there: the frame is left out), and in a registered
+     * property's keyframe or transition start (anim_pass) */
+    if (var) {
+        char t[WF_CSSPROP_VAL];
+        if (!g_kfdoc || wf_cssvar_subst(raw, t, (int)sizeof(t), var_get, g_kfdoc) <= 0) return 0;
+        scopy(raw, (int)sizeof(raw), t, slen(t));
     }
     if (p == op_prop()) {
-        /* Lot 110: an opacity keyframe is computed (clamped) first */
-        int v;
-        if (!op_num(raw, &v)) return 0;
+        /* Lot 110: an opacity keyframe is computed (clamped) first. Lot
+         * 112: a math function of a number or a percentage is a value (as
+         * in a declaration) */
+        int v, ty = 0;
+        char t[WF_CSSPROP_VAL];
+        if (!op_num(raw, &v) && (wf_cssprop_math_eval(raw, &ty, t, (int)sizeof(t)) != 1 || !op_num(t, &v))) return 0;
         op_text(v, out, cap);
         return 1;
     }
@@ -4958,13 +5182,13 @@ static void sp_inset(const wf_site_t *d, int s, int side, int view, unsigned cha
         /* one that does not resolve (past 10000 px) is 0, as auto
          * (tok_px gives 0 then) */
         char ex[WF_SITE_BOXEX];
-        r = tok_box(d, t, d->fs[s], d->lh[s], ex, &ok);
+        r = tok_box(d, t, d->fs[s], d->lh[s], -1, ex, &ok);
         (void)ok;
         *k = WF_CSSTL_I_LEN; *v = r > 0 ? r * 10 : 0;
     } else if (t[0] == '@' && view >= 0 && view <= WF_CSSMATH_MAX / 1000) {
         for (j = 1; t[j] >= '0' && t[j] <= '9' && r <= WF_SITE_LONGS; j++) r = r * 10 + (t[j] - '0');
         if (r < 1 || r > d->nlongs) return;
-        if (wf_css_math_box_at(d->lpool[r - 1], d->vw, d->vh, d->fs[s], d->root_fs, d->lh[s] - 1, view * 1000, &r) != 1)
+        if (box_of(d, d->lpool[r - 1], d->fs[s], d->lh[s], view * 1000, &r, 0) != 1)
             r = 0;
         *k = WF_CSSTL_I_LEN; *v = r > 0 ? r * 10 : 0;
     }
@@ -5170,12 +5394,23 @@ static int anim_pass(wf_site_t *d) {
     static uint8_t orig[WF_SITE_NODES][WF_SITE_VNAMES];
     static char cur[WF_CSSPROP_VAL], val[WF_CSSPROP_VAL], base[WF_CSSPROP_VAL];
     static wf_cssanim_t al[WF_CSSANIM_MAX];
+    static uint8_t nb[WF_SITE_VNAMES];
     int i, k, changed = 0, ms[WF_CSSANIM_MAX];
     for (i = 0; i < d->nnodes; i++) for (k = 0; k < d->nvnames; k++) orig[i][k] = d->node[i].vbind[k];
     for (i = 0; i < d->nnodes; i++) {
         wf_site_node_t *nd = &d->node[i];
         int par = nd->parent, na = 0, j;
         wf_cssprop_fctx_t fc;
+        /* Lot 112: var() in a registered property's keyframe (kf_take)
+         * reads element i's custom properties below its own animations:
+         * the inherited ones first (the parent's are final), the animated
+         * values (nb) are bound once every property ran */
+        for (k = 0; k < d->nvnames; k++)
+            if (kprop(d, k) && !(g_vexp[i] & (1u << k)) && kprop(d, k)->inherits && par >= 0 && par < i)
+                nd->vbind[k] = d->node[par].vbind[k];
+        for (k = 0; k < d->nvnames; k++) nb[k] = nd->vbind[k];
+        g_kfdoc = d;
+        g_vnode = i;
         fc.vw = d->vw; fc.vh = d->vh; fc.em = d->fs[i]; fc.rem = d->root_fs;
         na = node_lists(d, nd, 1, al);
         /* Lot 99: an animation without a timeline (none, or a name no
@@ -5185,7 +5420,6 @@ static int anim_pass(wf_site_t *d) {
             const wf_cssprop_t *p = kprop(d, k);
             int b, animated = 0, e, composed = 0;
             if (!p) continue;
-            if (!(g_vexp[i] & (1u << k)) && p->inherits && par >= 0 && par < i) nd->vbind[k] = d->node[par].vbind[k];
             b = nd->vbind[k];
             if (!b || b > d->nevars) { if (b != orig[i][k]) changed++; continue; }
             scopy(cur, WF_CSSPROP_VAL, d->evar[b - 1].value, slen(d->evar[b - 1].value));
@@ -5213,9 +5447,12 @@ static int anim_pass(wf_site_t *d) {
                 scopy(cur, WF_CSSPROP_VAL, val, slen(val));
                 d->prop_transitioned++;
             }
-            if (!eq(cur, d->evar[b - 1].value) && (e = evar_intern(d, k, cur)) >= 0) nd->vbind[k] = (uint8_t)(e + 1);
-            if (nd->vbind[k] != orig[i][k]) changed++;
+            if (!eq(cur, d->evar[b - 1].value) && (e = evar_intern(d, k, cur)) >= 0) nb[k] = (uint8_t)(e + 1);
+            if (nb[k] != orig[i][k]) changed++;
         }
+        g_vnode = -1;
+        g_kfdoc = 0;
+        for (k = 0; k < d->nvnames; k++) nd->vbind[k] = nb[k];
     }
     return changed;
 }
@@ -5283,7 +5520,19 @@ static void cur_pass(wf_site_t *d) {
  * own declaration keeps its value, and a transition runs from the
  * @starting-style value; keyframe values are clamped when they are taken
  * (kf_take), the result once the animations ran (op_num) */
+static void op_run(wf_site_t *d, int i, const wf_cssanim_t *al, int na, const int *ms, const wf_cssprop_fctx_t *fc);
+
+/* Lot 112: with element i's custom properties for var() in its opacity
+ * keyframes (kf_take) */
 static void op_anim(wf_site_t *d, int i, const wf_cssanim_t *al, int na, const int *ms, const wf_cssprop_fctx_t *fc) {
+    g_kfdoc = d;
+    g_vnode = i;
+    op_run(d, i, al, na, ms, fc);
+    g_vnode = -1;
+    g_kfdoc = 0;
+}
+
+static void op_run(wf_site_t *d, int i, const wf_cssanim_t *al, int na, const int *ms, const wf_cssprop_fctx_t *fc) {
     static char base[WF_CSSPROP_VAL], cur[WF_CSSPROP_VAL], val[WF_CSSPROP_VAL];
     const wf_cssprop_t *p = op_prop();
     wf_site_node_t *nd = &d->node[i];
@@ -5353,6 +5602,9 @@ static void col_pass(wf_site_t *d) {
                 else scopy(base, WF_CSSPROP_VAL, "#000000", 7);
             }
             scopy(cur, WF_CSSPROP_VAL, base, slen(base));
+            /* Lot 112: var() in the keyframes reads element i (kf_take) */
+            g_kfdoc = d;
+            g_vnode = i;
             if (rank < (1 << 30))
                 for (j = 0; j < na; j++) {
                     const wf_site_kf_t *kf = kf_find(d, al[j].name);
@@ -5362,6 +5614,8 @@ static void col_pass(wf_site_t *d) {
                         animated = 1;
                     }
                 }
+            g_vnode = -1;
+            g_kfdoc = 0;
             if (composed) d->prop_composed++;
             if (animated) d->col_animated++;
             else {

@@ -52,33 +52,49 @@ static void test_l111_mflow_0(void) {
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(calc(-10% + 424px), 8%), 48%)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(96, sh(1));
+    flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: max(calc(max(58rem, calc((47% + 29lh) / 5), 0%) - calc(81% - 164px)), 26.125ex) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(-81% + 1092px), calc(-72% + 222px), 131px)", g_o);
+    TEST_ASSERT_EQUAL(320, sh(0));
+    TEST_ASSERT_EQUAL(833, sh(1));
+    flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: min(96%, max(calc(3% + 42px), calc(30% - 187px), calc(73% - 80px))) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(96%, max(calc(3% + 42px), calc(73% - 80px)))", g_o);
+    TEST_ASSERT_EQUAL(400, sh(0));
+    TEST_ASSERT_EQUAL(212, sh(1));
+    flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: clamp(max(calc(42% + 30px), calc(68% + 146px), 32em), 52%, min(23px, calc(79% + 136px))); max-height: calc(89% - 161px) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(max(calc(68% + 146px), 512px), 52%, 23px);max-height:calc(89% - 161px)", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(17, sh(1));
     flow("#p { overflow: auto; height: 250px } #o { overflow: auto; height: calc(min(calc(min(83%, calc((12.125% + 40pt) / 2)) - calc(2% - 1ch + 4%)), 69%, calc(min(80%, 69%) * 4)) / 0.5) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(154% + 16px), calc(0% + 69px), 138%, 552%)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(0% + 69px), 138%)", g_o);
     TEST_ASSERT_EQUAL(250, sh(0));
     TEST_ASSERT_EQUAL(69, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: calc(75% + 78px); max-height: min(min(20%, 24%), calc(max(calc(39.25px - 52%), 0%) + 58em)) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(75% + 78px);max-height:min(20%, max(calc(-52% + 967px), 928px))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(40, sh(1));
-    flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: min(calc(82% - 73px), calc(max(3%, 88%, 45ch) * 0.25)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(82% - 73px), max(1%, 22%, 90px))", g_o);
-    TEST_ASSERT_EQUAL(150, sh(0));
+    flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: min(min(calc(58% - 117px), 36%, 50px), calc(min(78%, 28%) * 2), max(22%, calc(60% - 9ch))) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(58% - 117px), 36%, 50px, max(22%, calc(60% - 72px)))", g_o);
+    TEST_ASSERT_EQUAL(320, sh(0));
     TEST_ASSERT_EQUAL(50, sh(1));
-    flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: min(46%, calc(min(15.5lh, 299px) + calc(36% + 19px)), calc(min(52%, 10.25rem) / 4)); max-height: calc(min(clamp(35%, 20ex, 4em), 279px) - calc(max(calc(72% * 2), 263px) - 2ex)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(46%, calc(36% + 174px), 13%, 41px)", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(26, sh(1));
-    flow("#p { overflow: auto; height: 250px } #o { overflow: auto; height: max(min(240px, 189px, 5%), calc(max(56%, 37%) - calc(41% - 44px))) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(240px, 189px, 5%), calc(15% + 44px))", g_o);
-    TEST_ASSERT_EQUAL(250, sh(0));
-    TEST_ASSERT_EQUAL(81, sh(1));
-    flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: max(max(258px, 34.125em), max(103px, 71%, 124px)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(546px, 103px, 71%, 124px)", g_o);
-    TEST_ASSERT_EQUAL(300, sh(0));
-    TEST_ASSERT_EQUAL(546, sh(1));
 }
 
 static void test_l111_mflow_1(void) {
+    flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: min(calc(82% - 73px), calc(max(3%, 88%, 45ch) * 0.25)) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(82% - 73px), max(22%, 90px))", g_o);
+    TEST_ASSERT_EQUAL(150, sh(0));
+    TEST_ASSERT_EQUAL(50, sh(1));
+    flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: min(46%, calc(min(15.5lh, 299px) + calc(36% + 19px)), calc(min(52%, 10.25rem) / 4)); max-height: calc(min(clamp(35%, 20ex, 4em), 279px) - calc(max(calc(72% * 2), 263px) - 2ex)) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(13%, 41px)", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(26, sh(1));
+    flow("#p { overflow: auto; height: 250px } #o { overflow: auto; height: max(min(240px, 189px, 5%), calc(max(56%, 37%) - calc(41% - 44px))) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(189px, 5%), calc(15% + 44px))", g_o);
+    TEST_ASSERT_EQUAL(250, sh(0));
+    TEST_ASSERT_EQUAL(81, sh(1));
+    flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: max(max(258px, 34.125em), max(103px, 71%, 124px)) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(546px, 71%)", g_o);
+    TEST_ASSERT_EQUAL(300, sh(0));
+    TEST_ASSERT_EQUAL(546, sh(1));
     flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: min(118px, calc(clamp(calc(38pc - 38%), 26%, 52%) - 1%), 67%); max-height: calc(64% + 142px); min-height: min(29px, 62%) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(118px, clamp(calc(-39% + 608px), 25%, 51%), 67%);max-height:calc(64% + 142px);min-height:min(29px, 62%)", g_o);
     TEST_ASSERT_EQUAL(320, sh(0));
@@ -87,47 +103,74 @@ static void test_l111_mflow_1(void) {
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(228% + 2px), 579px)", g_o);
     TEST_ASSERT_EQUAL(150, sh(0));
     TEST_ASSERT_EQUAL(579, sh(1));
+    flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: calc(max(max(calc(44% - 35.75pt + 10%), 4em, calc(79% - 155px)), 45%, 76%) / 0.5) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(128px, calc(158% - 310px), 152%)", g_o);
+    TEST_ASSERT_EQUAL(150, sh(0));
+    TEST_ASSERT_EQUAL(228, sh(1));
     flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: min(calc(min(141px, 286px) + 111px), min(25%, 123px, 49%)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(252px, 25%, 123px, 49%)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(25%, 123px)", g_o);
     TEST_ASSERT_EQUAL(240, sh(0));
     TEST_ASSERT_EQUAL(60, sh(1));
+}
+
+static void test_l111_mflow_2(void) {
     flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: max(75%, max(38lh, 54%, 254px)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(75%, 380px, 54%, 254px)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(75%, 380px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(380, sh(1));
     flow("#p { overflow: auto; height: 250px } #o { overflow: auto; height: calc(min(calc(52% - 0.75px), calc(min(98%, 11lh) + 238px)) * 1.5); max-height: calc(min(10%, 1px) + 1) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(78% - 1px), calc(147% + 357px), 522px)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(78% - 1px), 522px)", g_o);
     TEST_ASSERT_EQUAL(250, sh(0));
     TEST_ASSERT_EQUAL(194, sh(1));
     flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: calc(max(max(64px, 37%), clamp(95%, 18px, calc(32% - 15vw))) * 4) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(256px, 148%, clamp(380%, 72px, calc(128% - 384px)))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(760, sh(1));
+    flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: calc(min(69%, 193px, 71%) + calc(min(41%, calc(39% - 112px)) - 53%)) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(55% - 112px), calc(-14% + 81px))", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: clamp(67%, 37.2vh, calc(max(1%, 28vh) / 0.5)) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(67%, 179px, max(2%, 269px))", g_o);
     TEST_ASSERT_EQUAL(400, sh(0));
     TEST_ASSERT_EQUAL(268, sh(1));
+    flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: min(100%, calc(79% - 150px), min(99%, 4%, 12rem)); min-height: max(59%, calc(min(32%, 17%) - calc(29% + 70px)), 34.2em) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(79% - 150px), 4%, 192px);min-height:max(59%, 547px)", g_o);
+    TEST_ASSERT_EQUAL(240, sh(0));
+    TEST_ASSERT_EQUAL(547, sh(1));
+    flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: min(calc(min(18%, 7.5lh, 10.25ex) - 10ch), min(101px, calc(14% - 9px), calc(38% - 13px))) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(18% - 80px), -29px)", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(0, sh(1));
+    flow("#p { overflow: auto; height: 12.5em } #o { overflow: auto; height: max(calc(max(calc(41% + 141px), 33%) / -2), 18%) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:18%", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(36, sh(1));
+}
+
+static void test_l111_mflow_3(void) {
     flow("#p { overflow: auto; height: 12.5em } #o { overflow: auto; height: max(calc(min(48%, 87%) * 3), clamp(39ch, calc(76% - 9.5rem + 9%), calc(2 * (56% - 33.75rem)))); min-height: clamp(117px, calc(max(9%, 81%) + 10.25vh), calc(clamp(32%, 232px, 44%) / 4)) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(144%, clamp(312px, calc(85% - 152px), calc(112% - 1080px)));min-height:clamp(117px, calc(81% + 49px), clamp(8%, 58px, 11%))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(312, sh(1));
-}
-
-static void test_l111_mflow_2(void) {
     flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: max(calc(min(calc(29% - 60px), 36ch) + calc(41% - 38px)), 35%); min-height: calc(clamp(40%, calc(min(27%, 0%) * 0.25), calc(42% + 163px)) + 26.125ch) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(calc(70% - 98px), calc(41% + 250px)), 35%);min-height:clamp(calc(40% + 209px), 209px, calc(42% + 372px))", g_o);
     TEST_ASSERT_EQUAL(150, sh(0));
     TEST_ASSERT_EQUAL(269, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: min(83%, calc(min(13%, 9%) + 13%), min(276px, 38%)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(83%, 22%, 276px, 38%)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(22%, 276px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(44, sh(1));
     flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: clamp(calc(23.5% * 0.25), 42%, max(55%, calc(23% - 107px))) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(6%, 42%, max(55%, calc(23% - 107px)))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:42%", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(84, sh(1));
+    flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: min(calc(min(calc(3% + 109px), 200px) + calc(75% + 127px)), 6lh, calc(12% - 23em + 59%)) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(60px, calc(71% - 368px))", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: calc(max(min(calc(0.5 * (9.125% - 18.75pc)), 72%), calc(min(92%, 22ex) * -1), 68%) - 8%); max-height: calc(max(min(43rem, calc((20% + 15pc) / 5)), calc(min(69px, 8px, 33lh) / 4)) * 1.5) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(calc(-3% - 150px), 64%), -100%, calc(-8% - 110px), 60%);max-height:max(min(1032px, calc(6% + 72px)), 3px)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:60%;max-height:max(min(1032px, calc(6% + 72px)), 3px)", g_o);
     TEST_ASSERT_EQUAL(400, sh(0));
     TEST_ASSERT_EQUAL(96, sh(1));
     flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: calc(max(46vh, 29%) - 32vh) }");
@@ -138,31 +181,46 @@ static void test_l111_mflow_2(void) {
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(177px, clamp(calc(-10% + 234px), -2%, calc(65% - 189px)))", g_o);
     TEST_ASSERT_EQUAL(150, sh(0));
     TEST_ASSERT_EQUAL(219, sh(1));
+}
+
+static void test_l111_mflow_4(void) {
+    flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: calc(min(16%, max(0ch, calc(51% - 34px), 199px)) - min(15px, calc(73% + 180px))); max-height: calc(84% - 142px); min-height: calc(min(92px, calc(max(45%, 4.2lh) * 0.25), max(calc(88% - 86px), calc(0% * 2), 59rem)) * 0.5) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(16% - 15px), max(calc(51% - 49px), 184px));max-height:calc(84% - 142px);min-height:min(46px, max(6%, 5px), max(calc(44% - 43px), 472px))", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(17, sh(1));
     flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: calc(min(calc(88% + 182px), 298px) + 38em); max-height: calc(max(calc(12.125% - 18.2em + 15%), 10%) * 2) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(88% + 790px), 906px);max-height:max(calc(54% - 582px), 20%)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(40, sh(1));
     flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: max(calc(61% + 73px), min(calc(100% + 57px), calc(31.25% * 0.25))) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(61% + 73px), min(calc(100% + 57px), 8%))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(61% + 73px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(195, sh(1));
-}
-
-static void test_l111_mflow_3(void) {
     flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: calc(min(min(65%, 19%), 2lh) + max(51em, 11rem)); min-height: calc(min(calc(min(3.2rem, calc(6.25% - 2.5pc + 41%), 89%) / 2), 178px, 73%) - min(120px, 39.5ch)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(19% + 816px), 836px)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(19% + 816px), 836px);min-height:min(-94px, calc(24% - 140px))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(836, sh(1));
     flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: calc(min(min(calc(55% + 145px), 39%), 155px) - calc(19% - 3vw + 28%)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(8% + 164px), calc(-8% + 19px), calc(-47% + 174px))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(-8% + 19px), calc(-47% + 174px))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(3, sh(1));
+    flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: calc(max(calc(max(44%, 71%, 150px) * 4), 252px) + max(87px, 68%)); max-height: clamp(clamp(calc(0.5 * (36.75% - 20em)), 3px, 53px), 42%, min(42%, 155px, 78px)) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(284% + 87px), 352%, 687px, calc(68% + 600px));max-height:clamp(clamp(calc(18% - 160px), 3px, 53px), 42%, min(42%, 78px))", g_o);
+    TEST_ASSERT_EQUAL(150, sh(0));
+    TEST_ASSERT_EQUAL(63, sh(1));
+    flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: calc(max(max(calc(50% - 101px), 50%), 32rem) - calc(max(calc(59% - 77px), calc(97% + 140px)) / 0.5)); max-height: calc(min(calc(9pt - 70%), max(84%, 30.125vh)) / -2) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(-144% - 280px), calc(-194% + 232px));max-height:max(calc(35% - 6px), min(-42%, -72px))", g_o);
+    TEST_ASSERT_EQUAL(150, sh(0));
+    TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: calc(max(calc(min(53%, calc(37% - 2ex), calc(18% * 3)) / 0.5), calc(max(33ex, 183px) * 1.5)) * 4) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(424%, calc(296% - 80px), 432%), 1098px)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(296% - 80px), 1098px)", g_o);
     TEST_ASSERT_EQUAL(320, sh(0));
     TEST_ASSERT_EQUAL(1098, sh(1));
+}
+
+static void test_l111_mflow_5(void) {
     flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: max(99%, min(189px, 93px, calc((69% + 11pc) / 5))) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(99%, min(189px, 93px, calc(14% + 35px)))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(99%, min(93px, calc(14% + 35px)))", g_o);
     TEST_ASSERT_EQUAL(150, sh(0));
     TEST_ASSERT_EQUAL(148, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: calc(clamp(min(85%, 3%), calc(72% + 72px), 33.25px) * 4) }");
@@ -178,66 +236,105 @@ static void test_l111_mflow_3(void) {
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(73, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: max(30.25vh, clamp(5ch, calc(68% - 38.2ex + 1%), calc(2 * (44% - 37px)))); max-height: max(max(calc(19% + 167px), calc(99% + 52vh)), calc(88% * 0.5)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(145px, clamp(40px, calc(69% - 191px), calc(88% - 74px)));max-height:max(calc(19% + 167px), calc(99% + 250px), 44%)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(145px, clamp(40px, calc(69% - 191px), calc(88% - 74px)));max-height:calc(99% + 250px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(145, sh(1));
-}
-
-static void test_l111_mflow_4(void) {
+    flow("#p { overflow: auto; height: 12.5em } #o { overflow: auto; height: max(calc(min(29ex, calc(78% + 39px), 76%) / 4), calc(max(3ch, 117px) + 72%)) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(36px, 19%), calc(72% + 117px))", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(261, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: max(min(204px, 20%, calc(47vh - 21%)), clamp(50%, 49%, 63%), 46%); max-height: clamp(min(10%, 1px), 2px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(204px, 20%, calc(-21% + 226px)), 50%, 46%)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(204px, 20%, calc(-21% + 226px)), 50%)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(100, sh(1));
+    flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: calc(max(41px, 6lh) - clamp(44%, calc(53% - 160px), 95%)) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(-44% + 60px), calc(-53% + 220px))", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(0, sh(1));
+}
+
+static void test_l111_mflow_6(void) {
     flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: calc(min(max(82%, 40lh), 84%, 22ch) / -2) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(-41%, -200px), -42%, -88px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: calc(max(calc(43% + 186px), min(25lh, 4lh)) * 3); max-height: calc(85% + 125px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(129% + 558px), 120px);max-height:calc(85% + 125px)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(129% + 558px);max-height:calc(85% + 125px)", g_o);
     TEST_ASSERT_EQUAL(320, sh(0));
     TEST_ASSERT_EQUAL(397, sh(1));
     flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: calc(min(calc(0.5 * (16.5% - 13vw)), calc(min(98%, 7%) / 0.5)) * -1); min-height: calc(clamp(max(60%, 31vh), calc(min(6ch, 63%) / -2), clamp(calc(2% + 126px), 55ch, 81%)) + 66%) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(-8% + 42px), -14%)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(-8% + 42px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(26, sh(1));
     flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: calc(min(calc(92% + 180px), calc(63% - 60px)) - calc(17% + 191px)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(75% - 11px), calc(46% - 251px))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(46% - 251px)", g_o);
     TEST_ASSERT_EQUAL(300, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: calc(min(16em, calc(75% - 68px)) - calc(57ex - 88%)) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(88% - 29px), calc(163% - 353px))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
-    flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: calc(max(55px, calc(20% + 13px), 8px) * 4); max-height: calc(min(calc(max(80%, calc(3% + 137px)) - calc(93% - 10pc)), calc(min(29%, 6px) * 1.5)) - min(46%, calc(82% + 4px))) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(220px, calc(80% + 52px), 32px)", g_o);
+    flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: calc(3 * (11.2% - 4ex)); min-height: calc(clamp(85%, calc(min(148px, calc(12% + 129px), 240px) + 23%), calc(min(calc(63% + 173px), 49%, 71%) * 2)) * 2) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(34% - 60px);min-height:clamp(170%, min(calc(46% + 296px), calc(70% + 258px)), 196%)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(220, sh(1));
+    TEST_ASSERT_EQUAL(388, sh(1));
+    flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: min(calc(18% - 4px), calc(57% + 149px), clamp(15px, calc(41% - 22.2lh + 96%), 41rem)); max-height: calc(57% - 3vw) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(18% - 4px), clamp(15px, calc(137% - 222px), 656px));max-height:calc(57% - 19px)", g_o);
+    TEST_ASSERT_EQUAL(320, sh(0));
+    TEST_ASSERT_EQUAL(53, sh(1));
+    flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: calc(min(calc(min(44%, calc(89% + 45lh)) + 52%), min(16px, 199px)) * 1.5); min-height: calc(max(calc(max(85px, calc(57% * 3)) * 0.25), 59em) / 4) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(144%, 24px);min-height:max(11%, 236px)", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(236, sh(1));
+}
+
+static void test_l111_mflow_7(void) {
+    flow("#p { overflow: auto; height: 12.5em } #o { overflow: auto; height: max(calc(max(calc(21% - 74px), calc(77% + 132px)) + 100px), clamp(13.75em, 30%, 44%)); max-height: calc(41% + 1.25ex) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(77% + 232px), clamp(220px, 30%, 44%));max-height:calc(41% + 6px)", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(88, sh(1));
+    flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: max(calc(max(36vh, 48rem, 51%) - calc(25% + 195px)), 29.125em) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(-25% + 573px), calc(26% - 195px), 466px)", g_o);
+    TEST_ASSERT_EQUAL(320, sh(0));
+    TEST_ASSERT_EQUAL(493, sh(1));
     flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: calc(clamp(calc(2% + 176px), calc(min(235px, 56px) + calc(8% * 2)), calc(min(11lh, 229px) + 95%)) + 86%); max-height: calc(1 / min(10%, 1px)) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(calc(88% + 176px), calc(102% + 56px), calc(181% + 110px))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(352, sh(1));
-}
-
-static void test_l111_mflow_5(void) {
+    flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: calc(34% + 179px); min-height: calc(max(calc(2 * (49% - 3.125pt)), 79%, calc(max(18%, 6em) / 2)) + 149px) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(34% + 179px);min-height:max(calc(98% + 141px), calc(79% + 149px), 197px)", g_o);
+    TEST_ASSERT_EQUAL(240, sh(0));
+    TEST_ASSERT_EQUAL(376, sh(1));
+    flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: calc(clamp(19%, calc(81% - 0px), calc(max(52em, 93%, 15ch) - calc(14pt - 8%))) + calc(82% * 2)); max-height: calc(min(calc(max(64%, 27vh) / -2), 11ch) - 27%) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(183%, 245%, max(calc(172% + 813px), calc(265% - 19px)));max-height:min(-59%, calc(-27% - 65px))", g_o);
+    TEST_ASSERT_EQUAL(400, sh(0));
+    TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: calc(max(calc(clamp(31%, 26%, 14em) * 0.25), min(55ch, 41rem)) / -2); max-height: calc(35% - 195px); min-height: calc(66% - 45px) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(-4%, max(-3%, -28px), -220px);max-height:calc(35% - 195px);min-height:calc(66% - 45px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(87, sh(1));
     flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: clamp(229px, 67%, max(15vh, 44%, 58%)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(229px, 67%, max(72px, 44%, 58%))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(229px, 67%, max(72px, 58%))", g_o);
     TEST_ASSERT_EQUAL(150, sh(0));
     TEST_ASSERT_EQUAL(229, sh(1));
     flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: max(max(calc(83% - 113px), 55%), calc(min(91%, 45%) - 40ex)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(83% - 113px), 55%, calc(45% - 200px))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(83% - 113px), 55%)", g_o);
     TEST_ASSERT_EQUAL(320, sh(0));
     TEST_ASSERT_EQUAL(176, sh(1));
+}
+
+static void test_l111_mflow_8(void) {
     flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: max(max(7%, 14%), min(7lh, 33%), clamp(97px, 132px, 22px)) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(14%, min(70px, 33%), 97px)", g_o);
     TEST_ASSERT_EQUAL(400, sh(0));
     TEST_ASSERT_EQUAL(97, sh(1));
     flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: calc(max(67%, clamp(76%, 58%, 38%), min(156px, 48vh)) - 254px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(67% - 254px), calc(76% - 254px), -98px)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(76% - 254px), -98px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(0, sh(1));
+    flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: min(calc(max(calc(0.5 * (8.25% - 6pc)), 15%, 65%) * 3), calc(min(30%, 257px) + calc(24% - 134px))) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(54% - 134px), calc(24% + 123px))", g_o);
+    TEST_ASSERT_EQUAL(240, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: min(clamp(40%, 65%, 154px), clamp(21%, 73px, 261px)); max-height: calc(clamp(31%, calc(max(86%, calc(40% + 47px)) - calc(19.25ch - 15%)), 25%) * 2) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(clamp(40%, 65%, 154px), clamp(21%, 73px, 261px));max-height:clamp(62%, max(calc(202% - 308px), calc(110% - 214px)), 50%)", g_o);
@@ -248,12 +345,9 @@ static void test_l111_mflow_5(void) {
     TEST_ASSERT_EQUAL(320, sh(0));
     TEST_ASSERT_EQUAL(317, sh(1));
     flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: calc(35% + 5.2vw); min-height: min(31%, 90%, max(calc(3 * (52% - 35.125lh)), calc(26.125% * 1.5), calc(18% - 116px))) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(35% + 33px);min-height:min(31%, 90%, max(calc(156% - 1054px), 39%, calc(18% - 116px)))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(35% + 33px);min-height:min(31%, max(calc(156% - 1054px), 39%))", g_o);
     TEST_ASSERT_EQUAL(300, sh(0));
     TEST_ASSERT_EQUAL(138, sh(1));
-}
-
-static void test_l111_mflow_6(void) {
     flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: max(min(89%, 264px), clamp(40ex, 269px, 57%)); min-height: calc(32% - 107px) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(89%, 264px), clamp(200px, 269px, 57%));min-height:calc(32% - 107px)", g_o);
     TEST_ASSERT_EQUAL(400, sh(0));
@@ -262,35 +356,62 @@ static void test_l111_mflow_6(void) {
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(max(calc(-93% + 11px), calc(7% - 50px)), calc(30% - 196px))", g_o);
     TEST_ASSERT_EQUAL(400, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
+}
+
+static void test_l111_mflow_9(void) {
     flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: calc(max(calc(58% + 132px), 266px) / -2) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(-29% - 66px), -133px)", g_o);
     TEST_ASSERT_EQUAL(320, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
+    flow("#p { overflow: auto; height: 12.5em } #o { overflow: auto; height: max(calc(70% - 147px), 31ex, 90%) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(155px, 90%)", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(180, sh(1));
+    flow("#p { overflow: auto; height: 12.5em } #o { overflow: auto; height: max(clamp(5%, 51%, calc(36.25ch - 74%)), 36%, max(91%, calc(69% - 154px))); max-height: calc(max(27%, 285px, calc(clamp(57vh, 69%, 31%) / 4)) - calc(3 * (53% - 16.75vh))) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(clamp(5%, 51%, calc(-74% + 290px)), 91%)", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(182, sh(1));
+    flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: calc(min(63%, min(23%, 24vh)) - calc(min(calc(20% + 125px), 13%) - calc(61% - 7px))) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(71% - 7px), calc(48% + 108px))", g_o);
+    TEST_ASSERT_EQUAL(400, sh(0));
+    TEST_ASSERT_EQUAL(277, sh(1));
     flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: min(min(calc(3 * (13% - 12.125vw)), 9%), calc(min(31.2ch, 193px) - 151px)); max-height: calc(15% - 91px) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(39% - 233px), 9%, 42px);max-height:calc(15% - 91px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
+    flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: min(89%, calc(max(2%, 22%) + 46%), 19.2rem) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(68%, 307px)", g_o);
+    TEST_ASSERT_EQUAL(320, sh(0));
+    TEST_ASSERT_EQUAL(217, sh(1));
+    flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: calc(max(calc(min(59%, calc(68% - 50px)) - 0vw), 72%, 55%) - calc(5% - 43pt)); max-height: calc(52% - 61px) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(calc(54% + 57px), calc(63% + 7px)), calc(67% + 57px));max-height:calc(52% - 61px)", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(43, sh(1));
+    flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: calc(min(81%, 3.125ex, calc(min(calc(55% + 175px), 32%, 5.5rem) * 3)) - min(169px, 76px)); min-height: calc(max(calc(min(56%, 157px, 40rem) * 1.5), 100%) * 2) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(81% - 76px), -60px);min-height:max(min(168%, 471px), 200%)", g_o);
+    TEST_ASSERT_EQUAL(300, sh(0));
+    TEST_ASSERT_EQUAL(600, sh(1));
+}
+
+static void test_l111_mflow_10(void) {
     flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: min(min(43%, calc(40% - 47px)), clamp(41%, 91%, 56%)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(43%, calc(40% - 47px), 56%)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(40% - 47px)", g_o);
     TEST_ASSERT_EQUAL(320, sh(0));
     TEST_ASSERT_EQUAL(81, sh(1));
     flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: calc((20% + 5rem) / 5); max-height: min(92%, min(calc(54% - 35lh + 86%), 54%, 33.125ch)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(4% + 16px);max-height:min(92%, calc(140% - 350px), 54%, 265px)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(4% + 16px);max-height:min(calc(140% - 350px), 54%, 265px)", g_o);
     TEST_ASSERT_EQUAL(300, sh(0));
     TEST_ASSERT_EQUAL(28, sh(1));
     flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: calc(max(calc(max(207px, calc(91% - 157px)) + calc(81% + 2px)), min(124px, 251px)) - calc(18% - 5.25vw + 55%)); min-height: calc(max(min(9%, 91px), calc(49% - 19px), 24lh) - 64%) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(8% + 243px), calc(99% - 121px), calc(-73% + 158px))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(8% + 243px), calc(99% - 121px))", g_o);
     TEST_ASSERT_EQUAL(240, sh(0));
     TEST_ASSERT_EQUAL(262, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: min(calc(max(82%, 28%, calc(31% - 80px)) * 3), max(42%, 252px, 46%)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(max(246%, 84%, calc(93% - 240px)), max(42%, 252px, 46%))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(246%, max(252px, 46%))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(252, sh(1));
-}
-
-static void test_l111_mflow_7(void) {
     flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: calc(min(calc(20% - 133px), 44%) + 54ex) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(20% + 137px), calc(44% + 270px))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(20% + 137px)", g_o);
     TEST_ASSERT_EQUAL(240, sh(0));
     TEST_ASSERT_EQUAL(185, sh(1));
     flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: calc(max(4vh, calc(10% - 150px), min(4%, 16%)) / 0.5) }");
@@ -298,15 +419,18 @@ static void test_l111_mflow_7(void) {
     TEST_ASSERT_EQUAL(300, sh(0));
     TEST_ASSERT_EQUAL(38, sh(1));
     flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: calc(min(calc(min(17.75rem, 3%) + calc(40% + 81px)), calc(7% - 159px)) - 97%) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(-57% + 365px), calc(-54% + 81px), calc(-90% - 159px))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(-90% - 159px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 12.5em } #o { overflow: auto; height: calc(min(calc(max(51%, 39ex) * 4), calc(25% + 107px)) / 4); max-height: calc(7% * 3) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(max(51%, 195px), calc(6% + 27px));max-height:21%", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(39, sh(1));
+}
+
+static void test_l111_mflow_11(void) {
     flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: calc(min(297px, max(80%, calc(45% - 119px))) * -1) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(-297px, min(-80%, calc(-45% + 119px)))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(-297px, -80%)", g_o);
     TEST_ASSERT_EQUAL(240, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: max(264px, calc(min(calc((18% + 39.75vw) / 8), 94%) * 1.5)) }");
@@ -314,172 +438,48 @@ static void test_l111_mflow_7(void) {
     TEST_ASSERT_EQUAL(400, sh(0));
     TEST_ASSERT_EQUAL(264, sh(1));
     flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: max(calc(33% - 26ch + 15%), calc(55% - 195px)); max-height: calc(max(calc(2 * (85% - 8ch)), 41em) + calc(29ex - 54%)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(48% - 208px), calc(55% - 195px));max-height:max(calc(116% + 17px), calc(-54% + 801px))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(55% - 195px);max-height:max(calc(116% + 17px), calc(-54% + 801px))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
+    flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: max(56px, calc(89% + 132px), calc(min(9rem, calc(14% - 29pt), 43ch) + 0vh)); max-height: calc(min(calc(3 * (28% - 55ch)), 76%, calc(clamp(94%, calc(94% + 172px), 4%) - calc((11% + 13.5rem) / 4))) * -1) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(89% + 132px), min(144px, calc(14% - 39px)));max-height:max(calc(-84% + 1320px), -76%)", g_o);
+    TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(310, sh(1));
     flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: min(64%, calc(min(17vh, 53%) + 158px)) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(64%, 240px, calc(53% + 158px))", g_o);
     TEST_ASSERT_EQUAL(150, sh(0));
     TEST_ASSERT_EQUAL(96, sh(1));
-}
-
-static void test_l111_mflow_8(void) {
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: min(48%, max(calc(11% + 42px), 58vh)) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(48%, max(calc(11% + 42px), 278px))", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(96, sh(1));
     flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: min(calc(24% - 144px), calc(min(91%, 62%, 69%) * 3)); max-height: calc(min(calc(max(86%, 29em, 72%) / -2), max(calc(2 * (37% - 29vh)), calc(3 * (31% - 23lh)))) + max(6.125pt, 147px)); min-height: calc(min(20%, 16.5rem, min(39px, 99%)) - 286px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(24% - 144px), 186%);min-height:min(calc(20% - 286px), -22px, -247px, calc(99% - 286px))", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(24% - 144px);min-height:min(calc(20% - 286px), -247px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: calc(min(24.2lh, calc(78% + 120px), 64%) * 1.5) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(363px, calc(117% + 180px), 96%)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(363px, 96%)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(192, sh(1));
+}
+
+static void test_l111_mflow_12(void) {
+    flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: calc(max(calc(20.25% + 23lh), calc(75% + 147px), min(78%, 44px, 42%)) * -1) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(-20% - 230px), calc(-75% - 147px), max(-44px, -42%))", g_o);
+    TEST_ASSERT_EQUAL(150, sh(0));
+    TEST_ASSERT_EQUAL(0, sh(1));
     flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: min(clamp(calc(51% - 155px), 48vh, calc(93% * 2)), 32.5lh, 59rem) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(clamp(calc(51% - 155px), 230px, 186%), 325px, 944px)", g_o);
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(clamp(calc(51% - 155px), 230px, 186%), 325px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
     TEST_ASSERT_EQUAL(230, sh(1));
-    flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: calc(min(36lh, calc(29% + 40pc)) * 0.25); max-height: calc(clamp(calc(28% - 4pc + 82%), 19lh, calc(min(30rem, 45%) - 20%)) + 254px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(90px, calc(7% + 160px))", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(90, sh(1));
     flow("#p { overflow: auto; height: 250px } #o { overflow: auto; height: calc(clamp(54%, 250px, 8px) * 2) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(108%, 500px, 16px)", g_o);
     TEST_ASSERT_EQUAL(250, sh(0));
     TEST_ASSERT_EQUAL(270, sh(1));
-    flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: calc(min(calc(min(calc(43% - 56px), 57rem) - 41%), 29%) + 17%); min-height: min(calc(min(calc(9% + 146px), 47px) + 64%), 72%) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(19% - 56px), calc(-24% + 912px), 46%);min-height:min(calc(73% + 146px), calc(64% + 47px), 72%)", g_o);
-    TEST_ASSERT_EQUAL(300, sh(0));
-    TEST_ASSERT_EQUAL(216, sh(1));
-    flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: max(87%, min(calc(23% - 135px), 18%, calc(12.125% * 2)), 97%) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(87%, min(calc(23% - 135px), 18%, 24%), 97%)", g_o);
-    TEST_ASSERT_EQUAL(240, sh(0));
-    TEST_ASSERT_EQUAL(232, sh(1));
-}
-
-static void test_l111_mflow_9(void) {
-    flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: max(calc(17% + 173px), calc(max(28px, 30em) * 0.5), min(41%, 44em)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(17% + 173px), 240px, min(41%, 704px))", g_o);
+    flow("#p { overflow: auto; height: 12.5em } #o { overflow: auto; height: min(min(2%, 12px), calc(66% + 86px), min(98%, 8%, 68px)) }");
+    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(2%, 12px)", g_o);
     TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(240, sh(1));
-    flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: calc(min(60%, calc(97% - 193px)) * 3) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(180%, calc(291% - 579px))", g_o);
-    TEST_ASSERT_EQUAL(300, sh(0));
-    TEST_ASSERT_EQUAL(294, sh(1));
-    flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: calc(20% - 39ex + 17%); max-height: max(min(26lh, calc(83% - 94px)), calc(min(40%, 44%) + 58%)); min-height: min(clamp(59px, 145px, 75px), calc(85% * 3)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(37% - 195px);max-height:max(min(260px, calc(83% - 94px)), 98%);min-height:min(75px, 255%)", g_o);
-    TEST_ASSERT_EQUAL(400, sh(0));
-    TEST_ASSERT_EQUAL(75, sh(1));
-    flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: clamp(147px, calc(min(58%, 23ex) + calc(11% - 67px)), 86%) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(147px, min(calc(69% - 67px), calc(11% + 48px)), 86%)", g_o);
-    TEST_ASSERT_EQUAL(400, sh(0));
-    TEST_ASSERT_EQUAL(147, sh(1));
-    flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: calc(min(68%, 72%) * 3); max-height: max(max(26%, calc(35% - 153px)), 89%) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:204%;max-height:max(26%, calc(35% - 153px), 89%)", g_o);
-    TEST_ASSERT_EQUAL(400, sh(0));
-    TEST_ASSERT_EQUAL(356, sh(1));
-    flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: calc(max(68%, 39.25rem) / 2) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(34%, 314px)", g_o);
-    TEST_ASSERT_EQUAL(240, sh(0));
-    TEST_ASSERT_EQUAL(314, sh(1));
-    flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: calc(clamp(calc(min(17lh, 18ex) * 2), 46%, 275px) - 298px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(-118px, calc(46% - 298px), -23px)", g_o);
-    TEST_ASSERT_EQUAL(320, sh(0));
-    TEST_ASSERT_EQUAL(0, sh(1));
-    flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: max(max(198px, 55%, 92%), 77%); min-height: min(calc(min(calc(69% + 30px), 75%, 286px) + 63%), calc(21% + 14vh)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(198px, 55%, 92%, 77%)", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(198, sh(1));
-}
-
-static void test_l111_mflow_10(void) {
-    flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: calc(min(max(64%, 37%), 90%) - max(45%, 7px)); min-height: clamp(min(10%, 1px), 2px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(19%, calc(64% - 7px))", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(38, sh(1));
-    flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: min(calc(min(249px, 39px) + calc(23% + 193px)), 182px); max-height: min(min(calc(21% - 8lh), 90%), calc(43% + 38px), 43rem); min-height: calc(max(45vh, 10px, max(56%, 71%)) + calc(42% * 2)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(23% + 232px), 182px);max-height:min(calc(21% - 80px), 90%, calc(43% + 38px), 688px);min-height:max(calc(84% + 216px), calc(84% + 10px), 155%)", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(384, sh(1));
-    flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: min(61px, max(calc(91% + 151px), 27%), 55%); max-height: calc(58% - 63px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(61px, max(calc(91% + 151px), 27%), 55%);max-height:calc(58% - 63px)", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(53, sh(1));
-    flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: calc(min(16.125ex, 28%) / 2) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(40px, 14%)", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(28, sh(1));
-    flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: clamp(max(119px, 86%), calc(36.2pc + 54%), calc(max(7%, 76%, 15%) + 18.125vh)); max-height: calc(min(250px, calc(74% - 67px)) - calc(max(31.125ex, 86%) - 214px)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(max(119px, 86%), calc(54% + 579px), calc(76% + 87px))", g_o);
-    TEST_ASSERT_EQUAL(320, sh(0));
-    TEST_ASSERT_EQUAL(330, sh(1));
-    flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: min(calc(max(calc(73% - 55px), 77%) - 39%), calc(min(26lh, 71%) - 54lh)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(max(calc(34% - 55px), 38%), -280px, calc(71% - 540px))", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(0, sh(1));
-    flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: clamp(max(34%, calc(3% * 2)), 55%, calc(min(97%, 3%, 81px) - 38%)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(34%, 55%, min(59%, -35%, calc(-38% + 81px)))", g_o);
-    TEST_ASSERT_EQUAL(300, sh(0));
-    TEST_ASSERT_EQUAL(102, sh(1));
-    flow("#p { overflow: auto; height: 200px } #o { overflow: auto; height: max(min(43ch, 77%), calc(max(16vh, 96%) * 4)); min-height: min(calc(98% + 6px), min(110px, 86%, 47vh)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(min(344px, 77%), 307px, 384%);min-height:min(calc(98% + 6px), 110px, 86%, 226px)", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(768, sh(1));
-}
-
-static void test_l111_mflow_11(void) {
-    flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: max(calc(51% - 29.5lh), 44rem, max(4.5rem, 47%)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(51% - 295px), 704px, 72px, 47%)", g_o);
-    TEST_ASSERT_EQUAL(240, sh(0));
-    TEST_ASSERT_EQUAL(704, sh(1));
-    flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: calc(max(max(9.5lh, 3em), calc(max(53px, 86%, 241px) / -2), 25rem) * 0.25) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(24px, min(-7px, -11%, -30px), 100px)", g_o);
-    TEST_ASSERT_EQUAL(400, sh(0));
-    TEST_ASSERT_EQUAL(100, sh(1));
-    flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: calc(max(51%, max(286px, 292px, 202px)) / 0.5); max-height: calc(5% + 160px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(102%, 584px);max-height:calc(5% + 160px)", g_o);
-    TEST_ASSERT_EQUAL(240, sh(0));
-    TEST_ASSERT_EQUAL(172, sh(1));
-    flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: calc(min(79%, 30.125lh) * 3); max-height: calc(45% - 101px) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(237%, 904px);max-height:calc(45% - 101px)", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(0, sh(1));
-    flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: calc(13lh + 100%); min-height: min(calc(max(94%, 91%, 2%) + 25.75rem), min(calc(17% - 68px), 125px)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(100% + 130px);min-height:min(calc(94% + 412px), calc(17% - 68px), 125px)", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(330, sh(1));
-    flow("#p { overflow: auto; height: 250px } #o { overflow: auto; height: calc(clamp(13ch, 26%, max(48%, 43%)) * -2); max-height: max(58%, max(24%, 52px)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(-208px, -52%);max-height:max(58%, 24%, 52px)", g_o);
-    TEST_ASSERT_EQUAL(250, sh(0));
-    TEST_ASSERT_EQUAL(0, sh(1));
-    flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: calc(max(82%, calc(max(90%, calc(17% - 49px)) * 2)) + 32%); max-height: calc(min(calc(max(8em, 66%) - 250px), 14.75vh, calc(clamp(59%, 46lh, 4%) * 0.5)) / 2) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(114%, 212%, calc(66% - 98px))", g_o);
-    TEST_ASSERT_EQUAL(150, sh(0));
-    TEST_ASSERT_EQUAL(318, sh(1));
-    flow("#p { overflow: auto; height: 40ex } #o { overflow: auto; height: min(calc(26% + 130px), calc(min(calc(97% + 181px), calc(31% + 135px)) / 4)); max-height: calc(min(10%, 1px) * min(2%, 1px)) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(calc(26% + 130px), calc(24% + 45px), calc(8% + 34px))", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(50, sh(1));
-}
-
-static void test_l111_mflow_12(void) {
-    flow("#p { overflow: auto; height: 20lh } #o { overflow: auto; height: clamp(min(27.25vh, 19vh), max(calc(7% - 197px), 30.2em, 34rem), 36em); min-height: calc(min(32%, min(calc(73% - 71px), 77%, calc(96% - 5px))) * -2) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:clamp(91px, max(calc(7% - 197px), 483px, 544px), 576px);min-height:max(-64%, calc(-146% + 142px), -154%, calc(-192% + 10px))", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(544, sh(1));
-    flow("#p { overflow: auto; height: 250px } #o { overflow: auto; height: max(clamp(99px, 24.25rem, 44%), 86%) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(clamp(99px, 388px, 44%), 86%)", g_o);
-    TEST_ASSERT_EQUAL(250, sh(0));
-    TEST_ASSERT_EQUAL(215, sh(1));
-    flow("#p { overflow: auto; height: 25ch } #o { overflow: auto; height: calc(max(max(calc(38% - 21.125pt + 23%), 13%), calc(clamp(44%, 1%, 29%) + 75%)) / 4); max-height: calc(56% - 50em) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(15% - 7px), 3%, 30%);max-height:calc(56% - 800px)", g_o);
-    TEST_ASSERT_EQUAL(200, sh(0));
-    TEST_ASSERT_EQUAL(0, sh(1));
-    flow("#p { overflow: auto; height: 150px } #o { overflow: auto; height: calc(max(calc(max(69%, 46vw) / 0.5), 274px) * 1.5) }");
-    TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(207%, 883px, 411px)", g_o);
-    TEST_ASSERT_EQUAL(150, sh(0));
-    TEST_ASSERT_EQUAL(883, sh(1));
+    TEST_ASSERT_EQUAL(4, sh(1));
 }
 
 int main(void) {

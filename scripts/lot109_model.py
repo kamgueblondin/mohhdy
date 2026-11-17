@@ -3,7 +3,8 @@ code with the C (userspace/wf_cssmath.c, wf_sitecss.c, wf_cssprop.c).
 
 - Box scroller lengths (CSS Values 4, CSS Box Sizing 3): ex, ch and lh
   against the reader's font (the 8x8 font at 16 px: x height 5 px,
-  advance 8 px, normal line height 10 px, so 5/16, 8/16 and 10/16 em); a
+  advance 8 px, normal line height 10 px, so 5/16, 8/16 and 10/16 em;
+  Lot 112: ex and ch of the font the engine draws, font_unit); a
   percentage inside calc()/min()/max()/clamp() is of the containing
   block, so the value goes to the layout as the engine's math reads it
   (integer literals, at most 2000).
@@ -18,6 +19,46 @@ import lot107_model as L7
 LIT = 2000          # the engine's math literal bound (WE_MATH_LITERAL_MAX)
 LIMIT = 10000       # px or % a value may reach (WF_CSSMATH_MAX)
 FONT = {"ex": F(5, 16), "ch": F(8, 16), "lh": F(10, 16)}
+# Lot 112: rlh, the root element's line height in px (None: normal, 10/16
+# of the root's font size, the rem)
+RLH = [None]
+# Lot 112: ex and ch of the element's actual font, the glyphs the engine
+# draws for its font size (False: the 16 px proportions above)
+ACTUAL = [True]
+
+
+def font_q(em):
+    """Lot 112: the engine's font scale for a font size of em px: the
+    font px rounded (half up) within 4..64, then (px + 2) // 4 within
+    4..16 (an 8x8 font scaled by q / 4)"""
+    px = int(F(em) + F(1, 2))
+    px = min(max(px, 4), 64)
+    return min(max((px + 2) // 4, 4), 16)
+
+
+def legacy(fn):
+    """Lot 112: fn with ex and ch as the 16 px proportions (the model of
+    wf_css_math_box and the other entry points without the element's
+    font metrics)"""
+    def run(*a, **k):
+        save = ACTUAL[0]
+        ACTUAL[0] = False
+        try:
+            return fn(*a, **k)
+        finally:
+            ACTUAL[0] = save
+    run.__name__ = fn.__name__
+    return run
+
+
+def font_unit(u, em):
+    """Lot 112: one ex, ch or lh in px for a font size of em px: ex the 5
+    inked rows of "x" and ch the 8 px advance, both scaled by q / 4 and
+    rounded as the screen scale rounds ((n q + 2) // 4)"""
+    if u == "lh" or not ACTUAL[0]:
+        return FONT[u] * em
+    q = font_q(em)
+    return F(((5 if u == "ex" else 8) * q + 2) // 4)
 
 
 class Unsure(L7.Unsure):
@@ -34,7 +75,9 @@ def unit_len(u, em, rem):
     if u == "%":
         return (F(0), F(1))
     if u in FONT:
-        return (FONT[u] * em, F(0))
+        return (font_unit(u, em), F(0))
+    if u == "rlh":
+        return (RLH[0] if RLH[0] is not None else F(rem) * F(10, 16), F(0))
     k = L7.unit_px(u, em, rem)
     return None if k is None else (k, F(0))
 
@@ -136,8 +179,10 @@ class _Box:
         k = unit_len(u, self.em, self.rem)
         if k is None:
             self.fail()
-        if u in FONT:
+        if u in FONT and (u == "lh" or not ACTUAL[0]):
             self.chk(n * self.em)       # the C takes n em first
+        if u == "rlh" and RLH[0] is None:
+            self.chk(n * self.rem)      # Lot 112: n rem, then 10/16 of it
         self.chk(n * k[0], n * k[1])
         return (n * k[0], n * k[1], True, False)
 

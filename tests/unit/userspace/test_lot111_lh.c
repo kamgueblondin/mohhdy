@@ -98,8 +98,8 @@ static void test_l111_lh_1(void) {
     TEST_ASSERT_EQUAL_STRING("0 48001 48001", lh3());
     TEST_ASSERT_EQUAL(120, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #i { font-size: 0.5em; line-height: 120% } #o { line-height: calc(10% + 1px); overflow: auto; height: calc(1lh * 3) } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("0 0 9601", lh3());
-    TEST_ASSERT_EQUAL(30, height_of("o"));
+    TEST_ASSERT_EQUAL_STRING("0 2601 9601", lh3());
+    TEST_ASSERT_EQUAL(7, height_of("o"));
 }
 
 static void test_l111_lh_2(void) {
@@ -116,8 +116,8 @@ static void test_l111_lh_2(void) {
     TEST_ASSERT_EQUAL_STRING("0 20001 48001", lh3());
     TEST_ASSERT_EQUAL(40, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { font-size: 1.25em; line-height: calc(2 * 1.5em); line-height: 1.5lh; overflow: auto; height: min(5lh, 100px) } body { line-height: calc(10% + 1px) } html { line-height: 150% } #i { font-size: 0.5em; line-height: 2lh; line-height: 0 } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("24001 36001 1", lh3());
-    TEST_ASSERT_EQUAL(100, height_of("o"));
+    TEST_ASSERT_EQUAL_STRING("2601 3901 1", lh3());
+    TEST_ASSERT_EQUAL(19, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } body { line-height: auto; line-height: normal } #o { font-size: 1.25em; overflow: auto; height: calc(2lh + 10px) } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
     TEST_ASSERT_EQUAL_STRING("0 0 0", lh3());
     TEST_ASSERT_EQUAL(35, height_of("o"));
@@ -128,8 +128,8 @@ static void test_l111_lh_2(void) {
     TEST_ASSERT_EQUAL_STRING("12801 18001 20001", lh3());
     TEST_ASSERT_EQUAL(180, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } body { line-height: auto } #o { line-height: calc(10% + 1px); line-height: calc(10% + 1px); overflow: auto; height: 0.5lh } #i { line-height: calc(1em + 4px) } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("0 0 20001", lh3());
-    TEST_ASSERT_EQUAL(5, height_of("o"));
+    TEST_ASSERT_EQUAL_STRING("0 2601 20001", lh3());
+    TEST_ASSERT_EQUAL(1, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } body { line-height: max(1em, 18px); line-height: 0 } html { font-size: 12px } #o { font-size: 20px; line-height: 1.25em; overflow: auto; height: 0.5lh } #i { line-height: inherit } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
     TEST_ASSERT_EQUAL_STRING("1 25001 25001", lh3());
     TEST_ASSERT_EQUAL(12, height_of("o"));
@@ -155,8 +155,8 @@ static void test_l111_lh_3(void) {
     TEST_ASSERT_EQUAL_STRING("20001 20001 12001", lh3());
     TEST_ASSERT_EQUAL(20, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } body { font-size: 1.5em; line-height: calc(2 * 1.5em); line-height: inherit } #o { font-size: 2em; line-height: calc(10% + 1px); overflow: auto; height: 0.5lh } #i { font-size: 20px; line-height: 1.5lh } html { line-height: normal } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("0 0 45001", lh3());
-    TEST_ASSERT_EQUAL(15, height_of("o"));
+    TEST_ASSERT_EQUAL_STRING("0 5801 8701", lh3());
+    TEST_ASSERT_EQUAL(2, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #i { line-height: 15pt } body { line-height: 1.25 } html { font-size: 12px } #o { font-size: 24px; line-height: 1.5 2; line-height: 75%; overflow: auto; height: 4lh } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
     TEST_ASSERT_EQUAL_STRING("15001 18001 20001", lh3());
     TEST_ASSERT_EQUAL(72, height_of("o"));
@@ -221,8 +221,8 @@ static void test_l111_lh_5(void) {
     TEST_ASSERT_EQUAL_STRING("24001 1 1", lh3());
     TEST_ASSERT_EQUAL(0, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } body { line-height: 1.25 } #o { line-height: calc(10% + 1px); overflow: auto; height: 1lh } #i { font-size: 24px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("20001 20001 30001", lh3());
-    TEST_ASSERT_EQUAL(20, height_of("o"));
+    TEST_ASSERT_EQUAL_STRING("20001 2601 2601", lh3());
+    TEST_ASSERT_EQUAL(2, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { line-height: calc(2 * 1.5em); overflow: auto; height: 0.5lh } body { font-size: 24px } #i { font-size: 16px; line-height: 20px } html { line-height: 75% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
     TEST_ASSERT_EQUAL_STRING("12001 72001 20001", lh3());
     TEST_ASSERT_EQUAL(36, height_of("o"));
@@ -326,7 +326,7 @@ static void test_l111_lh_8(void) {
     TEST_ASSERT_EQUAL_STRING("16001 16001 20001", lh3());
     TEST_ASSERT_EQUAL(160, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { font-size: 20px } #i { line-height: calc(10% + 1px) } #o { font-size: 32px; overflow: auto; height: 3lh } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("0 0 0", lh3());
+    TEST_ASSERT_EQUAL_STRING("0 0 4201", lh3());
     TEST_ASSERT_EQUAL(60, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { font-size: 16px; line-height: normal } body { line-height: 75% } #o { line-height: 20px; line-height: calc(1lh - 50px); overflow: auto; height: 4lh } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
     TEST_ASSERT_EQUAL_STRING("12001 1 1", lh3());
@@ -389,8 +389,8 @@ static void test_l111_lh_10(void) {
     TEST_ASSERT_EQUAL_STRING("20001 20001 0", lh3());
     TEST_ASSERT_EQUAL(60, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { font-size: 20px } #o { font-size: 1.25em; line-height: calc(10% + 1px); overflow: auto; height: calc(1lh * 3) } #i { line-height: 1.25em } body { line-height: calc(1lh + 2px); line-height: 1.5 } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("30001 37501 31251", lh3());
-    TEST_ASSERT_EQUAL(112, height_of("o"));
+    TEST_ASSERT_EQUAL_STRING("30001 3501 31251", lh3());
+    TEST_ASSERT_EQUAL(10, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow: auto; height: 3lh } body { line-height: calc(1em + 4px); line-height: calc(1lh - 50px) } html { font-size: 12px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
     TEST_ASSERT_EQUAL_STRING("1 1 1", lh3());
     TEST_ASSERT_EQUAL(0, height_of("o"));
@@ -419,10 +419,10 @@ static void test_l111_lh_11(void) {
     TEST_ASSERT_EQUAL_STRING("0 0 16001", lh3());
     TEST_ASSERT_EQUAL(30, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } body { line-height: calc(10% + 1px) } #o { font-size: 20px; line-height: calc(1lh - 50px); overflow: auto; height: 3lh } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("0 1 1", lh3());
+    TEST_ASSERT_EQUAL_STRING("2601 1 1", lh3());
     TEST_ASSERT_EQUAL(0, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { font-size: 16px; line-height: 0.8; overflow: auto; height: min(5lh, 100px) } html { font-size: 16px; line-height: calc(10% + 1px) } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("0 12801 12801", lh3());
+    TEST_ASSERT_EQUAL_STRING("2601 12801 12801", lh3());
     TEST_ASSERT_EQUAL(64, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { font-size: 10px; line-height: calc(2 * 1.5em) } #i { line-height: 2lh; line-height: 1.5 } #o { overflow: auto; height: 0.5lh } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
     TEST_ASSERT_EQUAL_STRING("30001 30001 15001", lh3());
@@ -557,7 +557,7 @@ static void test_l111_lh_15(void) {
     TEST_ASSERT_EQUAL_STRING("32001 32001 1", lh3());
     TEST_ASSERT_EQUAL(64, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { overflow: auto; height: calc(1lh * 3) } html { font-size: 20px } #i { font-size: 20px; line-height: calc(10% + 1px) } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("0 0 0", lh3());
+    TEST_ASSERT_EQUAL_STRING("0 0 3001", lh3());
     TEST_ASSERT_EQUAL(37, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { font-size: 1.5em; line-height: 15pt; overflow: auto; height: min(5lh, 100px) } #i { line-height: calc(1em + 4px); line-height: 2rem } html { font-size: 12px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
     TEST_ASSERT_EQUAL_STRING("0 20001 24001", lh3());
@@ -605,8 +605,8 @@ static void test_l111_lh_17(void) {
     TEST_ASSERT_EQUAL_STRING("0 40001 40001", lh3());
     TEST_ASSERT_EQUAL(88, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #o { line-height: calc(10% + 1px); overflow: auto; height: 4lh } html { font-size: 12px } #i { font-size: 0.5em; line-height: 20px; line-height: calc(1lh - 50px) } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
-    TEST_ASSERT_EQUAL_STRING("0 0 1", lh3());
-    TEST_ASSERT_EQUAL(30, height_of("o"));
+    TEST_ASSERT_EQUAL_STRING("0 2201 1", lh3());
+    TEST_ASSERT_EQUAL(8, height_of("o"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { line-height: 1.5lh } #o { font-size: 1.25em; line-height: -1; overflow: auto; height: 10lh } body { line-height: 1.25; line-height: 15pt } #i { animation: k 1s linear; animation-timeline: scroll(nearest) }");
     TEST_ASSERT_EQUAL_STRING("20001 20001 20001", lh3());
     TEST_ASSERT_EQUAL(200, height_of("o"));

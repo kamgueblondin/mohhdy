@@ -55,13 +55,15 @@ static const char *mb(const char *s, int em, int cap) {
     return g_o;
 }
 
-/* ex 5/16, ch 8/16, lh 10/16 of the element's font size */
+/* ex 5/16, ch 8/16, lh 10/16 of the element's font size (Lot 112: ex and
+ * ch of the font the engine draws for it, the same at 16px) */
 static void test_l109_font_units(void) {
     prep("#b { overflow: auto; height: 10ex } " RD);
     TEST_ASSERT_EQUAL_STRING("~10ex", node("b")->htok);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:50px\"", style_of("b"));
+    /* Lot 112: ex of the 24px font the engine draws (scale 6: 8px) */
     prep("#b { overflow: auto; height: 10ex; font-size: 24px } " RD);
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:24px;overflow-y:auto;height:75px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:24px;overflow-y:auto;height:80px\"", style_of("b"));
     prep("#b { overflow: auto; max-height: 2lh } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:20px\"", style_of("b"));
     prep("#b { overflow: auto; height: 3lh; min-height: 1.5lh } " RD);
@@ -70,8 +72,10 @@ static void test_l109_font_units(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:2px\"", style_of("b"));
     prep("#b { overflow: auto; width: 3ch } " RX);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-x:auto;width:24px\"", style_of("b"));
+    /* Lot 112: the engine draws a 10px font at its smallest scale (4):
+     * ch 8px, as at 16px */
     prep("#b { overflow: auto; width: 3ch; max-width: 2ch; font-size: 10px } " RX);
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;overflow-x:auto;width:15px;max-width:10px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;overflow-x:auto;width:24px;max-width:16px\"", style_of("b"));
     /* in a math function, kept in the pool ("=N") and resolved against
      * the element's font size */
     prep("#b { overflow: auto; height: calc(2lh + 4px) } " RD);
@@ -100,8 +104,11 @@ static void test_l109_pct_math(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:clamp(5px, 20%, 20px)\"", style_of("b"));
     prep("#b { overflow: auto; height: 10px; min-height: calc(25% + 1ch) } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:10px;min-height:calc(25% + 8px)\"", style_of("b"));
+    /* Lot 112 (converted, was max(50%, 1px, 32px)): 32px covers 1px */
     prep("#b { overflow: auto; height: max(50%, 1px, 2em) } " RD);
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:max(50%, 1px, 32px)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:max(50%, 32px)\"", style_of("b"));
+    prep("#b { overflow: auto; height: max(50%, calc(10% + 1px), 2em) } " RD);
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:max(50%, calc(10% + 1px), 32px)\"", style_of("b"));
     /* integers, half away from zero; signs */
     prep("#b { overflow: auto; height: calc(10.5% + 0.5px) } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:calc(11% + 1px)\"", style_of("b"));
@@ -180,8 +187,11 @@ static void test_l109_pct_refused(void) {
      * arguments, a nested min() of the same kind is flattened */
     prep("#b { overflow: auto; height: calc(min(50%, 10px) + 1px) } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(calc(50% + 1px), 11px)\"", style_of("b"));
+    /* Lot 112 (converted, was min(50%, 1px, 2px)): 1px covers 2px */
     prep("#b { overflow: auto; height: min(min(50%, 1px), 2px) } " RD);
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(50%, 1px, 2px)\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(50%, 1px)\"", style_of("b"));
+    prep("#b { overflow: auto; height: min(min(50%, 1px), calc(2px - 10%)) } " RD);
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(50%, 1px, calc(-10% + 2px))\"", style_of("b"));
 }
 
 /* scroll-padding: ex, ch, lh resolve; a percentage in math is auto */

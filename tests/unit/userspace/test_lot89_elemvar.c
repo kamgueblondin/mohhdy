@@ -91,14 +91,19 @@ static void test_invalid_per_element_and_colour(void) {
     char text[96];
     TEST_ASSERT_EQUAL(0, prep(html));
     TEST_ASSERT_EQUAL((int)0x102030, (int)by_id("a")->color);
-    /* invalid where it is used: dropped on that element, the earlier rule stays */
-    TEST_ASSERT_EQUAL((int)0x000001, (int)by_id("b")->color);
-    /* no value at all and no fallback: dropped as well */
-    TEST_ASSERT_EQUAL((int)0x000001, (int)by_id("c")->color);
+    /* invalid where it is used: Lot 112: unset on that element (CSS
+     * Variables 1 3.1; was dropped, the earlier rule stayed), so color
+     * inherits (no ancestor colour here: none set) */
+    TEST_ASSERT_EQUAL(0, by_id("b")->color_set);
+    TEST_ASSERT_EQUAL(1, by_id("b")->color_inh);
+    /* no value at all and no fallback: unset as well */
+    TEST_ASSERT_EQUAL(0, by_id("c")->color_set);
+    TEST_ASSERT_EQUAL(1, by_id("c")->color_inh);
     TEST_ASSERT(wf_site_vars_text(&g_d, text, (int)sizeof(text)) > 0);
     TEST_ASSERT_NOT_NULL(strstr(text, "names 1 values 2"));
-    TEST_ASSERT_NOT_NULL(strstr(text, "bound 2 reread 1"));
-    TEST_ASSERT_NOT_NULL(strstr(text, "dropped 2"));
+    /* Lot 112: the two unset rereads apply too (were dropped) */
+    TEST_ASSERT_NOT_NULL(strstr(text, "bound 2 reread 3"));
+    TEST_ASSERT_NOT_NULL(strstr(text, "dropped 0"));
 }
 
 static void test_inside_scope(void) {

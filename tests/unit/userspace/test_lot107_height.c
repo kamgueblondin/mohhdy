@@ -73,7 +73,7 @@ static void test_l107_height_0(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("2 4 0 0 1 24000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:75px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;max-height:80px\"", style_of("b"));
 }
 
 static void test_l107_height_1(void) {
@@ -236,7 +236,7 @@ static void test_l107_height_4(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { height: 0.5%; max-height: 3lh } #o { max-height: calc(10px - 20px); overflow: hidden auto; height: 10ex } #o { font-size: 24px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("2 4 0 0 1 24000", sc_of(3));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:24px;overflow-y:auto;height:75px;max-height:0px\"", style_of("o"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:24px;overflow-y:auto;height:80px;max-height:0px\"", style_of("o"));
     TEST_ASSERT_EQUAL(0, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("0 0 0 0 0 24000", sc_of(4));
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
@@ -1326,7 +1326,7 @@ static void test_l107_height_28(void) {
     TEST_ASSERT_EQUAL_STRING("", style_of("o"));
     TEST_ASSERT_EQUAL(4, wf_site_box_scroller(&g_d, 4));
     TEST_ASSERT_EQUAL_STRING("4 4 526 0 1 10000", sc_of(4));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;overflow-y:auto;height:525px;max-height:31px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;overflow-y:auto;height:525px;max-height:50px\"", style_of("b"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } #b { max-height: 33.3vh; height: 33.3vh; overflow: hidden } #o { overflow-y: hidden !important; max-height: --x; max-height: 2.5em } html { font-size: 9px } #o { font-size: 24px } #b { font-size: 24px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #r { animation: k 1s linear; animation-timeline: view() }");
     TEST_ASSERT_EQUAL(2, wf_site_box_scroller(&g_d, 3));
     TEST_ASSERT_EQUAL_STRING("0 2 0 0 0 24000", sc_of(3));

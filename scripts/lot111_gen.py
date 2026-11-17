@@ -438,6 +438,8 @@ def blen_case(rng):
         if not v.endswith("%"):
             return v
         hv = M.html_len(slot(html_v), em, em, basis) if html_v else None
+        if html_v in (None, "auto") and basis == M.VW:
+            hv = M.VW       # Lot 112: html's width auto is the viewport's (CSS 2, 10.3.3)
         pc = int(v[:-1].split(".")[0])
         if hv is None:
             return "%d%%" % pc
@@ -608,6 +610,7 @@ def mix_check(s, text, em, rem):
         assert got == want, (s, text, basis, got, want)
 
 
+@M9.legacy     # Lot 112: wf_css_math_box keeps the 16 px proportions
 def write_mix():
     rng = random.Random(11106)
     cases, seen, mixed = [], set(), 0

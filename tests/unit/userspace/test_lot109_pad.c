@@ -429,7 +429,7 @@ static void test_l109_pad_8(void) {
     geo(-1, 1, 1, 8, 646, 8, 127, 480, 640, 400, 0);
     geo2(-1, 0, 400, 0, 0, 0, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: #000000 } to { color: #ffffff } } #b { overflow-y: Auto; overflow-x: overlay; height: SCROLL; height: fit-content(10px) } #o { overflow: auto; height: 20vh } #q { overflow-x: overlay; height: 1e } div { overflow-x: scroll; height: 20vh } html { scroll-padding-block-end: 0.5lh; scroll-padding: calc(10% + 2px) 100px 100px 3ch } #o { scroll-padding-bottom: 5vh } #b { scroll-padding-block: calc(10% + 1ch) } html { font-size: 8px } body { view-timeline-name: --v, --t; view-timeline-inset: 0% } #o { view-timeline: --v 0% 20.1387%, --u y } #i { animation: k 1s linear both; animation-timeline: view(y); animation-range: entry-crossing }", 1);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#4d4d4d\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#474747\"", style_of("i"));
     TEST_ASSERT_EQUAL_STRING("1 0 1 1 0 1", counts());
     geo_root(1000, 0);
     geo(0, 1, 1, 1467, 0, 45, 602, 480, 640, 1000, 0);
@@ -1602,7 +1602,7 @@ static void test_l109_pad_33(void) {
     geo(5, 0, 1, 130, 20, 15, 224, 100, 640, 0, 0);
     geo2(5, 4, 0, 0, 0, 0, 0, 0);
     prep3("@property --p { syntax: '<length>'; inherits: false; initial-value: 0px } @keyframes k { from { color: #000000 } to { color: #ffffff } } #o { height: calc(10px + 5px); overflow: clip scroll; height: 0.5in } html { overflow: SCROLL scroll; height: 0 } #o { scroll-padding-block: 10px; scroll-padding: 100px 2ex 1.5lh } #b { scroll-padding: 122px } html { font-size: 20px } #o { font-size: 37px } #i { animation: k 1s linear both; animation-timeline: view(x) }", 0);
-    TEST_ASSERT_EQUAL_STRING(" style=\"color:#bcbcbc\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"color:#bbbbbb\"", style_of("i"));
     TEST_ASSERT_EQUAL_STRING("1 0 1 1 0 1", counts());
     geo_root(1000, 0);
     geo(2, 1, 1, 296, 0, 23, 166, 480, 640, 1000, 0);

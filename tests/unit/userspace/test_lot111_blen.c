@@ -56,7 +56,7 @@ static void test_l111_blen_0(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden; height: calc(10em + 25%) } body { overflow: auto; max-width: 50% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("-", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";width:"));
-    TEST_ASSERT_EQUAL_STRING("50%", part(";max-width:"));
+    TEST_ASSERT_EQUAL_STRING("320px", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden; height: max(25%, 100px); width: calc(100% - 40px) } body { overflow: auto; height: 200px; width: 50% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("200px", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("300px", part(";width:"));
@@ -137,11 +137,11 @@ static void test_l111_blen_2(void) {
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: calc(100% / 3) } body { overflow: scroll; height: 75%; width: 25% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("120px", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("25%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("160px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden } body { overflow: auto; height: 10%; width: 100% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("10%", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("100%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("640px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: calc(100% / 3); width: calc(12.5% * 4) } body { overflow: scroll; height: 10%; width: 12.5% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("16px", part(";height:"));
@@ -168,16 +168,16 @@ static void test_l111_blen_3(void) {
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; font-size: 20px } body { overflow: auto; height: 50%; width: 12.5%; max-width: 50% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("50%", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("12%", part(";width:"));
-    TEST_ASSERT_EQUAL_STRING("50%", part(";max-width:"));
+    TEST_ASSERT_EQUAL_STRING("76px", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("320px", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: clamp(100px, 50%, 200px); width: auto; font-size: 10px } body { overflow: scroll; height: 10%; width: 12.5% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("20px", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("12%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("76px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: clip hidden; height: calc(200% - 900px) } body { overflow: scroll; height: 100%; width: 200px; max-width: 90% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("60px", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("200px", part(";width:"));
-    TEST_ASSERT_EQUAL_STRING("90%", part(";max-width:"));
+    TEST_ASSERT_EQUAL_STRING("576px", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden; height: calc(100% / 3); width: min(80%, 400px); font-size: 20px } body { overflow: auto; height: 200px; max-width: 300px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("200px", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";width:"));
@@ -196,7 +196,7 @@ static void test_l111_blen_3(void) {
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: clip hidden; height: min(50%, 300px) } body { overflow: scroll; width: 12.5% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("-", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("12%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("76px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
 }
 
@@ -228,10 +228,10 @@ static void test_l111_blen_4(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: calc(10em + 25%) } body { overflow: auto; height: 75%; width: 200px; max-width: 90% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("210px", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("200px", part(";width:"));
-    TEST_ASSERT_EQUAL_STRING("90%", part(";max-width:"));
+    TEST_ASSERT_EQUAL_STRING("576px", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: clip hidden; height: calc(37.5% + 2rem); font-size: 20px } body { overflow: auto; height: 200px; width: 12.5% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("200px", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("12%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("76px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden; height: calc(100% / 3); width: max(10%, 100px) } body { overflow: auto; height: 33.5%; width: 80% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("52px", part(";height:"));
@@ -278,7 +278,7 @@ static void test_l111_blen_5(void) {
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: calc(100% / 3) } body { overflow: scroll; height: 150%; width: 50%; max-width: 300px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("240px", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("50%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("320px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("300px", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: clip hidden; height: 400px; width: calc(12.5% * 4) } body { overflow: scroll; height: 200px; width: 100% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("200px", part(";height:"));
@@ -336,8 +336,8 @@ static void test_l111_blen_7(void) {
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden; height: calc(50% + 10px) } body { overflow: auto; height: 75%; width: 80%; max-width: 50% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("187px", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("80%", part(";width:"));
-    TEST_ASSERT_EQUAL_STRING("50%", part(";max-width:"));
+    TEST_ASSERT_EQUAL_STRING("512px", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("320px", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden; width: auto } body { overflow: auto; height: 100%; width: 200px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("100%", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("200px", part(";width:"));
@@ -384,7 +384,7 @@ static void test_l111_blen_8(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: clip hidden; height: calc(100% / 3); font-size: 10px } body { overflow: scroll; height: 10%; width: 200px; max-width: 50% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("16px", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("200px", part(";width:"));
-    TEST_ASSERT_EQUAL_STRING("50%", part(";max-width:"));
+    TEST_ASSERT_EQUAL_STRING("320px", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden; height: calc(100% - 20px); width: clamp(200px, 30%, 500px) } body { overflow: scroll; height: 33.5%; width: 12.5%; max-width: 300px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("151px", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("24px", part(";width:"));
@@ -465,7 +465,7 @@ static void test_l111_blen_10(void) {
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden; height: min(50%, 300px); font-size: 20px } body { overflow: auto; height: 150%; width: 50% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("360px", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("50%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("320px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: max(25%, 100px); width: 50% } body { overflow: auto; width: 12.5% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("-", part(";height:"));
@@ -513,7 +513,7 @@ static void test_l111_blen_11(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: clip hidden; width: auto; font-size: 10px } body { overflow: auto; height: 75%; max-width: 50% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("75%", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";width:"));
-    TEST_ASSERT_EQUAL_STRING("50%", part(";max-width:"));
+    TEST_ASSERT_EQUAL_STRING("320px", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: calc(100% - 20px); width: clamp(200px, 30%, 500px) } body { overflow: scroll; height: 10%; width: 200px } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("46px", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("200px", part(";width:"));
@@ -571,12 +571,12 @@ static void test_l111_blen_12(void) {
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden; height: calc(10em + 25%); font-size: 20px } body { overflow: scroll; height: 150%; width: 25% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("480px", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("25%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("160px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: auto; width: auto; font-size: 20px } body { overflow: scroll; height: 33.5%; width: 50%; max-width: 50% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("33%", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("50%", part(";width:"));
-    TEST_ASSERT_EQUAL_STRING("50%", part(";max-width:"));
+    TEST_ASSERT_EQUAL_STRING("320px", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("320px", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: clip hidden; height: calc(37.5% + 2rem); width: calc(50% + 2em) } body { overflow: auto; width: 25% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("-", part(";height:"));
     TEST_ASSERT_EQUAL_STRING("88px", part(";width:"));
@@ -590,7 +590,7 @@ static void test_l111_blen_12(void) {
 static void test_l111_blen_13(void) {
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: clip hidden; height: calc(50% + 10px); font-size: 20px } body { overflow: auto; height: 33.5%; width: 80% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("82px", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("80%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("512px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: clip hidden; height: clamp(100px, 50%, 200px); width: 300px; font-size: 20px } body { overflow: scroll; height: 75% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("150px", part(";height:"));
@@ -602,7 +602,7 @@ static void test_l111_blen_13(void) {
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; width: auto; font-size: 20px } body { overflow: auto; height: 10%; width: 25% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("10%", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("25%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("160px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: 400px; width: max(10%, 100px); font-size: 20px } body { overflow: scroll; height: 50%; width: 12.5% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("200px", part(";height:"));
@@ -610,7 +610,7 @@ static void test_l111_blen_13(void) {
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: max(25%, 100px); width: auto; font-size: 10px } body { overflow: scroll; height: 100%; width: 50% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("120px", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("50%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("320px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: hidden; height: 400px; width: calc(12.5% * 4) } body { overflow: auto; height: 100%; width: 50%; max-width: 50% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("400px", part(";height:"));
@@ -645,7 +645,7 @@ static void test_l111_blen_14(void) {
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: clip hidden; height: min(50%, 300px) } body { overflow: auto; height: 50%; width: 12.5% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("120px", part(";height:"));
-    TEST_ASSERT_EQUAL_STRING("12%", part(";width:"));
+    TEST_ASSERT_EQUAL_STRING("76px", part(";width:"));
     TEST_ASSERT_EQUAL_STRING("-", part(";max-width:"));
     prep("@keyframes k { from { color: #000000 } to { color: #ffffff } } html { overflow: auto; height: auto; width: 50% } body { overflow: scroll; height: 100% } #i { animation: k 1s linear; animation-timeline: scroll(nearest) } #j { animation: k 1s linear; animation-timeline: scroll(nearest x) }");
     TEST_ASSERT_EQUAL_STRING("100%", part(";height:"));

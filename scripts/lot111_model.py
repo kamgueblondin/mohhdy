@@ -294,6 +294,16 @@ def subst(text, env):
 
 
 def op_value(text, env):
+    """op_value_lot111 converted by Lot 112: a value with var() that is
+    invalid after substitution (no value and no fallback, or no opacity)
+    is unset (1), invalid at computed-value time (CSS Variables 1 3.1)"""
+    got = op_value_lot111(text, env)
+    if got is None and "var(" in text:
+        return (1, 10000)
+    return got
+
+
+def op_value_lot111(text, env):
     """("val", code, value) of an opacity value after var(): code 1
     initial/unset, 2 a value, 3 inherit, 4 revert, 5 revert-layer; None
     when dropped"""
@@ -408,7 +418,99 @@ def box_len_lh(s, f, root, lh):
     return int(v)
 
 
+def lh_num(t):
+    """Lot 112: the value (1/1000, cut; below 0 is 0) of a math function
+    of numbers, None when it is not one; Unsure past 1/1000 (the reader
+    reads wf_cssprop_math_eval's canonical text) or when large"""
+    if not any(t.startswith(f) for f in ("calc(", "min(", "max(", "clamp(")):
+        return None
+    c = _Calc(t)
+    try:
+        v, pct = c.factor()
+    except (_Bad, ZeroDivisionError):
+        return None
+    c.ws()
+    if c.i != len(t) or pct:
+        return None
+    if v < 0:
+        return 0
+    if (v * 1000).denominator != 1 or v > 100000:
+        raise Unsure("number math")
+    return int(v * 1000)
+
+
 def lh_decl(t):
+    """("n"|"i"|"#"|"%"|"p"|"m", value) of a line-height declaration
+    value, None when it is invalid. Lot 112: a math function with a
+    percentage ("m", resolved against the element's font size) and a math
+    function of numbers ("#") are values too"""
+    if t in ("normal", "initial"):
+        return ("n", 0)
+    if t in ("inherit", "unset"):
+        return ("i", 0)
+    if t.startswith("-"):
+        return None
+    m = _milli(t)
+    if m is not None:
+        return ("#", m)
+    if t.endswith("%"):
+        m = _milli(t[:-1])
+        return None if m is None else ("%", m)
+    if not t.endswith(")"):
+        mm = _re.fullmatch(r"\+?(\d+(\.\d+)?|\.\d+)([a-z]+)", t)
+        if mm is None:
+            return None
+        u = mm.group(3)
+        if u in L7.ABS:
+            return ("p", int(_F(mm.group(1)) * L7.ABS[u] * 1000))
+        if u not in L7.REL and u != "rlh":
+            return None
+    if L9.math_box(t, 16, 16) is None:
+        n = lh_num(t)
+        return None if n is None else ("#", min(n, 10 ** 6))
+    return ("m", t)
+
+
+def box_len_lh_at(s, f, root, lh, basis):
+    """Lot 112: box_len_lh with the percentages of basis (px thousandths)"""
+    save = L9.FONT["lh"]
+    try:
+        if lh is not None:
+            L9.FONT["lh"] = _F(lh, 1000) / _F(f, 1000)
+        r = pct_at(s, _F(f, 1000), _F(root, 1000), _F(basis, 1000))
+    finally:
+        L9.FONT["lh"] = save
+    if r is None:
+        return None
+    v = r * 1000
+    if v.denominator != 1:
+        raise Unsure("cut")
+    return int(v)
+
+
+def lh_comp(decl, f, root, parent_comp, parent_f):
+    """the computed line-height (k, v) of an element of font size f from
+    its winning declaration decl (None: inherited)"""
+    plh = lh_px(parent_comp, parent_f) if parent_comp is not None else lh_normal(16000)
+    pc = parent_comp if parent_comp is not None else (0, 0)
+    if decl is None or decl[0] == "i":
+        return pc
+    k, v = decl
+    if k == "n":
+        return (0, 0)
+    if k == "#":
+        return (1, min(v, 10 ** 6))
+    if k == "%":
+        return (2, min(f * min(v, 10 ** 8) // 100000, LH_MAX))
+    if k == "p":
+        return (2, min(v, LH_MAX))
+    r = box_len_lh_at(v, f, root, plh, f) if "%" in v else box_len_lh(v, f, root, plh)
+    if r is None:
+        return (0, 0)
+    return (2, max(r, 0))
+
+
+def lh_decl_lot111(t):
     """("n"|"i"|"#"|"%"|"p"|"m", value) of a line-height declaration
     value, None when it is invalid"""
     if t in ("normal", "initial"):
@@ -438,7 +540,7 @@ def lh_decl(t):
     return ("m", t)
 
 
-def lh_comp(decl, f, root, parent_comp, parent_f):
+def lh_comp_lot111(decl, f, root, parent_comp, parent_f):
     """the computed line-height (k, v) of an element of font size f from
     its winning declaration decl (None: inherited)"""
     plh = lh_px(parent_comp, parent_f) if parent_comp is not None else lh_normal(16000)
@@ -467,7 +569,7 @@ def lh_comp(decl, f, root, parent_comp, parent_f):
 # block (the viewport) or an expression of those, and the body's
 # percentage then has a value in px; html's auto height leaves it as it
 # is (auto); html's auto width is the viewport's, which the layout gives
-# anyway (left as it is). Each percentage literal of an expression is
+# anyway (Lot 112: then in px as well, lot110_model.body_pct). Each percentage literal of an expression is
 # taken in px thousandths cut toward zero (the reader's math), the
 # result in whole px cut toward zero, below 0 is 0.
 _PCT = _re.compile(r"(?<![\w.])([+-]?)(\d+(?:\.\d+)?|\.\d+)%")
@@ -570,6 +672,38 @@ class _Mix(L9._Box):
         return (F0, F0, True, t)
 
     def op(self, f, kids):
+        """Lot 112: a plain-sum argument (a leaf) whose px and % parts are
+        both at least (at most, for max) another leaf's goes, as a % is
+        of a size that is never negative (min(10px, 20px, 5%) is min(10px,
+        5%)); of equal leaves the first stays"""
+        flat = []
+        for k in kids:
+            flat.extend(k[1] if k[0] == f else [k])
+        if len(flat) > KIDS:
+            raise _Pool()
+
+        def cover(a, b):
+            if f == "min":
+                return a[1] <= b[1] and a[2] <= b[2]
+            return a[1] >= b[1] and a[2] >= b[2]
+        keep = []
+        for k, b in enumerate(flat):
+            gone = False
+            if b[0] == "lin":
+                for j, a in enumerate(flat):
+                    if j == k or a[0] != "lin" or not cover(a, b):
+                        continue
+                    if j < k or not cover(b, a):
+                        gone = True
+                        break
+            if not gone:
+                keep.append(b)
+        if len(keep) == 1:
+            return keep[0]
+        return self.new((f, keep))
+
+    def op_lot111(self, f, kids):
+        """Lot 111's rule: leaves compared only when all are of one part"""
         flat = []
         for k in kids:
             flat.extend(k[1] if k[0] == f else [k])

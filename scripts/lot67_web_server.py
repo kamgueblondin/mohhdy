@@ -146,7 +146,8 @@ AES128-GCM-SHA256 ECDHE suites the Mohhdy client offers. Routes:
                       view(); opacity, animated and transitioned
   /lot111/box.html    Lot 111: the body box scroller 50% of an html
                       height given as max(20lh, min(10%, 40px)) with
-                      html's line-height 20px; opacity from calc(),
+                      html's line-height 20px (Lot 112: the body's
+                      normal); opacity from calc(),
                       var() and revert-layer seen in the report; a
                       relative colour whose origin has a missing red
                       mixed with another colour
@@ -870,14 +871,16 @@ LOT110_PAGES = {
 # Lot 111: the Lot 110 page with html's height an expression (lh against
 # html's line-height, a mixed min() nested in max()), opacity values from
 # calc(), var() and revert-layer, a relative colour with a missing origin
-# component (tests/scripts/test_qemu_lot111.py)
+# component (tests/scripts/test_qemu_lot111.py). Lot 112: the body's
+# line-height normal keeps the Lot 110 geometry now that html's 20px
+# reaches the engine (the report's node lines end with "lh normal")
 LOT111_FILL = "".join("<p>line111 %d</p>" % i for i in range(12))
 LOT111_PAGES = {
     "/lot111/box.html": (
         "<!doctype html><html><head><title>Lot 111 box</title><style>"
         "@keyframes k111 { from { color: #000000 } to { color: #ffffff } }\n"
         "html { overflow: hidden; line-height: 20px; height: max(20lh, min(10%, 40px)) }\n"
-        "body { overflow: auto; height: 50%; margin: 0; scroll-timeline: --b111; --a: 40% }\n"
+        "body { overflow: auto; height: 50%; margin: 0; scroll-timeline: --b111; --a: 40%; line-height: normal }\n"
         "#i111 { animation: k111 1000ms linear; animation-timeline: scroll(nearest) }\n"
         "#n111 { animation: k111 1000ms linear; animation-timeline: --b111 }\n"
         "#v111 { animation: k111 1000ms linear; animation-timeline: view() }\n"
@@ -891,6 +894,48 @@ LOT111_PAGES = {
         "<p id=\"v111\">vkeep111</p>" + LOT111_FILL +
         "<p id=\"o111\">okeep111</p><p id=\"a111\">akeep111</p><p id=\"t111\">tkeep111</p>"
         "<p>fin111</p></body></html>"),
+}
+
+
+# Lot 112: line-height reaches the engine (whole px within 10..40): the
+# body's calc(100% + 4px) is 20px on each line, so the body's content and
+# its scroll range grow; html's height is calc(26rlh + 10px) with html's
+# line-height 15px (400px), so the body's height: 50% is 200px; rlh,
+# revert-layer and var() unset on line-height, var() in opacity and color
+# keyframes
+# (tests/scripts/test_qemu_lot112.py)
+LOT112_FILL = "".join("<p>line112 %d</p>" % i for i in range(12))
+LOT112_FILL9 = "".join("<p>line112 %d</p>" % i for i in range(9))
+LOT112_PAGES = {
+    "/lot112/lh.html": (
+        "<!doctype html><html><head><title>Lot 112 lh</title><style>"
+        "@keyframes k112 { from { color: #000000 } to { color: #ffffff } }\n"
+        "@keyframes o112 { from { opacity: var(--a) } to { opacity: calc(var(--a) * 3) } }\n"
+        "@keyframes c112 { from { color: var(--c) } to { color: #ffffff } }\n"
+        "html { overflow: hidden; line-height: 15px; height: calc(26rlh + 10px) }\n"
+        "body { overflow: auto; height: 50%; margin: 0; scroll-timeline: --b112; "
+        "line-height: calc(100% + 4px) }\n"
+        "#i112 { animation: k112 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "#n112 { animation: k112 1000ms linear; animation-timeline: --b112 }\n"
+        "#r112 { line-height: 2rlh; animation: k112 1000ms linear; animation-timeline: view() }\n"
+        "#u112 { line-height: 3; line-height: var(--u112) }\n"
+        "@layer l112 { #t112 { line-height: 18px } }\n"
+        "#t112 { line-height: 3; line-height: revert-layer }\n"
+        "#k112 { --a: 0.2; --c: #ff0000; animation: o112 1000ms linear, c112 1000ms linear }\n"
+        "@property --m112 { syntax: '<color>'; inherits: false; initial-value: #000000 }\n"
+        "@keyframes m112 { from { --m112: var(--c112) } to { --m112: #ffffff } }\n"
+        "#g112 { font-size: 18px; color: #0000ff }\n"
+        "#f112 { font-size: 2ex; color: #00ff00; color: var(--bad112) }\n"
+        "#e112 { font-size: 3ch }\n"
+        "#h112 { font-size: calc(1lh + 2px) }\n"
+        "#m112 { --c112: #00ff00; color: var(--m112); animation: m112 1000ms linear }\n"
+        "</style></head><body><h1>Body 112</h1>"
+        "<p id=\"i112\">ikeep112</p><p id=\"n112\">nkeep112</p>" + LOT112_FILL +
+        "<p id=\"r112\">rkeep112</p>" + LOT112_FILL9 +
+        "<p id=\"g112\">gkeep112 <span id=\"f112\">fkeep112</span> <span id=\"e112\">ekeep112</span></p>"
+        "<p id=\"h112\">hkeep112</p><p id=\"m112\">mkeep112</p>" +
+        "<p id=\"u112\">ukeep112</p><p id=\"t112\">tkeep112</p><p id=\"k112\">kkeep112</p>"
+        "<p>fin112</p></body></html>"),
 }
 
 
@@ -1134,6 +1179,9 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT111_PAGES:
             self._send(200, LOT111_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT112_PAGES:
+            self._send(200, LOT112_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
