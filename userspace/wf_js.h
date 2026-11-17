@@ -55,6 +55,10 @@ int  js_to_cstr(js_vm_t *vm, jv v, char *out, int max);
 /* the console log since the last js_log_clear */
 const char *js_log_text(js_vm_t *vm, int *len);
 void js_log_clear(js_vm_t *vm);
+/* the error text of the last run that did not return JS_OK */
+const char *js_last_error(const js_vm_t *vm);
+/* sizeof(js_vm_t), for callers that allocate it */
+int js_vm_size(void);
 /* limits for the next js_eval / js_call_value */
 void js_set_budget(js_vm_t *vm, uint32_t steps);
 /* arena use: bytes used, bytes total */

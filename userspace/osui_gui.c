@@ -4,6 +4,7 @@
  */
 
 #include "osui_scale.h"
+#include "wf_jsweb.h"
 #include "osui_gui.h"
 #include "wsearch.h"
 #include "osui_runtime.h"
@@ -643,6 +644,8 @@ int osui_gui_web_command(const char *line, char *out, int out_max) {
     const char *a;
     int n = 0, neg = 0;
     if (out && out_max > 0) out[0] = 0;
+    /* Lot 113 (US-031): js and web-js, one path for the console and the GUI */
+    if (wf_jsweb_command(line, out, out_max)) return 1;
     if (sncmp(line, "web-open", 8) == 0 && (line[8] == ' ' || !line[8])) {
         static char wl[300];
         scpy(wl, (int)sizeof(wl), "web ");

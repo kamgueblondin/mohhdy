@@ -23,6 +23,7 @@
 #include "wf_compat.h"
 #include "wf_sitecss.h"
 #include "webeng.h"   /* Lot 104: we_geom_feed */
+#include "wf_jsweb.h"  /* Lot 113: the page script pass */
 
 extern const fsops_io_t shell_fs_io;
 #include "../include/os_syscalls.h"
@@ -318,6 +319,13 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
     g_body[g_res.body_len] = 0;
     g_page_ok = 0;
     g_blocks_n = 0;
+    /* Lot 113 (US-031): with web-js on, the inline scripts of an HTML page
+     * run against its DOM first; everything below (blocks, reducer, the
+     * sanitizer of the GUI) sees the page as the scripts left it */
+    if (wf_jsweb_enabled() && is_html(&g_res, g_body, g_res.body_len)) {
+        g_res.body_len = wf_jsweb_page((char *)g_body, g_res.body_len, (int)sizeof(g_body), g_res.url);
+        g_body[g_res.body_len] = 0;
+    }
     if (wf_feed_looks((const char *)g_body, g_res.body_len)) {
         static wf_feed_t feed;
         if (wf_feed_parse((const char *)g_body, g_res.body_len, &feed) == 0)
@@ -402,6 +410,7 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
         scat(status, st_max, " reduced ");
         scat_int(status, st_max, g_page_ok ? g_full_n : n);
         if (req && req->method) { scat(status, st_max, " method "); scat(status, st_max, req->method); }
+        wf_jsweb_note(status, st_max);   /* Lot 113 */
         if (g_page_ok) {
             scat(status, st_max, " sections "); scat_int(status, st_max, g_sec.n);
             scat(status, st_max, " forms "); scat_int(status, st_max, g_forms.nforms);

@@ -14,7 +14,7 @@
 #define MOHHDY_OSUI_PYTHON_FACADE 0
 #define MOHHDY_OSUI_LLM_KIND "stub_echo"
 #define MOHHDY_SHELL_PROMPT "MOHHDY>"
-#define MOHHDY_SHELL_COMMAND_COUNT 497
+#define MOHHDY_SHELL_COMMAND_COUNT 499
 
 static const char * const mohhdy_shell_commands[] = {
     "[",
@@ -208,6 +208,7 @@ static const char * const mohhdy_shell_commands[] = {
     "ipc-recv",
     "ipc-send",
     "jobs",
+    "js",
     "kill",
     "kill-children",
     "logout",
@@ -496,6 +497,7 @@ static const char * const mohhdy_shell_commands[] = {
     "web-images",
     "web-input",
     "web-inspect",
+    "web-js",
     "web-load",
     "web-open",
     "web-perf",

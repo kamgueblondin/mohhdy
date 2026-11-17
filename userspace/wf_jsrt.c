@@ -1041,6 +1041,8 @@ const char *js_log_text(js_vm_t *vm, int *len) {
     return vm->log;
 }
 
+const char *js_last_error(const js_vm_t *vm) { return vm->err; }
+int js_vm_size(void) { return (int)sizeof(js_vm_t); }
 void js_log_clear(js_vm_t *vm) { vm->log_len = 0; vm->log[0] = 0; }
 
 void js_set_budget(js_vm_t *vm, uint32_t steps) { vm->budget = steps; }

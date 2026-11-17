@@ -3683,7 +3683,7 @@ static int is_builtin(const char* cmd) {
         "help", "ls", "dir", "ps", "task-metrics", "task-priority", "task-name", "task-capacity", "task-suspend", "task-resume", "kill-children", "children", "wait-any-result", "child-exit-count", "task-delegate", "task-events", "task-events-observe", "task-events-clear", "task-event", "task-events-forget", "task-summary", "task-events-notify", "task-events-filter", "task-events-notify-status", "task-events-watch", "task-events-unwatch", "task-events-watch-clear", "task-events-watch-status", "task-events-notify-stats", "task-events-notify-stats-clear", "task-event-replay", "task-priority-child", "task-priority-child-status", "task-events-budget", "task-events-budget-status", "fat16-list", "fat16-cat", "ata-status", "ata-debug-crash", "net-relay-status", "net-wire-status", "net-if", "lspci", "pci-rescan", "devices", "child-result", "child-result-any", "child-results", "child-results-clear", "child-results-observe", "child-results-forget", "wait", "wait-result", "sysinfo", "info", "mem", "memory",
         "history", "env", "echo", "write", "append", "touch", "clear", "cls", "exit", "quit",
         "ai", "ai-mode", "ai-help", "ai-test", "ai-stats", "ai-provider", "ai-model", "ai-runtime", "ai-continue", "ai-peer-listen", "ai-peer-accept", "ai-peer-tls-poll", "ai-peer-tls-poll", "ai-metier", "net-status",
-        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "fetch", "http-get", "search", "search-open", "search-engine", "search-config", "cookies", "bookmark", "web-history", "web-back", "web-forward", "web-tab", "autofill", "settings", "web-open", "web-load", "web-forms", "web-read", "web-section", "web-input", "web-submit", "web-preview", "web-fill", "web-css", "web-find", "web-fclick", "web-fkey", "web-ftype", "web-fstate", "web-scroll", "web-bscroll", "web-images", "web-anim", "http-cache", "http-keepalive", "tls-suite", "web-render", "web-dom", "web-inspect", "web-console", "web-perf",
+        "pm", "pm-check", "pm-run", "pm-test", "pm-doc", "pm-disasm", "pm-debug", "pm-compile", "pm-exec", "pm-say", "pm-version", "pm-versions", "pm-edit", "pm-ide", "pm-catalog", "pm-catalog-search", "pm-catalog-fetch", "pm-install", "pm-certify", "pm-verify", "pm-ca-init", "pm-ca-sign", "pm-ca-verify", "pm-cross", "pm-assist", "pm-ca-revoke", "pm-ca-seal", "grpc-wire", "grpc-serve", "grpc-call", "grpc-calls", "grpc-tls-serve", "grpc-tls-call", "fetch", "http-get", "search", "search-open", "search-engine", "search-config", "cookies", "bookmark", "web-history", "web-back", "web-forward", "web-tab", "autofill", "settings", "web-open", "web-load", "web-forms", "web-read", "web-section", "web-input", "web-submit", "web-preview", "web-fill", "web-css", "web-find", "web-fclick", "web-fkey", "web-ftype", "web-fstate", "web-scroll", "web-bscroll", "web-images", "web-anim", "http-cache", "http-keepalive", "tls-suite", "web-render", "web-dom", "web-inspect", "web-console", "web-perf", "js", "web-js",
         "prod-sample", "prod-inject", "prod-metrics", "prod-predict", "prod-alert-add", "prod-alert-del", "prod-alerts",
         "prod-log-append", "prod-log-analyze", "prod-backup", "prod-backups", "prod-backup-verify", "prod-backup-corrupt",
         "prod-restore", "prod-manifest", "prod-deploy", "prod-rollback", "prod-scale-sim", "prod-scale-run", "prod-scale-status", "prod-scale-stop", "persist-save", "persist-load", "persist-status", "persist-auto", "persist-passphrase", "persist-unlock", "prod-integrity", "prod-bench", "prod-diag",
@@ -7501,6 +7501,24 @@ int execute_builtin_command(shell_context_t* ctx, const char* command,
         (void)shell_page_article(art, (int)sizeof(art));
         print_string(art);
         return 1;
+    } else if (strcmp(command, "js") == 0 || strcmp(command, "web-js") == 0) {
+        /* Lot 113 (US-031): the JavaScript subset; same code as the GUI
+         * input line (osui_gui_web_command -> wf_jsweb_command). Words are
+         * joined back with one blank; the interactive line keeps its text
+         * as typed (see handle_line). */
+        static char line[MAX_COMMAND_LENGTH], out[4096];
+        int i, n = 0;
+        (void)ctx;
+        for (i = 0; command[i] && n < (int)sizeof(line) - 1; i++) line[n++] = command[i];
+        for (i = 0; i < arg_count; i++) {
+            int j;
+            if (n < (int)sizeof(line) - 1) line[n++] = ' ';
+            for (j = 0; args[i][j] && n < (int)sizeof(line) - 1; j++) line[n++] = args[i][j];
+        }
+        line[n] = 0;
+        (void)osui_gui_web_command(line, out, (int)sizeof(out));
+        print_string(out);
+        return 1;
     } else if (strcmp(command, "web-open") == 0 || strcmp(command, "web-load") == 0 || strcmp(command, "web-forms") == 0 || strcmp(command, "web-section") == 0 || strcmp(command, "web-input") == 0 || strcmp(command, "web-submit") == 0 || strcmp(command, "web-preview") == 0 || strcmp(command, "web-fill") == 0 || strcmp(command, "web-css") == 0 || strcmp(command, "web-find") == 0 ||
                strcmp(command, "web-fclick") == 0 || strcmp(command, "web-fkey") == 0 || strcmp(command, "web-ftype") == 0 ||
                strcmp(command, "web-fstate") == 0 || strcmp(command, "web-scroll") == 0 || strcmp(command, "web-bscroll") == 0) {
@@ -7943,6 +7961,17 @@ void handle_line(shell_context_t* ctx, char* input_buffer) {
             parse_command(rebuilt, command, args, &arg_count);
             break;
         }
+    }
+
+    /* Lot 113: js keeps the line as typed (quotes and blanks are code) */
+    if (strcmp(command, "js") == 0) {
+        static char js_out[4096];
+        const char *raw = input_buffer;
+        while (*raw == ' ' || *raw == '\t') raw++;
+        (void)osui_gui_web_command(raw, js_out, (int)sizeof(js_out));
+        print_string(js_out);
+        ctx->last_rc = 0;
+        return;
     }
 
     // Exécuter la commande builtin
