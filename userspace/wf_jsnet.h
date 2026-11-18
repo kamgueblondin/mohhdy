@@ -22,6 +22,8 @@
 
 /* fetch, Headers, Response and XMLHttpRequest on the global object */
 int js_net_init(js_vm_t *vm);
+/* Lot 115: the arena references this module keeps in statics (wf_jsgc.c) */
+void js_net_gc_roots(js_vm_t *vm);
 
 /* from wf_jsdom.c */
 int wf_jsdom_resolve(const char *href, char *out, int cap);

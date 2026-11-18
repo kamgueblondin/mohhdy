@@ -2684,7 +2684,7 @@ static jv compile_handler(js_vm_t *vm, int k, const char *nm, int nl) {
         /* a syntax error aborts the parse; it only drops this handler
          * (an exhausted arena stays an abort) */
         int syn = vm->err[0] == 'S' && vm->err[1] == 'y' && vm->err[6] == 'E';
-        if (vm->ctl == CTL_ABORT && (!syn || js_mem_used(vm) + 65536u >= js_mem_size(vm))) return jv_undef();
+        if (vm->ctl == CTL_ABORT && (!syn || js_mem_free(vm) < 65536u)) return jv_undef();
         vm->ctl = CTL_NONE;
         logc(vm, "error: SyntaxError in the ");
         logc(vm, nm);
@@ -3105,6 +3105,7 @@ static uint32_t g_dispatch;
 static js_vm_t g_vm;
 
 static uint32_t plain_obj(js_vm_t *vm) { return js_obj_new(vm, JS_CLASS_OBJECT, vm->p_object); }
+static void dom_gc_roots(js_vm_t *vm, void *ctx);
 
 static int realm_setup(js_vm_t *vm, int doc, const char *url) {
     uint32_t g = vm->global, o, ctor;
@@ -3119,6 +3120,7 @@ static int realm_setup(js_vm_t *vm, int doc, const char *url) {
     vm->host_get = dom_get;
     vm->host_set = dom_set;
     vm->host_ctx = &g_rt;
+    js_gc_set_roots(vm, dom_gc_roots, 0);
 
     g_rt.p_node = plain_obj(vm);
     g_rt.p_style = plain_obj(vm);
@@ -3237,6 +3239,7 @@ static int realm_setup(js_vm_t *vm, int doc, const char *url) {
 /* ---- the page runner ---- */
 
 static int g_calls, g_alive, g_in_dyn;
+static int g_gc_stress, g_gc_poison;          /* Lot 115: wf_jspage_gc_debug */
 static int g_dyn[WF_DOM_DYN_SCRIPTS], g_ndyn;
 static int g_defer[WF_DOM_EXT_SCRIPTS], g_ndefer;
 static wf_jsfetch_fn g_fetch;
@@ -3306,7 +3309,40 @@ static void copy_err(wf_jspage_stats_t *st, const char *e) {
     st->first_err[i] = 0;
 }
 
-static int arena_full(js_vm_t *vm) { return js_mem_used(vm) + 65536u >= js_mem_size(vm); }
+static int arena_full(js_vm_t *vm) { return js_mem_free(vm) < 65536u; }
+
+/* Lot 115: the references the page keeps outside the arena (wf_jsgc.c
+ * calls this while it marks): the node objects and listener arrays, the
+ * runtime's prototypes and keys, the timers and the statics of the other
+ * page modules */
+static void dom_gc_roots(js_vm_t *vm, void *ctx) {
+    int k;
+    (void)ctx;
+    for (k = 0; k < g_nn; k++) {
+        js_gc_scan(vm, &g_n[k].obj, (uint32_t)sizeof(g_n[k].obj));
+        js_gc_scan(vm, &g_n[k].listeners, (uint32_t)sizeof(g_n[k].listeners));
+    }
+    js_gc_scan(vm, &g_rt, (uint32_t)sizeof(g_rt));
+    for (k = 0; k < WF_DOM_TIMERS; k++) if (g_t[k].active) js_gc_scan(vm, &g_t[k], (uint32_t)sizeof(g_t[k]));
+    js_gc_scan(vm, g_store, (uint32_t)sizeof(g_store));
+    js_gc_scan(vm, &g_p_event, (uint32_t)sizeof(g_p_event));
+    js_gc_scan(vm, &g_dispatch, (uint32_t)sizeof(g_dispatch));
+    js_api_gc_roots(vm);
+    js_net_gc_roots(vm);
+    js_hist_gc_roots(vm);
+}
+
+/* a collection when the realm is idle (no script on the stack, no
+ * reference in a C local of the caller) */
+static void page_idle(js_vm_t *vm) {
+    js_gc_idle(vm);
+    if (g_rt.st) {
+        js_gc_stats_t gs;
+        js_gc_stats(vm, &gs);
+        g_rt.st->gc_runs = gs.runs;
+        g_rt.st->gc_freed = gs.freed_total;
+    }
+}
 
 /* Lot 114: the Promise jobs queued by the last run; 1 when the pass must stop */
 static int drain(js_vm_t *vm, wf_jspage_stats_t *st) {
@@ -3573,6 +3609,7 @@ static int run_dynamic(js_vm_t *vm, wf_jspage_stats_t *st) {
 static int run_scripts(js_vm_t *vm, int doc, wf_jspage_stats_t *st) {
     int k, i;
     while ((k = next_script(doc)) >= 0) {
+        page_idle(vm);
         g_n[k].inserted = 2;
         if (bool_attr(k, "src")) {
             st->external++;
@@ -3624,10 +3661,12 @@ static int run_load(js_vm_t *vm, int doc, wf_jspage_stats_t *st) {
     return fire_event(vm, jv_obj(vm->global), "load", 0, st);
 }
 
-static int run_timers(js_vm_t *vm, wf_jspage_stats_t *st) {
+/* may_gc: the caller keeps no reference in a C local (Lot 115) */
+static int run_timers(js_vm_t *vm, wf_jspage_stats_t *st, int may_gc) {
     for (;;) {
         int i, best = -1, rc;
         jv fn;
+        if (may_gc) page_idle(vm);
         for (i = 0; i < WF_DOM_TIMERS; i++) {
             if (!g_t[i].active) continue;
             if (best < 0 || g_t[i].due < g_t[best].due || (g_t[i].due == g_t[best].due && g_t[i].seq < g_t[best].seq)) best = i;
@@ -3728,6 +3767,7 @@ static int emit_page(js_vm_t *vm, char *out, int out_max, wf_jspage_stats_t *st)
     for (i = 0, st->nodes = 0; i < g_nn; i++) if (is_connected(i)) st->nodes++;
     if (g_trunc) st->truncated = 1;
     st->mem = js_mem_used(vm);
+    st->mem_free = js_mem_free(vm);
     return o.n;
 }
 
@@ -3746,6 +3786,7 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
     for (i = 0; url && url[i] && i < (int)sizeof(g_url) - 1; i++) g_url[i] = url[i];
     g_url[i] = 0;
     if (js_init(vm, arena, arena_size) != 0) return -1;
+    js_gc_config(vm, g_gc_stress, g_gc_poison, 0);
     doc = dom_parse(html, n);
     if (doc < 0) return -1;
     g_rt.st = st;
@@ -3760,8 +3801,9 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
     if (realm_setup(vm, doc, url) != 0) { g_rt.st = 0; return -1; }
     if (js_net_init(vm) != 0 || js_api_init(vm, g_url) != 0 || js_hist_init(vm, g_url) != 0) { g_rt.st = 0; return -1; }
     set_ready("loading");
-    if (!body_onload(vm, doc, st) && !run_scripts(vm, doc, st) && !run_load(vm, doc, st)) run_timers(vm, st);
+    if (!body_onload(vm, doc, st) && !run_scripts(vm, doc, st) && !run_load(vm, doc, st)) run_timers(vm, st, 1);
     if (!st->scripts && !st->ext_ran && !st->dynamic) { g_rt.st = 0; return 0; }
+    page_idle(vm);
     r = emit_page(vm, out, out_max, st);
     g_rt.st = 0;
     g_alive = !arena_full(vm);
@@ -3771,6 +3813,13 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
 /* ---- events after load (Lot 114) ---- */
 
 int wf_jspage_alive(void) { return g_alive; }
+
+/* Lot 115: tests run the page realm with a collection at every idle
+ * point and freed memory poisoned (from the next wf_jspage_run on) */
+void wf_jspage_gc_debug(int stress, int poison) {
+    g_gc_stress = stress;
+    g_gc_poison = poison;
+}
 void wf_jspage_close(void) { g_alive = 0; }
 
 /* Lot 114: a control as the reader engine counts them (webeng_finput.inc:
@@ -4105,7 +4154,7 @@ static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_j
         mut0 = g_mut;
         g_dirty = k;
         stop = input_fire(vm, k, 0, "insertText", 0, st);
-        if (!stop) stop = run_timers(vm, st);
+        if (!stop) stop = run_timers(vm, st, 0);
         if (!stop) ev_note_value(vm, k, sent);
     } else if (al == 5 && span_eq_ci(act, 5, "check", 5)) {
         const char *v;
@@ -4136,7 +4185,7 @@ static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_j
             g_ev |= WF_JSEV_PREVENTED;
             mut0 = g_mut;
         } else if (!stop) stop = input_fire(vm, k, 0, "", 1, st);
-        if (!stop) stop = run_timers(vm, st);
+        if (!stop) stop = run_timers(vm, st, 0);
         if (!stop && bool_attr(k, "checked") != on) {
             g_ev_val[0] = bool_attr(k, "checked") ? '1' : '0';
             g_ev_val[1] = 0;
@@ -4151,7 +4200,7 @@ static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_j
         mut0 = g_mut;
         if (g_dirty == k) g_dirty = -1;
         stop = input_fire(vm, k, 0, "", 1, st);
-        if (!stop) stop = run_timers(vm, st);
+        if (!stop) stop = run_timers(vm, st, 0);
         if (!stop) ev_note_value(vm, k, sent);
     } else if ((al == 5 && span_eq_ci(act, 5, "focus", 5)) || (al == 4 && span_eq_ci(act, 4, "blur", 4))) {
         int on = act[0] == 'f' || act[0] == 'F';
@@ -4168,7 +4217,7 @@ static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_j
             stop = fire_event(vm, node_obj(vm, k), on ? "focus" : "blur", 0, st) ||
                    fire_event(vm, node_obj(vm, k), on ? "focusin" : "focusout", 1, st);
         }
-        if (!stop) stop = run_timers(vm, st);
+        if (!stop) stop = run_timers(vm, st, 0);
     } else if (al == 6 && span_eq_ci(act, 6, "submit", 6)) {
         int form = name_is(k, "form") ? k : form_of(k);
         mut0 = g_mut;
@@ -4176,7 +4225,7 @@ static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_j
         stop = field_change_due(vm, k, st);
         if (!stop) stop = fire_event_ex(vm, node_obj(vm, form), "submit", 1, 1, 0, &prevented, st);
         if (!stop && prevented) g_ev |= WF_JSEV_PREVENTED;
-        if (!stop) stop = run_timers(vm, st);
+        if (!stop) stop = run_timers(vm, st, 0);
     } else return -2;
     if (g_mut != mut0) g_ev |= WF_JSEV_DOM;
     return stop;
@@ -4195,6 +4244,7 @@ int wf_jspage_event(const char *type, const char *target, const char *arg, char 
     if (!g_alive) return -1;
     if (!type || !out || out_max <= 0) return -1;
     if (!st) st = &dummy;
+    if (arena_full(vm)) js_gc(vm);          /* Lot 115: reclaim before giving up */
     if (arena_full(vm)) return -3;
     k = find_target(target ? target : "");
     if (k < 0) return -2;
@@ -4202,6 +4252,7 @@ int wf_jspage_event(const char *type, const char *target, const char *arg, char 
     vm->host_set = dom_set;
     g_rt.st = st;
     g_calls = 0;
+    page_idle(vm);
     st->live_events++;
     tl = dlen(type);
     if (tl > 6 && span_eq_ci(type, 6, "field-", 6)) stop = live_field(vm, k, type + 6, arg, st);
@@ -4225,7 +4276,8 @@ int wf_jspage_event(const char *type, const char *target, const char *arg, char 
         return -2;
     }
     if (stop == -2) { g_rt.st = 0; return -2; }
-    if (!stop) (void)run_timers(vm, st);
+    if (!stop) (void)run_timers(vm, st, 1);
+    page_idle(vm);
     r = emit_page(vm, out, out_max, st);
     g_rt.st = 0;
     if (arena_full(vm)) g_alive = 0;

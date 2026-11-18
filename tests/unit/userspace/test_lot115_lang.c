@@ -265,6 +265,33 @@ static const acase_t k_utf16[] = {
     { 0, 0 }
 };
 
+
+/* Lot 115: every case again in one realm, a collection with freed
+ * memory poisoned after each (wf_jsgc.c): the results must not change */
+static void run_cases_shared(const acase_t *c) {
+    static char src[8192];
+    int i;
+    fresh();
+    js_gc_config(&g_vm, 1, 1, 0);
+    for (i = 0; c[i].src; i++) {
+        const char *got;
+        snprintf(src, sizeof(src), "{\n%s\n}", c[i].src);
+        got = run(src);
+        if (strcmp(got, c[i].want) != 0) printf("  shared case %d: %s\n    got  %s\n    want %s\n", i, c[i].src, got, c[i].want);
+        TEST_ASSERT_EQUAL_STRING(c[i].want, got);
+        TEST_ASSERT_TRUE(js_gc_idle(&g_vm));
+        TEST_ASSERT_EQUAL(0, js_gc_check(&g_vm));
+    }
+}
+
+static void test_shared_realm_reclaim(void) {
+    run_cases_shared(k_symbol);
+    run_cases_shared(k_iter);
+    run_cases_shared(k_private);
+    run_cases_shared(k_static);
+    run_cases_shared(k_utf16);
+}
+
 static void test_symbol(void) { run_cases(k_symbol); }
 static void test_iterator_protocol(void) { run_cases(k_iter); }
 static void test_private_members(void) { run_cases(k_private); }
@@ -368,6 +395,7 @@ int main(void) {
     RUN_TEST(test_utf16_log_valid);
     RUN_TEST(test_still_refused);
     RUN_TEST(test_symbol_bound);
+    RUN_TEST(test_shared_realm_reclaim);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

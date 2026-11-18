@@ -191,6 +191,31 @@ static const acase_t k_promise[] = {
     { 0, 0 }
 };
 
+
+/* Lot 115: every case again in one realm, a collection with freed
+ * memory poisoned after each (wf_jsgc.c): the results must not change */
+static void run_cases_shared(const acase_t *c) {
+    static char src[8192];
+    int i;
+    fresh();
+    js_gc_config(&g_vm, 1, 1, 0);
+    for (i = 0; c[i].src; i++) {
+        const char *got;
+        snprintf(src, sizeof(src), "{\n%s\n}", c[i].src);
+        got = run(src);
+        if (strcmp(got, c[i].want) != 0) printf("  shared case %d: %s\n    got  %s\n    want %s\n", i, c[i].src, got, c[i].want);
+        TEST_ASSERT_EQUAL_STRING(c[i].want, got);
+        TEST_ASSERT_TRUE(js_gc_idle(&g_vm));
+        TEST_ASSERT_EQUAL(0, js_gc_check(&g_vm));
+    }
+}
+
+static void test_shared_realm_reclaim(void) {
+    run_cases_shared(k_gen);
+    run_cases_shared(k_async);
+    run_cases_shared(k_promise);
+}
+
 static void test_l114_generators(void) { run_cases(k_gen); }
 static void test_l114_async(void) { run_cases(k_async); }
 static void test_l114_promise(void) { run_cases(k_promise); }
@@ -295,6 +320,7 @@ int main(void) {
     RUN_TEST(test_l114_across_runs);
     RUN_TEST(test_l114_bounds);
     RUN_TEST(test_l114_refused);
+    RUN_TEST(test_shared_realm_reclaim);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

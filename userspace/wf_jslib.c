@@ -19,6 +19,7 @@ static void on_stack(js_vm_t *vm, void (*fn)(js_vm_t *)) {
     js_vm_t *saved_vm = g_entry_vm;
     g_entry = fn;
     g_entry_vm = vm;
+    vm->gc_hold++;
 #if defined(__i386__)
     if (vm->stack_top && vm->stack_base) {
         /* esi keeps the caller's stack pointer across the call */
@@ -37,6 +38,7 @@ static void on_stack(js_vm_t *vm, void (*fn)(js_vm_t *)) {
 #else
     entry_thunk();
 #endif
+    vm->gc_hold--;
     g_entry = saved_fn;
     g_entry_vm = saved_vm;
 }
@@ -639,7 +641,7 @@ static jv fnp_bind(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     jv nm;
     (void)m;
     if (!js_is_callable(vm, thisv)) return js_throw_err(vm, JE_TYPE, "Bind must be called on a function");
-    blk = js_alloc(vm, (uint32_t)(1 + nb) * (uint32_t)sizeof(jv));
+    blk = js_alloc_k(vm, (uint32_t)(1 + nb) * (uint32_t)sizeof(jv), JK_JVS);
     b = blk ? js_obj_new(vm, JS_CLASS_BOUND, vm->p_function) : 0;
     if (!b) return jv_undef();
     ((jv *)JPTR(vm, blk))[0] = JARG(0);
@@ -652,6 +654,15 @@ static jv fnp_bind(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     s = js_str_c(vm, "bound ");
     if (nm.t == JT_STR) s = js_str_cat(vm, s, nm.a);
     js_define(vm, b, vm->s_name, jv_str(s), P_CONF);
+    /* Lot 115: length is the target's length less the bound arguments */
+    {
+        jv tl = js_get(vm, thisv, vm->s_length);
+        int32_t n = 0;
+        if (vm->ctl) return jv_undef();
+        if (tl.t == JT_INT) n = (int32_t)tl.a;
+        n -= nb;
+        js_define(vm, b, vm->s_length, jv_int(n < 0 ? 0 : n), P_CONF);
+    }
     return jv_obj(b);
 }
 
@@ -1078,8 +1089,8 @@ static jv arrp_sort(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     if (fn.t != JT_UNDEF && !js_is_callable(vm, fn)) return js_throw_err(vm, JE_TYPE, "The comparison function must be either a function or undefined");
     if (!arr_this(vm, thisv, &o, &len)) return jv_undef();
     if (len < 2) return o;
-    buf = js_alloc(vm, len * (uint32_t)sizeof(jv));
-    tmp = buf ? js_alloc(vm, len * (uint32_t)sizeof(jv)) : 0;
+    buf = js_alloc_k(vm, len * (uint32_t)sizeof(jv), JK_JVS);
+    tmp = buf ? js_alloc_k(vm, len * (uint32_t)sizeof(jv), JK_JVS) : 0;
     if (!tmp) return jv_undef();
     for (i = 0; i < len && !vm->ctl; i++) {
         if (has_elem(vm, o, i)) {
@@ -1834,6 +1845,7 @@ int js_init(js_vm_t *vm, void *mem, uint32_t size) {
     vm->stack_base = vm->mem + vm->limit;
     vm->stack_top = vm->mem + size - 16;
     vm->top = 16;
+    if (js_gc_init(vm) != 0) return -1;
     vm->budget = JS_DEFAULT_BUDGET;
     vm->rng = 0x2545F491u;
     /* a fixed clock, 2026-01-01T00:00:00Z, until the host sets one */

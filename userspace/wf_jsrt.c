@@ -43,18 +43,7 @@ void js_abort(js_vm_t *vm, const char *msg) {
     vm->ctl = CTL_ABORT;
 }
 
-uint32_t js_alloc(js_vm_t *vm, uint32_t n) {
-    uint32_t r, i;
-    n = (n + 3u) & ~3u;
-    if (n > vm->limit || vm->top > vm->limit - n) {
-        js_abort(vm, "RangeError: out of memory (the realm's arena is full)");
-        return 0;
-    }
-    r = vm->top;
-    vm->top += n;
-    for (i = 0; i < n; i++) vm->mem[r + i] = 0;
-    return r;
-}
+/* js_alloc and js_alloc_k: wf_jsgc.c (Lot 115) */
 
 /* ---- strings ---- */
 
@@ -70,7 +59,7 @@ uint32_t js_str_new(js_vm_t *vm, const char *s, int len) {
     js_str_t *p;
     int i;
     if (len < 0) len = 0;
-    r = js_alloc(vm, (uint32_t)(12 + len + 1));
+    r = js_alloc_k(vm, (uint32_t)(12 + len + 1), JK_LEAF);
     if (!r) return vm->s_empty;
     p = JSTR(vm, r);
     p->len = (uint32_t)len;
@@ -92,7 +81,7 @@ uint32_t js_str_cat(js_vm_t *vm, uint32_t a, uint32_t b) {
         pa = JSTR(vm, a); pb = JSTR(vm, b);
     }
     la = pa->len; lb = pb->len;
-    r = js_alloc(vm, 12 + la + lb + 1);
+    r = js_alloc_k(vm, 12 + la + lb + 1, JK_LEAF);
     if (!r) return vm->s_empty;
     p = JSTR(vm, r);
     pa = JSTR(vm, a); pb = JSTR(vm, b);
@@ -182,7 +171,7 @@ uint32_t js_str_sub(js_vm_t *vm, uint32_t r, int from, int to) {
     if (from == 0 && to == (int)p->len) return r;
     if (to <= from) return vm->s_empty;
     {
-        uint32_t n = js_alloc(vm, (uint32_t)(12 + (to - from) + 1));
+        uint32_t n = js_alloc_k(vm, (uint32_t)(12 + (to - from) + 1), JK_LEAF);
         js_str_t *q;
         int i;
         if (!n) return vm->s_empty;
@@ -230,7 +219,7 @@ uint32_t js_key_of_index(js_vm_t *vm, uint32_t idx) {
 /* ---- objects ---- */
 
 uint32_t js_obj_new(js_vm_t *vm, int cls, uint32_t proto) {
-    uint32_t r = js_alloc(vm, sizeof(js_obj_t));
+    uint32_t r = js_alloc_k(vm, sizeof(js_obj_t), JK_OBJ);
     js_obj_t *o;
     if (!r) return 0;
     o = JOBJ(vm, r);
@@ -244,7 +233,7 @@ uint32_t js_array_new(js_vm_t *vm, uint32_t cap) {
     uint32_t r = js_obj_new(vm, JS_CLASS_ARRAY, vm->p_array);
     if (!r) return 0;
     if (cap) {
-        uint32_t a = js_alloc(vm, cap * (uint32_t)sizeof(jv));
+        uint32_t a = js_alloc_k(vm, cap * (uint32_t)sizeof(jv), JK_JVS);
         if (!a) return r;
         JOBJ(vm, r)->arr = a;
         JOBJ(vm, r)->acap = cap;
@@ -265,7 +254,7 @@ static int array_reserve(js_vm_t *vm, uint32_t arr, uint32_t need) {
     }
     cap = o->acap ? o->acap * 2 : 4;
     while (cap < need) cap *= 2;
-    a = js_alloc(vm, cap * (uint32_t)sizeof(jv));
+    a = js_alloc_k(vm, cap * (uint32_t)sizeof(jv), JK_JVS);
     if (!a) return 0;
     o = JOBJ(vm, arr);
     src = (jv *)JPTR(vm, o->arr);
@@ -334,7 +323,7 @@ int js_define(js_vm_t *vm, uint32_t obj, uint32_t key, jv v, uint32_t flags) {
         uint32_t cap = o->pcap ? (uint32_t)o->pcap * 2u : 4u, r, i;
         js_prop_t *src, *dst;
         if (cap > 60000u) { js_throw_err(vm, JE_RANGE, "too many properties on one object"); return 0; }
-        r = js_alloc(vm, cap * (uint32_t)sizeof(js_prop_t));
+        r = js_alloc_k(vm, cap * (uint32_t)sizeof(js_prop_t), JK_PROPS);
         if (!r) return 0;
         o = JOBJ(vm, obj);
         src = (js_prop_t *)JPTR(vm, o->props);

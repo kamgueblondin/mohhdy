@@ -7,8 +7,9 @@
  * the realm's arena, JS_CO_STACK bytes) and wf_js_co_switch swaps the
  * stack pointer and the callee-saved registers (i386 only). At most
  * JS_CO_MAX coroutines hold a stack at the same time; a stack is reused
- * when its coroutine finishes. Suspended coroutines are never collected
- * (there is no garbage collector).
+ * when its coroutine finishes. Lot 115: a suspended coroutine nobody can
+ * reach any more is reclaimed with its stack by wf_jsgc.c between runs
+ * (the stack is a JK_COSTACK block, scanned word by word).
  *
  * Promise follows the ECMAScript job model: reactions run as microtasks
  * in FIFO order when the host calls js_run_jobs (after every script,
@@ -17,8 +18,10 @@
  * ordering matches current engines. A rejection nobody handled by the
  * end of a drain is reported once as "Uncaught (in promise) ...".
  *
- * Not done: async generators, for await, Promise subclassing (species),
- * the Symbol.iterator protocol (no Symbol in the subset). */
+ * Not done: async generators, for await, Promise subclassing (species).
+ * Lot 115: the resolve and await functions keep their record offset with
+ * a flag in bit 0 as magic (offsets are 4-aligned), so the collector sees
+ * an offset inside the record. */
 #include "wf_jsi.h"
 
 static int cslen(const char *s) { int n = 0; while (s[n]) n++; return n; }
@@ -96,7 +99,7 @@ static int co_stack(js_vm_t *vm, uint32_t c) {
             js_throw_err(vm, JE_RANGE, "too many suspended generators or async functions (guest bound)");
             return 0;
         }
-        s = js_alloc(vm, JS_CO_STACK + 16u);
+        s = js_alloc_k(vm, JS_CO_STACK + 16u, JK_COSTACK);
         if (!s) return 0;
         s = (s + 15u) & ~15u;
     }
@@ -114,6 +117,26 @@ static int co_stack(js_vm_t *vm, uint32_t c) {
     return 1;
 }
 
+/* Lot 115 (wf_jsgc.c): the references of a coroutine record. Its stack
+ * block is marked through co->stack, and only the part above the saved
+ * stack pointer is scanned (the frames of the suspended coroutine); the
+ * dead frames below it would keep garbage alive. */
+void js_co_gc_scan(js_vm_t *vm, uint32_t c) {
+    js_co_t *co = CO(vm, c);
+    uint32_t base = (uint32_t)(unsigned long)vm->mem;
+    js_gc_mark_ref(vm, co->stack);
+    js_gc_mark_ref(vm, co->f);
+    js_gc_mark_ref(vm, co->env);
+    js_gc_mark_ref(vm, co->promise);
+    js_gc_mark_ref(vm, co->aful);
+    js_gc_mark_ref(vm, co->arej);
+    js_gc_scan(vm, &co->val, (uint32_t)sizeof(co->val));
+    if (co->stack && co->state == CO_SUSP) {
+        uint32_t lo = co->sp - base, hi = co->stack + JS_CO_STACK;
+        if (lo >= co->stack && lo < hi) js_gc_scan(vm, vm->mem + lo, hi - lo);
+    }
+}
+
 static void co_release(js_vm_t *vm, uint32_t c) {
     uint32_t s = CO(vm, c)->stack;
     if (!s) return;
@@ -124,7 +147,7 @@ static void co_release(js_vm_t *vm, uint32_t c) {
 }
 
 static uint32_t co_new(js_vm_t *vm, int kind, uint32_t f, uint32_t env) {
-    uint32_t c = js_alloc(vm, sizeof(js_co_t));
+    uint32_t c = js_alloc_k(vm, sizeof(js_co_t), JK_CO);
     int i;
     if (!c) return 0;
     for (i = 0; i < (int)sizeof(js_co_t); i++) vm->mem[c + (uint32_t)i] = 0;
@@ -388,7 +411,7 @@ static uint32_t promise_of(js_vm_t *vm, jv v) {
 
 /* resolving functions: magic is a record {a: promise, b: already resolved} */
 static jv resolve_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
-    uint32_t cap = m >> 1;
+    uint32_t cap = m & ~3u;
     (void)thisv;
     if (REC(vm, cap)->b) return jv_undef();
     REC(vm, cap)->b = 1;
@@ -403,8 +426,8 @@ static int resolving_pair(js_vm_t *vm, uint32_t p, jv *res, jv *rej, uint32_t *c
     uint32_t cap = rec_new(vm), f1, f2;
     if (!cap) return 0;
     REC(vm, cap)->a = p;
-    f1 = js_native_new(vm, "", resolve_fn, 1, cap << 1);
-    f2 = js_native_new(vm, "", resolve_fn, 1, (cap << 1) | 1u);
+    f1 = js_native_new(vm, "", resolve_fn, 1, cap);
+    f2 = js_native_new(vm, "", resolve_fn, 1, cap | 1u);
     if (!f1 || !f2) return 0;
     *res = jv_obj(f1);
     *rej = jv_obj(f2);
@@ -632,7 +655,7 @@ static void async_after(js_vm_t *vm, uint32_t c) {
 }
 
 static jv await_resume(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
-    uint32_t c = m >> 1;
+    uint32_t c = m & ~3u;
     (void)thisv;
     if (CO(vm, c)->state != CO_SUSP) return jv_undef();
     if (co_resume(vm, c, (m & 1u) ? RM_THROW : RM_NEXT, JARG(0)) != 0) return jv_undef();
@@ -679,8 +702,8 @@ jv js_co_await(js_vm_t *vm, jv v) {
     p = promise_of(vm, v);
     if (!p || vm->ctl) return jv_undef();
     if (!CO(vm, c)->aful) {
-        uint32_t f1 = js_native_new(vm, "", await_resume, 1, c << 1);
-        uint32_t f2 = js_native_new(vm, "", await_resume, 1, (c << 1) | 1u);
+        uint32_t f1 = js_native_new(vm, "", await_resume, 1, c);
+        uint32_t f2 = js_native_new(vm, "", await_resume, 1, c | 1u);
         if (!f1 || !f2) return jv_undef();
         CO(vm, c)->aful = f1;
         CO(vm, c)->arej = f2;
@@ -739,7 +762,7 @@ static jv finally_value(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
 }
 
 static jv finally_step(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
-    uint32_t rec = m >> 1, keep, p, f, d;
+    uint32_t rec = m & ~3u, keep, p, f, d;
     jv r;
     (void)thisv;
     r = js_call(vm, REC(vm, rec)->h, jv_undef(), 0, 0);
@@ -768,8 +791,8 @@ static jv promise_finally(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m)
     rec = rec_new(vm);
     if (!rec) return jv_undef();
     REC(vm, rec)->h = h;
-    f1 = js_native_new(vm, "", finally_step, 1, rec << 1);
-    f2 = js_native_new(vm, "", finally_step, 1, (rec << 1) | 1u);
+    f1 = js_native_new(vm, "", finally_step, 1, rec);
+    f2 = js_native_new(vm, "", finally_step, 1, rec | 1u);
     if (!f1 || !f2) return jv_undef();
     perform_then(vm, thisv.a, jv_obj(f1), jv_obj(f2), d);
     return jv_obj(d);
@@ -815,7 +838,7 @@ static void comb_done(js_vm_t *vm, uint32_t sh) {
 }
 
 static jv comb_element(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
-    uint32_t el = m >> 1, sh = REC(vm, el)->a;
+    uint32_t el = m & ~3u, sh = REC(vm, el)->a;
     int rejected = (int)(m & 1u);
     jv v = JARG(0);
     (void)thisv;
@@ -830,7 +853,7 @@ static jv comb_element(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
 
 /* settle the result directly (race, the reject of all, the resolve of any) */
 static jv comb_direct(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
-    uint32_t p = m >> 1;
+    uint32_t p = m & ~3u;
     (void)thisv;
     if (m & 1u) js_promise_reject(vm, p, JARG(0));
     else js_promise_resolve(vm, p, JARG(0));
@@ -861,8 +884,8 @@ static jv promise_comb(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     REC(vm, sh)->v = jv_obj(out);
     REC(vm, sh)->kind = m;
     {
-        uint32_t f1 = js_native_new(vm, "", comb_direct, 1, p << 1);
-        uint32_t f2 = js_native_new(vm, "", comb_direct, 1, (p << 1) | 1u);
+        uint32_t f1 = js_native_new(vm, "", comb_direct, 1, p);
+        uint32_t f2 = js_native_new(vm, "", comb_direct, 1, p | 1u);
         if (!f1 || !f2) return jv_undef();
         direct_res = jv_obj(f1);
         direct_rej = jv_obj(f2);
@@ -879,16 +902,16 @@ static jv promise_comb(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
             REC(vm, el)->a = sh;
             REC(vm, el)->b = i;
             if (m == COMB_ALL) {
-                fe = js_native_new(vm, "", comb_element, 1, el << 1);
+                fe = js_native_new(vm, "", comb_element, 1, el);
                 onf = jv_obj(fe);
                 onr = direct_rej;
             } else if (m == COMB_ANY) {
-                fe = js_native_new(vm, "", comb_element, 1, (el << 1) | 1u);
+                fe = js_native_new(vm, "", comb_element, 1, el | 1u);
                 onf = direct_res;
                 onr = jv_obj(fe);
             } else {
-                uint32_t f1 = js_native_new(vm, "", comb_element, 1, el << 1);
-                fe = js_native_new(vm, "", comb_element, 1, (el << 1) | 1u);
+                uint32_t f1 = js_native_new(vm, "", comb_element, 1, el);
+                fe = js_native_new(vm, "", comb_element, 1, el | 1u);
                 onf = jv_obj(f1);
                 onr = jv_obj(fe);
             }

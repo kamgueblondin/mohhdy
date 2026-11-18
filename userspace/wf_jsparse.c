@@ -273,7 +273,7 @@ static int sb_room(ps_t *p, sbuf_t *sb, int need) {
         char *nb;
         while (cap < sb->n + need + 1) cap *= 2;
         if (cap > (1 << 20)) { ps_error(p, "string literal too long"); return 0; }
-        r = js_alloc(p->vm, (uint32_t)cap);
+        r = js_alloc_k(p->vm, (uint32_t)cap, JK_LEAF);
         if (!r) { p->failed = 1; return 0; }
         nb = (char *)JPTR(p->vm, r);
         for (i = 0; i < sb->n; i++) nb[i] = sb->b[i];
@@ -518,7 +518,7 @@ static void semi(ps_t *p) {
 /* ---- nodes ---- */
 
 uint32_t js_node_new(js_vm_t *vm, int k, uint32_t line) {
-    uint32_t r = js_alloc(vm, sizeof(js_node_t));
+    uint32_t r = js_alloc_k(vm, sizeof(js_node_t), JK_NODE);
     if (!r) return 0;
     JNODE(vm, r)->k = (uint8_t)k;
     JNODE(vm, r)->line = line;

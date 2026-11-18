@@ -33,7 +33,7 @@ jv jv_sym(uint32_t r) { jv v = jv_undef(); v.t = JT_SYM; v.a = r; return v; }
 uint32_t js_sym_new(js_vm_t *vm, uint32_t desc, uint32_t kind) {
     uint32_t len = desc ? JSTR(vm, desc)->len : 0, r, i;
     js_str_t *p;
-    r = js_alloc(vm, 12u + len + 1u);
+    r = js_alloc_k(vm, 12u + len + 1u, JK_LEAF);
     if (!r) return 0;
     p = JSTR(vm, r);
     p->len = len;
@@ -59,7 +59,7 @@ uint32_t js_sym_descr(js_vm_t *vm, uint32_t sym) {
     js_str_t *p = JSTR(vm, sym);
     uint32_t r, n = p->len, i;
     if (p->interned == JS_SYM_PRIVATE) return js_str_new(vm, p->s, (int)p->len);   /* "#x" */
-    r = js_alloc(vm, 12u + n + 9u);
+    r = js_alloc_k(vm, 12u + n + 9u, JK_LEAF);
     if (!r) return vm->s_empty;
     {
         js_str_t *q = JSTR(vm, r);

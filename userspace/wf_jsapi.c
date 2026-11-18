@@ -1488,3 +1488,9 @@ int js_api_platform(js_vm_t *vm, jv v) {
     p = JOBJ(vm, v.a)->proto;
     return p && (p == g_p_usp || p == g_p_fd || p == g_p_url || p == g_p_storage || p == g_p_signal || p == g_p_ctrl);
 }
+
+/* Lot 115: the prototypes kept here are references the collector must see */
+void js_api_gc_roots(js_vm_t *vm) {
+    const uint32_t r[] = { g_p_usp, g_p_fd, g_p_url, g_p_storage, g_p_signal, g_p_ctrl, g_p_domexc };
+    js_gc_scan(vm, r, (uint32_t)sizeof(r));
+}

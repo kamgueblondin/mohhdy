@@ -33,6 +33,8 @@
 /* history and structuredClone on the global object; page_url is the
  * first entry. 0 or -1. */
 int js_hist_init(js_vm_t *vm, const char *page_url);
+/* Lot 115: the arena references this module keeps in statics (wf_jsgc.c) */
+void js_hist_gc_roots(js_vm_t *vm);
 
 /* structuredClone(v): the copy, or undefined with the exception thrown */
 jv js_hist_clone(js_vm_t *vm, jv v);

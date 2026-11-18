@@ -1,9 +1,9 @@
 /* wf_jsrun.c - Lot 113: the tree-walking interpreter of the JavaScript
  * subset (see wf_js.h). Control flow (return, break, continue, throw,
  * abort) is vm->ctl, checked after every sub-evaluation. Environments
- * that no closure captured are recycled when their scope ends (there is
- * no garbage collector, so this keeps calls in loops from filling the
- * arena). */
+ * that no closure captured are recycled when their scope ends, so calls
+ * in loops do not fill the arena while a script runs (wf_jsgc.c only
+ * reclaims between runs, Lot 115). */
 #include "wf_jsi.h"
 
 static jv ev(js_vm_t *vm, uint32_t env, uint32_t n);
@@ -45,7 +45,7 @@ uint32_t js_env_new(js_vm_t *vm, uint32_t parent, int kind) {
         vm->free_env = JENV(vm, r)->parent;
         for (i = 0; i < (int)sizeof(js_env_t); i++) vm->mem[r + (uint32_t)i] = 0;
     } else {
-        r = js_alloc(vm, sizeof(js_env_t));
+        r = js_alloc_k(vm, sizeof(js_env_t), JK_ENV);
         if (!r) return 0;
     }
     e = JENV(vm, r);
@@ -87,7 +87,7 @@ static uint32_t vars_alloc(js_vm_t *vm, uint32_t cap) {
         for (i = 0; i < cap * (uint32_t)sizeof(js_prop_t); i++) vm->mem[r + i] = 0;
         return r;
     }
-    return js_alloc(vm, cap * (uint32_t)sizeof(js_prop_t));
+    return js_alloc_k(vm, cap * (uint32_t)sizeof(js_prop_t), JK_PROPS);
 }
 
 static void env_capture(js_vm_t *vm, uint32_t env) {
@@ -247,7 +247,7 @@ static uint32_t make_arguments(js_vm_t *vm, uint32_t f, jv *argv, int argc) {
     uint32_t a = js_obj_new(vm, JS_CLASS_ARGS, vm->p_object), arr;
     int i;
     if (!a) return 0;
-    arr = js_alloc(vm, (uint32_t)(argc ? argc : 1) * (uint32_t)sizeof(jv));
+    arr = js_alloc_k(vm, (uint32_t)(argc ? argc : 1) * (uint32_t)sizeof(jv), JK_JVS);
     if (!arr) return 0;
     for (i = 0; i < argc; i++) ((jv *)JPTR(vm, arr))[i] = argv[i];
     JOBJ(vm, a)->arr = arr;
@@ -391,7 +391,7 @@ jv js_call(js_vm_t *vm, jv fn, jv thisv, jv *argv, int argc) {
         jv local[16], *all = local;
         int total = (int)nb + argc, i;
         if (total > 16) {
-            uint32_t r = js_alloc(vm, (uint32_t)total * (uint32_t)sizeof(jv));
+            uint32_t r = js_alloc_k(vm, (uint32_t)total * (uint32_t)sizeof(jv), JK_JVS);
             if (!r) return jv_undef();
             all = (jv *)JPTR(vm, r);
             bound = (jv *)JPTR(vm, blk);

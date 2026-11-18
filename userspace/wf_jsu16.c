@@ -213,7 +213,7 @@ uint32_t js_u16_sub(js_vm_t *vm, uint32_t r, uint32_t from, uint32_t to) {
     }
     if (!hn && !tn) return js_str_sub(vm, r, a, b);
     len = (uint32_t)(hn + (b - a) + tn);        /* from < to: a <= b even after a cut */
-    res = js_alloc(vm, 12u + len + 1u);
+    res = js_alloc_k(vm, 12u + len + 1u, JK_LEAF);
     if (!res) return vm->s_empty;
     {
         js_str_t *q = JSTR(vm, res), *p = JSTR(vm, r);
@@ -255,7 +255,7 @@ uint32_t js_u16_join(js_vm_t *vm, uint32_t a, uint32_t b) {
     lo = (((uint32_t)(uint8_t)pb->s[1] & 63u) << 6) | ((uint8_t)pb->s[2] & 63u);
     lo |= 0xD000u;
     cp = 0x10000u + ((hi - 0xD800u) << 10) + (lo - 0xDC00u);
-    r = js_alloc(vm, 12u + (la - 3) + 4 + (lb - 3) + 1);
+    r = js_alloc_k(vm, 12u + (la - 3) + 4 + (lb - 3) + 1, JK_LEAF);
     if (!r) return vm->s_empty;
     {
         js_str_t *q = JSTR(vm, r);

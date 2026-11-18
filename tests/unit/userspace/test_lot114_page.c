@@ -517,6 +517,39 @@ static void test_l114_reader_fields(void) {
     TEST_ASSERT_TRUE(g_st.fields > 0);
 }
 
+
+/* Lot 115: the live realm reclaims its arena between events
+ * (wf_jsgc.c): 150 clicks that each leave about 300 KiB of garbage would
+ * need 45 MiB without it; the listener, its closure, the node objects
+ * and the state the page keeps survive, freed memory is poisoned */
+static void test_l115_live_reclaim(void) {
+    const char *o;
+    int i;
+    wf_jspage_set_fetch(0, 0);
+    wf_jspage_gc_debug(0, 1);
+    o = run("<body><p id=c>0</p><button id=inc>plus</button><ul id=l></ul><script>"
+            "var clicks = 0, kept = [];"
+            "document.getElementById('inc').addEventListener('click', function () {"
+            "  var junk = []; for (var i = 0; i < 1500; i++) junk.push({i: i, s: 'item ' + i, a: [i, i + 1]});"
+            "  clicks++; if (clicks % 50 === 0) { kept.push('k' + clicks);"
+            "    var li = document.createElement('li'); li.textContent = 'at ' + clicks; document.getElementById('l').appendChild(li); }"
+            "  document.getElementById('c').textContent = clicks + ' ' + kept.join(',') + ' ' + junk.length; });"
+            "</script></body>");
+    TEST_ASSERT_TRUE(g_rc > 0);
+    TEST_ASSERT_EQUAL(1, wf_jspage_alive());
+    for (i = 0; i < 150; i++) {
+        o = ev("click", "#inc", 0);
+        TEST_ASSERT_TRUE(g_rc > 0);
+    }
+    CHECK_HAS(o, "<p id=\"c\">150 k50,k100,k150 1500</p>");
+    CHECK_HAS(o, "<li>at 50</li><li>at 100</li><li>at 150</li>");
+    TEST_ASSERT_EQUAL(1, wf_jspage_alive());
+    TEST_ASSERT_TRUE(g_st.gc_runs >= 10);
+    TEST_ASSERT_TRUE(g_st.gc_freed > 30u * 1024u * 1024u);
+    TEST_ASSERT_TRUE(g_st.mem_free > 2u * 1024u * 1024u);
+    wf_jspage_gc_debug(0, 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_l114_external_order);
@@ -535,6 +568,7 @@ int main(void) {
     RUN_TEST(test_l114_focus_api);
     RUN_TEST(test_l114_select_and_form);
     RUN_TEST(test_l114_reader_fields);
+    RUN_TEST(test_l115_live_reclaim);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

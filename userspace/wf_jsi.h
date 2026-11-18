@@ -179,6 +179,22 @@ enum { CTL_NONE = 0, CTL_RETURN, CTL_BREAK, CTL_CONTINUE, CTL_THROW, CTL_ABORT }
 #define FN_DERIVED   2u
 #define FN_DEFAULT   4u               /* synthesized default constructor */
 
+/* Lot 115: block kinds and collector bounds (wf_jsgc.c) */
+enum {
+    JK_SCAN = 0,      /* every word is a candidate */
+    JK_LEAF,          /* no reference (strings, symbols) */
+    JK_OBJ,           /* js_obj_t: proto, props, arr, x0..x2 */
+    JK_COSTACK,       /* a coroutine stack: every word, also as a pointer */
+    JK_ENV,           /* js_env_t */
+    JK_PROPS,         /* js_prop_t[] (properties, scope variables) */
+    JK_JVS,           /* jv[] (array elements, arguments) */
+    JK_NODE,          /* js_node_t */
+    JK_CO             /* a coroutine record (wf_jsco.c scans it and the live part of its stack) */
+};
+#define JS_GC_CLASSES 16
+#define JS_GC_MSTACK 512
+#define JS_GC_MIN_STEP (256u * 1024u)
+
 /* error kinds */
 enum { JE_ERROR = 0, JE_TYPE, JE_RANGE, JE_SYNTAX, JE_REFERENCE, JE_URI, JE_EVAL, JE_COUNT };
 
@@ -250,6 +266,20 @@ struct js_vm {
     uint32_t s_description;
     uint32_t s_privm;                     /* " privm": the class scope's private method holder */
     uint32_t u16_str, u16_unit, u16_byte; /* wf_jsu16.c: the last index conversion (a cursor) */
+    /* Lot 115: arena reclaim (wf_jsgc.c) */
+    uint32_t gc_bits, gc_bitmap_bytes;    /* the payload start bitmap */
+    uint32_t gc_heap_lo;                  /* the first block header */
+    uint32_t gc_free[JS_GC_CLASSES];      /* free lists by size class */
+    uint32_t gc_free_bytes;
+    uint32_t gc_since;                    /* bytes allocated since the last collection */
+    uint32_t gc_live, gc_freed_last, gc_freed_total, gc_runs, gc_marked_bytes;
+    uint32_t gc_mstack[JS_GC_MSTACK];
+    int gc_msp, gc_overflow;
+    uint32_t gc_last, gc_last_end;        /* a cache: the block a candidate fell in last */
+    int gc_hold;                          /* > 0 while a script runs (on_stack) */
+    int gc_stress, gc_poison, gc_off;
+    js_gc_roots_fn gc_roots;
+    void *gc_roots_ctx;
 };
 
 #define JPTR(vm, r) ((void *)((vm)->mem + (r)))
@@ -273,6 +303,13 @@ int jv_is_obj(jv v);
 int jv_is_nullish(jv v);
 
 uint32_t js_alloc(js_vm_t *vm, uint32_t n);          /* 0 on exhaustion (vm aborted) */
+/* ---- wf_jsgc.c (Lot 115) ---- */
+uint32_t js_alloc_k(js_vm_t *vm, uint32_t n, int kind);   /* JK_*: JK_LEAF holds no reference */
+int js_gc_init(js_vm_t *vm);
+int js_gc_busy(const js_vm_t *vm);
+void js_gc_mark_ref(js_vm_t *vm, uint32_t r);
+int js_gc_check(js_vm_t *vm);
+void js_co_gc_scan(js_vm_t *vm, uint32_t c);        /* wf_jsco.c: a JK_CO record */
 void js_abort(js_vm_t *vm, const char *msg);
 uint32_t js_str_new(js_vm_t *vm, const char *s, int len);
 uint32_t js_str_cat(js_vm_t *vm, uint32_t a, uint32_t b);

@@ -79,6 +79,21 @@ static int repl_ready(char *out, int out_max) {
     return 1;
 }
 
+/* Lot 115: "osui js gc runs N live L freed F free B" (wf_jsgc.c) */
+static void gc_line(char *out, int out_max, js_vm_t *vm) {
+    js_gc_stats_t gs;
+    js_gc_stats(vm, &gs);
+    ws_cat(out, out_max, "osui js gc runs ");
+    ws_cat_u(out, out_max, gs.runs);
+    ws_cat(out, out_max, " live ");
+    ws_cat_u(out, out_max, gs.live);
+    ws_cat(out, out_max, " freed ");
+    ws_cat_u(out, out_max, gs.freed_total);
+    ws_cat(out, out_max, " free ");
+    ws_cat_u(out, out_max, gs.free_bytes);
+    ws_cat(out, out_max, "\n");
+}
+
 static void cmd_js(const char *code, char *out, int out_max) {
     static char disp[1024];
     const char *lg;
@@ -92,6 +107,7 @@ static void cmd_js(const char *code, char *out, int out_max) {
             ws_cat(out, out_max, "/");
             ws_cat_u(out, out_max, js_mem_size(g_repl));
             ws_cat(out, out_max, "\n");
+            gc_line(out, out_max, g_repl);
         }
         return;
     }
@@ -119,8 +135,12 @@ static void cmd_js(const char *code, char *out, int out_max) {
     ws_cat(out, out_max, "/");
     ws_cat_u(out, out_max, js_mem_size(g_repl));
     ws_cat(out, out_max, "\n");
-    /* an exhausted realm cannot recover (no GC): start a new one next time */
-    if (rc == JS_ABORTED && js_mem_used(g_repl) + 65536u >= js_mem_size(g_repl)) {
+    /* Lot 115: the realm is idle now: reclaim what the line left behind.
+     * An arena still full after a collection cannot recover: start a new
+     * realm next time */
+    if (rc == JS_ABORTED && js_mem_free(g_repl) < 65536u) js_gc(g_repl);
+    else js_gc_idle(g_repl);
+    if (rc == JS_ABORTED && js_mem_free(g_repl) < 65536u) {
         ufree(g_repl);
         g_repl = 0;
         ws_cat(out, out_max, "osui js realm reset (arena full)\n");
@@ -188,6 +208,12 @@ static void stats_line(char *out, int out_max) {
         ws_cat_u(out, out_max, g_last.mem);
         ws_cat(out, out_max, " layout_engine ");     /* Lot 115: boxes from the renderer */
         ws_cat_i(out, out_max, g_last.layout_engine);
+        ws_cat(out, out_max, " gc ");                /* Lot 115: arena collections, bytes back, bytes free */
+        ws_cat_u(out, out_max, g_last.gc_runs);
+        ws_cat(out, out_max, " freed ");
+        ws_cat_u(out, out_max, g_last.gc_freed);
+        ws_cat(out, out_max, " free ");
+        ws_cat_u(out, out_max, g_last.mem_free);
         if (g_last.first_err[0]) {
             ws_cat(out, out_max, " error=");
             ws_cat(out, out_max, g_last.first_err);

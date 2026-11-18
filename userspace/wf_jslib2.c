@@ -21,7 +21,7 @@ static int sb_grow(js_vm_t *vm, js_sb_t *b, uint32_t need) {
     if (vm->ctl == CTL_ABORT) return 0;
     if (need > (1u << 24)) { js_abort(vm, "RangeError: string too long for the guest"); return 0; }
     while (cap < need) cap *= 2;
-    r = js_alloc(vm, 12 + cap + 1);
+    r = js_alloc_k(vm, 12 + cap + 1, JK_LEAF);
     if (!r) return 0;
     for (i = 0; i < b->len; i++) JSTR(vm, r)->s[i] = JSTR(vm, b->ref)->s[i];
     b->ref = r;

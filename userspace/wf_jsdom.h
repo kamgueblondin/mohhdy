@@ -73,6 +73,9 @@ typedef struct {
     uint32_t steps;     /* interpreter steps, all runs */
     char first_err[160];
     int layout_engine;  /* Lot 115: elements whose layout values came from the renderer (last layout) */
+    uint32_t gc_runs;   /* Lot 115: arena collections of the realm so far */
+    uint32_t gc_freed;  /* bytes they gave back */
+    uint32_t mem_free;  /* arena bytes free after the run (free lists and the top) */
 } wf_jspage_stats_t;
 
 /* run the inline scripts of html[0..n) against its DOM; the page as
@@ -127,6 +130,8 @@ void wf_jspage_set_layout(wf_jslayout_fn fn, void *ctx);
 
 /* 1 while the realm of the last pass that ran scripts is alive (until the
  * next wf_jspage_run or wf_jspage_close) */
+/* Lot 115: test hook: collect at every idle point, poison freed memory */
+void wf_jspage_gc_debug(int stress, int poison);
 int wf_jspage_alive(void);
 void wf_jspage_close(void);
 /* an event after load: type "click", "key" (arg: a key name such as "a"

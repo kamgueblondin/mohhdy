@@ -13,8 +13,12 @@ private fields, a static private counter, a generator [Symbol.iterator]
 and a #x in o brand check, a symbol key and a string with an astral
 character: the reader shows "lang115 ab 1 true u16 7 d83d sym 0 symbol"
 (node prints the same for the script; the Lot 114 subset refused the
-page with a SyntaxError on #items). The Lot 114 page (/lot114/app.html)
-still runs on the same boot. No guest clock is involved (no -rtc option).
+page with a SyntaxError on #items). The js REPL then runs six lines
+that each leave about 900 KiB of garbage in its 3 MiB arena: Lot 114 had
+to drop the realm ("realm reset (arena full)"); now the arena is
+reclaimed between lines (wf_jsgc.c), the array the lines fill keeps its
+six entries and "js" reports the collections ("osui js gc runs N").
+The Lot 114 page (/lot114/app.html) still runs on the same boot. No guest clock is involved (no -rtc option).
 """
 from __future__ import print_function
 
@@ -39,6 +43,8 @@ import test_qemu_lot88 as l88  # noqa: E402  (boot, stop, need, refuse, keep_log
 ROOT = g.ROOT
 SRV_LOG = os.path.join(g.LOG_DIR, "lot115-web-server.log")
 need, refuse = l88.need, l88.refuse
+lw.ALIASES.update({"*": "shift-8", "+": "shift-equal", "[": "bracket_left", "]": "bracket_right", ",": "comma",
+                   "#": "shift-3", "(": "shift-9", ")": "shift-0", ";": "semicolon", "<": "shift-comma"})
 
 
 def say(msg):
@@ -67,6 +73,22 @@ def step_lang(mon, proc, u):
     say("private members, Symbol.iterator, a symbol key and UTF-16 lengths ran in the page script")
 
 
+def step_gc(mon, proc):
+    out = lw.run(mon, proc, "web-js status", "osui web-js on", 20)
+    need(out, [" gc ", " freed ", " free "], "web-js status (arena collections)")
+    lw.run(mon, proc, "js var k=[]", "osui js steps", 20, fail=["error="])
+    churn = "js for(var i=0;i<8e3;i++)var o=[i,i+1].join();k.push(1);k.length"
+    for n in range(1, 7):
+        out = lw.run(mon, proc, churn, "osui js steps", 30, fail=["error=", "realm reset"])
+        need(out, ["osui js => %d" % n], "js churn line %d" % n)
+    out = lw.run(mon, proc, "js", "osui js gc runs", 20)
+    m = re.search(r"osui js gc runs (\d+) live (\d+) freed (\d+)", out)
+    if not m or int(m.group(1)) < 3 or int(m.group(3)) < 2 * 1024 * 1024:
+        raise RuntimeError("js: too few collections: %r" % out[-400:])
+    say("the js REPL reclaimed its arena between lines: %s collections, %s bytes back, the realm kept"
+        % (m.group(1), m.group(3)))
+
+
 def step_lot114(mon, proc, u):
     lw.run(mon, proc, "web-open %s/lot114/app.html" % u, "osui web page sections", fail=["error="])
     read = lw.run(mon, proc, "web-read", "fin114", 30)
@@ -82,6 +104,7 @@ def boot(hp):
         u = "http://10.0.2.2:%d" % hp
         step_layout(mon, proc, u)
         step_lang(mon, proc, u)
+        step_gc(mon, proc)
         step_lot114(mon, proc, u)
     finally:
         l88.stop(proc, mon, qmp)

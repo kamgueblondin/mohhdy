@@ -677,3 +677,9 @@ int js_net_init(js_vm_t *vm) {
     g_xhr_task = js_native_new(vm, "xhrDone", xhr_task, 1, 0);
     return g_settle && g_xhr_task && !vm->ctl ? 0 : -1;
 }
+
+/* Lot 115: the prototypes and the pending XHR task kept here (wf_jsgc.c) */
+void js_net_gc_roots(js_vm_t *vm) {
+    const uint32_t r[] = { g_p_headers, g_p_response, g_p_xhr, g_settle, g_xhr_task };
+    js_gc_scan(vm, r, (uint32_t)sizeof(r));
+}

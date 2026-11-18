@@ -19,7 +19,8 @@ A row is listed only when its code, tests and docs are in the branch.
 | C | The iterator protocol. for-of over an object with its own or inherited [Symbol.iterator] (also one set on Array.prototype or an array) reads one value at a time and calls the iterator's return() on break, return, continue to an outer label or a throw; spread, Array.from, new Set/Map and Promise.all read user iterables; array destructuring reads only the elements the pattern needs from a user iterator or a generator and then closes it (an endless iterator works). keys(), values() and entries() of arrays, Map and Set, and String.prototype[Symbol.iterator], give iterator objects (next, return, [Symbol.iterator]) over a snapshot; the built-in iterator methods keep their fast paths. | wf_jssym.c, wf_jsrun.c (ex_forof, bind_pattern), wf_jslib.c (js_iter_values, Array.from, keys/values/entries), wf_jslib2.c (Map and Set) | test_lot115_lang.c (iter: 13 cases) |
 | D | Class private members and static blocks. The lexer reads #name inside a class body; obj.#x and obj?.#x become an index on an N_PRIVNAME node, so reads, writes, compound assignment, ++, calls and destructuring targets all take the existing index paths. Each evaluation of a class binds a new private symbol per name in the class scope (two classes made by one factory do not share names). Private keys are own-only: a read or a write on an object without the member is a TypeError, #x in o is the brand check, a private method is not writable, a getter without a setter refuses writes, a frozen object keeps writable private fields. Instance private methods and accessors are kept on a holder in the class scope and installed on each instance before its fields. Static private fields and methods, static { } blocks (run in order with the static fields, this = the class) and a super() that returns another object (the derived class's fields go on that object) are covered. Early errors: an undeclared #x, delete of a private member, #constructor, a duplicate name (a getter and a setter may share one), a lone #x outside "#x in o". | wf_jsparse.c, wf_jsrun.c (eval_class, init_fields, ev, call_func), wf_jsrt.c (own-only private get/put/has), wf_jsi.h | test_lot115_lang.c (private: 15 cases, static: 3 cases, test_private_refused, test_private_hidden) |
 | E | UTF-16 string semantics. Strings stay UTF-8 in the arena (the DOM, the console and the reader are UTF-8), but length, s[i], charAt, charCodeAt, codePointAt, at, slice, substring, substr, indexOf, lastIndexOf, includes/startsWith/endsWith positions, padStart/padEnd, split(""), Object.keys of a string, the replace callback offset, search, match index, exec index and lastIndex count UTF-16 code units. An astral character is two units; a slice through it keeps a lone surrogate as a 3-byte WTF-8 sequence, + and template literals join a high and a low half back into the 4-byte form, String.fromCharCode makes one code point from a pair, JSON.stringify writes a lone half as \udxxx and the console shows it as U+FFFD. An empty regular expression match steps over a whole character. toUpperCase/toLowerCase also map Latin-1, Latin Extended-A, basic Greek and Cyrillic (the 2-byte letters whose cases have the same length). The unit count is cached in the string record (upper bits of js_str_t.interned); ASCII strings take an identity fast path; other strings keep one conversion cursor per realm, so a loop over s[i] stays linear. | userspace/wf_jsu16.c (new), wf_jsrt.c, wf_jslib2.c, wf_jsre.c, wf_jsrun.c | test_lot115_lang.c (utf16: 11 cases, test_utf16_cache, test_utf16_log_valid) |
-| Z | QEMU pages /lot115/layout.html and /lot115/lang.html (private members, Symbol.iterator, a symbol key and UTF-16 lengths in a page script; the Lot 114 subset refused the page), run by `make qemu-lot115` and the CI job lot115-js-layout | scripts/lot67_web_server.py, tests/scripts/test_qemu_lot115.py, Makefile, .github/workflows/ci.yml | CI |
+| F | Arena reclaim (the second gap of Lot 114). A mark and sweep collector that never moves a block, so every offset the C code holds stays valid. Each block has a 4-byte header (kind, mark, free, size) and a bitmap at the start of the arena records where payloads start, so any 32-bit word can be checked as a reference. Marking starts from the js_vm_t fields (minus its counters and buffers) and the host's roots (the page DOM gives its node objects, listener arrays, timers, runtime prototypes and the statics of wf_jsapi.c, wf_jsnet.c and wf_jshist.c); objects, scopes, property and value arrays and syntax nodes are scanned by their layout, other blocks and the stacks of suspended generators and async functions word by word (also as pointers). The mark stack is fixed (512 entries) and a heap walk takes over when it overflows. Sweep merges free neighbours, lowers the top when the last blocks are free, and fills 16 size-class free lists that js_alloc uses before the top. A collection only runs when no script runs (js_eval, js_call_value, js_run_jobs and coroutines refuse it), so no C local holds a reference: after a REPL line, before a page event, between page scripts and between timers; js_gc_idle collects after 256 KiB (or half the live size) of new allocations or when a quarter of the arena is left. Suspended generators nobody can reach give their stack back (the JS_CO_MAX bound counts live ones). `js` prints `osui js gc runs N live L freed F free B`, `web-js status` prints `gc N freed F free B`; a REPL realm is reset only when a collection does not bring it under the 64 KiB margin. The Promise resolve functions now keep their record offset with the flag in bit 0 (was offset << 1), and bound functions get their length. | userspace/wf_jsgc.c (new), wf_jsi.h, wf_js.h, wf_jsrt.c, wf_jslib.c, wf_jsco.c, wf_jsrun.c, wf_jsparse.c, wf_jsdom.c, wf_jsapi.c, wf_jsnet.c, wf_jshist.c, wf_jsweb.c | test_lot115_gc.c (12 multi-stage scenarios compared with node v24 under a collection after every stage with freed memory poisoned; a 60-line session in a 1 MiB arena and the same session failing without reclaim; reuse of freed blocks; refused inside scripts and coroutines; host roots; unreachable generators; mark stack overflow; bounds), test_lot115_lang.c and test_lot114_async.c (every case again in one realm with a collection after each), test_lot114_page.c (150 clicks leaving 300 KiB each on a live page) |
+| Z | QEMU pages /lot115/layout.html and /lot115/lang.html (private members, Symbol.iterator, a symbol key and UTF-16 lengths in a page script; the Lot 114 subset refused the page), then eight js REPL lines of 400 KiB of garbage each in the 3 MiB REPL arena (Lot 114 reset the realm), run by `make qemu-lot115` and the CI job lot115-js-layout | scripts/lot67_web_server.py, tests/scripts/test_qemu_lot115.py, Makefile, .github/workflows/ci.yml | CI |
 
 ## Not covered (honest)
 
@@ -51,6 +52,14 @@ A row is listed only when its code, tests and docs are in the branch.
   string unchanged. Regular expressions still match bytes (an astral
   character matches as a whole with the u flag or a literal, not as two
   units).
+- Reclaim only happens between runs: a single script, event handler or
+  timer callback that allocates more than the arena still aborts with
+  "out of memory" (the collector would need the C stack of the running
+  interpreter as roots). Interned strings (every property name ever used)
+  are never reclaimed. Marking is conservative for the blocks it does not
+  know the layout of and for generator stacks: a number that looks like
+  an offset keeps a block alive (never the reverse). The free lists are
+  first fit in 16 size classes; fragmentation is not compacted.
 - Lot 113 pinned `typeof Symbol` (undefined), Map keys() as an array and
   the refusal of #x as documented limits; test_lot113_js.c now pins the
   new behaviour (a conscious change, as the comment there asks).
@@ -65,10 +74,16 @@ A row is listed only when its code, tests and docs are in the branch.
 | a symbol | 16 bytes plus its description, in the realm's arena | wf_jssym.c |
 | private names | 96 declared or used names in nested class bodies per parse | PS_MAX_PRIV in wf_jsparse.c |
 | cached UTF-16 length | strings up to 4194302 units (longer ones are counted again) | JS_U16_MAXC in wf_jsi.h |
+| collector bitmap | vm->limit / 32 bytes of the arena (84 KiB for the 3 MiB REPL arena, 180 KiB for the 6 MiB page arena) | js_gc_init in wf_jsgc.c |
+| block header | 4 bytes per block; a block is at most 64 MiB | wf_jsgc.c |
+| mark stack | 512 entries in js_vm_t, then heap walks | JS_GC_MSTACK |
+| idle trigger | 256 KiB allocated since the last run (or half the live size), or a quarter of the arena left | JS_GC_MIN_STEP, js_gc_idle |
 
 ## Security
 
-The layout copy has no scripts. It is laid out by the same engine that
+The collector never moves a block and only frees blocks no root reaches;
+a wrong guess keeps garbage, it cannot free a live block. Its marking is
+bounded (fixed stack, heap walks). The layout copy has no scripts. It is laid out by the same engine that
 paints untrusted pages in the GUI, with the same bounds, and nothing is
 painted from it. The sanitizer and the kernel rights are unchanged.
 
@@ -81,7 +96,8 @@ See the Lot 115 section of docs/ETAT_REEL.md.
 1. More of the page laid out by the engine than its 160 nodes, for
    example by laying out the section around the element being read.
    This is the first gap.
-2. A collector or arena reclaim for the live realm and the REPL.
+2. Reclaim inside a run (the running interpreter's C stack as roots),
+   so one handler that allocates more than the arena can finish.
 3. Async generators and for await (they need the iterator protocol this
    lot adds and the coroutines of Lot 114).
 4. web-js on by default after a compatibility pass.
