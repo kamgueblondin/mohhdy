@@ -16,12 +16,13 @@ path, scripts inserted by scripts, on* attributes, fetch() and
 XMLHttpRequest on their own origin, and get approximate layout values.
 The page realm stays alive after load: clicks, keys, input, focus and
 submit from the console, the GUI input line, GUI clicks on marked
-elements and unused GUI keys reach the scripts through one shared path,
-and the rewritten page goes through the unchanged sanitizer. The host
+elements, unused GUI keys and the reader's own form controls (GUI and
+console) reach the scripts through one shared path, and the rewritten
+page goes through the unchanged sanitizer. The host
 coverage CI job is back under 15 minutes (parallel test runner, gcov
 pool, platform boot in its own job). A QEMU page (`make qemu-lot114`,
-CI job lot114-js-page) checks it. First gap for Lot 115: keys typed
-into reader form fields reaching page scripts. See docs/lot114_plan.md.
+CI job lot114-js-page) checks it. First gap for Lot 115: layout values
+from the renderer instead of the block model. See docs/lot114_plan.md.
 
 ### Lot 113 (17 November 2026, PR 270 merged)
 

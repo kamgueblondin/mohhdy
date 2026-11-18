@@ -31,6 +31,7 @@ static char g_b[WF_DOM_BYTES];
 static int g_nn, g_na, g_trunc;
 static uint32_t g_nb;
 static uint32_t g_mut;         /* Lot 114: DOM changes (the layout cache follows it) */
+static int g_ev, g_dirty = -1;   /* Lot 114: reader field events (live_field) */
 
 static int dlen(const char *s) { int n = 0; while (s[n]) n++; return n; }
 static char lower(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
@@ -801,7 +802,7 @@ enum {
     K_data, K_body, K_head, K_documentElement, K_title, K_readyState, K_cookie, K_ownerDocument, K_URL,
     K_defaultView, K_cssText, K_length, K_location, K_offsetWidth, K_offsetHeight, K_clientWidth, K_clientHeight,
     K_scrollTop, K_isConnected, K_dataset, K_offsetTop, K_offsetLeft, K_offsetParent, K_scrollHeight, K_scrollWidth,
-    K_scrollLeft, K_currentScript, K_activeElement, K_COUNT
+    K_scrollLeft, K_currentScript, K_activeElement, K_selectedIndex, K_form, K_COUNT
 };
 static const char *const k_names[K_COUNT] = {
     "nodeType", "nodeName", "tagName", "id", "className", "textContent", "innerText", "innerHTML", "outerHTML",
@@ -811,7 +812,7 @@ static const char *const k_names[K_COUNT] = {
     "data", "body", "head", "documentElement", "title", "readyState", "cookie", "ownerDocument", "URL",
     "defaultView", "cssText", "length", "location", "offsetWidth", "offsetHeight", "clientWidth", "clientHeight",
     "scrollTop", "isConnected", "dataset", "offsetTop", "offsetLeft", "offsetParent", "scrollHeight", "scrollWidth",
-    "scrollLeft", "currentScript", "activeElement"
+    "scrollLeft", "currentScript", "activeElement", "selectedIndex", "form"
 };
 /* string attributes reflected as properties of the same name */
 static const char *const k_reflect[] = { "href", "src", "alt", "type", "name", "placeholder", "rel", "lang", "dir",
@@ -1594,6 +1595,49 @@ static jv select_value(js_vm_t *vm, int k) {
     return jv_str(text_content(vm, first));
 }
 
+/* Lot 114: the options of a select in document order (optgroups too) */
+static int select_index(int k) {
+    int c, i = 0, first = -1;
+    for (c = walk_next(k, k); c >= 0; c = walk_next(c, k)) {
+        if (!name_is(c, "option")) continue;
+        if (bool_attr(c, "selected")) return i;
+        if (first < 0) first = i;
+        i++;
+    }
+    return first;     /* a single select shows its first option; -1 without options */
+}
+
+/* select option idx (-1: none): the selected attribute moves to it */
+static void select_set_index(int k, int idx) {
+    int c, i = 0;
+    for (c = walk_next(k, k); c >= 0; c = walk_next(c, k)) {
+        if (!name_is(c, "option")) continue;
+        if (i == idx) { if (!bool_attr(c, "selected")) attr_set_raw(c, "selected", 8, "", 0); }
+        else if (bool_attr(c, "selected")) attr_remove(c, "selected", 8);
+        i++;
+    }
+}
+
+/* the first option whose value is s; -1 (no option selected) when none */
+static void select_set_value(js_vm_t *vm, int k, uint32_t s) {
+    int c, i = 0, hit = -1, found;
+    const js_str_t *w = JSTR(vm, s);
+    for (c = walk_next(k, k); c >= 0 && hit < 0; c = walk_next(c, k)) {
+        uint32_t v;
+        if (!name_is(c, "option")) continue;
+        v = bool_attr(c, "value") ? attr_get_js(vm, c, "value", &found) : text_content(vm, c);
+        if (JSTR(vm, v)->len == w->len) {
+            uint32_t q;
+            for (q = 0; q < w->len && JSTR(vm, v)->s[q] == w->s[q]; q++) {}
+            if (q == w->len) hit = i;
+        }
+        i++;
+    }
+    select_set_index(k, hit);
+}
+
+static int form_of(int k);
+
 static int node_get(js_vm_t *vm, int k, uint32_t key, jv *out) {
     int idx = key_index(key), found, c;
     dnode_t *d = &g_n[k];
@@ -1699,6 +1743,16 @@ static int node_get(js_vm_t *vm, int k, uint32_t key, jv *out) {
         return 1;
     case K_offsetParent: if (d->type != DN_ELEM) return 0; *out = node_obj(vm, layout_offset_parent(k)); return 1;
     case K_currentScript: if (d->type != DN_DOC) return 0; *out = node_obj(vm, g_rt.cur_script); return 1;
+    case K_selectedIndex: if (!name_is(k, "select")) return 0; *out = jv_int(select_index(k)); return 1;
+    case K_form: {
+        static const char *const ctl[] = { "input", "select", "textarea", "button", "fieldset", "output", "object", "label", 0 };
+        int q;
+        if (d->type != DN_ELEM) return 0;
+        for (q = 0; ctl[q] && !name_is(k, ctl[q]); q++) {}
+        if (!ctl[q]) return 0;
+        *out = node_obj(vm, form_of(k));
+        return 1;
+    }
     case K_activeElement: {
         int html, body;
         if (d->type != DN_DOC) return 0;
@@ -1780,7 +1834,16 @@ static int node_set(js_vm_t *vm, int k, uint32_t key, jv val) {
         s = js_to_string(vm, val);
         if (vm->ctl) return 1;
         if (idx == K_value && name_is(k, "textarea")) set_text(vm, k, s);
+        else if (idx == K_value && name_is(k, "select")) select_set_value(vm, k, s);   /* the matching option */
         else attr_set_js(vm, k, an, dlen(an), s);
+        return 1;
+    }
+    case K_selectedIndex: {
+        int32_t x;
+        if (!name_is(k, "select")) return 0;
+        x = js_to_int32(vm, val);
+        if (vm->ctl) return 1;
+        select_set_index(k, x >= 0 && x < WF_DOM_NODES ? (int)x : -1);
         return 1;
     }
     case K_checked: case K_disabled: case K_hidden: case K_selected:
@@ -1848,7 +1911,7 @@ static int node_set(js_vm_t *vm, int k, uint32_t key, jv val) {
     case K_ownerDocument: case K_URL: case K_defaultView: case K_isConnected: case K_dataset:
     case K_offsetWidth: case K_offsetHeight: case K_clientWidth: case K_clientHeight: case K_offsetTop:
     case K_offsetLeft: case K_offsetParent: case K_scrollHeight: case K_scrollWidth: case K_currentScript:
-    case K_activeElement:
+    case K_activeElement: case K_form:
         return 1;     /* read-only: ignored as in sloppy-mode browsers */
     default: return 0;
     }
@@ -3595,6 +3658,7 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
     g_rt.st = st;
     g_rt.cur_script = -1;
     g_rt.focus = -1;
+    g_dirty = -1;
     g_calls = 0;
     g_ndyn = 0;
     g_ndefer = 0;
@@ -3616,6 +3680,37 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
 int wf_jspage_alive(void) { return g_alive; }
 void wf_jspage_close(void) { g_alive = 0; }
 
+/* Lot 114: a control as the reader engine counts them (webeng_finput.inc:
+ * input, select, textarea, button, details, dialog and output) */
+static int ctl_kind(int k) {
+    return name_is(k, "input") || name_is(k, "select") || name_is(k, "textarea") || name_is(k, "button") ||
+           name_is(k, "details") || name_is(k, "dialog") || name_is(k, "output");
+}
+
+/* "ORD,NTH,NAME": control NTH of those named NAME (a reader field keeps
+ * its name), else control ORD in document order; -1 when none */
+static int field_target(const char *t) {
+    int ord = 0, nth = 0, nl, k, i = 0, doc = g_rt.doc;
+    const char *name;
+    while (*t >= '0' && *t <= '9' && ord < 100000) ord = ord * 10 + (*t++ - '0');
+    if (*t++ != ',') return -1;
+    while (*t >= '0' && *t <= '9' && nth < 100000) nth = nth * 10 + (*t++ - '0');
+    if (*t == ',') t++;
+    name = t;
+    nl = dlen(name);
+    while (nl > 0 && name[nl - 1] == ' ') nl--;
+    for (k = walk_next(doc, doc); k >= 0; k = walk_next(k, doc)) {
+        const char *v;
+        int vl;
+        if (!ctl_kind(k)) continue;
+        if (nl > 0) {
+            if (!attr_val(k, "name", &v, &vl) || vl != nl || !span_eq_ci(v, vl, name, nl)) continue;
+            if (i++ == nth) return k;
+        } else if (i++ == ord) return k;
+    }
+    return -1;
+}
+
 static int find_target(const char *t) {
     int n, k, doc = g_rt.doc;
     while (*t == ' ') t++;
@@ -3626,6 +3721,7 @@ static int find_target(const char *t) {
         body = html < 0 ? -1 : find_child(html, "body");
         return body;
     }
+    if (*t == '=') return field_target(t + 1);
     if (*t == '@') {
         k = 0;
         t++;
@@ -3671,11 +3767,13 @@ static int editable(int k) {
 static uint32_t value_get(js_vm_t *vm, int k) {
     int f;
     if (name_is(k, "textarea")) return text_content(vm, k);
+    if (name_is(k, "select")) return select_value(vm, k).a;
     return attr_get_js(vm, k, "value", &f);
 }
 
 static void value_set(js_vm_t *vm, int k, uint32_t s) {
     if (name_is(k, "textarea")) set_text(vm, k, s);
+    else if (name_is(k, "select")) select_set_value(vm, k, s);
     else attr_set_js(vm, k, "value", 5, s);
     vm->ctl = CTL_NONE;
 }
@@ -3825,11 +3923,141 @@ static int live_key(js_vm_t *vm, int k, const char *key, wf_jspage_stats_t *st) 
     return fire_event_ex(vm, node_obj(vm, k), "keyup", 1, 1, &ei, 0, st);
 }
 
+/* ---- reader form fields (Lot 114) ----
+ * The reader's controls (engine forms of the GUI, the Lot 71 fields of the
+ * console) change first; the scripts then see the new state through
+ * "field-input" (value, input event), "field-check" (checked, click,
+ * input, change; a prevented click puts the old state back), "field-change"
+ * (value, input, change: select), "field-focus" / "field-blur" (focus,
+ * focusin, blur, focusout; change on blur after an edit) and
+ * "field-submit" (change after an edit, then submit on the form). g_ev
+ * holds what the reader needs back: WF_JSEV_DOM when a script changed
+ * the DOM (the page is written again), WF_JSEV_PREVENTED when the default
+ * action was cancelled (the reader does not send the form, or keeps the
+ * old check) and WF_JSEV_VALUE when a script changed the field's value
+ * (the reader takes it, g_ev_val). */
+static char g_ev_val[WF_DOM_FIELD_VAL];
+
+static void ev_note_value(js_vm_t *vm, int k, uint32_t sent) {
+    uint32_t now = value_get(vm, k), i, n;
+    const js_str_t *a = JSTR(vm, now), *b = JSTR(vm, sent);
+    if (vm->ctl) { vm->ctl = CTL_NONE; return; }
+    if (a->len == b->len) {
+        for (i = 0; i < a->len && a->s[i] == b->s[i]; i++) {}
+        if (i == a->len) return;
+    }
+    n = a->len < WF_DOM_FIELD_VAL - 1 ? a->len : WF_DOM_FIELD_VAL - 1;
+    for (i = 0; i < n; i++) g_ev_val[i] = a->s[i] == '\n' || a->s[i] == '\r' ? ' ' : a->s[i];
+    g_ev_val[n] = 0;
+    g_ev |= WF_JSEV_VALUE;
+}
+
+static int field_change_due(js_vm_t *vm, int k, wf_jspage_stats_t *st) {
+    if (g_dirty != k) return 0;
+    g_dirty = -1;
+    return fire_event(vm, node_obj(vm, k), "change", 1, st);
+}
+
+static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_jspage_stats_t *st) {
+    int al = dlen(act), prevented = 0, stop = 0;
+    uint32_t mut0;
+    if (!arg) arg = "";
+    st->fields++;
+    if (al == 5 && span_eq_ci(act, 5, "input", 5)) {
+        uint32_t sent;
+        if (!editable(k)) return -2;
+        sent = js_str_c(vm, arg);
+        value_set(vm, k, sent);
+        mut0 = g_mut;
+        g_dirty = k;
+        stop = input_fire(vm, k, 0, "insertText", 0, st);
+        if (!stop) stop = run_timers(vm, st);
+        if (!stop) ev_note_value(vm, k, sent);
+    } else if (al == 5 && span_eq_ci(act, 5, "check", 5)) {
+        const char *v;
+        int vl, on = arg[0] == '1', was;
+        ev_init_t ei;
+        if (!name_is(k, "input") || !attr_val(k, "type", &v, &vl) ||
+            !(span_eq_ci(v, vl, "checkbox", 8) || span_eq_ci(v, vl, "radio", 5))) return -2;
+        was = bool_attr(k, "checked");
+        if (on) { if (!was) attr_set_raw(k, "checked", 7, "", 0); } else attr_remove(k, "checked", 7);
+        if (on && span_eq_ci(v, vl, "radio", 5) && attr_val(k, "name", &v, &vl)) {
+            int q;
+            for (q = walk_next(g_rt.doc, g_rt.doc); q >= 0; q = walk_next(q, g_rt.doc)) {
+                const char *w;
+                int wl;
+                if (q != k && name_is(q, "input") && attr_val(q, "name", &w, &wl) && wl == vl && span_eq_ci(w, wl, v, vl) &&
+                    form_of(q) == form_of(k))
+                    attr_remove(q, "checked", 7);
+            }
+        }
+        mut0 = g_mut;
+        layout_ensure();
+        ei.kind = 1; ei.key = ei.code = ei.data = ""; ei.key_code = ei.char_code = 0;
+        ei.ox = g_box[k].w / 2; ei.oy = g_box[k].h / 2;
+        ei.x = g_box[k].x + ei.ox; ei.y = g_box[k].y + ei.oy;
+        stop = fire_event_ex(vm, node_obj(vm, k), "click", 1, 1, &ei, &prevented, st);
+        if (!stop && prevented) {
+            if (was) attr_set_raw(k, "checked", 7, "", 0); else attr_remove(k, "checked", 7);
+            g_ev |= WF_JSEV_PREVENTED;
+            mut0 = g_mut;
+        } else if (!stop) stop = input_fire(vm, k, 0, "", 1, st);
+        if (!stop) stop = run_timers(vm, st);
+        if (!stop && bool_attr(k, "checked") != on) {
+            g_ev_val[0] = bool_attr(k, "checked") ? '1' : '0';
+            g_ev_val[1] = 0;
+            g_ev |= WF_JSEV_VALUE;
+        }
+    } else if (al == 6 && span_eq_ci(act, 6, "change", 6)) {
+        uint32_t sent;
+        if (!editable(k) && !name_is(k, "select")) return -2;
+        sent = js_str_c(vm, arg);
+        value_set(vm, k, sent);
+        sent = value_get(vm, k);       /* a select keeps an existing option */
+        mut0 = g_mut;
+        if (g_dirty == k) g_dirty = -1;
+        stop = input_fire(vm, k, 0, "", 1, st);
+        if (!stop) stop = run_timers(vm, st);
+        if (!stop) ev_note_value(vm, k, sent);
+    } else if ((al == 5 && span_eq_ci(act, 5, "focus", 5)) || (al == 4 && span_eq_ci(act, 4, "blur", 4))) {
+        int on = act[0] == 'f' || act[0] == 'F';
+        mut0 = g_mut;
+        if (on && g_rt.focus >= 0 && g_rt.focus != k && is_connected(g_rt.focus)) {
+            int old = g_rt.focus;
+            g_rt.focus = -1;
+            stop = field_change_due(vm, old, st) || fire_event(vm, node_obj(vm, old), "blur", 0, st) ||
+                   fire_event(vm, node_obj(vm, old), "focusout", 1, st);
+        }
+        if (!stop && !on) stop = field_change_due(vm, k, st);
+        if (!stop && (on ? g_rt.focus != k : g_rt.focus == k)) {
+            g_rt.focus = on ? k : -1;
+            stop = fire_event(vm, node_obj(vm, k), on ? "focus" : "blur", 0, st) ||
+                   fire_event(vm, node_obj(vm, k), on ? "focusin" : "focusout", 1, st);
+        }
+        if (!stop) stop = run_timers(vm, st);
+    } else if (al == 6 && span_eq_ci(act, 6, "submit", 6)) {
+        int form = name_is(k, "form") ? k : form_of(k);
+        mut0 = g_mut;
+        if (form < 0) return -2;
+        stop = field_change_due(vm, k, st);
+        if (!stop) stop = fire_event_ex(vm, node_obj(vm, form), "submit", 1, 1, 0, &prevented, st);
+        if (!stop && prevented) g_ev |= WF_JSEV_PREVENTED;
+        if (!stop) stop = run_timers(vm, st);
+    } else return -2;
+    if (g_mut != mut0) g_ev |= WF_JSEV_DOM;
+    return stop;
+}
+
+int wf_jspage_event_flags(void) { return g_ev; }
+const char *wf_jspage_field_value(void) { return g_ev_val; }
+
 int wf_jspage_event(const char *type, const char *target, const char *arg, char *out, int out_max,
                     wf_jspage_stats_t *st) {
     static wf_jspage_stats_t dummy;
     js_vm_t *vm = &g_vm;
     int k, stop = 0, r, tl;
+    g_ev = 0;
+    g_ev_val[0] = 0;
     if (!g_alive) return -1;
     if (!type || !out || out_max <= 0) return -1;
     if (!st) st = &dummy;
@@ -3842,7 +4070,8 @@ int wf_jspage_event(const char *type, const char *target, const char *arg, char 
     g_calls = 0;
     st->live_events++;
     tl = dlen(type);
-    if (tl == 5 && span_eq_ci(type, 5, "click", 5)) stop = live_click(vm, k, st);
+    if (tl > 6 && span_eq_ci(type, 6, "field-", 6)) stop = live_field(vm, k, type + 6, arg, st);
+    else if (tl == 5 && span_eq_ci(type, 5, "click", 5)) stop = live_click(vm, k, st);
     else if (tl == 3 && span_eq_ci(type, 3, "key", 3)) stop = live_key(vm, k, arg, st);
     else if (tl == 5 && span_eq_ci(type, 5, "input", 5)) {
         if (!editable(k) && !name_is(k, "select")) { g_rt.st = 0; return -2; }

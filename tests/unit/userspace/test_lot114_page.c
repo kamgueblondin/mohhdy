@@ -422,6 +422,101 @@ static void test_l114_focus_api(void) {
     CHECK_STR("BODY\nb focus-a in-a blur-a focus-b in-b\nBODY\n", logtext());
 }
 
+static void test_l114_select_and_form(void) {
+    wf_jspage_set_fetch(0, 0);
+    run("<body><form id=f><select id=s name=s><option value=a>A<option value=b selected>B<option>C</select>"
+        "<input id=i></form><p id=x></p><script>"
+        "var s = document.getElementById('s');"
+        "console.log(s.value, s.selectedIndex, s.form.id, document.getElementById('i').form === s.form,"
+        "  document.getElementById('x').form);"
+        "s.value = 'C'; console.log(s.value, s.selectedIndex);"
+        "s.selectedIndex = 0; console.log(s.value, s.getAttribute('value'));"
+        "s.value = 'zz'; console.log(s.selectedIndex, JSON.stringify(s.value));"
+        "s.selectedIndex = 1;"
+        "</script></body>");
+    CHECK_STR("b 1 f true undefined\nC 2\na null\n0 \"a\"\n", logtext());
+    CHECK_HAS(g_out, "<option value=\"b\" selected=\"\">B");
+}
+
+/* the reader's controls reach the scripts (field-*): by name, by rank */
+static void test_l114_reader_fields(void) {
+    const char *o;
+    wf_jspage_set_fetch(0, 0);
+    run("<body><form id=f action=\"/s\"><input name=q id=q><input name=q id=q2><input id=anon>"
+        "<input type=checkbox name=c id=c><select name=s id=s><option value=1>one<option value=2>two</select>"
+        "<button id=go>Go</button></form><p id=out>-</p><script>"
+        "var seen = [];"
+        "function note(s) { seen.push(s); }"
+        "var q = document.getElementById('q');"
+        "q.addEventListener('focus', function () { note('focus'); });"
+        "q.addEventListener('input', function (e) { note('input:' + q.value + ':' + e.inputType); });"
+        "q.addEventListener('change', function () { note('change:' + q.value); });"
+        "q.addEventListener('blur', function () { note('blur'); });"
+        "document.getElementById('q2').addEventListener('input', function (e) { e.target.value = e.target.value.toUpperCase(); });"
+        "document.getElementById('anon').addEventListener('input', function (e) { document.getElementById('out').textContent = 'anon ' + e.target.value; });"
+        "document.getElementById('c').addEventListener('click', function (e) { if (window.lock) e.preventDefault(); });"
+        "document.getElementById('c').addEventListener('change', function (e) { document.getElementById('out').textContent = 'c ' + e.target.checked; });"
+        "document.getElementById('s').addEventListener('change', function (e) { document.getElementById('out').textContent = 's ' + e.target.value; });"
+        "document.getElementById('f').addEventListener('submit', function (e) { if (q.value === 'stop') e.preventDefault(); note('submit:' + q.value); });"
+        "document.body.addEventListener('lock', function () { window.lock = true; });"
+        "document.body.addEventListener('dump', function () { document.getElementById('out').textContent = seen.join(' '); });"
+        "</script></body>");
+    TEST_ASSERT_TRUE(g_rc > 0);
+    /* a script that only notes: the DOM changes (the value) but no visible change flag */
+    ev("field-focus", "=0,0,q", 0);
+    TEST_ASSERT_EQUAL(0, wf_jspage_event_flags());
+    ev("field-input", "=0,0,q", "he");
+    TEST_ASSERT_EQUAL(0, wf_jspage_event_flags());
+    o = ev("field-input", "=0,0,q", "hey you");
+    CHECK_HAS(o, "<input name=\"q\" id=\"q\" value=\"hey you\">");
+    TEST_ASSERT_EQUAL(0, wf_jspage_event_flags());
+    ev("field-blur", "=0,0,q", 0);
+    ev("field-blur", "=0,0,q", 0);              /* not focused: nothing */
+    ev("field-focus", "=0,0,q", 0);
+    ev("field-blur", "=0,0,q", 0);              /* no edit since: no change */
+    /* a script that rewrites the value: the reader takes it back */
+    ev("field-input", "=1,1,q", "abc");    /* the value attribute changed too: DOM and VALUE */
+    TEST_ASSERT_EQUAL(WF_JSEV_DOM | WF_JSEV_VALUE, wf_jspage_event_flags());
+    CHECK_STR("ABC", wf_jspage_field_value());
+    /* no name: control ORD in document order (anon is control 2) */
+    o = ev("field-input", "=2,0,", "x1");
+    TEST_ASSERT_EQUAL(WF_JSEV_DOM, wf_jspage_event_flags());
+    CHECK_HAS(o, ">anon x1</p>");
+    /* a box: click, input, change; a prevented click keeps the old state */
+    o = ev("field-check", "=3,0,c", "1");
+    CHECK_HAS(o, ">c true</p>");
+    CHECK_HAS(o, "id=\"c\" checked=\"\"");
+    TEST_ASSERT_EQUAL(WF_JSEV_DOM, wf_jspage_event_flags());
+    ev("lock", "body", 0);
+    o = ev("field-check", "=3,0,c", "0");
+    TEST_ASSERT_EQUAL(WF_JSEV_PREVENTED | WF_JSEV_VALUE, wf_jspage_event_flags());
+    CHECK_STR("1", wf_jspage_field_value());
+    CHECK_HAS(o, "id=\"c\" checked=\"\"");
+    /* a select: the chosen option */
+    o = ev("field-change", "=4,0,s", "2");
+    CHECK_HAS(o, ">s 2</p>");
+    CHECK_HAS(o, "<option value=\"2\" selected=\"\">two");
+    /* submit: change first after an edit, a prevented submit is reported */
+    ev("field-focus", "=0,0,q", 0);
+    ev("field-input", "=0,0,q", "stop");
+    ev("field-submit", "=0,0,q", 0);
+    TEST_ASSERT_EQUAL(WF_JSEV_PREVENTED, wf_jspage_event_flags());
+    ev("field-input", "=0,0,q", "go");
+    ev("field-submit", "=5,0,", 0);
+    TEST_ASSERT_EQUAL(0, wf_jspage_event_flags());
+    o = ev("dump", "body", 0);
+    CHECK_HAS(o, "<p id=\"out\">focus input:he:insertText input:hey you:insertText change:hey you blur focus blur focus "
+                     "input:stop:insertText change:stop submit:stop input:go:insertText submit:go</p>");
+    /* bad targets and kinds */
+    TEST_ASSERT_EQUAL(-2, wf_jspage_event("field-input", "=0,9,q", "v", g_out, (int)sizeof(g_out), &g_st));
+    TEST_ASSERT_EQUAL(-2, wf_jspage_event("field-input", "=40,0,", "v", g_out, (int)sizeof(g_out), &g_st));
+    TEST_ASSERT_EQUAL(-2, wf_jspage_event("field-check", "=0,0,q", "1", g_out, (int)sizeof(g_out), &g_st));
+    TEST_ASSERT_EQUAL(-2, wf_jspage_event("field-input", "=3,0,c", "1", g_out, (int)sizeof(g_out), &g_st));
+    TEST_ASSERT_EQUAL(-2, wf_jspage_event("field-zap", "=0,0,q", "1", g_out, (int)sizeof(g_out), &g_st));
+    TEST_ASSERT_EQUAL(-2, wf_jspage_event("field-input", "=x", "1", g_out, (int)sizeof(g_out), &g_st));
+    TEST_ASSERT_TRUE(g_st.fields > 0);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_l114_external_order);
@@ -438,6 +533,8 @@ int main(void) {
     RUN_TEST(test_l114_live_timers_and_custom);
     RUN_TEST(test_l114_handler_attrs);
     RUN_TEST(test_l114_focus_api);
+    RUN_TEST(test_l114_select_and_form);
+    RUN_TEST(test_l114_reader_fields);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

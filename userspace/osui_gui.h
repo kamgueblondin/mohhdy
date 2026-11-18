@@ -104,7 +104,7 @@ typedef struct {
      * src (laid out once more), 0 when nothing waited for it. May be 0. */
     int (*page_geom)(const void *doc, char *src, int src_max);
     /* Lot 114 (US-031): page scripts after load (shell_page_js): a
-     * "web-js click|key|input|focus|blur|submit|event|clicks|gkey" line;
+     * "web-js click|key|input|focus|blur|submit|event|clicks|field|rfield|gkey" line;
      * the page written again goes to src (length > 0), 0 nothing to show,
      * -1 not for a live page. May be 0. */
     int (*page_js)(const char *line, char *src, int src_max, char *out, int out_max);

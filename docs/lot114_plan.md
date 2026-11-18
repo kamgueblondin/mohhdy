@@ -27,6 +27,7 @@ A row is listed only when its code, tests and docs are in the branch.
 | I | approximate layout values: offsetWidth/Height/Top/Left, offsetParent, clientWidth/Height, scrollWidth/Height, getBoundingClientRect from a block model (8x16 px characters, h1 16x32, h2 12x24, 1024x768 viewport, body margin 8, list indent 40, inline-block controls with fixed sizes, style width/height in px, display none/block/inline/inline-block), recomputed after a DOM change | userspace/wf_jsdom.c | test_lot114_page.c (layout), `make qemu-lot114` |
 | J | events after load: the realm stays alive after the pass; wf_jspage_event dispatches click (MouseEvent fields, checkbox and radio toggling, submit of the button's form), key (keydown, keypress, keyup with key/code/keyCode, the character typed into a focused text field, Backspace, Enter submits), input (value, input, change), focus/blur (activeElement, focusin/focusout), submit and any other type, then runs Promise jobs, timers and inserted scripts, and writes the page again; el.focus()/blur() and document.activeElement | userspace/wf_jsdom.c | test_lot114_page.c (live_click, live_forms, live_timers_and_custom, focus_api) |
 | K | one shell/GUI path for J: shell_page_js (shell_fetch.c) takes "web-js click/key/input/focus/blur/submit/event/clicks" from the console and the GUI input line (osui_gui_web_command), the GUI's click on a "?__wfjs=N" link (the serializer wraps every element with a click handler in such a link) and the keys the page view does not use ("web-js gkey", only when the page listens to keys); the page written again goes through the same reader, sanitizer and forms without a new script pass; a new page ends the live realm | userspace/shell_fetch.c, osui_gui.c, osui_gui.h (page_js), shell.c, wf_jsweb.c, wf_jsweb.h | test_lot113_dom.c (commands), `make qemu-lot114` |
+| M | the reader's own controls reach the scripts: field-input / check / change / focus / blur / submit with the target "=ORD,NTH,NAME" (control NTH of those named NAME, else control ORD in document order as webeng_finput.inc counts them); the GUI's engine forms (a click, typing, Enter, a box, a select: web_js_fields) and the console forms of Lot 71 (web-input, keys in a focused field, web-submit: "web-js rfield set/submit N") send them through shell_page_js; change fires on blur and before submit after an edit; a prevented submit is not sent, a prevented box click keeps its old state, a value a script gives the field goes back into the control; the page is written again only when a script changed the DOM; select.value / selectedIndex move the selected option and el.form is the owner form | userspace/wf_jsdom.c, wf_jsdom.h, shell_fetch.c, osui_gui.c, wf_jsweb.c | test_lot114_page.c (select_and_form, reader_fields), `make qemu-lot114` (web-fclick, web-ftype, Enter, web-input, web-submit) |
 | L | QEMU page /lot114/app.html with lib114.js, late114.js, data114.json and a POST echo; `make qemu-lot114`; CI job lot114-js-page | scripts/lot67_web_server.py, tests/scripts/test_qemu_lot114.py, Makefile, .github/workflows/ci.yml | CI |
 
 ## Not covered (honest)
@@ -54,10 +55,15 @@ A row is listed only when its code, tests and docs are in the branch.
   height are 0x0, nothing scrolls (scrollTop 0). The values are stable
   and documented in wf_jsdom.c so scripts that only compare or test for
   non-zero sizes work.
-- Events after load come from "web-js" lines and from GUI clicks on the
-  marked links; keys typed into a reader form field change that field
-  only (the page scripts do not see them; "web-js key" and "web-js input"
-  do reach them). The default action of a click on a real link (follow
+- Events after load come from "web-js" lines, from GUI clicks on the
+  marked links and from the reader's controls (row M). A reader field
+  sends input / change / focus / blur / submit, not keydown / keyup for
+  each key (the page view keys that no control takes do send them). A
+  field is found by its name (and rank among that name) or by its rank
+  among the controls: a page whose scripts insert unnamed controls before
+  it can shift the rank. A value a script writes into another control
+  than the one the user changed shows only while the user has not edited
+  that control (the reader's state of an edited control wins). The default action of a click on a real link (follow
   the href) is the reader's, not the event's: links with an href other
   than "#" or javascript: are not marked and are followed without running
   their click listeners. A form submit after a click is dispatched to the
@@ -100,13 +106,13 @@ See the Lot 114 section of docs/ETAT_REEL.md.
 
 ## Not done (first gaps for Lot 115)
 
-1. Keys typed into a reader form field and its value should reach the
-   page scripts too (input and change on the matching element), so a page
-   that filters a list as the user types works from the GUI without
-   "web-js input". This is the first gap.
+1. Layout values from the renderer (webeng.c we_geom, the same boxes the
+   GUI paints) instead of the block model, so offsetWidth and
+   getBoundingClientRect follow the page's CSS. This is the first gap.
 2. web-js on by default after a compatibility pass over the Lot 67 to 113
    pages and the script wall verdicts (Lot 87).
-3. Layout values from the renderer (webeng.c) instead of the block model.
-4. Symbol and the iterator protocol, async generators and for await.
-5. A collector or arena compaction for the live realm and the REPL.
-6. Asynchronous network inside the pass (overlap fetches) and CORS.
+3. Symbol and the iterator protocol, async generators and for await.
+4. A collector or arena compaction for the live realm and the REPL.
+5. Asynchronous network inside the pass (overlap fetches) and CORS.
+6. keydown / keyup from reader fields, and script values of controls the
+   user edited.

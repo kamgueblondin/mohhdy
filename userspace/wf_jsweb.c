@@ -143,14 +143,21 @@ static void stats_line(char *out, int out_max) {
         ws_cat_i(out, out_max, g_last.failed);
         ws_cat(out, out_max, " external ");
         ws_cat_i(out, out_max, g_last.external);
+        ws_cat(out, out_max, " other ");
+        ws_cat_i(out, out_max, g_last.other_type);
+        ws_cat(out, out_max, " writes ");
+        ws_cat_i(out, out_max, g_last.writes);
+        ws_cat(out, out_max, " timers ");
+        ws_cat_i(out, out_max, g_last.timers);
+        ws_cat(out, out_max, " events ");
+        ws_cat_i(out, out_max, g_last.events);
+        /* Lot 114: after the Lot 113 fields, which keep their order */
         ws_cat(out, out_max, " ext_ran ");
         ws_cat_i(out, out_max, g_last.ext_ran);
         ws_cat(out, out_max, " ext_failed ");
         ws_cat_i(out, out_max, g_last.ext_failed);
         ws_cat(out, out_max, " ext_skipped ");
         ws_cat_i(out, out_max, g_last.ext_skipped);
-        ws_cat(out, out_max, " other ");
-        ws_cat_i(out, out_max, g_last.other_type);
         ws_cat(out, out_max, " dynamic ");
         ws_cat_i(out, out_max, g_last.dynamic);
         ws_cat(out, out_max, " microtasks ");
@@ -165,16 +172,12 @@ static void stats_line(char *out, int out_max) {
         ws_cat_i(out, out_max, g_last.layout_reads);
         ws_cat(out, out_max, " live ");
         ws_cat_i(out, out_max, g_last.live_events);
+        ws_cat(out, out_max, " fields ");
+        ws_cat_i(out, out_max, g_last.fields);
         ws_cat(out, out_max, " marks ");
         ws_cat_i(out, out_max, g_last.marks);
         ws_cat(out, out_max, " alive ");
         ws_cat_i(out, out_max, wf_jspage_alive());
-        ws_cat(out, out_max, " writes ");
-        ws_cat_i(out, out_max, g_last.writes);
-        ws_cat(out, out_max, " timers ");
-        ws_cat_i(out, out_max, g_last.timers);
-        ws_cat(out, out_max, " events ");
-        ws_cat_i(out, out_max, g_last.events);
         ws_cat(out, out_max, " nodes ");
         ws_cat_i(out, out_max, g_last.nodes);
         ws_cat(out, out_max, " truncated ");
@@ -226,7 +229,7 @@ int wf_jsweb_command(const char *line, char *out, int out_max) {
         ws_cat(out, out_max, "osui web-js event error=no_page (open a page with web-js on)\n");
         return 1;
     }
-    ws_cat(out, out_max, "osui web-js usage: web-js on|off|status|log|reset|click|key|input|focus|blur|submit|event|clicks\n");
+    ws_cat(out, out_max, "osui web-js usage: web-js on|off|status|log|reset|click|key|input|focus|blur|submit|event|clicks|field|rfield\n");
     return 1;
 }
 

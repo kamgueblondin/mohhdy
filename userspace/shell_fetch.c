@@ -936,7 +936,7 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
 }
 
 /* Lot 114 (US-031): events after load, one path for the console words
- * (web-js click|key|input|focus|blur|submit|event|clicks) and the GUI
+ * (web-js click|key|input|focus|blur|submit|event|clicks|field|rfield) and the GUI
  * (a click on a "?__wfjs=N" link, keys the page view does not use, as
  * "web-js gkey KEY"). The event runs in the live realm of the page, the
  * page is written again and presented without a new script pass (the
@@ -952,10 +952,20 @@ static const char *js_word(const char *s, char *w, int cap) {
     return s;
 }
 
+/* a word followed by one space at most: the rest is a value kept as typed */
+static const char *js_last_word(const char *s, char *w, int cap) {
+    int n = 0;
+    while (*s == ' ') s++;
+    while (*s && *s != ' ' && n < cap - 1) w[n++] = *s++;
+    w[n] = 0;
+    if (*s == ' ') s++;
+    return s;
+}
+
 int shell_page_js(const char *line, char *src, int src_max, char *out, int out_max) {
     static char word[24], target[256], type[40], fu[600], st[640], cur_url[600];
     const char *a = line, *arg = 0;
-    int r, n = 0, cur, log0 = 0, gui_key = 0, i;
+    int r, n = 0, cur, log0 = 0, gui_key = 0, i, field = 0, fl, rfield = 0;
     if (out && out_max > 0) out[0] = 0;
     a = js_word(a, word, (int)sizeof(word));          /* web-js */
     a = js_word(a, word, (int)sizeof(word));
@@ -980,6 +990,60 @@ int shell_page_js(const char *line, char *src, int src_max, char *out, int out_m
         type[0] = 0; scat(type, (int)sizeof(type), "key");
         arg = key;
         target[0] = 0; scat(target, (int)sizeof(target), a);
+    } else if (s_eq(word, "field") || s_eq(word, "rfield")) {
+        /* Lot 114: a reader form field: "field ACTION ORD NTH NAME|- [VALUE]"
+         * (the GUI's engine controls) or "rfield ACTION N [VALUE]" (field N
+         * of the console's Lot 71 forms: its name and rank among the
+         * fields of that name) */
+        static char act[16], num[16], nm[64], rv[WF_FORM_VALUE];
+        int ord = 0, nth = 0;
+        a = js_word(a, act, (int)sizeof(act));
+        if (s_eq(word, "field")) a = js_word(a, num, (int)sizeof(num));
+        else a = js_last_word(a, num, (int)sizeof(num));
+        if (s_eq(word, "rfield") && s_eq(num, "f")) {      /* the focused field */
+            if (!g_page_ok || g_forms.focus < 0) return -1;
+            num[0] = 0; scat_int(num, (int)sizeof(num), g_forms.focus);
+        }
+        for (i = 0; num[i] >= '0' && num[i] <= '9' && ord < 100000; i++) ord = ord * 10 + (num[i] - '0');
+        if (!act[0] || !num[0] || num[i]) return -1;
+        nm[0] = 0;
+        if (s_eq(word, "field")) {
+            a = js_word(a, num, (int)sizeof(num));
+            for (i = 0; num[i] >= '0' && num[i] <= '9' && nth < 100000; i++) nth = nth * 10 + (num[i] - '0');
+            a = js_last_word(a, nm, (int)sizeof(nm));     /* the value keeps its spaces */
+            if (s_eq(nm, "-")) nm[0] = 0;
+        } else {
+            int q;
+            if (!g_page_ok || ord >= g_forms.nfields) return -1;
+            const wf_field_t *f = &g_forms.field[ord];
+            scat(nm, (int)sizeof(nm), f->name);
+            for (q = 0; q < ord; q++) if (nm[0] && s_eq(g_forms.field[q].name, nm)) nth++;
+            if (s_eq(act, "set")) {
+                /* the field's state now, as the action its kind takes */
+                rv[0] = 0;
+                act[0] = 0;
+                if (f->type == WF_FIELD_CHECKBOX || f->type == WF_FIELD_RADIO) {
+                    scat(act, (int)sizeof(act), "check");
+                    scat(rv, (int)sizeof(rv), f->checked ? "1" : "0");
+                } else if (f->type == WF_FIELD_SELECT) {
+                    const char *ov = wf_form_option_value(&g_forms, ord, f->sel);
+                    scat(act, (int)sizeof(act), "change");
+                    scat(rv, (int)sizeof(rv), ov ? ov : "");
+                } else if (f->type == WF_FIELD_TEXT || f->type == WF_FIELD_PASSWORD || f->type == WF_FIELD_TEXTAREA) {
+                    scat(act, (int)sizeof(act), "input");
+                    scat(rv, (int)sizeof(rv), f->value);
+                } else return -1;
+                a = rv;
+            }
+            rfield = ord + 1;
+        }
+        type[0] = 0; scat(type, (int)sizeof(type), "field-"); scat(type, (int)sizeof(type), act);
+        target[0] = 0; scat(target, (int)sizeof(target), "=");
+        scat_int(target, (int)sizeof(target), ord); scat(target, (int)sizeof(target), ",");
+        scat_int(target, (int)sizeof(target), nth); scat(target, (int)sizeof(target), ",");
+        scat(target, (int)sizeof(target), nm);
+        arg = a;
+        field = 1;
     } else if (s_eq(word, "event")) {
         a = js_word(a, type, (int)sizeof(type));
         target[0] = 0; scat(target, (int)sizeof(target), a);
@@ -998,11 +1062,13 @@ int shell_page_js(const char *line, char *src, int src_max, char *out, int out_m
         }
     }
     if (!g_page_ok || !wf_jspage_alive()) {
+        if (field) return -1;      /* the reader goes on alone */
         if (!gui_key) scat(out, out_max, "osui web-js event error=no_live_page (web-js on, then open a page whose scripts ran)\n");
         return -1;
     }
     (void)wf_jspage_log(&log0);
     r = wf_jsweb_event(type, target, arg, (char *)g_body, (int)sizeof(g_body));
+    if (r < 0 && field) return -1;     /* not a field of the scripts' page */
     if (r < 0) {
         scat(out, out_max, r == -2 ? "osui web-js event error=no_target " : r == -3 ? "osui web-js event error=arena_full " :
                            "osui web-js event error=no_live_page ");
@@ -1014,11 +1080,43 @@ int shell_page_js(const char *line, char *src, int src_max, char *out, int out_m
     }
     cur = g_cur;
     cur_url[0] = 0; scat(cur_url, (int)sizeof(cur_url), g_res.url);
-    g_res.body_len = r;
-    g_js_replay = 1;
-    n = page_present(0, g_css_on, src, src_max, fu, (int)sizeof(fu), st, (int)sizeof(st));
-    g_js_replay = 0;
-    if (n > 0 && cur > 0 && cur < g_sec.n) n = shell_page_section(cur, src, src_max);
+    fl = wf_jspage_event_flags();
+    g_res.body_len = r;       /* the page as the scripts left it */
+    if (field && !(fl & WF_JSEV_DOM)) {
+        /* the scripts left the DOM alone: the reader keeps its page (and
+         * the state of its controls) */
+        scat(out, out_max, "osui web-js field ");
+        scat(out, out_max, type + 6);
+        scat(out, out_max, " ");
+        scat(out, out_max, target);
+        scat(out, out_max, " ok dom=0");
+        scat(out, out_max, fl & WF_JSEV_PREVENTED ? " prevented=1" : " prevented=0");
+        scat(out, out_max, "\n");
+        n = 0;
+    } else {
+        int keep = g_forms.focus;
+        g_js_replay = 1;
+        n = page_present(0, g_css_on, src, src_max, fu, (int)sizeof(fu), st, (int)sizeof(st));
+        g_js_replay = 0;
+        if (rfield > 0 && keep >= 0 && keep < g_forms.nfields) (void)wf_form_focus(&g_forms, keep);   /* typing goes on */
+        if (n > 0 && cur > 0 && cur < g_sec.n) n = shell_page_section(cur, src, src_max);
+    }
+    if (rfield > 0 && (fl & WF_JSEV_VALUE) && !(fl & WF_JSEV_DOM) && rfield - 1 < g_forms.nfields)
+        (void)wf_form_set(&g_forms, rfield - 1, wf_jspage_field_value());   /* a script's value */
+    if (field && (fl & WF_JSEV_VALUE)) {
+        scat(out, out_max, "osui web-js field-value ");
+        scat(out, out_max, wf_jspage_field_value());
+        scat(out, out_max, "\n");
+    }
+    if (field && (fl & WF_JSEV_DOM)) {
+        scat(out, out_max, "osui web-js field ");
+        scat(out, out_max, type + 6);
+        scat(out, out_max, " ");
+        scat(out, out_max, target);
+        scat(out, out_max, n > 0 ? " ok dom=1" : " error=present dom=1");
+        scat(out, out_max, fl & WF_JSEV_PREVENTED ? " prevented=1" : " prevented=0");
+        scat(out, out_max, "\n");
+    } else if (!field) {
     scat(out, out_max, "osui web-js event ");
     scat(out, out_max, type);
     scat(out, out_max, " ");
@@ -1026,6 +1124,7 @@ int shell_page_js(const char *line, char *src, int src_max, char *out, int out_m
     scat(out, out_max, n > 0 ? " ok" : " error=present");
     wf_jsweb_event_note(out, out_max);
     scat(out, out_max, "\n");
+    }
     {   /* the console lines the event added */
         int ln;
         const char *lg = wf_jspage_log(&ln);

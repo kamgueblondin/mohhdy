@@ -61,6 +61,7 @@ typedef struct {
     int handlers;       /* on* attributes compiled into handlers */
     int layout_reads;   /* layout values read (offsetWidth, getBoundingClientRect...) */
     int live_events;    /* events dispatched after the pass (wf_jspage_event) */
+    int fields;         /* reader field events among them (field-*) */
     int marks;          /* clickable elements marked in the output */
     int other_type;     /* type= not JavaScript (JSON, templates, modules) */
     int writes;         /* document.write calls */
@@ -116,6 +117,21 @@ void wf_jspage_close(void);
  * -1 when no realm is alive, -2 when the target is not found, -3 when
  * the run could not start (arena full). st gets the stats of the pass
  * updated (pass the same struct as the run, or 0). */
+/* Lot 114: reader form fields. A "field-ACTION" type (input, check, change,
+ * focus, blur, submit) with the target "=ORD,NTH,NAME" (control NTH of
+ * those named NAME, or control ORD in document order when NAME is empty,
+ * as webeng_finput.inc counts them) tells the scripts what the reader's
+ * control did. After wf_jspage_event, wf_jspage_event_flags says what the
+ * reader must do: WF_JSEV_DOM write the page again, WF_JSEV_PREVENTED do
+ * not send the form (or keep the old check), WF_JSEV_VALUE take the value
+ * a script gave the field (wf_jspage_field_value, newlines as spaces,
+ * "1"/"0" for a check, at most WF_DOM_FIELD_VAL - 1 bytes). */
+#define WF_DOM_FIELD_VAL 256
+#define WF_JSEV_DOM 1
+#define WF_JSEV_PREVENTED 2
+#define WF_JSEV_VALUE 4
+int wf_jspage_event_flags(void);
+const char *wf_jspage_field_value(void);
 int wf_jspage_event(const char *type, const char *target, const char *arg, char *out, int out_max,
                     wf_jspage_stats_t *st);
 /* one line per clickable element of the live page: "@N tag #id text" */

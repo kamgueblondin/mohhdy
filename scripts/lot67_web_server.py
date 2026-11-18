@@ -981,6 +981,7 @@ LOT114_FILES = {
         "<h1 id=\"h\">static114</h1><p id=\"c\">count114 0</p><button id=\"inc\">plus114</button>"
         "<ul id=\"l\"></ul><p id=\"x\">xhr114 wait</p><p id=\"k\">keys114 none</p><p id=\"a\">async114 wait</p>"
         "<input id=\"q\" value=\"\">"
+        "<form id=\"f114\" action=\"never114\"><input name=\"who\" id=\"who\"><button>send114</button></form>"
         "<script src=\"missing114.js\" onerror=\"document.getElementById('h').setAttribute('data-e', '1')\"></script>"
         "<script>\n"
         "document.getElementById('h').textContent = 'ext114 ' + Lib114.twice(21);\n"
@@ -998,6 +999,10 @@ LOT114_FILES = {
         "document.getElementById('q').addEventListener('input', function (e) {\n"
         "  document.getElementById('k').textContent = 'input114 ' + e.target.value; });\n"
         "fetch('http://example.com/').catch(e => console.log('cors114', e.message));\n"
+        "var who = document.getElementById('who');\n"
+        "who.addEventListener('input', function () { document.getElementById('k').textContent = 'who114 ' + who.value; });\n"
+        "document.getElementById('f114').addEventListener('submit', function (e) {\n"
+        "  e.preventDefault(); document.getElementById('k').textContent = 'sent114 ' + who.value; });\n"
         "</script><p>fin114</p></body></html>"),
     "/lot114/lib114.js": ("text/javascript", "var Lib114 = { twice: function (x) { return 2 * x; } };\n"),
     "/lot114/late114.js": ("text/javascript",

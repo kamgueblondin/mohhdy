@@ -18,12 +18,18 @@ fetch is refused (log line "cors114 Failed to fetch"). After load:
 "web-js click #inc" runs the click listener ("count114 1", twice gives
 2), "web-js key z" reaches the document keydown listener ("keys114 z"),
 "web-js input #q hi" the input listener ("input114 hi"); "web-js clicks"
-lists the button. A new page ends the live realm (no_live_page). No
+lists the button. The reader's own controls reach the scripts too: a
+click on the "who" field of the rendered page (web-fclick), typing
+(web-ftype abc) and Enter go through web-js field (focus, input
+"who114 abc", a submit the page prevents: "sent114 abc", nothing sent),
+and so do the console forms (web-input, web-submit). A new page ends the
+live realm (no_live_page). No
 guest clock is involved (no -rtc option).
 """
 from __future__ import print_function
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -61,7 +67,7 @@ def step_page(mon, proc, u):
     need(read, SCRIPTED, "web-read with web-js on")
     refuse(read, ["static114", "xhr114 wait", "async114 wait"] + SCRIPT_TEXT, "web-read with web-js on")
     out = lw.run(mon, proc, "web-js status", "osui web-js on", 20)
-    need(out, [" external 3 ext_ran 2 ext_failed 1 ext_skipped 0 ", " net 3 net_failed 1 ", " alive 1"],
+    need(out, [" external 3 other 0 ", " ext_ran 2 ext_failed 1 ext_skipped 0 ", " net 3 net_failed 1 ", " alive 1"],
          "web-js status")
     out = lw.run(mon, proc, "web-js log", "osui web-js log", 20)
     need(out, ["osui web-js log: warn: script not loaded (HTTP status not 200): %s/lot114/missing114.js" % u,
@@ -90,6 +96,52 @@ def step_events(mon, proc):
     say("after load: click, key and input listeners ran through web-js, the page was shown again")
 
 
+def controls(out):
+    """web-fstate lines: id -> (k, x, y, w, h, value) (as test_qemu_lot74.py)"""
+    found = {}
+    for m in re.finditer(r"osui web form2 ctl (\d+) (\w+) id=(\S+) box (-?\d+) (-?\d+) (\d+) (\d+) value=([^\r\n]*)", out):
+        found[m.group(3)] = (int(m.group(1)), int(m.group(4)), int(m.group(5)), int(m.group(6)), int(m.group(7)),
+                             m.group(8).strip())
+    return found
+
+
+def step_fields(mon, proc):
+    # the controls of the rendered page (Lot 74 engine forms, as the desktop)
+    out = lw.run(mon, proc, "web-fstate", "osui web form2 state", 30)
+    ctl = controls(out[out.rfind("osui web form2 state"):])
+    if "who" not in ctl:
+        raise RuntimeError("web-fstate: no control who in %r" % ctl)
+    k, x, y, w, h = ctl["who"][:5]
+    out = lw.run(mon, proc, "web-fclick %d %d" % (x + w // 2, y + h // 2), "osui web form2", 30)
+    need(out, ["osui web-js field focus =%d,0,who ok dom=0" % k], "a click on the reader field")
+    out = lw.run(mon, proc, "web-ftype abc", "osui web form2", 30)
+    need(out, ["osui web-js field input =%d,0,who ok dom=1" % k, "typed 3"], "typing in the reader field")
+    read = lw.run(mon, proc, "web-read", "fin114", 30)
+    need(read, ["who114 abc"], "web-read after typing")
+    out = lw.run(mon, proc, "web-fkey enter", "osui web form", 30)
+    # implicit submission: the first submit button is the submitter (control k + 1, no name)
+    need(out, ["osui web-js field submit =%d,0, ok dom=1 prevented=1" % (k + 1),
+               "osui web form submit prevented by the page scripts"], "Enter in the reader field")
+    read = lw.run(mon, proc, "web-read", "fin114", 30)
+    need(read, ["sent114 abc"], "web-read after the prevented submit")
+    # the console forms (Lot 71): web-input and web-submit
+    out = lw.run(mon, proc, "web-forms", "osui web forms", 30)
+    m = re.search(r"field (\d+) form \d+ text name=who", out)
+    if not m:
+        raise RuntimeError("web-forms: no field who: %r" % out[-600:])
+    n = int(m.group(1))
+    out = lw.run(mon, proc, "web-input %d zed" % n, "osui web input", 30)
+    need(out, ["osui web-js field input =%d,0,who ok dom=1" % n, "osui web input ok"], "web-input")
+    read = lw.run(mon, proc, "web-read", "fin114", 30)
+    need(read, ["who114 zed"], "web-read after web-input")
+    out = lw.run(mon, proc, "web-submit %d" % n, "osui web form submit", 30)
+    need(out, ["osui web form submit prevented by the page scripts"], "web-submit")
+    read = lw.run(mon, proc, "web-read", "fin114", 30)
+    need(read, ["sent114 zed"], "web-read after web-submit")
+    say("reader fields: a click, typing and Enter in the rendered page's control, web-input and web-submit "
+        "reached the page scripts; the prevented submits were not sent")
+
+
 def step_end(mon, proc, u):
     lw.run(mon, proc, "web-open %s/lot113/js.html" % u, "osui web page sections", fail=["error="])
     out = lw.run(mon, proc, "web-js click #inc", "osui web-js event", 30)
@@ -111,6 +163,7 @@ def boot(hp):
         u = "http://10.0.2.2:%d" % hp
         step_page(mon, proc, u)
         step_events(mon, proc)
+        step_fields(mon, proc)
         step_end(mon, proc, u)
     finally:
         l88.stop(proc, mon, qmp)
