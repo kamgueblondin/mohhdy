@@ -30,6 +30,14 @@ SKIPPED_TESTS=0
 mkdir -p "$LOG_DIR"
 mkdir -p "$BUILD_DIR"
 
+# Parallel workers. Default: one per CPU. TEST_JOBS=1 runs one test at a time.
+TEST_JOBS="${TEST_JOBS:-$(nproc 2>/dev/null || echo 1)}"
+case "$TEST_JOBS" in ''|*[!0-9]*) TEST_JOBS=1 ;; esac
+[ "$TEST_JOBS" -ge 1 ] || TEST_JOBS=1
+PAR_DIR="$BUILD_DIR/.test_parts"
+rm -rf "$PAR_DIR"
+mkdir -p "$PAR_DIR"
+
 echo -e "${BLUE}=================================${NC}"
 echo -e "${BLUE} MOHHDY Test Suite Runner v1.0   ${NC}"
 echo -e "${BLUE}=================================${NC}"
@@ -73,15 +81,17 @@ add_unity_counts() {
     fi
 }
 
-# Fonction pour compiler et exécuter un test
-run_test() {
+# Compile and run one test. Runs in a worker subshell: RESULTS_FILE is the
+# test's own log part, the test output goes to "$RESULTS_FILE.out" and the
+# return code is 0 pass, 1 fail, 2 compilation error. Nothing is printed and
+# no counter is touched here; collect_test does both, in discovery order.
+run_test_body() {
     local test_file=$1
     local test_name=$2
     local test_type=$3
-    
+
     echo "DEBUG: run_test $test_name" >> "$RESULTS_FILE"
-    echo -n "Running $test_name... "
-    
+
     # Compiler le test
     local test_binary="$BUILD_DIR/$(basename $test_file .c)"
     
@@ -537,27 +547,66 @@ run_test() {
         # TEST_RUNNER lets a non-x86 host run the i386 ELF (for example
         # TEST_RUNNER="qemu-i386 -L /usr/i686-linux-gnu" on arm64). Empty on x86.
         if test_output=$(${TEST_RUNNER:-} "$test_binary" 2>&1); then
-            echo -e "${GREEN}PASS${NC}"
             echo "$test_output" >> "$RESULTS_FILE"
-            add_unity_counts "$test_output" pass
+            printf '%s\n' "$test_output" > "$RESULTS_FILE.out"
             return 0
         else
-            echo -e "${RED}FAIL${NC}"
             echo "Test: $test_name" >> "$RESULTS_FILE"
             echo "$test_output" >> "$RESULTS_FILE"
             echo "---" >> "$RESULTS_FILE"
-            add_unity_counts "$test_output" fail
+            printf '%s\n' "$test_output" > "$RESULTS_FILE.out"
             return 1
         fi
     else
-        echo -e "${YELLOW}COMPILATION_ERROR${NC}"
         echo "Compilation failed for $test_name" >> "$RESULTS_FILE"
-        # A test that does not build is a failure, not a skip: otherwise a
-        # broken test silently drops out of make test-all.
-        TOTAL_TESTS=$((TOTAL_TESTS + 1))
-        FAILED_TESTS=$((FAILED_TESTS + 1))
         return 2
     fi
+}
+
+# Worker: one test in a subshell, its log part and return code in $PAR_DIR.
+start_test() {
+    local test_file=$1 test_name=$2 test_type=$3 rc=0
+    local part="$PAR_DIR/$test_name"
+    : > "$part.log"
+    ( RESULTS_FILE="$part.log"; set +e; run_test_body "$test_file" "$test_name" "$test_type"; echo $? > "$part.rc" ) || true
+}
+
+# Collector: prints the PASS/FAIL line, appends the log part to the results
+# file and updates the counters, in discovery order (same output as the old
+# sequential runner). Returns the test's code.
+collect_test() {
+    local test_name=$1
+    local part="$PAR_DIR/$test_name"
+    local rc
+    rc=$(cat "$part.rc" 2>/dev/null || echo 2)
+    echo -n "Running $test_name... "
+    cat "$part.log" >> "$RESULTS_FILE"
+    case "$rc" in
+        0)
+            echo -e "${GREEN}PASS${NC}"
+            add_unity_counts "$(cat "$part.log.out" 2>/dev/null)" pass
+            ;;
+        1)
+            echo -e "${RED}FAIL${NC}"
+            add_unity_counts "$(cat "$part.log.out" 2>/dev/null)" fail
+            ;;
+        *)
+            echo -e "${YELLOW}COMPILATION_ERROR${NC}"
+            # A test that does not build is a failure, not a skip: otherwise a
+            # broken test silently drops out of make test-all.
+            TOTAL_TESTS=$((TOTAL_TESTS + 1))
+            FAILED_TESTS=$((FAILED_TESTS + 1))
+            rc=2
+            ;;
+    esac
+    rm -f "$part.log" "$part.log.out" "$part.rc"
+    return "$rc"
+}
+
+# Sequential form kept for callers that run one test.
+run_test() {
+    start_test "$@"
+    collect_test "$2"
 }
 
 # Fonction pour exécuter une catégorie de tests
@@ -571,17 +620,35 @@ run_test_category() {
     local category_failed=0
     local category_total=0
     
-    # Trouver tous les fichiers de test dans la catégorie
+    # Every test of the category is compiled and run by up to TEST_JOBS
+    # workers (each test has its own binary, log part and .gcda names), then
+    # collected in discovery order. TEST_JOBS=1 is the old sequential run.
+    local names=()
+    local running=0
     for test_file in "$TEST_DIR/$category"/*.c; do
         if [ -f "$test_file" ]; then
             local test_name=$(basename "$test_file" .c)
-            category_total=$((category_total + 1))
-            
-            if run_test "$test_file" "$test_name" "$category"; then
-                category_passed=$((category_passed + 1))
+            names+=("$test_name")
+            if [ "$TEST_JOBS" -le 1 ]; then
+                start_test "$test_file" "$test_name" "$category"
             else
-                category_failed=$((category_failed + 1))
+                start_test "$test_file" "$test_name" "$category" &
+                running=$((running + 1))
+                if [ "$running" -ge "$TEST_JOBS" ]; then
+                    wait -n || true
+                    running=$((running - 1))
+                fi
             fi
+        fi
+    done
+    wait || true
+    local test_name
+    for test_name in "${names[@]}"; do
+        category_total=$((category_total + 1))
+        if collect_test "$test_name"; then
+            category_passed=$((category_passed + 1))
+        else
+            category_failed=$((category_failed + 1))
         fi
     done
     

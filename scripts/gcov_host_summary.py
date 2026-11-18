@@ -8,6 +8,7 @@ not in the denominator. This is not guest-image coverage.
 """
 from __future__ import print_function
 
+import concurrent.futures
 import os
 import re
 import subprocess
@@ -28,6 +29,52 @@ def gcda_files():
     return found
 
 
+def read_one(path):
+    """gcov one .gcda in a private directory. Returns a list of
+    (source, instrumented lines, executed lines), False when gcov could not
+    read it, None when gcov did not start."""
+    directory = os.path.dirname(path)
+    name = os.path.basename(path)
+    out = []
+    with tempfile.TemporaryDirectory(prefix="gcov-") as tmp:
+        try:
+            proc = subprocess.run(
+                ["gcov", "-o", directory, name],
+                cwd=tmp, capture_output=True, text=True, check=False)
+        except OSError:
+            return None
+        if proc.returncode != 0 and "Lines executed" not in proc.stdout:
+            return False
+        produced_any = False
+        for produced in sorted(os.listdir(tmp)):
+            if not produced.endswith(".gcov"):
+                continue
+            produced_any = True
+            src = None
+            lines = set()
+            hits = set()
+            with open(os.path.join(tmp, produced), "r", errors="replace") as handle:
+                for raw in handle:
+                    if raw.startswith("        -:    0:Source:"):
+                        src = raw.split("Source:", 1)[1].strip()
+                        continue
+                    match = LINE_RE.match(raw)
+                    if not match or src is None:
+                        continue
+                    kind, lineno_s = match.group(1), match.group(2)
+                    if kind == "-":
+                        continue
+                    lineno = int(lineno_s)
+                    lines.add(lineno)
+                    if kind != "#####":
+                        hits.add(lineno)
+            if src is not None:
+                out.append((src, lines, hits))
+        if not produced_any:
+            return False
+    return out
+
+
 def main():
     notes = gcda_files()
     if not notes:
@@ -37,47 +84,22 @@ def main():
     instrumented = {}
     covered = {}
     failed = 0
-    for path in notes:
-        directory = os.path.dirname(path)
-        name = os.path.basename(path)
-        try:
-            proc = subprocess.run(
-                ["gcov", "-n", "-o", directory, name],
-                cwd=ROOT, capture_output=True, text=True, check=False)
-        except OSError as error:
-            print("Coverage: gcov failed to start: %s" % error)
+    jobs = int(os.environ.get("GCOV_JOBS", "0") or "0") or (os.cpu_count() or 1)
+    # One gcov process per .gcda, run by a pool (gcov is the slow part).
+    # The results are merged here in a fixed order, so the percentage does
+    # not depend on the number of workers.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        results = list(pool.map(read_one, notes))
+    for result in results:
+        if result is None:
+            print("Coverage: gcov failed to start.")
             return 1
-        if proc.returncode != 0 and "Lines executed" not in proc.stdout:
+        if result is False:
             failed += 1
             continue
-        # gcov -n does not write a per-line file. Ask for the annotated
-        # form in a private directory so lines can be merged across copies.
-        with tempfile.TemporaryDirectory(prefix="gcov-") as tmp:
-            proc = subprocess.run(
-                ["gcov", "-o", directory, name],
-                cwd=tmp, capture_output=True, text=True, check=False)
-            if proc.returncode != 0 and not os.listdir(tmp):
-                failed += 1
-                continue
-            for produced in os.listdir(tmp):
-                if not produced.endswith(".gcov"):
-                    continue
-                src = None
-                with open(os.path.join(tmp, produced), "r", errors="replace") as handle:
-                    for raw in handle:
-                        if raw.startswith("        -:    0:Source:"):
-                            src = raw.split("Source:", 1)[1].strip()
-                            continue
-                        match = LINE_RE.match(raw)
-                        if not match or src is None:
-                            continue
-                        kind, lineno_s = match.group(1), match.group(2)
-                        if kind == "-":
-                            continue
-                        lineno = int(lineno_s)
-                        instrumented.setdefault(src, set()).add(lineno)
-                        if kind != "#####":
-                            covered.setdefault(src, set()).add(lineno)
+        for src, lines, hits in result:
+            instrumented.setdefault(src, set()).update(lines)
+            covered.setdefault(src, set()).update(hits)
     if not instrumented:
         print("Coverage: not measured. gcov produced no executable lines "
               "(%d gcda, %d unreadable)." % (len(notes), failed))
