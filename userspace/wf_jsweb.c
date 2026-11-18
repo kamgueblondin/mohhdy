@@ -186,6 +186,8 @@ static void stats_line(char *out, int out_max) {
         ws_cat_u(out, out_max, g_last.steps);
         ws_cat(out, out_max, " mem ");
         ws_cat_u(out, out_max, g_last.mem);
+        ws_cat(out, out_max, " layout_engine ");     /* Lot 115: boxes from the renderer */
+        ws_cat_i(out, out_max, g_last.layout_engine);
         if (g_last.first_err[0]) {
             ws_cat(out, out_max, " error=");
             ws_cat(out, out_max, g_last.first_err);

@@ -1774,6 +1774,11 @@ qemu-lot113: $(OS_IMAGE) pack-initrd disk
 qemu-lot114: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot114.py
 
+# Lot 115 (US-031): layout values of the page scripts from the renderer
+.PHONY: qemu-lot115
+qemu-lot115: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot115.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

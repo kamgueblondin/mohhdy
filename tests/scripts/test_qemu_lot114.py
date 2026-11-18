@@ -12,8 +12,10 @@ inline script used the external one) and "defer114 interactive".
 missing114.js is a 404: counted in ext_failed, the page goes on.
 fetch('data114.json') builds three list items ("item114 1..3"), an
 XMLHttpRequest POST to echo114 answers "xhr114 200 echo114 text/plain
-ping", an async function reads the approximate layout (offsetWidth of a
-7 character button: 7 x 8 + 16 = 72, "async114 72"), and a cross-origin
+ping", an async function reads the layout (offsetWidth of a 7 character
+button; Lot 114 used the block model, 7 x 8 + 16 = 72; since Lot 115 the
+value is the box the GUI renderer lays out for the button, 70,
+"async114 70"), and a cross-origin
 fetch is refused (log line "cors114 Failed to fetch"); a URL, localStorage
 and a URLSearchParams POST body give "api114 ?x=1 true q=a+b&n=1" (true: the echo saw an urlencoded
 Content-Type); history.replaceState and structuredClone give
@@ -55,7 +57,7 @@ need, refuse = l88.need, l88.refuse
 lw.ALIASES.update({"#": "shift-3", "@": "shift-2"})
 
 SCRIPTED = ["ext114 42", "count114 0", "item114 1", "item114 2", "item114 3", "xhr114 200 echo114 text/plain ping",
-            "async114 72", "defer114 interactive", "fin114",
+            "async114 70", "defer114 interactive", "fin114",
             "api114 ?x=1 true q=a+b&n=1", "hist114 1 ?h=1 1"]
 SCRIPT_TEXT = ["Lib114", "addEventListener", "XMLHttpRequest"]
 

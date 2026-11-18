@@ -480,6 +480,8 @@ typedef struct {
     int skip_scripts;
     int marks;          /* Lot 114: clickable elements inside "?__wfjs=N" links */
     int in_link;        /* inside a link: no nested mark */
+    int budget;         /* Lot 115: element and text nodes still written (-1: no bound) */
+    int quiet;          /* Lot 115: a full buffer is not a DOM bound (layout copy) */
 } dout_t;
 
 static int g_alive_marking;
@@ -492,7 +494,7 @@ static void dw(dout_t *o, const char *s, int n) {
     if (o->sb) { js_sb_put(o->vm, o->sb, s, n); return; }
     while (n-- > 0) {
         if (o->n < o->max - 1) o->out[o->n] = *s;
-        else g_trunc = 1;
+        else if (!o->quiet) g_trunc = 1;
         o->n++;
         s++;
     }
@@ -503,6 +505,10 @@ static void ser(dout_t *o, int k, int depth) {
     dnode_t *d = &g_n[k];
     int c, a, mark, is_a;
     if (depth > PSTACK) return;
+    if (o->budget >= 0 && (d->type == DN_TEXT || d->type == DN_ELEM)) {
+        if (o->budget == 0) return;         /* Lot 115: the layout copy stops here */
+        o->budget--;
+    }
     switch (d->type) {
     case DN_TEXT: dw(o, g_b + d->text, (int)d->text_len); return;
     case DN_COMMENT: dws(o, "<!--"); dw(o, g_b + d->text, (int)d->text_len); dws(o, "-->"); return;
@@ -572,6 +578,8 @@ int wf_jsdom_roundtrip(const char *html, int n, char *out, int out_max) {
     o.skip_scripts = 0;
     o.marks = 0;
     o.in_link = 0;
+    o.budget = -1;
+    o.quiet = 0;
     ser(&o, doc, 0);
     if (o.n >= out_max) o.n = out_max - 1;
     out[o.n] = 0;
@@ -961,7 +969,7 @@ static uint32_t serialize_js(js_vm_t *vm, int k, int outer) {
     dout_t o;
     int c;
     js_sb_init(vm, &b);
-    o.out = 0; o.n = 0; o.max = 0; o.vm = vm; o.sb = &b; o.skip_scripts = 0; o.marks = 0; o.in_link = 0;
+    o.out = 0; o.n = 0; o.max = 0; o.vm = vm; o.sb = &b; o.skip_scripts = 0; o.marks = 0; o.in_link = 0; o.budget = -1; o.quiet = 0;
     if (outer) ser(&o, k, 0);
     else for (c = g_n[k].first; c >= 0; c = g_n[c].next) ser(&o, c, 1);
     return js_sb_finish(vm, &b);
@@ -1273,7 +1281,7 @@ static int class_count(js_vm_t *vm, int k) {
  * document are computed again after a DOM change, when read. ---- */
 
 enum { LD_NONE, LD_BLOCK, LD_INLINE, LD_ATOM };
-typedef struct { int32_t x, y, w, h; } dbox_t;
+typedef struct { int32_t x, y, w, h, cw, ch; } dbox_t;   /* Lot 115: cw, ch the padding box */
 static dbox_t g_box[WF_DOM_NODES];
 static uint32_t g_lay_mut;
 static int g_lay_valid, g_lay_doc_h;
@@ -1511,6 +1519,74 @@ static void lay_node(int k, lflow_t *f, int depth) {
     }
 }
 
+/* ---- Lot 115: layout values from the renderer (wf_jspage_set_layout).
+ * The document without scripts, cut at WF_JSLAY_NODES nodes, goes to the
+ * hook; its boxes replace the block model's for the elements they match
+ * (same tag, in document order, a short look-ahead on both sides for
+ * elements one side drops: head, title, implied ones). ---- */
+
+static wf_jslayout_fn g_lay_fn;
+static void *g_lay_ctx;
+static char g_lay_html[32 * 1024];
+static wf_jslay_box_t g_lbox[WF_JSLAY_NODES + 16];
+static uint8_t g_lay_eng[WF_DOM_NODES];     /* 1: g_box[k] came from the renderer */
+
+void wf_jspage_set_layout(wf_jslayout_fn fn, void *ctx) {
+    g_lay_fn = fn;
+    g_lay_ctx = ctx;
+}
+
+static int lay_tag_is(int k, const char *tag) {
+    int i, l = (int)g_n[k].name_len;
+    if (l > 11) l = 11;
+    for (i = 0; i < l; i++) if (lower(g_b[g_n[k].name + (uint32_t)i]) != tag[i]) return 0;
+    return tag[l] == 0;
+}
+
+static int lay_skipped(int k) {         /* not written into the layout copy */
+    int p;
+    for (p = k; p >= 0; p = g_n[p].parent)
+        if (g_n[p].type == DN_ELEM && (name_is(p, "script") || name_is(p, "noscript"))) return 1;
+    return 0;
+}
+
+static int lay_engine(void) {
+    dout_t o;
+    int nb, i, k, used = 0;
+    if (!g_lay_fn || g_rt.doc < 0 || g_rt.doc >= g_nn) return 0;
+    o.out = g_lay_html; o.n = 0; o.max = (int)sizeof(g_lay_html); o.vm = 0; o.sb = 0;
+    o.skip_scripts = 1; o.marks = 0; o.in_link = 0; o.budget = WF_JSLAY_NODES; o.quiet = 1;
+    ser(&o, g_rt.doc, 0);
+    if (o.n >= o.max) o.n = o.max - 1;
+    g_lay_html[o.n] = 0;
+    nb = g_lay_fn(g_lay_ctx, g_lay_html, o.n, WF_DOM_VIEW_W, WF_DOM_VIEW_H, g_lbox, WF_JSLAY_NODES + 16);
+    if (nb <= 0) return 0;
+    if (nb > WF_JSLAY_NODES + 16) nb = WF_JSLAY_NODES + 16;
+    k = walk_next(g_rt.doc, g_rt.doc);
+    for (i = 0; i < nb && k >= 0; i++) {
+        int c = k, look, found = -1;
+        for (look = 0; c >= 0 && look < 8; c = walk_next(c, g_rt.doc)) {
+            if (g_n[c].type != DN_ELEM || lay_skipped(c)) continue;
+            if (lay_tag_is(c, g_lbox[i].tag)) { found = c; break; }
+            look++;
+        }
+        if (found < 0) continue;        /* an element only the engine has (implied): skip it */
+        if (g_lbox[i].ok == 2) { k = walk_next(found, g_rt.doc); continue; }   /* the model's box stays */
+        if (g_lbox[i].ok) {
+            dbox_t *b = &g_box[found];
+            b->x = g_lbox[i].x; b->y = g_lbox[i].y; b->w = g_lbox[i].w; b->h = g_lbox[i].h;
+            b->cw = g_lbox[i].cw; b->ch = g_lbox[i].ch;
+        } else {
+            g_box[found].x = g_box[found].y = g_box[found].w = g_box[found].h = 0;
+            g_box[found].cw = g_box[found].ch = 0;
+        }
+        g_lay_eng[found] = 1;
+        used++;
+        k = walk_next(found, g_rt.doc);
+    }
+    return used;
+}
+
 static void layout_ensure(void) {
     lflow_t f;
     int c, i;
@@ -1524,6 +1600,14 @@ static void layout_ensure(void) {
         for (c = g_n[g_rt.doc].first; c >= 0; c = g_n[c].next) lay_node(c, &f, 1);
     if (f.cx > f.left || f.lh) lay_newline(&f);
     g_lay_doc_h = f.cy;
+    for (i = 0; i < g_nn; i++) { g_box[i].cw = g_box[i].w; g_box[i].ch = g_box[i].h; g_lay_eng[i] = 0; }
+    i = lay_engine();
+    if (g_rt.st) g_rt.st->layout_engine = i;
+    if (i > 0) {                        /* the page height from the renderer's boxes */
+        int k;
+        for (k = 0; k < g_nn; k++)
+            if (g_lay_eng[k] && g_box[k].y + g_box[k].h > g_lay_doc_h) g_lay_doc_h = g_box[k].y + g_box[k].h;
+    }
     g_lay_mut = g_mut;
     g_lay_valid = 1;
 }
@@ -1540,10 +1624,10 @@ static int layout_value(int k, int idx) {
     case K_offsetHeight: return b->h;
     case K_offsetTop: return b->y;
     case K_offsetLeft: return b->x;
-    case K_clientWidth: return html ? WF_DOM_VIEW_W : inl ? 0 : b->w;
-    case K_clientHeight: return html ? WF_DOM_VIEW_H : inl ? 0 : b->h;
-    case K_scrollWidth: return html ? WF_DOM_VIEW_W : inl ? 0 : b->w;
-    case K_scrollHeight: return html ? (g_lay_doc_h > WF_DOM_VIEW_H ? g_lay_doc_h : WF_DOM_VIEW_H) : inl ? 0 : b->h;
+    case K_clientWidth: return html ? WF_DOM_VIEW_W : inl ? 0 : b->cw;
+    case K_clientHeight: return html ? WF_DOM_VIEW_H : inl ? 0 : b->ch;
+    case K_scrollWidth: return html ? WF_DOM_VIEW_W : inl ? 0 : b->cw;
+    case K_scrollHeight: return html ? (g_lay_doc_h > WF_DOM_VIEW_H ? g_lay_doc_h : WF_DOM_VIEW_H) : inl ? 0 : b->ch;
     default: return 0;      /* scrollTop, scrollLeft: nothing scrolls in the pass */
     }
 }
@@ -3632,6 +3716,8 @@ static int emit_page(js_vm_t *vm, char *out, int out_max, wf_jspage_stats_t *st)
     o.skip_scripts = 1;
     o.marks = 1;
     o.in_link = 0;
+    o.budget = -1;
+    o.quiet = 0;
     g_marks = 0;
     g_alive_marking = 1;
     ser(&o, g_rt.doc, 0);

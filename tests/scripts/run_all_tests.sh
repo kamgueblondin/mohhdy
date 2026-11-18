@@ -284,6 +284,10 @@ run_test_body() {
             extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsco.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsnet.c $BASE_DIR/userspace/wf_jsapi.c $BASE_DIR/userspace/wf_jshist.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_jsweb.c $BASE_DIR/userspace/umalloc.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
+        test_lot115_layout.c)
+            extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsco.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsnet.c $BASE_DIR/userspace/wf_jsapi.c $BASE_DIR/userspace/wf_jshist.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_jsweb.c $BASE_DIR/userspace/umalloc.c $BASE_DIR/userspace/wf_jslayout.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/imgdec.c"
+            cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include -I$BASE_DIR/kernel"
+            ;;
     esac
     case "$(basename "$test_file")" in
         test_wf_x509.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c" ;;

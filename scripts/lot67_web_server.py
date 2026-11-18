@@ -974,6 +974,22 @@ LOT113_PAGES = {
 # function reading a layout value, a cross-origin fetch the guest refuses,
 # and click, key and input listeners reached after load through
 # "web-js click|key|input" (tests/scripts/test_qemu_lot114.py)
+# Lot 115 (US-031): layout values from the renderer: a box with padding and
+# border, a flex row of two fixed-width items, read by the page script
+# (tests/scripts/test_qemu_lot115.py)
+LOT115_FILES = {
+    "/lot115/layout.html": ("text/html; charset=utf-8",
+        "<!doctype html><html><head><title>Lot 115 layout</title><style>"
+        "#b { width: 200px; height: 50px; padding: 10px; border: 2px solid #c00 }"
+        " .row { display: flex; justify-content: flex-start } .row div { width: 100px; height: 20px }</style></head><body>"
+        "<div id=\"b\">box115</div><div class=\"row\"><div id=\"r1\">r1</div><div id=\"r2\">r2</div></div>"
+        "<p id=\"o\">layout115 wait</p><script>\n"
+        "var b = document.getElementById('b'), r2 = document.getElementById('r2');\n"
+        "document.getElementById('o').textContent = 'layout115 ' + b.offsetWidth + 'x' + b.offsetHeight +\n"
+        "  ' c' + b.clientWidth + ' r2 ' + (r2.offsetLeft - b.offsetLeft) + ' ' + r2.offsetWidth;\n"
+        "</script><p>fin115</p></body></html>"),
+}
+
 LOT114_FILES = {
     "/lot114/app.html": ("text/html; charset=utf-8",
         "<!doctype html><html><head><title>Lot 114 js</title>"
@@ -1269,6 +1285,10 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT113_PAGES:
             self._send(200, LOT113_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT115_FILES:
+            ct, body = LOT115_FILES[p]
+            self._send(200, body.encode("utf-8"), ct)
             return True
         if p in LOT114_FILES:
             ct, body = LOT114_FILES[p]
