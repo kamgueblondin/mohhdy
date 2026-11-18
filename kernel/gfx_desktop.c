@@ -1213,10 +1213,40 @@ int gfx_text_wrap_take(const char *t, int pos, int len, int maxc) {
     return take > 0 ? take : 1;
 }
 
-static void draw_title(uint32_t *fb, int w, int h, int x, int y, const char *s, int maxpx, uint32_t c) {
-    int keep = g_tq;
+/* Lot 115: how a title of maxc cells is shown: the bytes kept, and 1 when
+ * it was cut (the caller then writes "..." after them). A title that fits
+ * is kept whole; a cut one keeps maxc - 3 cells, ending at a word when a
+ * space falls in its last third. */
+int gfx_desktop_title_fit(const char *s, int maxc, int *keep_bytes) {
+    int len = 0, take, k;
+    while (s && s[len] && len < 512) len++;
+    if (maxc < 1) { *keep_bytes = 0; return len > 0; }
+    if (os_display_cells(s, len) <= maxc) { *keep_bytes = len; return 0; }
+    if (maxc <= 3) { *keep_bytes = 0; return 1; }
+    take = os_display_take(s, len, maxc - 3);
+    for (k = take; k > 0 && k > (take * 2) / 3; k--)
+        if (s[k - 1] == ' ') { take = k - 1; break; }
+    while (take > 0 && s[take - 1] == ' ') take--;
+    *keep_bytes = take;
+    return 1;
+}
+
+/* A window title: in at most maxpx, and never under the title buttons of
+ * win (Lot 115: the room before the minimize button, whatever the chrome
+ * scale); a title that does not fit ends with "..." */
+static void draw_title(uint32_t *fb, int w, int h, const gfx_wm_rect_t *win, int title_h, int x, int y, const char *s,
+                       int maxpx, uint32_t c) {
+    int keep = g_tq, maxc, kb, cut;
     if (g_tq > OS_UI_Q_CHROME_MAX) g_tq = OS_UI_Q_CHROME_MAX;
-    draw_text_n(fb, w, h, x, y + 4 - os_ui_px(8, g_tq) / 2, s, maxpx / CW, c);
+    if (win) {
+        int room = gfx_wm_title_room(*win, title_h, g_wm_q, x);
+        if (room < maxpx) maxpx = room;
+    }
+    maxc = maxpx / CW;
+    cut = gfx_desktop_title_fit(s, maxc, &kb);
+    y += 4 - os_ui_px(8, g_tq) / 2;
+    (void)draw_text_seg(fb, w, h, x, y, s, kb, maxc, 0, c);
+    if (cut && maxc > 3) draw_text_n(fb, w, h, x + os_display_cells(s, kb) * CW, y, "...", 3, c);
     g_tq = keep;
 }
 
@@ -1253,6 +1283,15 @@ static void landscape(uint32_t *fb, int w, int h) {
     }
 }
 
+/* Lot 115: left edge of a label of width px centred on cx, moved inside
+ * [GFX_LABEL_MARGIN, w - GFX_LABEL_MARGIN] when it would leave the screen */
+int gfx_desktop_label_x(int w, int cx, int px) {
+    int lx = cx - px / 2;
+    if (lx + px > w - GFX_LABEL_MARGIN) lx = w - GFX_LABEL_MARGIN - px;
+    if (lx < GFX_LABEL_MARGIN) lx = GFX_LABEL_MARGIN;
+    return lx;
+}
+
 static void icon_tile(uint32_t *fb, int w, int h, int x, int y, uint32_t c0, uint32_t c1, const char *label) {
     int yy, xx;
     for (yy = 0; yy < 42; yy++) {
@@ -1274,9 +1313,12 @@ static void icon_tile(uint32_t *fb, int w, int h, int x, int y, uint32_t c0, uin
         }
     }
     if (label) {
-        int len = 0;
+        int len = 0, lx;
         while (label[len]) len++;
-        draw_text(fb, w, h, x + 21 - (len * CW) / 2, y + 46, label, RGB(232, 238, 244));
+        /* Lot 115: centred under the tile, but kept on the screen when the
+         * text scale makes the label wider than the room right of it */
+        lx = gfx_desktop_label_x(w, x + 21, os_display_cells(label, len) * CW);
+        draw_text(fb, w, h, lx, y + 46, label, RGB(232, 238, 244));
     }
 }
 
@@ -1490,7 +1532,12 @@ static void draw_window(uint32_t *fb, int w, int h, int x, int y, int rw, int rh
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32 + tdy(GFX_DESKTOP_PANE_TITLE_H), RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, tbar(GFX_DESKTOP_PANE_TITLE_H));
-    draw_title(fb, w, h, x + 14, y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2, title ? title : "", rw - 80, RGB(232, 238, 244));
+    {
+        gfx_wm_rect_t wr;
+        wr.x = x; wr.y = y; wr.w = rw; wr.h = rh;
+        draw_title(fb, w, h, &wr, tbar(GFX_DESKTOP_PANE_TITLE_H), x + 14, y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2,
+                   title ? title : "", rw - 80, RGB(232, 238, 244));
+    }
     y += tdy(GFX_DESKTOP_PANE_TITLE_H);   /* Lot 90: the body under a taller title bar */
     rh -= tdy(GFX_DESKTOP_PANE_TITLE_H);
     int top = y + 84 + TS(12);
@@ -1575,7 +1622,12 @@ static void draw_ide(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, c
     draw_full_chrome(fb, w, h, x, y, rw, rh);
     maxc = (rw - 40) / CW;
     if (maxc < 8) maxc = 8;
-    if (n > 0) draw_title(fb, w, h, x + 56, y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2, sc->term[0], rw - 100, RGB(232, 238, 244));
+    if (n > 0) {
+        gfx_wm_rect_t wr;
+        wr.x = x; wr.y = y; wr.w = rw; wr.h = rh;
+        draw_title(fb, w, h, &wr, tbar(GFX_DESKTOP_PANE_TITLE_H), x + 56, y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2,
+                   sc->term[0], rw - 100, RGB(232, 238, 244));
+    }
     y += tdy(GFX_DESKTOP_PANE_TITLE_H);   /* Lot 90: the body under a taller title bar */
     rh -= tdy(GFX_DESKTOP_PANE_TITLE_H);
     ty = y + 48;
@@ -1662,7 +1714,10 @@ static void draw_web(uint32_t *fb, int w, int h, const os_fb_scene_t *sc) {
             draw_webimg(fb, w, h, OS_FB_WEBIMG_FAVICON, tx, fr.y + 16 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2 - fav / 2, fav, fav, tx, fr.y, tx + fav, fr.y + 32 + tdy(GFX_DESKTOP_PANE_TITLE_H));
             tx += fav + 6;
         }
-        draw_title(fb, w, h, tx, fr.y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2, sc->web_title, fr.w + 16 - 96 - 80 - 3 * 30 - (tx - (fr.x + 8 + 2 * 34 + 8)), RGB(232, 238, 244));
+        gfx_wm_rect_t wr;
+        wr.x = fr.x; wr.y = fr.y; wr.w = fr.w; wr.h = fr.h;
+        draw_title(fb, w, h, &wr, tbar(GFX_DESKTOP_PANE_TITLE_H), tx, fr.y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2,
+                   sc->web_title, fr.w + 16 - 96 - 80 - 3 * 30 - (tx - (fr.x + 8 + 2 * 34 + 8)), RGB(232, 238, 244));
     }
     g_tq = OS_UI_Q1;
     for (i = 0; i < 2; i++) {
@@ -1725,7 +1780,12 @@ static void draw_shell(uint32_t *fb, int w, int h, int x, int y, int rw, int rh,
     stroke_round(fb, w, h, x, y, rw, rh, 10, RGB(61, 154, 138), 1);
     fill_rect(fb, w, h, x, y, rw, 32 + tdy(GFX_DESKTOP_PANE_TITLE_H), RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, tbar(GFX_DESKTOP_PANE_TITLE_H));
-    draw_title(fb, w, h, x + 14, y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2, "Shell Multiboot", rw - 100, RGB(232, 238, 244));
+    {
+        gfx_wm_rect_t wr;
+        wr.x = x; wr.y = y; wr.w = rw; wr.h = rh;
+        draw_title(fb, w, h, &wr, tbar(GFX_DESKTOP_PANE_TITLE_H), x + 14, y + 12 + tdy(GFX_DESKTOP_PANE_TITLE_H) / 2,
+                   "Shell Multiboot", rw - 100, RGB(232, 238, 244));
+    }
     if (g_tq <= OS_UI_Q1 && rw > CW * 34 + 80) draw_text(fb, w, h, x + rw - CW * 18 - 70, y + 12, "prompt=MOHHDY>", RGB(122, 212, 196));
     y += tdy(GFX_DESKTOP_PANE_TITLE_H);   /* Lot 90 */
     rh -= tdy(GFX_DESKTOP_PANE_TITLE_H);
@@ -1784,7 +1844,12 @@ static void draw_chat(uint32_t *fb, int w, int h, int x, int y, int rw, int rh, 
     stroke_round(fb, w, h, x, y, rw, rh, 14, RGB(61, 154, 138), 2);
     fill_rect(fb, w, h, x + 1, y + 1, rw - 2, 36 + tdy(GFX_DESKTOP_CHAT_TITLE_H), RGB(28, 44, 56));
     draw_wm_buttons(fb, w, h, x, y, rw, rh, tbar(GFX_DESKTOP_CHAT_TITLE_H));
-    draw_title(fb, w, h, x + 16, y + 14 + tdy(GFX_DESKTOP_CHAT_TITLE_H) / 2, "Mohhdy", 8 * 16, RGB(232, 238, 244));
+    {
+        gfx_wm_rect_t wr;
+        wr.x = x; wr.y = y; wr.w = rw; wr.h = rh;
+        draw_title(fb, w, h, &wr, tbar(GFX_DESKTOP_CHAT_TITLE_H), x + 16, y + 14 + tdy(GFX_DESKTOP_CHAT_TITLE_H) / 2,
+                   "Mohhdy", 8 * 16, RGB(232, 238, 244));
+    }
     llm_text(lab, (int)sizeof(lab), "IA : ", sc, "");
     {
         int ln = 0;
@@ -2283,13 +2348,16 @@ void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_deskto
      * a 42 px tile at w - 86 and its label below. */
     out->desk.count = 0;
     if (w >= 780 && h >= 520 && pane != OS_FB_PANE_IDE && pane != OS_FB_PANE_WEB) {
-        int dgap = (h >= 700) ? 72 : 56;
+        /* Lot 115: the rows grow with the label glyphs as drawn (gap + gh - 8);
+         * the hit boxes stayed on the 1x rows and drifted from the tiles */
+        int gh = os_ui_px(8, out->chrome_q < OS_UI_Q1 ? OS_UI_Q1 : out->chrome_q);
+        int dgap = ((h >= 700) ? 72 : 56) + gh - 8;
         for (i = 0; i < 6; i++) {
-            if (bar_h + 16 + i * dgap + 58 > h - 52) break;
+            if (bar_h + 16 + i * dgap + 50 + gh > h - 52) break;
             out->desk.icons[i].x = w - 96;
             out->desk.icons[i].y = bar_h + 16 + i * dgap;
             out->desk.icons[i].w = 62;
-            out->desk.icons[i].h = 58;
+            out->desk.icons[i].h = 50 + gh;
             out->desk.count = i + 1;
         }
     }
@@ -2320,7 +2388,12 @@ static void draw_app(uint32_t *fb, int w, int h, const gfx_rect_t *box, const os
     for (i = 0; a->title[i] && n < 70; i++) title[n++] = a->title[i];
     if (a->dirty && n < 76) { title[n++] = ' '; title[n++] = '*'; }
     title[n] = 0;
-    draw_title(fb, w, h, x + 14, y + 11 + tdy(GFX_DESKTOP_APP_TITLE_H) / 2, title, rw - 110, RGB(232, 238, 244));
+    {
+        gfx_wm_rect_t wr;
+        wr.x = x; wr.y = y; wr.w = rw; wr.h = rh;
+        draw_title(fb, w, h, &wr, tbar(GFX_DESKTOP_APP_TITLE_H), x + 14, y + 11 + tdy(GFX_DESKTOP_APP_TITLE_H) / 2,
+                   title, rw - 110, RGB(232, 238, 244));
+    }
     gfx_desktop_app_grid_fit_q(box, q, &maxr, &maxc);
     fill_rect(fb, w, h, x + 8, y + GFX_APP_TOOL_Y + tdy(GFX_DESKTOP_APP_TITLE_H) - 5, rw - 16, TS(8) + 10, RGB(22, 32, 42));
     draw_text_n(fb, w, h, x + 12, y + GFX_APP_TOOL_Y + tdy(GFX_DESKTOP_APP_TITLE_H), a->tool, maxc, RGB(122, 212, 196));

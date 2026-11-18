@@ -60,6 +60,11 @@ void gfx_wm_draw_buttons(uint32_t *fb, int fw, int fh, int pitch, gfx_wm_rect_t 
  * overlap, and a click on each centre hits that button. The grip stays
  * in the bottom-right corner. scale is quarters (4 = 1x) or 1..3. */
 int gfx_wm_chrome_check(gfx_wm_rect_t win, int title_h, int scale);
+/* Lot 115: pixels a title starting at text_x may take before the
+ * leftmost title button (minimize), keeping GFX_WM_TITLE_GAP free; 0 when
+ * there is no room. */
+#define GFX_WM_TITLE_GAP 8
+int gfx_wm_title_room(gfx_wm_rect_t win, int title_h, int scale, int text_x);
 /* The sizes the desktop actually uses (full screen, restored, minimum,
  * a tool window) at every zoom step. Returns how many checks failed. */
 int gfx_wm_chrome_suite(void);
