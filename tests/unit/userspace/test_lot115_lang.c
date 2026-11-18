@@ -365,11 +365,13 @@ static void test_utf16_log_valid(void) {
     TEST_ASSERT_EQUAL_STRING("\357\277\275|1", run("const h = '\\u{1F600}'[0]; console.log(h); console.log(h.length)"));
 }
 
-/* still refused, honestly: async generators and for await */
+/* still refused, honestly: yield* inside an async generator (async
+ * generators and for await themselves run since the end of Lot 115,
+ * test_lot115_agen.c) */
 static void test_still_refused(void) {
     fresh();
-    TEST_ASSERT_EQUAL_STRING("!SyntaxError: async generators are not supported by the guest (line 1)",
-                             run("async function* g() {}"));
+    TEST_ASSERT_EQUAL_STRING("!SyntaxError: yield* in async generators is not supported by the guest (line 1)",
+                             run("async function* g() { yield* [1] }"));
 }
 
 /* Symbol() costs one record in the arena: a loop that makes them runs

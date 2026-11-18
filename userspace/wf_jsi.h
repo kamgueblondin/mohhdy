@@ -23,7 +23,8 @@ enum {
     JS_CLASS_PROMISE, JS_CLASS_GEN,          /* Lot 114 */
     JS_CLASS_SYMBOL,                         /* Lot 115: Object(symbol); JS_CLASS_ITER is now used */
     JS_CLASS_WEAKMAP, JS_CLASS_WEAKSET, JS_CLASS_WEAKREF, JS_CLASS_FINREG,  /* Lot 115: wf_jsweak.c */
-    JS_CLASS_PROXY                           /* Lot 115: wf_jsproxy.c (x0 target, x1 handler) */
+    JS_CLASS_PROXY,                          /* Lot 115: wf_jsproxy.c (x0 target, x1 handler) */
+    JS_CLASS_AGEN                            /* Lot 115: an async generator (wf_jsco.c) */
 };
 
 typedef struct { uint32_t len; uint32_t hash; uint32_t interned; char s[4]; } js_str_t;
@@ -273,6 +274,7 @@ struct js_vm {
     uint32_t u16_str, u16_unit, u16_byte; /* wf_jsu16.c: the last index conversion (a cursor) */
     /* Lot 115: weak collections and Reflect (wf_jsweak.c) */
     uint32_t p_weakmap, p_weakset, p_weakref, p_finreg;
+    uint32_t p_agen;                      /* Lot 115: async generator objects (wf_jsco.c) */
     /* Lot 115: arena reclaim (wf_jsgc.c) */
     uint32_t gc_bits, gc_bitmap_bytes;    /* the payload start bitmap */
     uint32_t gc_heap_lo;                  /* the first block header */
@@ -427,6 +429,9 @@ jv js_gen_new(js_vm_t *vm, uint32_t f, uint32_t env);
 jv js_gen_step(js_vm_t *vm, uint32_t g, int mode, jv v, int *done);   /* mode 0 next, 1 throw, 2 return */
 void js_gen_close(js_vm_t *vm, uint32_t g);
 int js_is_gen(js_vm_t *vm, jv v);
+jv js_agen_new(js_vm_t *vm, uint32_t f, uint32_t env);      /* Lot 115 */
+int js_is_agen(js_vm_t *vm, jv v);
+int js_agen_init(js_vm_t *vm);
 jv js_co_yield(js_vm_t *vm, jv v, int delegate);
 jv js_co_await(js_vm_t *vm, jv v);
 jv js_async_call(js_vm_t *vm, uint32_t f, uint32_t env);

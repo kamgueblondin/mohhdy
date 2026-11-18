@@ -57,16 +57,17 @@ __asm__(
 #endif
 
 enum { CO_NEW = 0, CO_SUSP, CO_RUN, CO_DONE };
-enum { CO_GEN = 1, CO_ASYNC = 2 };
+enum { CO_GEN = 1, CO_ASYNC = 2, CO_AGEN = 3 };     /* Lot 115: CO_AGEN, an async generator */
+enum { WHY_NONE = 0, WHY_YIELD, WHY_AWAIT };       /* why a coroutine is suspended (js_co_t.why) */
 enum { RM_NEXT = 0, RM_THROW, RM_RETURN };
 
 typedef struct {
     uint32_t sp, caller_sp;
     uint32_t stack;            /* arena ref of the stack block, 0 when none */
     uint32_t f, env;
-    uint32_t promise;          /* async: the result promise */
+    uint32_t promise;          /* async: the result promise; async generator: its object */
     uint32_t aful, arej;       /* async: the resume functions of await */
-    uint8_t state, kind, mode, pad;
+    uint8_t state, kind, mode, why;
     int depth_in, depth_base;
     jv val;
 } js_co_t;
@@ -586,9 +587,177 @@ static jv gen_method(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     return iter_result(vm, r, done);
 }
 
+/* ---- Lot 115: async generators ----
+ *
+ * An async generator runs on a coroutine like a generator, but it can
+ * suspend for two reasons: a yield (the value goes to the request at the
+ * head of its queue) or an await (it waits for a promise; the await
+ * resume functions continue it). next/throw/return queue a request
+ * { mode, value, promise } on the object (x1: an array of triples, x2 the
+ * index of the head) and answer the promise; agen_drain runs the
+ * generator while requests wait and it is not running or awaiting.
+ * As in the language, yield awaits its operand, and return(v) on a
+ * finished generator answers { value: v, done: true }. */
+
+static jv agen_yield(js_vm_t *vm, uint32_t c, jv v) {
+    int mode;
+    jv r;
+    v = js_co_await(vm, v);            /* yield await v */
+    if (vm->ctl) return jv_undef();
+    CO(vm, c)->why = WHY_YIELD;
+    r = co_suspend_raw(vm, v, &mode);
+    CO(vm, c)->why = WHY_NONE;
+    if (mode == RM_THROW) return js_throw(vm, r);
+    if (mode == RM_RETURN) {
+        r = js_co_await(vm, r);
+        if (vm->ctl) return jv_undef();
+        vm->ret = r;
+        vm->ctl = CTL_RETURN;
+        return jv_undef();
+    }
+    return r;
+}
+
+int js_is_agen(js_vm_t *vm, jv v) { return v.t == JT_OBJ && JOBJ(vm, v.a)->cls == JS_CLASS_AGEN; }
+
+jv js_agen_new(js_vm_t *vm, uint32_t f, uint32_t env) {
+    uint32_t g = js_obj_new(vm, JS_CLASS_AGEN, vm->p_agen), c = co_new(vm, CO_AGEN, f, env), q;
+    if (!g || !c) return jv_undef();
+    q = js_array_new(vm, 6);
+    if (!q) return jv_undef();
+    JOBJ(vm, g)->x0 = c;
+    JOBJ(vm, g)->x1 = q;
+    JOBJ(vm, g)->x2 = 0;
+    CO(vm, c)->promise = g;
+    return jv_obj(g);
+}
+
+/* the request at the head of g's queue: 0 when empty */
+static int agen_head(js_vm_t *vm, uint32_t g, int *mode, jv *v, uint32_t *p) {
+    uint32_t q = JOBJ(vm, g)->x1, h = JOBJ(vm, g)->x2;
+    if (h + 3u > JOBJ(vm, q)->alen) return 0;
+    *mode = js_array_get(vm, q, h).a;
+    *v = js_array_get(vm, q, h + 1u);
+    *p = js_array_get(vm, q, h + 2u).a;
+    return 1;
+}
+
+static void agen_pop(js_vm_t *vm, uint32_t g) {
+    uint32_t q = JOBJ(vm, g)->x1;
+    JOBJ(vm, g)->x2 += 3u;
+    if (JOBJ(vm, g)->x2 >= JOBJ(vm, q)->alen) {
+        js_array_set_len(vm, q, 0);
+        JOBJ(vm, g)->x2 = 0;
+    }
+}
+
+/* the head request is answered by what the coroutine did; 1 when the
+ * queue can go on, 0 while it awaits */
+static int agen_settle(js_vm_t *vm, uint32_t g) {
+    uint32_t c = JOBJ(vm, g)->x0, p;
+    int mode;
+    jv v;
+    if (!agen_head(vm, g, &mode, &v, &p)) return 0;
+    if (CO(vm, c)->state == CO_DONE) {
+        agen_pop(vm, g);
+        if (vm->ctl == CTL_THROW) {
+            jv e = vm->exc;
+            vm->ctl = CTL_NONE;
+            vm->exc = jv_undef();
+            js_promise_reject(vm, p, e);
+        } else if (vm->ctl == CTL_NONE) {
+            js_promise_resolve(vm, p, iter_result(vm, CO(vm, c)->val, 1));
+        }
+        return vm->ctl == CTL_NONE;
+    }
+    if (CO(vm, c)->state == CO_SUSP && CO(vm, c)->why == WHY_YIELD) {
+        agen_pop(vm, g);
+        js_promise_resolve(vm, p, iter_result(vm, CO(vm, c)->val, 0));
+        return vm->ctl == CTL_NONE;
+    }
+    return 0;
+}
+
+static void agen_drain(js_vm_t *vm, uint32_t g) {
+    int guard = 0;
+    while (!vm->ctl && guard++ < 100000) {
+        uint32_t c = JOBJ(vm, g)->x0, p;
+        int mode;
+        jv v;
+        if (!agen_head(vm, g, &mode, &v, &p)) return;
+        if (CO(vm, c)->state == CO_RUN) return;
+        if (CO(vm, c)->state == CO_SUSP && CO(vm, c)->why == WHY_AWAIT) return;
+        if (CO(vm, c)->state == CO_NEW && mode != RM_NEXT) CO(vm, c)->state = CO_DONE;
+        if (CO(vm, c)->state == CO_DONE) {
+            agen_pop(vm, g);
+            if (mode == RM_THROW) js_promise_reject(vm, p, v);
+            else js_promise_resolve(vm, p, iter_result(vm, mode == RM_RETURN ? v : jv_undef(), 1));
+            continue;
+        }
+        if (co_resume(vm, c, mode, v) != 0) {
+            jv e = vm->exc;
+            if (vm->ctl != CTL_THROW) return;
+            vm->ctl = CTL_NONE;
+            vm->exc = jv_undef();
+            CO(vm, c)->state = CO_DONE;
+            agen_pop(vm, g);
+            js_promise_reject(vm, p, e);
+            continue;
+        }
+        if (!agen_settle(vm, g)) return;
+    }
+}
+
+/* after an await inside the generator resumed it */
+static void agen_after(js_vm_t *vm, uint32_t c) {
+    uint32_t g = CO(vm, c)->promise;
+    if (agen_settle(vm, g)) agen_drain(vm, g);
+}
+
+/* next 0, throw 1, return 2: a promise of { value, done } */
+static jv agen_method(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
+    uint32_t p = js_promise_new(vm), q;
+    if (!p) return jv_undef();
+    if (!js_is_agen(vm, thisv)) {
+        uint32_t e = js_error_new(vm, JE_TYPE, js_str_c(vm, "next method called on a value that is not an async generator"));
+        if (e) js_promise_reject(vm, p, jv_obj(e));
+        return jv_obj(p);
+    }
+    q = JOBJ(vm, thisv.a)->x1;
+    if (JOBJ(vm, q)->alen - JOBJ(vm, thisv.a)->x2 >= 3u * 1024u)
+        return js_throw_err(vm, JE_RANGE, "too many pending async generator requests (guest bound)");
+    js_array_push(vm, q, jv_int((int32_t)m));
+    js_array_push(vm, q, JARG(0));
+    js_array_push(vm, q, jv_obj(p));
+    if (vm->ctl) return jv_undef();
+    agen_drain(vm, thisv.a);
+    return vm->ctl ? jv_undef() : jv_obj(p);
+}
+
+static jv agen_self(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
+    (void)vm; (void)argv; (void)argc; (void)m;
+    return thisv;
+}
+
+/* after js_sym_init: the prototype of async generator objects */
+int js_agen_init(js_vm_t *vm) {
+    uint32_t ap = js_obj_new(vm, JS_CLASS_OBJECT, vm->p_object), f;
+    if (!ap) return -1;
+    vm->p_agen = ap;
+    js_def_native(vm, ap, "next", agen_method, 1, RM_NEXT);
+    js_def_native(vm, ap, "return", agen_method, 1, RM_RETURN);
+    js_def_native(vm, ap, "throw", agen_method, 1, RM_THROW);
+    f = js_native_new(vm, "[Symbol.asyncIterator]", agen_self, 0, 0);
+    if (!f) return -1;
+    js_define(vm, ap, vm->sym_async_iterator, jv_obj(f), P_HIDDEN);
+    js_define(vm, ap, vm->sym_to_string_tag, jv_str(KEY(vm, "AsyncGenerator")), P_CONF);
+    return vm->ctl == CTL_ABORT ? -1 : 0;
+}
+
 /* yield (delegate = 0) and yield* (delegate = 1) inside a generator body */
 jv js_co_yield(js_vm_t *vm, jv v, int delegate) {
     uint32_t c = vm->co_cur;
+    if (c && CO(vm, c)->kind == CO_AGEN && !delegate) return agen_yield(vm, c, v);
     if (!c || CO(vm, c)->kind != CO_GEN) return js_throw_err(vm, JE_SYNTAX, "yield outside a generator");
     if (!delegate) return co_suspend(vm, v);
     if (js_is_gen(vm, v) || (v.t == JT_OBJ && JOBJ(vm, v.a)->cls != JS_CLASS_ARRAY && JOBJ(vm, v.a)->cls != JS_CLASS_STRING &&
@@ -641,6 +810,8 @@ jv js_co_yield(js_vm_t *vm, jv v, int delegate) {
 
 /* ---- async functions ---- */
 
+static void agen_after(js_vm_t *vm, uint32_t c);
+
 static void async_after(js_vm_t *vm, uint32_t c) {
     uint32_t p = CO(vm, c)->promise;
     if (CO(vm, c)->state != CO_DONE) return;
@@ -659,7 +830,8 @@ static jv await_resume(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     (void)thisv;
     if (CO(vm, c)->state != CO_SUSP) return jv_undef();
     if (co_resume(vm, c, (m & 1u) ? RM_THROW : RM_NEXT, JARG(0)) != 0) return jv_undef();
-    async_after(vm, c);
+    if (CO(vm, c)->kind == CO_AGEN) agen_after(vm, c);
+    else async_after(vm, c);
     return jv_undef();
 }
 
@@ -698,7 +870,8 @@ jv js_async_rejected(js_vm_t *vm) {
 
 jv js_co_await(js_vm_t *vm, jv v) {
     uint32_t c = vm->co_cur, p;
-    if (!c || CO(vm, c)->kind != CO_ASYNC) return js_throw_err(vm, JE_SYNTAX, "await is only valid in async functions");
+    if (!c || (CO(vm, c)->kind != CO_ASYNC && CO(vm, c)->kind != CO_AGEN))
+        return js_throw_err(vm, JE_SYNTAX, "await is only valid in async functions");
     p = promise_of(vm, v);
     if (!p || vm->ctl) return jv_undef();
     if (!CO(vm, c)->aful) {
@@ -710,6 +883,7 @@ jv js_co_await(js_vm_t *vm, jv v) {
     }
     perform_then(vm, p, jv_obj(CO(vm, c)->aful), jv_obj(CO(vm, c)->arej), 0);
     if (vm->ctl) return jv_undef();
+    CO(vm, c)->why = WHY_AWAIT;
     return co_suspend(vm, jv_undef());
 }
 

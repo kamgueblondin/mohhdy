@@ -11,7 +11,9 @@ over webeng.c), so the reader shows "layout115 224x74 c220 r2 100 100"
 engine gave (layout_engine, not 0). /lot115/lang.html runs a class with
 private fields, a static private counter, a generator [Symbol.iterator]
 and a #x in o brand check, a symbol key and a string with an astral
-character: the reader shows "lang115 ab 1 true u16 7 d83d sym 0 symbol"
+character, then a WeakMap, a WeakRef, Reflect, a Proxy get trap and an
+async generator stepped by for await: the reader shows "lang115 ab 1 true
+u16 7 d83d sym 0 symbol weak w true 1 false px 4 ag xy"
 (node prints the same for the script; the Lot 114 subset refused the
 page with a SyntaxError on #items). The js REPL then runs six lines
 that each leave about 900 KiB of garbage in its 3 MiB arena: Lot 114 had
@@ -70,7 +72,7 @@ def step_layout(mon, proc, u):
 def step_lang(mon, proc, u):
     lw.run(mon, proc, "web-open %s/lot115/lang.html" % u, "osui web page sections", fail=["error="])
     read = lw.run(mon, proc, "web-read", "end115", 30)
-    need(read, ["lang115 ab 1 true u16 7 d83d sym 0 symbol weak w true 1 false px 4"], "web-read of the Lot 115 language page")
+    need(read, ["lang115 ab 1 true u16 7 d83d sym 0 symbol weak w true 1 false px 4 ag xy"], "web-read of the Lot 115 language page")
     refuse(read, ["lang115 wait"], "web-read of the Lot 115 language page")
     say("private members, Symbol.iterator, a symbol key, UTF-16 lengths, WeakMap, WeakRef, Reflect and Proxy ran in the page script")
 

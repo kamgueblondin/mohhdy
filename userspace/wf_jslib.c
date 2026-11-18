@@ -696,6 +696,7 @@ static const char *class_tag(js_vm_t *vm, jv v) {
     case JS_CLASS_SET: return "Set";
     case JS_CLASS_PROMISE: return "Promise";
     case JS_CLASS_GEN: return "Generator";
+    case JS_CLASS_AGEN: return "AsyncGenerator";
     case JS_CLASS_WEAKMAP: return "WeakMap";
     case JS_CLASS_WEAKSET: return "WeakSet";
     case JS_CLASS_WEAKREF: return "WeakRef";
@@ -2138,7 +2139,8 @@ int js_init(js_vm_t *vm, void *mem, uint32_t size) {
     JENV(vm, vm->genv)->kind |= E_CAPTURED;
     JENV(vm, vm->genv)->thisv = jv_obj(vm->global);
     if (js_lib_init(vm) != 0 || js_lib2_init(vm) != 0 || js_regexp_init(vm) != 0 || js_co_init(vm) != 0 ||
-        js_sym_init(vm) != 0 || js_weak_init(vm) != 0 || js_proxy_init(vm) != 0) return -1;
+        js_sym_init(vm) != 0 || js_weak_init(vm) != 0 || js_proxy_init(vm) != 0 ||
+        js_agen_init(vm) != 0) return -1;
     return vm->ctl == CTL_ABORT ? -1 : 0;
 }
 

@@ -272,7 +272,7 @@ run_test_body() {
             extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsco.c $BASE_DIR/userspace/wf_jssym.c $BASE_DIR/userspace/wf_jsweak.c $BASE_DIR/userspace/wf_jsproxy.c $BASE_DIR/userspace/wf_jsu16.c $BASE_DIR/userspace/wf_jsgc.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
-        test_lot114_async.c|test_lot115_lang.c|test_lot115_gc.c|test_lot115_weak.c|test_lot115_proxy.c)
+        test_lot114_async.c|test_lot115_lang.c|test_lot115_gc.c|test_lot115_weak.c|test_lot115_proxy.c|test_lot115_agen.c)
             extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsco.c $BASE_DIR/userspace/wf_jssym.c $BASE_DIR/userspace/wf_jsweak.c $BASE_DIR/userspace/wf_jsproxy.c $BASE_DIR/userspace/wf_jsu16.c $BASE_DIR/userspace/wf_jsgc.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;

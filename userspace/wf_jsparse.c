@@ -787,11 +787,11 @@ static uint32_t parse_object(ps_t *p) {
                 !is_op(p, OP_ASSIGN)) {
                 if (kw == KW_ASYNC) {   /* Lot 114: async name() {} */
                     if (p->t.nl) { ps_error(p, "Unexpected token in object literal"); return 0; }
-                    if (is_op(p, OP_MUL)) { ps_error(p, "async generators are not supported by the guest"); return 0; }
+                    int star = accept(p, OP_MUL);    /* Lot 115: async *name() {} */
                     N(pr)->a = parse_prop_key(p, &computed);
                     if (computed) N(pr)->fl |= F_COMPUTED;
                     N(pr)->fl |= F_METHOD;
-                    N(pr)->b = parse_function_k(p, 0, 1, FK_ASYNC);
+                    N(pr)->b = parse_function_k(p, 0, 1, star ? (FK_ASYNC | FK_GEN) : FK_ASYNC);
                     list_add(p, &l, pr);
                     if (!is_op(p, OP_RBRACE)) expect(p, OP_COMMA, ",");
                     continue;
@@ -1240,6 +1240,7 @@ static uint32_t parse_assign(ps_t *p, int no_in) {
         if (!y) return 0;
         next(p);
         if (accept(p, OP_MUL)) {
+            if (p->in_async) { ps_error(p, "yield* in async generators is not supported by the guest"); return 0; }
             N(y)->op = 1;
             N(y)->a = parse_assign(p, no_in);
         } else if (!p->t.nl && p->t.type != TK_EOF &&
@@ -1386,7 +1387,6 @@ static uint32_t parse_function_k(ps_t *p, int is_decl, int is_method, int kind) 
     } else {
         N(fn)->fl |= F_METHOD;
     }
-    if ((kind & FK_GEN) && (kind & FK_ASYNC)) { ps_error(p, "async generators are not supported by the guest"); return 0; }
     N(fn)->op = (uint8_t)kind;
     p->vhead = p->vtail = 0;
     p->fn_flags = 0;
@@ -1533,8 +1533,8 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
             lex_save(p, &sv);
             next(p);
             if (!is_op(p, OP_LPAREN) && !is_op(p, OP_ASSIGN) && !is_op(p, OP_SEMI) && !is_op(p, OP_RBRACE) && !p->t.nl) {
-                if (is_op(p, OP_MUL)) { ps_error(p, "async generators are not supported by the guest"); return 0; }
                 kind = FK_ASYNC;
+                if (accept(p, OP_MUL)) kind |= FK_GEN;     /* Lot 115: async *name() {} */
             } else {
                 lex_restore(p, &sv);
             }
@@ -1665,10 +1665,14 @@ static uint32_t parse_block_body(ps_t *p, uint32_t blk) {
 
 static uint32_t parse_for(ps_t *p) {
     uint32_t n = mk(p, N_FOR), init = 0;
-    int decl_kw = 0;
+    int decl_kw = 0, is_await = 0;
     if (!n) return 0;
     next(p);
-    if (is_kw(p, KW_AWAIT)) { ps_error(p, "for await is not supported by the guest"); return 0; }
+    if (is_kw(p, KW_AWAIT)) {           /* Lot 115: for await (x of it) */
+        if (!p->in_async) { ps_error(p, "for await is only valid in async functions"); return 0; }
+        next(p);
+        is_await = 1;
+    }
     expect(p, OP_LPAREN, "(");
     if (is_op(p, OP_SEMI)) {
         init = 0;
@@ -1681,7 +1685,9 @@ static uint32_t parse_for(ps_t *p) {
     if (p->failed) return 0;
     if (is_kw(p, KW_OF) || is_kw(p, KW_IN)) {
         int of = is_kw(p, KW_OF);
+        if (is_await && !of) { ps_error(p, "for await needs of"); return 0; }
         N(n)->k = (uint8_t)(of ? N_FOROF : N_FORIN);
+        N(n)->op = (uint8_t)is_await;
         next(p);
         if (!decl_kw && init) {
             if (N(init)->k == N_ARRAY || N(init)->k == N_OBJECT) init = to_pattern(p, init);
@@ -1696,6 +1702,7 @@ static uint32_t parse_for(ps_t *p) {
         N(n)->c = parse_statement(p);
         return n;
     }
+    if (is_await) { ps_error(p, "for await needs of"); return 0; }
     N(n)->a = init;
     expect(p, OP_SEMI, ";");
     if (!is_op(p, OP_SEMI)) N(n)->b = parse_expr(p, 0);
@@ -1798,6 +1805,7 @@ static uint32_t parse_statement(ps_t *p) {
         case KW_RETURN:
             if (!p->in_func) { ps_error(p, "Illegal return statement"); return 0; }
             n = mk(p, N_RETURN);
+            if (n && p->in_gen && p->in_async) N(n)->op = 1;     /* Lot 115: return awaits in an async generator */
             next(p);
             if (!is_op(p, OP_SEMI) && !is_op(p, OP_RBRACE) && p->t.type != TK_EOF && !p->t.nl && n) N(n)->a = parse_expr(p, 0);
             semi(p);

@@ -311,7 +311,8 @@ static jv call_func(js_vm_t *vm, uint32_t f, jv thisv, jv *argv, int argc, uint3
         vm->depth--;
         if (vm->ctl) return is_gen ? jv_undef() : js_async_rejected(vm);
         env_capture(vm, env);
-        r = is_gen ? js_gen_new(vm, f, env) : js_async_call(vm, f, env);
+        if (is_gen && (NODE(fn)->op & FK_ASYNC)) r = js_agen_new(vm, f, env);     /* Lot 115 */
+        else r = is_gen ? js_gen_new(vm, f, env) : js_async_call(vm, f, env);
         return vm->ctl ? jv_undef() : r;
     }
     /* a base class constructor sets its fields before its body */
@@ -1496,10 +1497,75 @@ static void ex_forin(js_vm_t *vm, uint32_t env, uint32_t n, uint32_t label) {
     }
 }
 
+/* Lot 115: for await (x of src) inside an async function or generator:
+ * an async iterator (Symbol.asyncIterator) is stepped with an await on
+ * each next() result; any other iterable is read as for-of reads it and
+ * each value is awaited. An early exit awaits the iterator's return(). */
+static void ex_forawait(js_vm_t *vm, uint32_t env, uint32_t n, uint32_t label, jv src) {
+    jv m = jv_undef(), it, nx;
+    uint32_t arr = 0, i;
+    if (src.t == JT_OBJ || src.t == JT_STR) m = js_get(vm, src, vm->sym_async_iterator);
+    if (vm->ctl) return;
+    if (!jv_is_nullish(m)) {
+        if (!js_is_callable(vm, m)) { js_throw_err(vm, JE_TYPE, "Symbol.asyncIterator is not a function"); return; }
+        it = js_call(vm, m, src, 0, 0);
+        if (vm->ctl) return;
+        if (it.t != JT_OBJ) { js_throw_err(vm, JE_TYPE, "Result of the Symbol.asyncIterator method is not an object"); return; }
+        nx = js_get(vm, it, vm->s_next);
+        if (vm->ctl) return;
+        for (;;) {
+            uint32_t ie;
+            jv r = js_call(vm, nx, it, 0, 0), v;
+            if (vm->ctl) return;
+            r = js_co_await(vm, r);
+            if (vm->ctl) return;
+            if (r.t != JT_OBJ) { js_throw_err(vm, JE_TYPE, "Iterator result is not an object"); return; }
+            if (js_truthy(vm, js_get(vm, r, vm->s_done)) || vm->ctl) return;
+            v = js_get(vm, r, vm->s_value);
+            if (vm->ctl) return;
+            forx_bind(vm, env, NODE(n)->a, v, &ie);
+            if (!vm->ctl) ex(vm, ie, NODE(n)->c);
+            if (ie != env) env_free(vm, ie);
+            if (vm->ctl == CTL_CONTINUE && (!vm->label || vm->label == label)) { vm->ctl = CTL_NONE; vm->label = 0; continue; }
+            if (vm->ctl) {
+                int sctl = vm->ctl, brk = vm->ctl == CTL_BREAK && (!vm->label || vm->label == label);
+                jv sret = vm->ret, sexc = vm->exc;
+                uint32_t slabel = vm->label;
+                if (sctl != CTL_ABORT && sctl != CTL_THROW) {
+                    jv rf;
+                    vm->ctl = CTL_NONE;
+                    rf = js_get(vm, it, js_intern(vm, "return", 6));
+                    if (!vm->ctl && js_is_callable(vm, rf)) {
+                        jv rr = js_call(vm, rf, it, 0, 0);
+                        if (!vm->ctl) (void)js_co_await(vm, rr);
+                    }
+                    if (vm->ctl) return;
+                    vm->ctl = sctl; vm->ret = sret; vm->exc = sexc; vm->label = slabel;
+                }
+                if (brk && vm->ctl == CTL_BREAK) { vm->ctl = CTL_NONE; vm->label = 0; }
+                return;
+            }
+        }
+    }
+    js_iter_values(vm, src, &arr);
+    if (vm->ctl) return;
+    for (i = 0; i < JOBJ(vm, arr)->alen && !vm->ctl; i++) {
+        uint32_t ie;
+        jv v = js_co_await(vm, js_array_get(vm, arr, i));
+        if (vm->ctl) break;
+        forx_bind(vm, env, NODE(n)->a, v, &ie);
+        if (vm->ctl) break;
+        ex(vm, ie, NODE(n)->c);
+        if (ie != env) env_free(vm, ie);
+        if (loop_ctl(vm, label)) break;
+    }
+}
+
 static void ex_forof(js_vm_t *vm, uint32_t env, uint32_t n, uint32_t label) {
     jv src = ev(vm, env, NODE(n)->b);
     uint32_t arr = 0, i;
     if (vm->ctl) return;
+    if (NODE(n)->op & 1u) { ex_forawait(vm, env, n, label, src); return; }
     if (js_is_gen(vm, src)) {
         /* Lot 114: a generator is read one value at a time and closed
          * (its finally blocks run) when the loop leaves early */
@@ -1700,6 +1766,7 @@ static void ex(js_vm_t *vm, uint32_t env, uint32_t n) {
     case N_LABEL: ex_labeled(vm, env, s->b, s->a); return;
     case N_RETURN:
         vm->ret = s->a ? ev(vm, env, s->a) : jv_undef();
+        if (s->op && s->a && !vm->ctl) vm->ret = js_co_await(vm, vm->ret);   /* async generator: return await v */
         if (!vm->ctl) vm->ctl = CTL_RETURN;
         return;
     case N_BREAK: vm->ctl = CTL_BREAK; vm->label = s->a; return;
