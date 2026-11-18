@@ -7,6 +7,7 @@
 #include "wf_jsi.h"
 #include "wf_http.h"
 #include "wf_jsnet.h"
+#include "wf_jsapi.h"
 
 enum { DN_ELEM = 1, DN_TEXT = 3, DN_COMMENT = 8, DN_DOC = 9, DN_DOCTYPE = 10, DN_FRAG = 11 };
 
@@ -3665,7 +3666,7 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
     g_in_dyn = 0;
     g_lay_valid = 0;
     if (realm_setup(vm, doc, url) != 0) { g_rt.st = 0; return -1; }
-    if (js_net_init(vm) != 0) { g_rt.st = 0; return -1; }
+    if (js_net_init(vm) != 0 || js_api_init(vm, g_url) != 0) { g_rt.st = 0; return -1; }
     set_ready("loading");
     if (!body_onload(vm, doc, st) && !run_scripts(vm, doc, st) && !run_load(vm, doc, st)) run_timers(vm, st);
     if (!st->scripts && !st->ext_ran && !st->dynamic) { g_rt.st = 0; return 0; }
@@ -3921,6 +3922,47 @@ static int live_key(js_vm_t *vm, int k, const char *key, wf_jspage_stats_t *st) 
         }
     }
     return fire_event_ex(vm, node_obj(vm, k), "keyup", 1, 1, &ei, 0, st);
+}
+
+/* Lot 114 (FormData): the named controls of a form as [name, value]
+ * pairs, in document order, as a form submission collects them */
+int wf_jsdom_form_pairs(js_vm_t *vm, jv form, uint32_t list) {
+    int f = obj_node(vm, form), k;
+    if (f < 0 || !name_is(f, "form")) return -1;
+    for (k = walk_next(f, f); k >= 0 && !vm->ctl; k = walk_next(k, f)) {
+        const char *v;
+        int vl;
+        uint32_t nm, val, p;
+        if (!(name_is(k, "input") || name_is(k, "select") || name_is(k, "textarea"))) continue;
+        if (bool_attr(k, "disabled") || !attr_val(k, "name", &v, &vl) || vl == 0) continue;
+        if (name_is(k, "input") && attr_val(k, "type", &v, &vl)) {
+            if (span_eq_ci(v, vl, "submit", 6) || span_eq_ci(v, vl, "button", 6) || span_eq_ci(v, vl, "reset", 5) ||
+                span_eq_ci(v, vl, "image", 5) || span_eq_ci(v, vl, "file", 4))
+                continue;
+            if ((span_eq_ci(v, vl, "checkbox", 8) || span_eq_ci(v, vl, "radio", 5)) && !bool_attr(k, "checked")) continue;
+            if ((span_eq_ci(v, vl, "checkbox", 8) || span_eq_ci(v, vl, "radio", 5)) && !bool_attr(k, "value")) {
+                int f2;
+                nm = attr_get_js(vm, k, "name", &f2);
+                val = js_str_c(vm, "on");
+                goto push;
+            }
+        }
+        {
+            int f2;
+            nm = attr_get_js(vm, k, "name", &f2);
+            if (name_is(k, "select")) {
+                if (select_index(k) < 0) continue;
+                val = select_value(vm, k).a;
+            } else val = value_get(vm, k);
+        }
+push:
+        p = js_array_new(vm, 2);
+        if (!p) return 0;
+        js_array_push(vm, p, jv_str(nm));
+        js_array_push(vm, p, jv_str(val));
+        js_array_push(vm, list, jv_obj(p));
+    }
+    return 0;
 }
 
 /* ---- reader form fields (Lot 114) ----

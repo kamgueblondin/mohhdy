@@ -2,6 +2,7 @@
  * of the page realm over the network hook of the page pass (see
  * wf_jsnet.h for the bounds and what is not there). */
 #include "wf_jsnet.h"
+#include "wf_jsapi.h"
 
 static uint32_t g_p_headers, g_p_response, g_p_xhr, g_settle;
 
@@ -298,7 +299,8 @@ static void net_do(js_vm_t *vm, const char *what, jv urlv, const char *method, j
         r.url = abs;
         r.method = method;
         if (bodyv.t != JT_UNDEF && bodyv.t != JT_NULL) {
-            bs = js_to_string(vm, bodyv);
+            const char *api_ct = 0;
+            if (!js_api_body(vm, bodyv, &bs, &api_ct)) bs = js_to_string(vm, bodyv);      /* URLSearchParams, FormData */
             if (vm->ctl) return;
             r.body = JSTR(vm, bs)->s;
             r.body_len = (int)JSTR(vm, bs)->len;
@@ -309,8 +311,8 @@ static void net_do(js_vm_t *vm, const char *what, jv urlv, const char *method, j
                 for (i = 0; i < n; i++) ct[i] = JSTR(vm, ctype)->s[i];
                 ct[n] = 0;
             } else {
-                const char *d = "text/plain;charset=UTF-8";
-                for (i = 0; d[i]; i++) ct[i] = d[i];
+                const char *d = api_ct ? api_ct : "text/plain;charset=UTF-8";
+                for (i = 0; d[i] && i < (int)sizeof(ct) - 1; i++) ct[i] = d[i];
                 ct[i] = 0;
             }
             r.ctype = ct;
@@ -339,22 +341,28 @@ static void net_do(js_vm_t *vm, const char *what, jv urlv, const char *method, j
     nlog(vm, "\n");
 }
 
-/* the task that settles a fetch() promise: arg [promise, value, reject] */
+/* the task that settles a fetch() promise: arg [promise, value, reject,
+ * signal]; a signal aborted meanwhile rejects with its reason */
 static jv settle_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic) {
-    jv a = JARG(0);
+    jv a = JARG(0), reason;
     (void)thisv; (void)magic;
     if (!jv_is_obj(a)) return jv_undef();
+    if (js_api_aborted(vm, js_array_get(vm, a.a, 3), &reason)) {
+        js_promise_reject(vm, js_array_get(vm, a.a, 0).a, reason);
+        return jv_undef();
+    }
     if (js_truthy(vm, js_array_get(vm, a.a, 2))) js_promise_reject(vm, js_array_get(vm, a.a, 0).a, js_array_get(vm, a.a, 1));
     else js_promise_resolve(vm, js_array_get(vm, a.a, 0).a, js_array_get(vm, a.a, 1));
     return jv_undef();
 }
 
-static void settle_later(js_vm_t *vm, uint32_t p, jv v, int reject) {
-    uint32_t a = js_array_new(vm, 3);
+static void settle_later(js_vm_t *vm, uint32_t p, jv v, int reject, jv signal) {
+    uint32_t a = js_array_new(vm, 4);
     if (!a) return;
     js_array_push(vm, a, jv_obj(p));
     js_array_push(vm, a, v);
     js_array_push(vm, a, jv_bool(reject));
+    js_array_push(vm, a, signal);
     if (wf_jsdom_task(vm, jv_obj(g_settle), jv_obj(a)) != 0) {
         nlog(vm, "warn: fetch: timer bound reached, the answer is dropped\n");
         js_promise_reject(vm, p, type_error(vm, "Failed to fetch"));
@@ -395,7 +403,7 @@ static uint32_t content_type_of(js_vm_t *vm, jv headers) {
 
 static jv fetch_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic) {
     uint32_t p = js_promise_new(vm), ctype = 0;
-    jv input = JARG(0), init = JARG(1), body = jv_undef();
+    jv input = JARG(0), init = JARG(1), body = jv_undef(), signal = jv_undef(), reason;
     const char *method = "GET";
     net_ans_t a;
     (void)thisv; (void)magic;
@@ -415,14 +423,20 @@ static jv fetch_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic) {
         JCK(vm);
         ctype = content_type_of(vm, js_get_c(vm, init, "headers"));
         JCK(vm);
+        signal = js_get_c(vm, init, "signal");
+        JCK(vm);
+        if (js_api_aborted(vm, signal, &reason)) {      /* aborted before: no request */
+            js_promise_reject(vm, p, reason);
+            return jv_obj(p);
+        }
     }
     net_do(vm, "fetch", input, method, method[0] == 'P' ? body : jv_undef(), ctype, &a);
     JCK(vm);
-    if (!a.ok) settle_later(vm, p, type_error(vm, "Failed to fetch"), 1);
+    if (!a.ok) settle_later(vm, p, type_error(vm, "Failed to fetch"), 1, signal);
     else {
         uint32_t r = response_new(vm, a.status, a.body, a.url, a.ctype, 0);
         if (!r) return jv_undef();
-        settle_later(vm, p, jv_obj(r), 0);
+        settle_later(vm, p, jv_obj(r), 0, signal);
     }
     return jv_obj(p);
 }

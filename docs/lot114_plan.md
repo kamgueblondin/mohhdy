@@ -28,6 +28,8 @@ A row is listed only when its code, tests and docs are in the branch.
 | J | events after load: the realm stays alive after the pass; wf_jspage_event dispatches click (MouseEvent fields, checkbox and radio toggling, submit of the button's form), key (keydown, keypress, keyup with key/code/keyCode, the character typed into a focused text field, Backspace, Enter submits), input (value, input, change), focus/blur (activeElement, focusin/focusout), submit and any other type, then runs Promise jobs, timers and inserted scripts, and writes the page again; el.focus()/blur() and document.activeElement | userspace/wf_jsdom.c | test_lot114_page.c (live_click, live_forms, live_timers_and_custom, focus_api) |
 | K | one shell/GUI path for J: shell_page_js (shell_fetch.c) takes "web-js click/key/input/focus/blur/submit/event/clicks" from the console and the GUI input line (osui_gui_web_command), the GUI's click on a "?__wfjs=N" link (the serializer wraps every element with a click handler in such a link) and the keys the page view does not use ("web-js gkey", only when the page listens to keys); the page written again goes through the same reader, sanitizer and forms without a new script pass; a new page ends the live realm | userspace/shell_fetch.c, osui_gui.c, osui_gui.h (page_js), shell.c, wf_jsweb.c, wf_jsweb.h | test_lot113_dom.c (commands), `make qemu-lot114` |
 | M | the reader's own controls reach the scripts: field-input / check / change / focus / blur / submit with the target "=ORD,NTH,NAME" (control NTH of those named NAME, else control ORD in document order as webeng_finput.inc counts them); the GUI's engine forms (a click, typing, Enter, a box, a select: web_js_fields) and the console forms of Lot 71 (web-input, keys in a focused field, web-submit: "web-js rfield set/submit N") send them through shell_page_js; change fires on blur and before submit after an edit; a prevented submit is not sent, a prevented box click keeps its old state, a value a script gives the field goes back into the control; the page is written again only when a script changed the DOM; select.value / selectedIndex move the selected option and el.form is the owner form | userspace/wf_jsdom.c, wf_jsdom.h, shell_fetch.c, osui_gui.c, wf_jsweb.c | test_lot114_page.c (select_and_form, reader_fields), `make qemu-lot114` (web-fclick, web-ftype, Enter, web-input, web-submit) |
+| N | web APIs of the page realm: URL (WHATWG parser for the common cases: special and other schemes, relative references, dot segments, default ports, percent-encoding; href/protocol/username/password/host/hostname/port/pathname/search/hash setters, origin, searchParams, toJSON, URL.canParse), URLSearchParams (string, object and pairs input, append/delete/get/getAll/has/set/sort/forEach/size/toString, live link to its URL), FormData (from a form: the successful controls in document order; append/set/get/getAll/has/delete/forEach), fetch and XMLHttpRequest bodies from URLSearchParams (urlencoded) and FormData (multipart/form-data), localStorage and sessionStorage per origin across pages (QuotaExceededError, SecurityError on file:), AbortController / AbortSignal (abort, reason, aborted, onabort and listeners, throwIfAborted, AbortSignal.abort, AbortSignal.any, a fetch signal), DOMException (name, message, code) | userspace/wf_jsapi.c, wf_jsapi.h, wf_jsnet.c, wf_jsdom.c | test_lot114_api.c (38 cases equal to node v24, formdata_from_form, bodies_and_abort, storage) |
+| O | the reader (web-read, wf_article.c) wrote character references raw ("&amp;"), visible once a script set textContent to text with an ampersand: ASCII references are now written as characters, as wf_section.c does for the sections (other characters are already display bytes) | userspace/wf_article.c | test_wf_article.c (references_decoded), `make qemu-lot114` ("api114 ?x=1 true q=a+b&n=1") |
 | L | QEMU page /lot114/app.html with lib114.js, late114.js, data114.json and a POST echo; `make qemu-lot114`; CI job lot114-js-page | scripts/lot67_web_server.py, tests/scripts/test_qemu_lot114.py, Makefile, .github/workflows/ci.yml | CI |
 
 ## Not covered (honest)
@@ -41,8 +43,8 @@ A row is listed only when its code, tests and docs are in the branch.
   for the guest fetch, only the delivery of the answer is a task. No
   CORS: a cross-origin fetch or XMLHttpRequest fails (logged); external
   scripts may come from any http(s) origin, as in browsers. No request
-  headers other than Content-Type, no cookies option, no AbortController,
-  no streams, Blob, ArrayBuffer or FormData bodies, no WebSocket, no
+  headers other than Content-Type, no cookies option, no streams, Blob,
+  ArrayBuffer or File bodies (FormData holds strings only), no WebSocket, no
   Worker, no service worker. A redirected answer keeps redirected=false.
 - Async scripts run with the deferred ones after parsing, in document
   order (browsers run them when they arrive). Scripts inserted with
@@ -71,6 +73,15 @@ A row is listed only when its code, tests and docs are in the branch.
 - The live realm has no collector: every event allocates in the same
   arena (6 MiB); when it is full the realm ends (error=arena_full) and
   the page stays as it was last written.
+- Web APIs (row N): URL has no IDNA (hosts are lowercased ASCII) and no
+  IPv6 (a bracketed host is refused); IPv4 number forms are copied, not
+  normalized. Storage items are read with getItem/setItem and the other
+  methods only (localStorage.k is not an item); the store lives in the
+  shell process and is lost when the shell ends; sessionStorage is the
+  same store in its own area (not per tab). entries(), keys() and
+  values() return arrays. No AbortSignal.timeout; an abort cannot stop a
+  request already made (the network is synchronous inside), it only
+  rejects the promise that waits for the answer.
 - The pass is still off by default (web-js on).
 
 ## Bounds (guest)
@@ -84,6 +95,8 @@ A row is listed only when its code, tests and docs are in the branch.
 | external scripts per pass / bytes each | 16 / 256 KiB | WF_DOM_EXT_SCRIPTS, WF_DOM_EXT_BYTES |
 | fetch + XMLHttpRequest per pass / bytes per answer | 16 / 256 KiB | WF_DOM_NET_REQS, WF_DOM_NET_BYTES |
 | scripts inserted by scripts waiting to run | 16 | WF_DOM_DYN_SCRIPTS |
+| localStorage + sessionStorage: bytes / items / origins (the oldest dropped) | 32 KiB / 256 / 8 | WF_JSAPI_STORE_BYTES, _ITEMS, _ORIGINS |
+| URL length | 2048 bytes (TypeError past it) | WF_JSAPI_URL_MAX |
 | marked clickable elements per output | 128 | WF_DOM_MARKS |
 | scripts plus callbacks per pass, and per event | 256 | WF_DOM_PAGE_CALLS |
 

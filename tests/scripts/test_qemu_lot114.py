@@ -14,7 +14,9 @@ fetch('data114.json') builds three list items ("item114 1..3"), an
 XMLHttpRequest POST to echo114 answers "xhr114 200 echo114 text/plain
 ping", an async function reads the approximate layout (offsetWidth of a
 7 character button: 7 x 8 + 16 = 72, "async114 72"), and a cross-origin
-fetch is refused (log line "cors114 Failed to fetch"). After load:
+fetch is refused (log line "cors114 Failed to fetch"); a URL, localStorage
+and a URLSearchParams POST body give "api114 ?x=1 true q=a+b&n=1" (true: the echo saw an urlencoded
+Content-Type). After load:
 "web-js click #inc" runs the click listener ("count114 1", twice gives
 2), "web-js key z" reaches the document keydown listener ("keys114 z"),
 "web-js input #q hi" the input listener ("input114 hi"); "web-js clicks"
@@ -52,7 +54,8 @@ need, refuse = l88.need, l88.refuse
 lw.ALIASES.update({"#": "shift-3", "@": "shift-2"})
 
 SCRIPTED = ["ext114 42", "count114 0", "item114 1", "item114 2", "item114 3", "xhr114 200 echo114 text/plain ping",
-            "async114 72", "defer114 interactive", "fin114"]
+            "async114 72", "defer114 interactive", "fin114",
+            "api114 ?x=1 true q=a+b&n=1"]
 SCRIPT_TEXT = ["Lib114", "addEventListener", "XMLHttpRequest"]
 
 
@@ -65,9 +68,9 @@ def step_page(mon, proc, u):
     lw.run(mon, proc, "web-open %s/lot114/app.html" % u, "osui web page sections", fail=["error="])
     read = lw.run(mon, proc, "web-read", "fin114", 30)
     need(read, SCRIPTED, "web-read with web-js on")
-    refuse(read, ["static114", "xhr114 wait", "async114 wait"] + SCRIPT_TEXT, "web-read with web-js on")
+    refuse(read, ["static114", "xhr114 wait", "async114 wait", "api114 wait"] + SCRIPT_TEXT, "web-read with web-js on")
     out = lw.run(mon, proc, "web-js status", "osui web-js on", 20)
-    need(out, [" external 3 other 0 ", " ext_ran 2 ext_failed 1 ext_skipped 0 ", " net 3 net_failed 1 ", " alive 1"],
+    need(out, [" external 3 other 0 ", " ext_ran 2 ext_failed 1 ext_skipped 0 ", " net 4 net_failed 1 ", " alive 1"],
          "web-js status")
     out = lw.run(mon, proc, "web-js log", "osui web-js log", 20)
     need(out, ["osui web-js log: warn: script not loaded (HTTP status not 200): %s/lot114/missing114.js" % u,

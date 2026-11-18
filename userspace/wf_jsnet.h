@@ -5,9 +5,11 @@
  * Bounds and limits (said in docs/lot114_plan.md): same origin only (no
  * CORS: a cross-origin request fails as a network error, with a log
  * line), WF_DOM_NET_REQS requests per pass, WF_DOM_NET_BYTES per answer
- * (a longer one fails), GET and POST with a string body, only the
+ * (a longer one fails), GET and POST with a string, URLSearchParams
+ * (urlencoded) or FormData (multipart, wf_jsapi.c) body, only the
  * Content-Type request header is sent, the answer headers are
- * Content-Type alone, no streams, Blob, ArrayBuffer or FormData bodies.
+ * Content-Type alone, no streams, Blob or ArrayBuffer bodies. A fetch
+ * signal (AbortSignal) rejects the waiting promise when it aborts.
  * The request is made when fetch() or send() is called; the answer is
  * delivered as a task (a 0 ms timer) after the current script, so
  * .then() handlers and onload run after it, in request order. A

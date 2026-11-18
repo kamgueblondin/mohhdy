@@ -79,6 +79,13 @@ static void test_empty(void) {
     TEST_ASSERT_EQUAL(0, wf_article_text("<p>x</p>", 6, 0, 0));
 }
 
+/* Lot 114: ASCII references are written as characters, others stay */
+static void test_references_decoded(void) {
+    const char *html = "<p>a &amp; b &lt;c&gt; &quot;q&quot; d&#39;e &#x41;z &eacute; &unknown; & x</p>";
+    wf_article_text(html, (int)strlen(html), g_out, (int)sizeof(g_out));
+    TEST_ASSERT_EQUAL_STRING("a & b <c> \"q\" d'e Az &eacute; &unknown; & x", g_out);
+}
+
 int main(void) {
     unity_init();
     RUN_TEST(test_heading_and_paragraph);
@@ -91,6 +98,7 @@ int main(void) {
     RUN_TEST(test_comment_is_dropped);
     RUN_TEST(test_bound_is_respected);
     RUN_TEST(test_empty);
+    RUN_TEST(test_references_decoded);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;
