@@ -7,6 +7,22 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 113 (17 November 2026, PR 270 merged)
+
+US-031 partial, phase3_complete=false. A bounded JavaScript subset runs
+in Ring 3 in the shell: software binary64 numbers, a parser and
+tree-walking interpreter on a private stack, the common built-ins,
+regular expressions, JSON, Map/Set and a fixed-clock Date. `js CODE` is
+a REPL (console and GUI, one code path). With `web-js on` (off by
+default) the inline scripts of a fetched HTML page run against a bounded
+DOM (selectors, events, document.write, DOMContentLoaded/load, timers on
+a virtual clock) before the reader and the sanitizer, which still drops
+every script. External scripts, fetch/XHR, layout values, events after
+load, generators, async/Promise, Symbol and eval are not done. A QEMU
+page (`make qemu-lot113`, CI job lot113-js-subset) checks it.
+US-068/073, US-076, US-080 and US-081 stay partial. US-078 and US-097
+stay simule. See docs/lot113_plan.md.
+
 ### Lot 112 (17 November 2026, base 48709b8, PR 269 merged)
 
 US-031 partial, phase3_complete=false. The reader passes line-height to

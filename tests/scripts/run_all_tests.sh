@@ -88,6 +88,7 @@ run_test() {
     # Flags de compilation spécialisés selon le type de test
     local cflags="-I$TEST_DIR -I$BASE_DIR -I$BASE_DIR/kernel -I$BASE_DIR/include -Wall -Wextra -std=c99 -DKERNEL_TEST=1"
     local extra_src="$BASE_DIR/fs/overlay.c"
+    local extra_libs=""
     # make coverage exports ENABLE_COVERAGE=1. These are the binaries this
     # runner actually executes (it recompiles; the Makefile copies are not).
     if [ "${ENABLE_COVERAGE:-0}" = "1" ]; then
@@ -189,7 +190,7 @@ run_test() {
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_osui_p2p_prod_perf.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/p2p_shape.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/p2p_shape.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsweb.c $BASE_DIR/userspace/umalloc.c"
         cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
@@ -197,7 +198,7 @@ run_test() {
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_gui.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/umalloc.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/umalloc.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsweb.c"
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_files.c" ]; then
@@ -246,6 +247,24 @@ run_test() {
         test_wf_crypto.c|test_lot89_httpsync.c|test_wf_x509.c|test_wf_http.c|test_wf_text.c|test_wf_form.c|test_wf_section.c|test_wf_lot75.c|test_wf_lot76.c|test_wf_lot85.c|test_wf_lot85_sites.c|test_wf_article.c|test_wf_p256.c|test_wf_aead.c|test_wf_webimg.c|test_wf_webimg_anim.c|test_wf_srcset.c|test_wf_cache.c)
             extra_src="$extra_src $BASE_DIR/userspace/wf_bn.c $BASE_DIR/userspace/wf_sha512.c $BASE_DIR/userspace/wf_ec.c $BASE_DIR/userspace/wf_p256.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_rsa.c $BASE_DIR/kernel/sha256.c"
             cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1 -DWF_ROOTS_PEM=\"$BASE_DIR/initrd_content/etc/ca-roots.pem\""
+            ;;
+    esac
+    # Lot 113 (US-031): the JavaScript subset, the page script pass and the
+    # js/web-js commands. The number test compares bit for bit with the
+    # host's SSE2 doubles and uses libm for the series references.
+    case "$(basename "$test_file")" in
+        test_lot113_num.c)
+            extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c"
+            cflags="$cflags -I$BASE_DIR/userspace -msse2 -mfpmath=sse"
+            extra_libs="$extra_libs -lm"
+            ;;
+        test_lot113_js.c)
+            extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c"
+            cflags="$cflags -I$BASE_DIR/userspace"
+            ;;
+        test_lot113_dom.c)
+            extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsweb.c $BASE_DIR/userspace/umalloc.c"
+            cflags="$cflags -I$BASE_DIR/userspace"
             ;;
     esac
     case "$(basename "$test_file")" in
@@ -512,7 +531,7 @@ run_test() {
     
     # Compiler
     echo "${TEST_CC:-gcc} $cflags -o \"$test_binary\" \"$test_file\" $extra_src \"$TEST_DIR/framework/unity.c\" \"$TEST_DIR/framework/test_kernel.c\" \"$TEST_DIR/framework/kernel_mocks.c\"" >> "$RESULTS_FILE"
-    if ${TEST_CC:-gcc} $cflags -o "$test_binary" "$test_file" $extra_src "$TEST_DIR/framework/unity.c" "$TEST_DIR/framework/test_kernel.c" "$TEST_DIR/framework/kernel_mocks.c" 2>> "$RESULTS_FILE"; then
+    if ${TEST_CC:-gcc} $cflags -o "$test_binary" "$test_file" $extra_src "$TEST_DIR/framework/unity.c" "$TEST_DIR/framework/test_kernel.c" "$TEST_DIR/framework/kernel_mocks.c" $extra_libs 2>> "$RESULTS_FILE"; then
         # Exécuter le test
         local test_output
         # TEST_RUNNER lets a non-x86 host run the i386 ELF (for example
