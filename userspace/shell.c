@@ -8080,7 +8080,7 @@ void main() {
                                                       shell_page_request, shell_page_load, shell_page_preview,
                                                       shell_page_fill_cmd, shell_page_css_cmd, shell_desk_offer,
                                                       shell_desk_offer_at, shell_desk_offer_drop,
-                                                      shell_desk_offer_touch, shell_page_geom };
+                                                      shell_desk_offer_touch, shell_page_geom, shell_page_js };
         osui_gui_set_web_page_ops(&page_ops);
     }
     osui_gui_set_search_url(shell_search_url);   /* Lot 69: search-open on the desktop */   /* Lot 67: /browser over the network */

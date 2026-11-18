@@ -26,6 +26,15 @@ static int stack_low(js_vm_t *vm) {
     return vm->stack_base && (uint32_t)((uint8_t *)&probe - vm->stack_base) < JS_STACK_RESERVE;
 }
 
+/* Lot 114: a call is refused (a RangeError the script can catch) while
+ * JS_CALL_MARGIN more bytes are left than the abort threshold of ev;
+ * deep recursion on a coroutine stack then fails like it does on the
+ * main stack instead of ending the run */
+static int stack_low_call(js_vm_t *vm) {
+    char probe;
+    return vm->stack_base && (uint32_t)((uint8_t *)&probe - vm->stack_base) < JS_STACK_RESERVE + JS_CALL_MARGIN;
+}
+
 /* ---- environments ---- */
 
 uint32_t js_env_new(js_vm_t *vm, uint32_t parent, int kind) {
@@ -254,7 +263,7 @@ static jv call_func(js_vm_t *vm, uint32_t f, jv thisv, jv *argv, int argc, uint3
     js_node_t *n = NODE(fn);
     int i, arrow = (n->fl & F_ARROW) != 0;
     jv r = jv_undef();
-    if (vm->depth >= JS_MAX_DEPTH || stack_low(vm))
+    if (vm->depth >= JS_MAX_DEPTH || stack_low_call(vm))
         return js_throw_err(vm, JE_RANGE, "Maximum call stack size exceeded (guest bound)");
     env = js_env_new(vm, o->x1, arrow ? E_ARROW : E_FUNC);
     if (!env) return jv_undef();
@@ -294,6 +303,17 @@ static jv call_func(js_vm_t *vm, uint32_t f, jv thisv, jv *argv, int argc, uint3
     for (p = NODE(fn)->d; p && !vm->ctl; p = NODE(p)->next)
         if (!env_own(vm, env, NODE(p)->a)) js_env_declare(vm, env, NODE(p)->a, jv_undef(), 0);
     if (!vm->ctl && !(NODE(fn)->fl & F_EXPRBODY)) hoist_funcs(vm, env, NODE(fn)->c, 0);
+    /* Lot 114: a generator returns its object, an async function its
+     * promise; the body runs on a coroutine stack (wf_jsco.c) and keeps
+     * this environment, so it is never recycled */
+    if (NODE(fn)->op & (FK_GEN | FK_ASYNC)) {
+        int is_gen = (NODE(fn)->op & FK_GEN) != 0;
+        vm->depth--;
+        if (vm->ctl) return is_gen ? jv_undef() : js_async_rejected(vm);
+        env_capture(vm, env);
+        r = is_gen ? js_gen_new(vm, f, env) : js_async_call(vm, f, env);
+        return vm->ctl ? jv_undef() : r;
+    }
     /* a base class constructor sets its fields before its body */
     if (!vm->ctl && (FN_FLAGS(JOBJ(vm, f)) & FN_CLASSCTOR) && !(FN_FLAGS(JOBJ(vm, f)) & FN_DERIVED))
         init_fields(vm, f, JENV(vm, env)->thisv);
@@ -327,6 +347,21 @@ static jv call_func(js_vm_t *vm, uint32_t f, jv thisv, jv *argv, int argc, uint3
     return vm->ctl ? jv_undef() : r;
 }
 
+/* Lot 114: the body of f in its prepared environment (a coroutine runs
+ * this on its own stack); return becomes the value */
+jv js_fn_body(js_vm_t *vm, uint32_t f, uint32_t env) {
+    uint32_t fn = JOBJ(vm, f)->x0;
+    jv r = jv_undef();
+    if (NODE(fn)->fl & F_EXPRBODY) {
+        r = ev(vm, env, NODE(fn)->c);
+    } else {
+        ex_list(vm, env, NODE(fn)->c);
+        if (vm->ctl == CTL_RETURN) { r = vm->ret; vm->ctl = CTL_NONE; }
+        else if (vm->ctl == CTL_BREAK || vm->ctl == CTL_CONTINUE) vm->ctl = CTL_NONE;
+    }
+    return vm->ctl ? jv_undef() : r;
+}
+
 jv js_call(js_vm_t *vm, jv fn, jv thisv, jv *argv, int argc) {
     js_obj_t *o;
     if (vm->ctl) return jv_undef();
@@ -336,7 +371,7 @@ jv js_call(js_vm_t *vm, jv fn, jv thisv, jv *argv, int argc) {
     if (o->cls == JS_CLASS_NATIVE) {
         int saved_new = vm->in_new;
         jv r;
-        if (vm->depth >= JS_MAX_DEPTH || stack_low(vm))
+        if (vm->depth >= JS_MAX_DEPTH || stack_low_call(vm))
             return js_throw_err(vm, JE_RANGE, "Maximum call stack size exceeded (guest bound)");
         vm->depth++;
         r = vm->nat[o->x0](vm, thisv, argv, argc, o->x1);
@@ -395,6 +430,8 @@ jv js_construct(js_vm_t *vm, jv ctor, jv *argv, int argc, jv newtarget) {
         }
         return r;
     }
+    if (NODE(o->x0)->op & (FK_GEN | FK_ASYNC))
+        return js_throw_err2(vm, JE_TYPE, "is not a constructor: ", NODE(o->x0)->a ? NODE(o->x0)->a : vm->s_empty);
     if (NODE(o->x0)->fl & (F_ARROW | F_METHOD)) {
         if (!(NODE(o->x0)->fl & F_CTOR))
             return js_throw_err2(vm, JE_TYPE, "is not a constructor: ", NODE(o->x0)->a ? NODE(o->x0)->a : vm->s_empty);
@@ -1163,6 +1200,16 @@ static jv ev(js_vm_t *vm, uint32_t env, uint32_t n) {
         if (vm->ctl) return jv_undef();
         return js_construct(vm, c, a.argv, a.argc, c);
     }
+    case N_YIELD: {       /* Lot 114 */
+        jv v = x->a ? ev(vm, env, x->a) : jv_undef();
+        if (vm->ctl) return jv_undef();
+        return js_co_yield(vm, v, NODE(n)->op == 1);
+    }
+    case N_AWAIT: {
+        jv v = ev(vm, env, x->a);
+        if (vm->ctl) return jv_undef();
+        return js_co_await(vm, v);
+    }
     case N_SPREAD:
         return js_throw_err(vm, JE_SYNTAX, "Unexpected spread");
     default:
@@ -1364,6 +1411,26 @@ static void ex_forof(js_vm_t *vm, uint32_t env, uint32_t n, uint32_t label) {
     jv src = ev(vm, env, NODE(n)->b);
     uint32_t arr = 0, i;
     if (vm->ctl) return;
+    if (js_is_gen(vm, src)) {
+        /* Lot 114: a generator is read one value at a time and closed
+         * (its finally blocks run) when the loop leaves early */
+        for (;;) {
+            uint32_t ie;
+            int done;
+            jv v = js_gen_step(vm, src.a, 0, jv_undef(), &done);
+            if (vm->ctl || done) return;
+            forx_bind(vm, env, NODE(n)->a, v, &ie);
+            if (!vm->ctl) ex(vm, ie, NODE(n)->c);
+            if (ie != env) env_free(vm, ie);
+            if (vm->ctl == CTL_CONTINUE && (!vm->label || vm->label == label)) { vm->ctl = CTL_NONE; vm->label = 0; continue; }
+            if (vm->ctl) {
+                int brk = vm->ctl == CTL_BREAK && (!vm->label || vm->label == label);
+                js_gen_close(vm, src.a);
+                if (brk && vm->ctl == CTL_BREAK) { vm->ctl = CTL_NONE; vm->label = 0; }
+                return;
+            }
+        }
+    }
     js_iter_values(vm, src, &arr);
     if (vm->ctl) return;
     for (i = 0; i < JOBJ(vm, arr)->alen && !vm->ctl; i++) {

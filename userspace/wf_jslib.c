@@ -128,6 +128,39 @@ jv js_iter_values(js_vm_t *vm, jv v, uint32_t *arr_out) {
             *arr_out = arr;
             return jv_obj(arr);
         }
+        if (o->cls == JS_CLASS_GEN) {       /* Lot 114: run the generator to its end */
+            arr = js_array_new(vm, 16);
+            if (!arr) return jv_undef();
+            for (;;) {
+                int done;
+                jv x = js_gen_step(vm, v.a, 0, jv_undef(), &done);
+                if (vm->ctl || done) break;
+                js_array_push(vm, arr, x);
+            }
+            if (vm->ctl) return jv_undef();
+            *arr_out = arr;
+            return jv_obj(arr);
+        }
+        if (o->cls == JS_CLASS_OBJECT) {    /* Lot 114: an iterator object (a next method) */
+            jv next = js_get(vm, v, vm->s_next);
+            if (vm->ctl) return jv_undef();
+            if (js_is_callable(vm, next)) {
+                arr = js_array_new(vm, 16);
+                if (!arr) return jv_undef();
+                for (;;) {
+                    jv r = js_call(vm, next, v, 0, 0), dn;
+                    if (vm->ctl) return jv_undef();
+                    if (r.t != JT_OBJ) { js_throw_err(vm, JE_TYPE, "Iterator result is not an object"); return jv_undef(); }
+                    dn = js_get(vm, r, vm->s_done);
+                    if (vm->ctl) return jv_undef();
+                    if (js_truthy(vm, dn)) break;
+                    js_array_push(vm, arr, js_get(vm, r, vm->s_value));
+                    if (vm->ctl) return jv_undef();
+                }
+                *arr_out = arr;
+                return jv_obj(arr);
+            }
+        }
         if (o->cls == JS_CLASS_HOST) {      /* NodeList, HTMLCollection: length + index */
             uint32_t len;
             jv lv = js_get(vm, v, vm->s_length);
@@ -142,7 +175,7 @@ jv js_iter_values(js_vm_t *vm, jv v, uint32_t *arr_out) {
             }
         }
     }
-    js_throw_err(vm, JE_TYPE, "value is not iterable (the guest iterates arrays, strings, Map, Set and arguments)");
+    js_throw_err(vm, JE_TYPE, "value is not iterable (the guest iterates arrays, strings, Map, Set, arguments, generators and iterator objects)");
     return jv_undef();
 }
 
@@ -499,6 +532,8 @@ static const char *class_tag(js_vm_t *vm, jv v) {
     case JS_CLASS_DATE: return "Date";
     case JS_CLASS_MAP: return "Map";
     case JS_CLASS_SET: return "Set";
+    case JS_CLASS_PROMISE: return "Promise";
+    case JS_CLASS_GEN: return "Generator";
     default: return "Object";
     }
 }
@@ -1459,9 +1494,10 @@ static void disp(js_vm_t *vm, dsp_t *d, jv v, int quote, int depth) {
     switch (o->cls) {
     case JS_CLASS_FUNC: case JS_CLASS_NATIVE: case JS_CLASS_BOUND: {
         int is_class = o->cls == JS_CLASS_FUNC && (FN_FLAGS(o) & FN_CLASSCTOR);
+        int kind = o->cls == JS_CLASS_FUNC ? JNODE(vm, o->x0)->op : 0;
         jv nm = js_get(vm, v, vm->s_name);
         if (vm->ctl) return;
-        dputs(d, is_class ? "[class " : "[Function");
+        dputs(d, is_class ? "[class " : (kind & FK_GEN) ? "[GeneratorFunction" : (kind & FK_ASYNC) ? "[AsyncFunction" : "[Function");
         if (nm.t == JT_STR && JSTR(vm, nm.a)->len) {
             if (!is_class) dputs(d, ": ");
             dstr(vm, d, nm.a, 0);
@@ -1487,6 +1523,21 @@ static void disp(js_vm_t *vm, dsp_t *d, jv v, int quote, int depth) {
         if (s.t == JT_STR) dstr(vm, d, s.a, 0);
         return;
     }
+    case JS_CLASS_PROMISE: {     /* Lot 114: like node: Promise { 1 } */
+        jv pv;
+        int st = js_promise_state(vm, v, &pv);
+        dputs(d, "Promise { ");
+        if (st == 0) dputs(d, "<pending>");
+        else {
+            if (st == 2) dputs(d, "<rejected> ");
+            disp(vm, d, pv, 1, depth + 1);
+        }
+        dputs(d, " }");
+        return;
+    }
+    case JS_CLASS_GEN:
+        dputs(d, "Object [Generator] {}");
+        return;
     case JS_CLASS_BOOLEAN: case JS_CLASS_NUMBER: case JS_CLASS_STRING: {
         jv p = jv_undef();
         p.t = (uint8_t)o->x0;
@@ -1768,7 +1819,7 @@ int js_init(js_vm_t *vm, void *mem, uint32_t size) {
     if (!vm->genv) return -1;
     JENV(vm, vm->genv)->kind |= E_CAPTURED;
     JENV(vm, vm->genv)->thisv = jv_obj(vm->global);
-    if (js_lib_init(vm) != 0 || js_lib2_init(vm) != 0 || js_regexp_init(vm) != 0) return -1;
+    if (js_lib_init(vm) != 0 || js_lib2_init(vm) != 0 || js_regexp_init(vm) != 0 || js_co_init(vm) != 0) return -1;
     return vm->ctl == CTL_ABORT ? -1 : 0;
 }
 
@@ -1838,6 +1889,26 @@ int js_eval(js_vm_t *vm, const char *src, int len, jv *out) {
     vm->src_len = len;
     on_stack(vm, eval_entry);
     if (out) *out = vm->run_out;
+    return vm->run_rc;
+}
+
+/* Lot 114: the microtask queue on the private stack */
+static void jobs_entry(js_vm_t *vm) {
+    int errors = js_jobs_drain(vm);
+    vm->run_out = jv_undef();
+    if (vm->ctl == CTL_ABORT) vm->run_rc = JS_ABORTED;
+    else vm->run_rc = errors ? JS_THROWN : JS_OK;
+    vm->ctl = CTL_NONE;
+    vm->opt_short = 0;
+    vm->depth = 0;
+    vm->in_new = 0;
+    vm->super_this = 0;
+}
+
+int js_run_jobs(js_vm_t *vm) {
+    if (!vm->job_head && !vm->nunhandled) { vm->err[0] = 0; return JS_OK; }
+    begin_run(vm);
+    on_stack(vm, jobs_entry);
     return vm->run_rc;
 }
 

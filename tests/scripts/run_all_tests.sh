@@ -30,6 +30,14 @@ SKIPPED_TESTS=0
 mkdir -p "$LOG_DIR"
 mkdir -p "$BUILD_DIR"
 
+# Parallel workers. Default: one per CPU. TEST_JOBS=1 runs one test at a time.
+TEST_JOBS="${TEST_JOBS:-$(nproc 2>/dev/null || echo 1)}"
+case "$TEST_JOBS" in ''|*[!0-9]*) TEST_JOBS=1 ;; esac
+[ "$TEST_JOBS" -ge 1 ] || TEST_JOBS=1
+PAR_DIR="$BUILD_DIR/.test_parts"
+rm -rf "$PAR_DIR"
+mkdir -p "$PAR_DIR"
+
 echo -e "${BLUE}=================================${NC}"
 echo -e "${BLUE} MOHHDY Test Suite Runner v1.0   ${NC}"
 echo -e "${BLUE}=================================${NC}"
@@ -73,15 +81,17 @@ add_unity_counts() {
     fi
 }
 
-# Fonction pour compiler et exécuter un test
-run_test() {
+# Compile and run one test. Runs in a worker subshell: RESULTS_FILE is the
+# test's own log part, the test output goes to "$RESULTS_FILE.out" and the
+# return code is 0 pass, 1 fail, 2 compilation error. Nothing is printed and
+# no counter is touched here; collect_test does both, in discovery order.
+run_test_body() {
     local test_file=$1
     local test_name=$2
     local test_type=$3
-    
+
     echo "DEBUG: run_test $test_name" >> "$RESULTS_FILE"
-    echo -n "Running $test_name... "
-    
+
     # Compiler le test
     local test_binary="$BUILD_DIR/$(basename $test_file .c)"
     
@@ -190,7 +200,7 @@ run_test() {
         cflags="$cflags -I$BASE_DIR/userspace"
     fi
     if [ "$(basename "$test_file")" = "test_osui_p2p_prod_perf.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/p2p_shape.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsweb.c $BASE_DIR/userspace/umalloc.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/p2p.c $BASE_DIR/userspace/p2p_bwe.c $BASE_DIR/userspace/p2p_trend.c $BASE_DIR/userspace/p2p_pace.c $BASE_DIR/userspace/p2p_flow.c $BASE_DIR/userspace/p2p_rtx.c $BASE_DIR/userspace/p2p_shape.c $BASE_DIR/userspace/stun.c $BASE_DIR/userspace/prod.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/sha256.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/bigint.c $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsco.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsnet.c $BASE_DIR/userspace/wf_jsapi.c $BASE_DIR/userspace/wf_jshist.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_jsweb.c $BASE_DIR/userspace/umalloc.c"
         cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_runtime.c" ]; then
@@ -198,7 +208,7 @@ run_test() {
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_gui.c" ]; then
-        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/umalloc.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsweb.c"
+        extra_src="$extra_src $BASE_DIR/userspace/osui_gui.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/osui_scale.c $BASE_DIR/userspace/osui_tools.c $BASE_DIR/userspace/imgdec.c $BASE_DIR/userspace/osui_form.c $BASE_DIR/userspace/osui_parity.c $BASE_DIR/userspace/umalloc.c $BASE_DIR/userspace/osui_panes.c $BASE_DIR/userspace/osui_files.c $BASE_DIR/userspace/osui_app.c $BASE_DIR/userspace/fsops.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/osui_ide.c $BASE_DIR/userspace/osui_runtime.c $BASE_DIR/userspace/webrt.c $BASE_DIR/userspace/promptmessage.c $BASE_DIR/userspace/platform.c $BASE_DIR/userspace/csig.c $BASE_DIR/kernel/bigint.c $BASE_DIR/kernel/sha256.c $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsco.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsnet.c $BASE_DIR/userspace/wf_jsapi.c $BASE_DIR/userspace/wf_jshist.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_jsweb.c"
         cflags="$cflags -I$BASE_DIR/userspace -DMOHHDY_OSUI_HOST_TEST=1"
     fi
     if [ "$(basename "$test_file")" = "test_osui_files.c" ]; then
@@ -259,11 +269,19 @@ run_test() {
             extra_libs="$extra_libs -lm"
             ;;
         test_lot113_js.c)
-            extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c"
+            extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsco.c"
+            cflags="$cflags -I$BASE_DIR/userspace"
+            ;;
+        test_lot114_async.c)
+            extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsco.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
         test_lot113_dom.c)
-            extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsweb.c $BASE_DIR/userspace/umalloc.c"
+            extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsco.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsnet.c $BASE_DIR/userspace/wf_jsapi.c $BASE_DIR/userspace/wf_jshist.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_jsweb.c $BASE_DIR/userspace/umalloc.c"
+            cflags="$cflags -I$BASE_DIR/userspace"
+            ;;
+        test_lot114_page.c|test_lot114_api.c|test_lot114_hist.c)
+            extra_src="$extra_src $BASE_DIR/userspace/wf_jsnum.c $BASE_DIR/userspace/wf_jsrt.c $BASE_DIR/userspace/wf_jsparse.c $BASE_DIR/userspace/wf_jsrun.c $BASE_DIR/userspace/wf_jslib.c $BASE_DIR/userspace/wf_jslib2.c $BASE_DIR/userspace/wf_jsre.c $BASE_DIR/userspace/wf_jsco.c $BASE_DIR/userspace/wf_jsdom.c $BASE_DIR/userspace/wf_jsnet.c $BASE_DIR/userspace/wf_jsapi.c $BASE_DIR/userspace/wf_jshist.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_jsweb.c $BASE_DIR/userspace/umalloc.c"
             cflags="$cflags -I$BASE_DIR/userspace"
             ;;
     esac
@@ -279,7 +297,7 @@ run_test() {
         test_wf_webimg.c|test_wf_webimg_anim.c|test_wf_srcset.c|test_wf_cache.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c $BASE_DIR/userspace/wf_cssbg.c $BASE_DIR/userspace/wf_cssprop.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/userspace/wf_webimg.c $BASE_DIR/userspace/webeng.c $BASE_DIR/userspace/imgdec.c"; cflags="$cflags -I$BASE_DIR/include -I$TEST_DIR/unit/userspace" ;;
         test_wsearch_api.c) extra_src="$extra_src $BASE_DIR/userspace/wsearch_api.c $BASE_DIR/userspace/wsearch.c $BASE_DIR/userspace/wsearch_local.c $BASE_DIR/userspace/wf_entity.c"; cflags="$cflags -I$BASE_DIR/userspace" ;;
         test_wf_http.c) extra_src="$extra_src $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c $BASE_DIR/userspace/wf_cssbg.c $BASE_DIR/userspace/wf_cssprop.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c" ;;
-        test_wf_article.c) extra_src="$extra_src $BASE_DIR/userspace/wf_article.c" ;;
+        test_wf_article.c) extra_src="$extra_src $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_entity.c" ;;
         test_lot86.c)
             extra_src="$extra_src $BASE_DIR/userspace/wf_nav.c $BASE_DIR/userspace/desk_cfg.c $BASE_DIR/userspace/wf_store.c $BASE_DIR/userspace/wf_blocks.c $BASE_DIR/userspace/wf_cookie.c $BASE_DIR/userspace/wf_cache.c $BASE_DIR/userspace/wf_fetch.c $BASE_DIR/userspace/wf_http.c $BASE_DIR/userspace/wf_dns.c $BASE_DIR/userspace/wf_tls.c $BASE_DIR/userspace/wf_inflate.c $BASE_DIR/userspace/wf_x509.c $BASE_DIR/userspace/wf_bn.c $BASE_DIR/userspace/wf_sha512.c $BASE_DIR/userspace/wf_ec.c $BASE_DIR/userspace/wf_p256.c $BASE_DIR/userspace/wf_aead.c $BASE_DIR/userspace/wf_rsa.c $BASE_DIR/userspace/wf_html.c $BASE_DIR/userspace/wf_sitecss.c $BASE_DIR/userspace/wf_cssmath.c $BASE_DIR/userspace/wf_cssvar.c $BASE_DIR/userspace/wf_cssbg.c $BASE_DIR/userspace/wf_cssprop.c $BASE_DIR/userspace/wf_read.c $BASE_DIR/userspace/wf_score.c $BASE_DIR/userspace/wf_searchform.c $BASE_DIR/userspace/wf_article.c $BASE_DIR/userspace/wf_srcset.c $BASE_DIR/userspace/wf_entity.c $BASE_DIR/userspace/wf_form.c $BASE_DIR/kernel/aes_gcm.c $BASE_DIR/kernel/x25519.c $BASE_DIR/kernel/sha256.c"
             cflags="$cflags -I$BASE_DIR/userspace -I$BASE_DIR/include"
@@ -537,27 +555,66 @@ run_test() {
         # TEST_RUNNER lets a non-x86 host run the i386 ELF (for example
         # TEST_RUNNER="qemu-i386 -L /usr/i686-linux-gnu" on arm64). Empty on x86.
         if test_output=$(${TEST_RUNNER:-} "$test_binary" 2>&1); then
-            echo -e "${GREEN}PASS${NC}"
             echo "$test_output" >> "$RESULTS_FILE"
-            add_unity_counts "$test_output" pass
+            printf '%s\n' "$test_output" > "$RESULTS_FILE.out"
             return 0
         else
-            echo -e "${RED}FAIL${NC}"
             echo "Test: $test_name" >> "$RESULTS_FILE"
             echo "$test_output" >> "$RESULTS_FILE"
             echo "---" >> "$RESULTS_FILE"
-            add_unity_counts "$test_output" fail
+            printf '%s\n' "$test_output" > "$RESULTS_FILE.out"
             return 1
         fi
     else
-        echo -e "${YELLOW}COMPILATION_ERROR${NC}"
         echo "Compilation failed for $test_name" >> "$RESULTS_FILE"
-        # A test that does not build is a failure, not a skip: otherwise a
-        # broken test silently drops out of make test-all.
-        TOTAL_TESTS=$((TOTAL_TESTS + 1))
-        FAILED_TESTS=$((FAILED_TESTS + 1))
         return 2
     fi
+}
+
+# Worker: one test in a subshell, its log part and return code in $PAR_DIR.
+start_test() {
+    local test_file=$1 test_name=$2 test_type=$3 rc=0
+    local part="$PAR_DIR/$test_name"
+    : > "$part.log"
+    ( RESULTS_FILE="$part.log"; set +e; run_test_body "$test_file" "$test_name" "$test_type"; echo $? > "$part.rc" ) || true
+}
+
+# Collector: prints the PASS/FAIL line, appends the log part to the results
+# file and updates the counters, in discovery order (same output as the old
+# sequential runner). Returns the test's code.
+collect_test() {
+    local test_name=$1
+    local part="$PAR_DIR/$test_name"
+    local rc
+    rc=$(cat "$part.rc" 2>/dev/null || echo 2)
+    echo -n "Running $test_name... "
+    cat "$part.log" >> "$RESULTS_FILE"
+    case "$rc" in
+        0)
+            echo -e "${GREEN}PASS${NC}"
+            add_unity_counts "$(cat "$part.log.out" 2>/dev/null)" pass
+            ;;
+        1)
+            echo -e "${RED}FAIL${NC}"
+            add_unity_counts "$(cat "$part.log.out" 2>/dev/null)" fail
+            ;;
+        *)
+            echo -e "${YELLOW}COMPILATION_ERROR${NC}"
+            # A test that does not build is a failure, not a skip: otherwise a
+            # broken test silently drops out of make test-all.
+            TOTAL_TESTS=$((TOTAL_TESTS + 1))
+            FAILED_TESTS=$((FAILED_TESTS + 1))
+            rc=2
+            ;;
+    esac
+    rm -f "$part.log" "$part.log.out" "$part.rc"
+    return "$rc"
+}
+
+# Sequential form kept for callers that run one test.
+run_test() {
+    start_test "$@"
+    collect_test "$2"
 }
 
 # Fonction pour exécuter une catégorie de tests
@@ -571,17 +628,35 @@ run_test_category() {
     local category_failed=0
     local category_total=0
     
-    # Trouver tous les fichiers de test dans la catégorie
+    # Every test of the category is compiled and run by up to TEST_JOBS
+    # workers (each test has its own binary, log part and .gcda names), then
+    # collected in discovery order. TEST_JOBS=1 is the old sequential run.
+    local names=()
+    local running=0
     for test_file in "$TEST_DIR/$category"/*.c; do
         if [ -f "$test_file" ]; then
             local test_name=$(basename "$test_file" .c)
-            category_total=$((category_total + 1))
-            
-            if run_test "$test_file" "$test_name" "$category"; then
-                category_passed=$((category_passed + 1))
+            names+=("$test_name")
+            if [ "$TEST_JOBS" -le 1 ]; then
+                start_test "$test_file" "$test_name" "$category"
             else
-                category_failed=$((category_failed + 1))
+                start_test "$test_file" "$test_name" "$category" &
+                running=$((running + 1))
+                if [ "$running" -ge "$TEST_JOBS" ]; then
+                    wait -n || true
+                    running=$((running - 1))
+                fi
             fi
+        fi
+    done
+    wait || true
+    local test_name
+    for test_name in "${names[@]}"; do
+        category_total=$((category_total + 1))
+        if collect_test "$test_name"; then
+            category_passed=$((category_passed + 1))
+        else
+            category_failed=$((category_failed + 1))
         fi
     done
     

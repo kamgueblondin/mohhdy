@@ -229,7 +229,11 @@ jobs:
   coverage:
     name: Host unit-test coverage (gcov floor)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Lot 114: 23m36s on PR 271 (tests one at a time, gcov twice per
+    # .gcda, then a QEMU boot). The runner now uses one worker per CPU,
+    # gcov runs once per .gcda in a pool, and the QEMU boot has its own
+    # job (platform-groundwork below).
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -245,16 +249,10 @@ jobs:
       - name: Install dependencies
         run: bash scripts/ci-install-deps.sh
 
-      # Measured 79.56% on 2026-10-17. The floor fails the job on a drop.
+      # Measured 79.56% on 2026-10-17, 91.77% on 2026-11-18 (Lot 114).
+      # The floor fails the job on a drop.
       - name: make coverage (host unit tests, gcov line floor)
         run: make coverage COVERAGE_MIN=78
-
-      # Lot 9 headroom: phase 6 platform contract moved here from ai-gguf.
-      - name: Build OS image
-        run: make all
-
-      - name: QEMU phase 6 platform groundwork (HAL, screen, power, devices, migration, deploy)
-        run: make qemu-platform
 
       - name: Upload coverage report
         if: always()
@@ -264,6 +262,42 @@ jobs:
           if-no-files-found: ignore
           path: |
             test_logs/coverage_report.txt
+
+  # Lot 9 moved the phase 6 platform contract from ai-gguf into the
+  # coverage job; Lot 114 gives it its own job so both stay under 15 min.
+  platform-groundwork:
+    name: QEMU phase 6 platform groundwork (HAL, screen, power, devices, migration, deploy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU phase 6 platform groundwork (HAL, screen, power, devices, migration, deploy)
+        run: make qemu-platform
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-groundwork-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
 
   # Lot 8 (US-076): ARMv7-A kernel core on qemu-system-arm -M virt. Own
   # job: its toolchain is separate from the i386 one (about 2 min).
@@ -1273,6 +1307,41 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lot90-tv-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
+  # Lot 114: one boot of make qemu-lot114
+  lot114-js-page:
+    name: QEMU external scripts, fetch/XHR, async and events after load in the page pass (Lot 114)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 114 boot
+        run: make qemu-lot114
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot114-js-page-logs
           if-no-files-found: ignore
           path: |
             test_logs/

@@ -1,5 +1,6 @@
 /* wf_article.c - Lot 85. See wf_article.h. */
 #include "wf_article.h"
+#include "wf_entity.h"
 
 static int spc(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'; }
 static char lc(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
@@ -92,6 +93,21 @@ static void put_text_char(art_t *a, char c) {
     a->any = 1;
 }
 
+/* Lot 114: an ASCII character reference in the text ("&amp;", "&lt;",
+ * "&#39;") is written as the character, as wf_section.c already does for
+ * the rendered sections. wf_html_reduce_ex gives text whose other
+ * characters are already display bytes and escapes only these, so a
+ * reference to a character above ASCII stays as it is. The reader printed
+ * "&amp;" raw before, which a page script setting textContent to "a & b"
+ * made visible. Returns the bytes used, 0 when nothing was written. */
+static int put_reference(art_t *a, const char *s, int n) {
+    int used = 0;
+    uint32_t cp = wf_entity_decode(s, n, &used);
+    if (used <= 0 || cp == 0 || cp >= 0x80) return 0;
+    put_text_char(a, (char)cp);
+    return used;
+}
+
 int wf_article_text(const char *html, int n, char *out, int cap) {
     art_t a;
     int i = 0;
@@ -103,6 +119,10 @@ int wf_article_text(const char *html, int n, char *out, int cap) {
         char name[16];
         int close = 0, end = 0, level;
         if (html[i] != '<') {
+            if (!a.skip && html[i] == '&') {
+                int used = put_reference(&a, html + i, n - i);
+                if (used > 0) { i += used; continue; }
+            }
             if (!a.skip) put_text_char(&a, html[i]);
             i++;
             continue;

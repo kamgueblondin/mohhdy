@@ -151,6 +151,33 @@ static void stats_line(char *out, int out_max) {
         ws_cat_i(out, out_max, g_last.timers);
         ws_cat(out, out_max, " events ");
         ws_cat_i(out, out_max, g_last.events);
+        /* Lot 114: after the Lot 113 fields, which keep their order */
+        ws_cat(out, out_max, " ext_ran ");
+        ws_cat_i(out, out_max, g_last.ext_ran);
+        ws_cat(out, out_max, " ext_failed ");
+        ws_cat_i(out, out_max, g_last.ext_failed);
+        ws_cat(out, out_max, " ext_skipped ");
+        ws_cat_i(out, out_max, g_last.ext_skipped);
+        ws_cat(out, out_max, " dynamic ");
+        ws_cat_i(out, out_max, g_last.dynamic);
+        ws_cat(out, out_max, " microtasks ");
+        ws_cat_i(out, out_max, g_last.microtasks);
+        ws_cat(out, out_max, " rejections ");
+        ws_cat_i(out, out_max, g_last.rejections);
+        ws_cat(out, out_max, " net ");
+        ws_cat_i(out, out_max, g_last.net_requests);
+        ws_cat(out, out_max, " net_failed ");
+        ws_cat_i(out, out_max, g_last.net_failed);
+        ws_cat(out, out_max, " layout ");
+        ws_cat_i(out, out_max, g_last.layout_reads);
+        ws_cat(out, out_max, " live ");
+        ws_cat_i(out, out_max, g_last.live_events);
+        ws_cat(out, out_max, " fields ");
+        ws_cat_i(out, out_max, g_last.fields);
+        ws_cat(out, out_max, " marks ");
+        ws_cat_i(out, out_max, g_last.marks);
+        ws_cat(out, out_max, " alive ");
+        ws_cat_i(out, out_max, wf_jspage_alive());
         ws_cat(out, out_max, " nodes ");
         ws_cat_i(out, out_max, g_last.nodes);
         ws_cat(out, out_max, " truncated ");
@@ -196,7 +223,13 @@ int wf_jsweb_command(const char *line, char *out, int out_max) {
         ws_cat(out, out_max, "osui js realm reset\n");
         return 1;
     }
-    ws_cat(out, out_max, "osui web-js usage: web-js on|off|status|log|reset\n");
+    if (word_is(a, "click") || word_is(a, "key") || word_is(a, "input") || word_is(a, "focus") || word_is(a, "blur") ||
+        word_is(a, "submit") || word_is(a, "event") || word_is(a, "clicks")) {
+        /* Lot 114: reached only without the shell page (shell_page_js) */
+        ws_cat(out, out_max, "osui web-js event error=no_page (open a page with web-js on)\n");
+        return 1;
+    }
+    ws_cat(out, out_max, "osui web-js usage: web-js on|off|status|log|reset|click|key|input|focus|blur|submit|event|clicks|field|rfield\n");
     return 1;
 }
 
@@ -210,6 +243,7 @@ int wf_jsweb_page(char *body, int n, int max, const char *url) {
         g_page_out_max = g_page_out ? max : 0;
     }
     if (!g_page_mem || !g_page_out) return n;
+    wf_jspage_close();
     r = wf_jspage_run(g_page_mem, WF_JSWEB_PAGE_ARENA, body, n, url, g_page_out, max, &g_last);
     g_last_rc = r;
     if (r == 0) { g_last_valid = 0; return n; }
@@ -219,6 +253,38 @@ int wf_jsweb_page(char *body, int n, int max, const char *url) {
     for (i = 0; i < r; i++) body[i] = g_page_out[i];
     body[r] = 0;
     return r;
+}
+
+int wf_jsweb_event(const char *type, const char *target, const char *arg, char *body, int max) {
+    int r, i;
+    if (!g_on || !g_page_out || !body || max <= 1) return -1;
+    r = wf_jspage_event(type, target, arg, g_page_out, g_page_out_max < max ? g_page_out_max : max, &g_last);
+    if (r < 0) return r;
+    if (r >= max - 1) return -3;
+    for (i = 0; i < r; i++) body[i] = g_page_out[i];
+    body[r] = 0;
+    return r;
+}
+
+int wf_jsweb_clickables(char *out, int out_max) { return wf_jspage_clickables(out, out_max); }
+int wf_jsweb_wants_keys(void) { return g_on && wf_jspage_wants_keys(); }
+
+void wf_jsweb_event_note(char *out, int out_max) {
+    if (!out) return;
+    ws_cat(out, out_max, " events ");
+    ws_cat_i(out, out_max, g_last.events);
+    ws_cat(out, out_max, " live ");
+    ws_cat_i(out, out_max, g_last.live_events);
+    ws_cat(out, out_max, " timers ");
+    ws_cat_i(out, out_max, g_last.timers);
+    ws_cat(out, out_max, " microtasks ");
+    ws_cat_i(out, out_max, g_last.microtasks);
+    ws_cat(out, out_max, " marks ");
+    ws_cat_i(out, out_max, g_last.marks);
+    ws_cat(out, out_max, " failed ");
+    ws_cat_i(out, out_max, g_last.failed);
+    ws_cat(out, out_max, " mem ");
+    ws_cat_u(out, out_max, g_last.mem);
 }
 
 void wf_jsweb_note(char *out, int out_max) {

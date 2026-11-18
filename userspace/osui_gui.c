@@ -204,6 +204,9 @@ static const osui_web_page_ops_t *g_wops;
  * cleared on every new page; the source length for a render after a
  * click or a key */
 static we_forms_t g_web_forms;
+static void web_js_fields_reset(void);   /* Lot 114 */
+static int web_js_fields(int fr, char *out, int out_max);
+static int web_js_rfield(const char *what, char *out, int out_max);
 static void web_offer_clear(void);   /* Lot 87 */
 static int web_offer_take(char *out, int out_max);
 static int web_offer_key(int wk, char *out, int out_max);
@@ -456,6 +459,7 @@ static int web_go_page(const char *file, int push, char *out, int out_max) {
     char status[640];   /* Lot 87: the fetch line plus a web-compat line */
     g_web_errpage = 0;
     we_forms_init(&g_web_forms);   /* lot 74: a new page, new controls */
+    web_js_fields_reset();
     web_offer_clear();
     g_web_forms_ready = 1;
     if (osui_gui_web_load(file, status, (int)sizeof(status)) != 0) {
@@ -520,8 +524,18 @@ static int web_submit(int n, char *out, int out_max) {
         app_out(out, out_max, "osui web form error=no_form", 0);
         return -1;
     }
+    {
+        static char w[24];
+        scpy(w, (int)sizeof(w), "submit ");
+        if (n >= 0) gui_cat_u(w, (int)sizeof(w), (unsigned)n); else scat(w, (int)sizeof(w), "f");
+        if (web_js_rfield(w, out, out_max) & 2) {
+            app_out(out, out_max, "osui web form submit prevented by the page scripts", 0);
+            return 1;
+        }
+    }
     g_web_final[0] = 0;
     we_forms_init(&g_web_forms);
+    web_js_fields_reset();
     len = g_wops->submit(n, g_web_src, OSUI_WEB_SRC_MAX, g_web_final, (int)sizeof(g_web_final), status, (int)sizeof(status));
     if (len < 0) { app_out(out, out_max, status[0] ? status : "osui web form error=failed", 0); return -1; }
     g_web_src[len < OSUI_WEB_SRC_MAX ? len : OSUI_WEB_SRC_MAX - 1] = 0;
@@ -602,6 +616,7 @@ static int web_form_command(const char *line, char *out, int out_max) {
             else break;
         }
         if (changed) (void)web_form_render();
+        if (changed) (void)web_js_fields(WE_FACT_CHANGED, out, out_max);   /* Lot 114 */
         scpy(m, (int)sizeof(m), " typed ");
         gui_cat_u(m, (int)sizeof(m), (unsigned)typed);
         app_out(out, out_max, fr < 0 && !typed ? "osui web form2 error=no_focus" : "osui web form2", fr < 0 && !typed ? 0 : m);
@@ -640,10 +655,62 @@ static int web_form_command(const char *line, char *out, int out_max) {
     return 0;
 }
 
+/* Lot 114 (US-031): a web-js event line through the shell page
+ * (page_js); the page written again replaces the view. 1 when handled. */
+static int web_js_word(const char *a, const char *w) {
+    int n = slen(w);
+    return sncmp(a, w, n) == 0 && (a[n] == ' ' || !a[n]);
+}
+
+static int web_js_show(int n) {
+    int rc, scroll = g_web_scroll;
+    if (n <= 0) return 0;
+    g_web_src[n < OSUI_WEB_SRC_MAX ? n : OSUI_WEB_SRC_MAX - 1] = 0;
+    rc = osui_web_pipeline(g_web_src, n);
+    if (rc == 0) g_web_scroll = we_scroll(&g_web, scroll);
+    return rc == 0;
+}
+
+/* Lot 114: a console (Lot 71) form field through the shell page:
+ * "set N|f" (its state now) or "submit N|f". 2 when the scripts
+ * cancelled it; the page written again is in g_web_src (shown by the
+ * caller's section refresh) */
+static int web_js_rfield(const char *what, char *out, int out_max) {
+    static char jl[64], jo[1024];
+    const char *p;
+    int k, rc = 0;
+    if (!what || !g_wops || !g_wops->page_js) return 0;
+    scpy(jl, (int)sizeof(jl), "web-js rfield ");
+    scat(jl, (int)sizeof(jl), what);
+    k = g_wops->page_js(jl, g_web_src, OSUI_WEB_SRC_MAX, jo, (int)sizeof(jo));
+    if (k < 0) return 0;
+    if (out) scat(out, out_max, jo);
+    for (p = jo; *p; p++) if (sncmp(p, " prevented=1", 12) == 0) rc |= 2;
+    if (k > 0 && g_web_active) { (void)web_js_show(k); rc |= 1; }
+    return rc;
+}
+
+static int web_js_line(const char *line, char *out, int out_max) {
+    const char *a;
+    int n;
+    if (sncmp(line, "web-js ", 7) != 0) return 0;
+    a = line + 7;
+    while (*a == ' ') a++;
+    if (!web_js_word(a, "click") && !web_js_word(a, "key") && !web_js_word(a, "input") && !web_js_word(a, "focus") &&
+        !web_js_word(a, "blur") && !web_js_word(a, "submit") && !web_js_word(a, "event") && !web_js_word(a, "clicks") &&
+        !web_js_word(a, "field") && !web_js_word(a, "rfield"))
+        return 0;
+    if (!g_wops || !g_wops->page_js) return 0;
+    n = g_wops->page_js(line, g_web_src, OSUI_WEB_SRC_MAX, out, out_max);
+    if (n > 0 && g_web_active) (void)web_js_show(n);
+    return 1;
+}
+
 int osui_gui_web_command(const char *line, char *out, int out_max) {
     const char *a;
     int n = 0, neg = 0;
     if (out && out_max > 0) out[0] = 0;
+    if (web_js_line(line, out, out_max)) return 1;
     /* Lot 113 (US-031): js and web-js, one path for the console and the GUI */
     if (wf_jsweb_command(line, out, out_max)) return 1;
     if (sncmp(line, "web-open", 8) == 0 && (line[8] == ' ' || !line[8])) {
@@ -719,6 +786,12 @@ int osui_gui_web_command(const char *line, char *out, int out_max) {
         if (!g_wops || !g_wops->form_set || web_shell_sections() <= 0 || g_wops->form_set(n, a) != 0) {
             app_out(out, out_max, "osui web input error=no_field usage web-input N TEXT (N from the page links)", 0);
             return 1;
+        }
+        {   /* Lot 114: the page scripts see the new value */
+            static char w[24];
+            scpy(w, (int)sizeof(w), "set ");
+            gui_cat_u(w, (int)sizeof(w), (unsigned)n);
+            (void)web_js_rfield(w, out, out_max);
         }
         if (web_nsections() > 0) (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
         app_out(out, out_max, "osui web input ok", 0);
@@ -953,6 +1026,7 @@ static int web_form_post(const char *url, const we_form_req_t *q, char *out, int
                           status, (int)sizeof(status));
     if (len < 0) { app_out(out, out_max, status[0] ? status : "osui web form2 error=failed", 0); return -1; }
     we_forms_init(&g_web_forms);
+    web_js_fields_reset();
     g_web_src[len < OSUI_WEB_SRC_MAX ? len : OSUI_WEB_SRC_MAX - 1] = 0;
     if (osui_web_pipeline(g_web_src, len < OSUI_WEB_SRC_MAX ? len : OSUI_WEB_SRC_MAX - 1) != 0) return -1;
     scpy(g_web_file, (int)sizeof(g_web_file), g_web_final[0] ? g_web_final : url);
@@ -1286,8 +1360,137 @@ int osui_gui_offer_state(char *out, int cap) {
     return 0;
 }
 
+/* Lot 114 (US-031): the page scripts see the controls of the rendered
+ * page. After a click or a key changed a control, web_js_fields tells the
+ * live page (web-js field, the same shell path as the console): focus and
+ * blur when the focus moved, input with the new text, check with the new
+ * state of a box or radio, change with the chosen option, submit before
+ * the form is sent. A script that changed the DOM gets the page written
+ * again (the controls keep their state); a value a script gave the field
+ * goes back into the control; a prevented submit is not sent and a
+ * prevented click puts the old check back. Nothing happens without a live
+ * page (web-js off, or a page without scripts). */
+static int g_jsf_focus = -1;
+static char g_jsf_val[WE_FSTATE_VAL];
+
+static void web_js_fields_reset(void) { g_jsf_focus = -1; g_jsf_val[0] = 0; }
+
+static int web_ctl_text(const we_node_t *n) {
+    if (!n) return 0;
+    if (scmp(n->tag, "textarea") == 0) return 1;
+    return scmp(n->tag, "input") == 0 && (n->form_type == WE_FORM_TEXT || n->form_type == WE_FORM_PASSWORD ||
+                                     n->form_type == WE_FORM_DATE || n->form_type == WE_FORM_COLOR);
+}
+
+/* 1 shown again, 2 prevented, 4 a value came back; 0 when no live page */
+static int web_js_field(const char *act, int ctl, const char *val, char *out, int out_max) {
+    static char jl[WE_FSTATE_VAL + 160], jo[2048], nm[48];
+    const we_node_t *n = web_ctl_node(ctl);
+    int i, k, nth = 0, len, rc = 0, ok = 1;
+    const char *p;
+    if (!g_wops || !g_wops->page_js || !n) return 0;
+    len = n->fname_len < (int)sizeof(nm) - 1 ? n->fname_len : 0;
+    if ((int)n->fname_off + len > WE_POOL) len = 0;
+    for (k = 0; k < len; k++) { nm[k] = g_web.pool[n->fname_off + k]; if (nm[k] == ' ' || !nm[k]) ok = 0; }
+    nm[len] = 0;
+    if (!ok) nm[0] = 0;
+    for (i = 1; nm[0] && i < (int)g_web.nnodes; i++) {
+        const we_node_t *q = &g_web.nodes[i];
+        if (!q->form_ord || q->form_ord >= ctl + 1 || q->fname_len != len || (int)q->fname_off + len > WE_POOL) continue;
+        for (k = 0; k < len && g_web.pool[q->fname_off + k] == nm[k]; k++) {}
+        if (k == len) nth++;
+    }
+    scpy(jl, (int)sizeof(jl), "web-js field ");
+    scat(jl, (int)sizeof(jl), act);
+    scat(jl, (int)sizeof(jl), " ");
+    gui_cat_u(jl, (int)sizeof(jl), (unsigned)ctl);
+    scat(jl, (int)sizeof(jl), " ");
+    gui_cat_u(jl, (int)sizeof(jl), (unsigned)nth);
+    scat(jl, (int)sizeof(jl), " ");
+    scat(jl, (int)sizeof(jl), nm[0] ? nm : "-");
+    scat(jl, (int)sizeof(jl), " ");
+    scat(jl, (int)sizeof(jl), val ? val : "");
+    k = g_wops->page_js(jl, g_web_src, OSUI_WEB_SRC_MAX, jo, (int)sizeof(jo));
+    if (k < 0) return 0;
+    if (out) scat(out, out_max, jo);
+    for (p = jo; *p; p++) {
+        if (sncmp(p, " prevented=1", 12) == 0) rc |= 2;
+        if (sncmp(p, "osui web-js field-value ", 24) == 0) {
+            static char v[WE_FSTATE_VAL];
+            const char *e = p + 24;
+            for (i = 0; e[i] && e[i] != '\n' && i < (int)sizeof(v) - 1; i++) v[i] = e[i];
+            v[i] = 0;
+            if (web_ctl_text(n)) { (void)we_form_set_text(&g_web, ctl, v); scpy(g_jsf_val, (int)sizeof(g_jsf_val), v); }
+            else if ((n->form_type == WE_FORM_CHECKBOX || n->form_type == WE_FORM_RADIO) && ctl < WE_FSTATE_MAX) {
+                g_web_forms.c[ctl].set = 1;
+                g_web_forms.c[ctl].checked = v[0] == '1';
+            }
+            rc |= 4;
+        }
+    }
+    if (k > 0 && web_js_show(k)) rc |= 1;
+    else if (rc & 4) (void)web_form_render();
+    return rc;
+}
+
+/* 1 when the scripts cancelled the submit */
+static int web_js_fields(int fr, char *out, int out_max) {
+    int f = g_web_forms.focus, rc = 0;
+    const we_node_t *n;
+    char v[WE_FSTATE_VAL];
+    if (!g_wops || !g_wops->page_js) return 0;
+    if (f != g_jsf_focus) {
+        int old = g_jsf_focus;
+        g_jsf_focus = f;
+        g_jsf_val[0] = 0;
+        if (old >= 0) (void)web_js_field("blur", old, "", out, out_max);
+        if (f >= 0) {
+            (void)web_js_field("focus", f, "", out, out_max);
+            if (we_form_value(&g_web, f, v, (int)sizeof(v)) >= 0) scpy(g_jsf_val, (int)sizeof(g_jsf_val), v);
+            n = web_ctl_node(f);
+            if (n && (n->form_type == WE_FORM_CHECKBOX || n->form_type == WE_FORM_RADIO) && f < WE_FSTATE_MAX && fr == WE_FACT_CHANGED)
+                g_jsf_val[0] = 0;     /* the click that focused a box also toggled it */
+        }
+    }
+    n = web_ctl_node(f);
+    if (n && fr == WE_FACT_CHANGED) {
+        if (web_ctl_text(n)) {
+            if (we_form_value(&g_web, f, v, (int)sizeof(v)) >= 0 && scmp(v, g_jsf_val) != 0) {
+                scpy(g_jsf_val, (int)sizeof(g_jsf_val), v);
+                (void)web_js_field("input", f, v, out, out_max);
+            }
+        } else if ((n->form_type == WE_FORM_CHECKBOX || n->form_type == WE_FORM_RADIO) && f < WE_FSTATE_MAX) {
+            char c[2];
+            c[0] = g_web_forms.c[f].checked ? '1' : '0';
+            c[1] = 0;
+            if (scmp(c, g_jsf_val) != 0) {
+                scpy(g_jsf_val, (int)sizeof(g_jsf_val), c);
+                if (web_js_field("check", f, c, out, out_max) & 2) {
+                    g_web_forms.c[f].checked = c[0] == '1' ? 0 : 1;   /* a prevented click */
+                    g_jsf_val[0] = (char)(c[0] == '1' ? '0' : '1');
+                    (void)web_form_render();
+                }
+            }
+        } else if (scmp(n->tag, "select") == 0) {
+            if (we_form_value(&g_web, f, v, (int)sizeof(v)) >= 0 && scmp(v, g_jsf_val) != 0) {
+                scpy(g_jsf_val, (int)sizeof(g_jsf_val), v);
+                (void)web_js_field("change", f, v, out, out_max);
+            }
+        }
+    }
+    if (fr == WE_FACT_SUBMIT) {
+        int sub = g_web_forms.submitter >= 0 ? g_web_forms.submitter : f;
+        if (sub >= 0 && (web_js_field("submit", sub, "", out, out_max) & 2)) rc = 1;
+    }
+    return rc;
+}
+
 static void web_form_result(int fr, char *out, int out_max) {
     char m[48];
+    if (web_js_fields(fr, out, out_max) && fr == WE_FACT_SUBMIT) {
+        app_out(out, out_max, "osui web form submit prevented by the page scripts", 0);
+        return;
+    }
     if (fr == WE_FACT_SUBMIT) { web_offer_commit(); web_offer_clear(); web_form_send(out, out_max); return; }
     if (fr == WE_FACT_CHANGED) (void)web_form_render();
     scpy(m, (int)sizeof(m), fr == WE_FACT_CHANGED ? " changed focus " : " same focus ");
@@ -1373,6 +1576,21 @@ static void web_event(const char *p, char *out, int out_max) {
             if (fr >= 0) { web_form_result(fr, out, out_max); return; }
         }
         if (we_link_at(&g_web, x, y, href, (int)sizeof(href)) <= 0) return;
+        if (g_wops && g_wops->page_js) {
+            /* Lot 114: a clickable element of the page scripts (?__wfjs=N) */
+            int q;
+            for (q = 0; href[q]; q++) {
+                if (sncmp(href + q, "__wfjs=", 7) == 0) {
+                    static char jl[300];
+                    int jn;
+                    scpy(jl, (int)sizeof(jl), "web-js click ");
+                    scat(jl, (int)sizeof(jl), href + q);
+                    jn = g_wops->page_js(jl, g_web_src, OSUI_WEB_SRC_MAX, out, out_max);
+                    if (jn > 0) (void)web_js_show(jn);
+                    return;
+                }
+            }
+        }
         if (sncmp(href, "mohhdy-form:", 12) == 0) {
             /* Lot 71: a form control: focus the field or submit */
             int t = (g_wops && g_wops->form_link) ? g_wops->form_link(href) : -1;
@@ -2629,12 +2847,26 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             if (fr > 0 || (fr == 0 && key != OS_VGA_KEY_UP && key != OS_VGA_KEY_DOWN && key != OS_VGA_KEY_LEFT && key != OS_VGA_KEY_RIGHT)) { web_form_result(fr, out, out_max); return 0; }
         }
         fk = (!g_web_mobile && web_nsections() > 0 && g_wops->form_key) ? g_wops->form_key(key) : -1;
+        if (fk == 0) (void)web_js_rfield("set f", out, out_max);     /* Lot 114 */
         if (fk == 0 || fk == 2) {
             (void)web_show_section(g_wops->current ? g_wops->current() : 0, 1, 0, 0, 0);
             if (fk == 2) app_out(out, out_max, "osui web form blur", 0);
             return 0;
         }
         if (fk == 1) { (void)web_submit(-1, out, out_max); return 0; }
+        if (!g_web_mobile && g_wops && g_wops->page_js && ((key >= 0x20 && key < 0x7f) || key == '\n' || key == '\r' || key == '\b')) {
+            /* Lot 114: a key the page view does not use goes to the page
+             * scripts when they listen to keys (gkey answers -1 if not) */
+            static char jl[40];
+            int jn;
+            scpy(jl, (int)sizeof(jl), "web-js gkey ");
+            if (key == '\n' || key == '\r') scat(jl, (int)sizeof(jl), "Enter");
+            else if (key == '\b') scat(jl, (int)sizeof(jl), "Backspace");
+            else if (key == ' ') scat(jl, (int)sizeof(jl), "Space");
+            else { char c[2]; c[0] = (char)key; c[1] = 0; scat(jl, (int)sizeof(jl), c); }
+            jn = g_wops->page_js(jl, g_web_src, OSUI_WEB_SRC_MAX, out, out_max);
+            if (jn >= 0) { if (jn > 0) (void)web_js_show(jn); return 0; }
+        }
         if (key == OS_VGA_KEY_ESC) {
             g_web_active = 0;
             g_web_mobile = 0;

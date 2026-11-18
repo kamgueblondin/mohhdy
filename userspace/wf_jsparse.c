@@ -75,6 +75,7 @@ typedef struct {
     uint32_t vhead, vtail;      /* hoisted var names of the current function */
     int fn_flags;               /* F_ARGS seen in the current function */
     int in_func, in_class;
+    int in_gen, in_async;       /* Lot 114: yield / await are operators here */
     char buf[1024];             /* string literal decoding */
 } ps_t;
 
@@ -556,6 +557,7 @@ static uint32_t parse_assign(ps_t *p, int no_in);
 static uint32_t parse_expr(ps_t *p, int no_in);
 static uint32_t parse_statement(ps_t *p);
 static uint32_t parse_function(ps_t *p, int is_decl, int is_method, int is_arrow);
+static uint32_t parse_function_k(ps_t *p, int is_decl, int is_method, int kind);
 static uint32_t parse_class(ps_t *p, int is_decl);
 static uint32_t parse_binding(ps_t *p);
 static uint32_t parse_unary(ps_t *p);
@@ -717,7 +719,16 @@ static uint32_t parse_object(ps_t *p) {
         }
         pr = mk(p, N_PROP);
         if (!pr) return 0;
-        if (is_op(p, OP_MUL)) { ps_error(p, "generator methods are not supported by the guest"); return 0; }
+        if (is_op(p, OP_MUL)) {     /* Lot 114: *name() {} */
+            next(p);
+            N(pr)->a = parse_prop_key(p, &computed);
+            if (computed) N(pr)->fl |= F_COMPUTED;
+            N(pr)->fl |= F_METHOD;
+            N(pr)->b = parse_function_k(p, 0, 1, FK_GEN);
+            list_add(p, &l, pr);
+            if (!is_op(p, OP_RBRACE)) expect(p, OP_COMMA, ",");
+            continue;
+        }
         if ((is_kw(p, KW_GET) || is_kw(p, KW_SET) || is_kw(p, KW_ASYNC))) {
             lexsave_t sv;
             int kw = p->t.kw;
@@ -725,7 +736,17 @@ static uint32_t parse_object(ps_t *p) {
             next(p);
             if (!is_op(p, OP_COLON) && !is_op(p, OP_LPAREN) && !is_op(p, OP_COMMA) && !is_op(p, OP_RBRACE) &&
                 !is_op(p, OP_ASSIGN)) {
-                if (kw == KW_ASYNC) { ps_error(p, "async functions are not supported by the guest"); return 0; }
+                if (kw == KW_ASYNC) {   /* Lot 114: async name() {} */
+                    if (p->t.nl) { ps_error(p, "Unexpected token in object literal"); return 0; }
+                    if (is_op(p, OP_MUL)) { ps_error(p, "async generators are not supported by the guest"); return 0; }
+                    N(pr)->a = parse_prop_key(p, &computed);
+                    if (computed) N(pr)->fl |= F_COMPUTED;
+                    N(pr)->fl |= F_METHOD;
+                    N(pr)->b = parse_function_k(p, 0, 1, FK_ASYNC);
+                    list_add(p, &l, pr);
+                    if (!is_op(p, OP_RBRACE)) expect(p, OP_COMMA, ",");
+                    continue;
+                }
                 N(pr)->a = parse_prop_key(p, &computed);
                 if (computed) N(pr)->fl |= F_COMPUTED;
                 N(pr)->fl |= kw == KW_GET ? F_GETTER : F_SETTER;
@@ -835,10 +856,7 @@ static uint32_t parse_primary(ps_t *p) {
             lexsave_t sv;
             lex_save(p, &sv);
             next(p);
-            if ((is_kw(p, KW_FUNCTION) || ident_ok(p) || is_op(p, OP_LPAREN)) && !p->t.nl) {
-                ps_error(p, "async functions are not supported by the guest");
-                return 0;
-            }
+            if (is_kw(p, KW_FUNCTION) && !p->t.nl) return parse_function_k(p, 0, 0, FK_ASYNC);
             lex_restore(p, &sv);
             return parse_ident(p);
         }
@@ -1012,7 +1030,15 @@ static uint32_t parse_unary(ps_t *p) {
         if (p->t.kw == KW_TYPEOF) op = OP_TYPEOF;
         else if (p->t.kw == KW_VOID) op = OP_VOID;
         else if (p->t.kw == KW_DELETE) op = OP_DELETE;
-        else if (p->t.kw == KW_AWAIT && p->in_func) { ps_error(p, "await is not supported by the guest"); return 0; }
+        else if (p->t.kw == KW_AWAIT && p->in_async) {
+            uint32_t e;
+            if (++p->nest > PS_MAX_NEST || stack_low(p)) { ps_error(p, "expression nested too deeply for the guest"); return 0; }
+            next(p);
+            e = parse_unary(p);
+            p->nest--;
+            return mk2(p, N_AWAIT, 0, e, 0);
+        }
+        else if (p->t.kw == KW_AWAIT && p->in_func) { ps_error(p, "await is only valid in async functions"); return 0; }
     }
     if (op != OP_NONE) {
         uint32_t e;
@@ -1089,10 +1115,12 @@ static int is_assign_op(int op) { return op >= OP_ASSIGN && op <= OP_NULLISH_A; 
 
 static uint32_t parse_arrow_body(ps_t *p, uint32_t fn) {
     uint32_t saved_vh = p->vhead, saved_vt = p->vtail;
-    int saved_flags = p->fn_flags, saved_in = p->in_func;
+    int saved_flags = p->fn_flags, saved_in = p->in_func, saved_gen = p->in_gen, saved_async = p->in_async;
     /* an arrow has no own `arguments`: F_ARGS goes to the enclosing function */
     p->vhead = p->vtail = 0;
     p->in_func = 1;
+    p->in_gen = 0;
+    p->in_async = (N(fn)->op & FK_ASYNC) != 0;
     if (is_op(p, OP_LBRACE)) {
         list_t body = { 0, 0 };
         next(p);
@@ -1108,6 +1136,8 @@ static uint32_t parse_arrow_body(ps_t *p, uint32_t fn) {
     p->vtail = saved_vt;
     p->fn_flags |= saved_flags;
     p->in_func = saved_in;
+    p->in_gen = saved_gen;
+    p->in_async = saved_async;
     return fn;
 }
 
@@ -1132,8 +1162,67 @@ static uint32_t parse_assign(ps_t *p, int no_in) {
     uint32_t left;
     if (p->failed) return 0;
     if (++p->nest > PS_MAX_NEST || stack_low(p)) { ps_error(p, "expression nested too deeply for the guest"); return 0; }
+    /* Lot 114: yield [*] [expr] inside a generator */
+    if (p->in_gen && is_kw(p, KW_YIELD)) {
+        uint32_t y = mk(p, N_YIELD);
+        if (!y) return 0;
+        next(p);
+        if (accept(p, OP_MUL)) {
+            N(y)->op = 1;
+            N(y)->a = parse_assign(p, no_in);
+        } else if (!p->t.nl && p->t.type != TK_EOF &&
+                   !(p->t.type == TK_OP && (p->t.op == OP_RPAREN || p->t.op == OP_RBRACK || p->t.op == OP_RBRACE ||
+                                            p->t.op == OP_COMMA || p->t.op == OP_SEMI || p->t.op == OP_COLON)) &&
+                   !(p->t.type == TK_IDENT && p->t.kw == KW_IN)) {
+            N(y)->a = parse_assign(p, no_in);
+        }
+        p->nest--;
+        return y;
+    }
+    /* Lot 114: async x => ..., async (a, b) => ... */
+    if (is_kw(p, KW_ASYNC)) {
+        lexsave_t sv;
+        lex_save(p, &sv);
+        next(p);
+        if (!p->t.nl && ident_ok(p)) {
+            uint32_t pname = p->t.str;
+            next(p);
+            if (is_op(p, OP_ARROW) && !p->t.nl) {
+                uint32_t fn = mk(p, N_FUNC), pr = mk(p, N_PARAM), id = mk(p, N_IDENT);
+                if (!fn || !pr || !id) return 0;
+                N(id)->a = pname;
+                N(pr)->a = id;
+                N(fn)->b = pr;
+                N(fn)->fl |= F_ARROW;
+                N(fn)->op = FK_ASYNC;
+                next(p);
+                parse_arrow_body(p, fn);
+                p->nest--;
+                return fn;
+            }
+        } else if (!p->t.nl && is_op(p, OP_LPAREN) && arrow_ahead(p)) {
+            uint32_t fn = mk(p, N_FUNC);
+            int sv_async = p->in_async;
+            if (!fn) return 0;
+            N(fn)->fl |= F_ARROW;
+            N(fn)->op = FK_ASYNC;
+            {
+                uint32_t sv_vh = p->vhead, sv_vt = p->vtail;
+                p->in_async = 1;
+                N(fn)->b = parse_params(p);
+                p->in_async = sv_async;
+                p->vhead = sv_vh; p->vtail = sv_vt;
+            }
+            if (!is_op(p, OP_ARROW) || p->t.nl) { ps_error(p, "Unexpected token (expected =>)"); return 0; }
+            next(p);
+            parse_arrow_body(p, fn);
+            p->nest--;
+            return fn;
+        }
+        lex_restore(p, &sv);
+    }
     /* arrow functions */
-    if (ident_ok(p) && p->t.kw != KW_ASYNC) {
+    if (ident_ok(p) && p->t.kw != KW_ASYNC && !(p->in_gen && p->t.kw == KW_YIELD)) {
         lexsave_t sv;
         lex_save(p, &sv);
         next(p);
@@ -1202,14 +1291,19 @@ static uint32_t parse_binding(ps_t *p) {
 }
 
 static uint32_t parse_function(ps_t *p, int is_decl, int is_method, int is_arrow) {
-    uint32_t fn = mk(p, N_FUNC), saved_vh = p->vhead, saved_vt = p->vtail;
-    int saved_flags = p->fn_flags, saved_in = p->in_func;
-    list_t body = { 0, 0 };
     (void)is_arrow;
+    return parse_function_k(p, is_decl, is_method, 0);
+}
+
+/* kind: FK_GEN (function*), FK_ASYNC (async function), 0 */
+static uint32_t parse_function_k(ps_t *p, int is_decl, int is_method, int kind) {
+    uint32_t fn = mk(p, N_FUNC), saved_vh = p->vhead, saved_vt = p->vtail;
+    int saved_flags = p->fn_flags, saved_in = p->in_func, saved_gen = p->in_gen, saved_async = p->in_async;
+    list_t body = { 0, 0 };
     if (!fn) return 0;
     if (!is_method) {
         next(p);      /* function */
-        if (is_op(p, OP_MUL)) { ps_error(p, "generators are not supported by the guest"); return 0; }
+        if (accept(p, OP_MUL)) kind |= FK_GEN;
         if (ident_ok(p) || (p->t.type == TK_IDENT && (p->t.kw == KW_YIELD || p->t.kw == KW_AWAIT))) {
             N(fn)->a = p->t.str;
             next(p);
@@ -1220,9 +1314,13 @@ static uint32_t parse_function(ps_t *p, int is_decl, int is_method, int is_arrow
     } else {
         N(fn)->fl |= F_METHOD;
     }
+    if ((kind & FK_GEN) && (kind & FK_ASYNC)) { ps_error(p, "async generators are not supported by the guest"); return 0; }
+    N(fn)->op = (uint8_t)kind;
     p->vhead = p->vtail = 0;
     p->fn_flags = 0;
     p->in_func = 1;
+    p->in_gen = (kind & FK_GEN) != 0;
+    p->in_async = (kind & FK_ASYNC) != 0;
     N(fn)->b = parse_params(p);
     expect(p, OP_LBRACE, "{");
     while (!is_op(p, OP_RBRACE) && p->t.type != TK_EOF && !p->failed) list_add(p, &body, parse_statement(p));
@@ -1234,6 +1332,8 @@ static uint32_t parse_function(ps_t *p, int is_decl, int is_method, int is_arrow
     p->vtail = saved_vt;
     p->fn_flags = saved_flags;
     p->in_func = saved_in;
+    p->in_gen = saved_gen;
+    p->in_async = saved_async;
     if (is_decl) {
         uint32_t d = mk(p, N_FUNCDECL);
         if (!d) return 0;
@@ -1260,7 +1360,7 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
     p->in_class = 1;
     while (!is_op(p, OP_RBRACE) && p->t.type != TK_EOF && !p->failed) {
         uint32_t m;
-        int is_static = 0, flags = 0, computed = 0;
+        int is_static = 0, flags = 0, computed = 0, kind = 0;
         uint32_t key;
         if (accept(p, OP_SEMI)) continue;
         if (is_kw(p, KW_STATIC)) {
@@ -1271,12 +1371,19 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
             else is_static = 1;
             if (is_static && is_op(p, OP_LBRACE)) { ps_error(p, "static blocks are not supported by the guest"); return 0; }
         }
-        if (is_op(p, OP_MUL) || is_kw(p, KW_ASYNC)) {
+        if (is_op(p, OP_MUL)) {             /* Lot 114: *name() {} */
+            next(p);
+            kind = FK_GEN;
+        } else if (is_kw(p, KW_ASYNC)) {    /* Lot 114: async name() {} */
             lexsave_t sv;
             lex_save(p, &sv);
             next(p);
-            if (!is_op(p, OP_LPAREN) && !is_op(p, OP_ASSIGN)) { ps_error(p, "async and generator methods are not supported by the guest"); return 0; }
-            lex_restore(p, &sv);
+            if (!is_op(p, OP_LPAREN) && !is_op(p, OP_ASSIGN) && !is_op(p, OP_SEMI) && !is_op(p, OP_RBRACE) && !p->t.nl) {
+                if (is_op(p, OP_MUL)) { ps_error(p, "async generators are not supported by the guest"); return 0; }
+                kind = FK_ASYNC;
+            } else {
+                lex_restore(p, &sv);
+            }
         }
         if (is_kw(p, KW_GET) || is_kw(p, KW_SET)) {
             lexsave_t sv;
@@ -1289,10 +1396,12 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
         }
         key = parse_prop_key(p, &computed);
         if (p->failed) return 0;
+        if (kind && (flags || !is_op(p, OP_LPAREN))) { ps_error(p, "Unexpected token in class body"); return 0; }
         if (is_op(p, OP_LPAREN)) {
-            uint32_t fn = parse_function(p, 0, 1, 0);
+            uint32_t fn = parse_function_k(p, 0, 1, kind);
             if (!fn) return 0;
             if (!computed && !is_static && !flags && key == js_intern(p->vm, "constructor", 11)) {
+                if (kind) { ps_error(p, "Class constructor may not be a generator or async method"); return 0; }
                 N(fn)->fl |= F_CTOR;
                 if (N(c)->b) N(fn)->fl |= F_DERIVED;
                 N(c)->d = fn;
@@ -1312,12 +1421,16 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
             if (accept(p, OP_ASSIGN)) {
                 /* the initializer runs as a method body (this = the instance) */
                 uint32_t sv_vh = p->vhead, sv_vt = p->vtail;
-                int sv_in = p->in_func;
+                int sv_in = p->in_func, sv_gen = p->in_gen, sv_async = p->in_async;
                 p->vhead = p->vtail = 0;
                 p->in_func = 1;
+                p->in_gen = 0;
+                p->in_async = 0;
                 N(m)->b = parse_assign(p, 0);
                 p->vhead = sv_vh; p->vtail = sv_vt;
                 p->in_func = sv_in;
+                p->in_gen = sv_gen;
+                p->in_async = sv_async;
             }
             semi(p);
         }
@@ -1468,7 +1581,11 @@ static uint32_t parse_statement(ps_t *p) {
             lexsave_t sv;
             lex_save(p, &sv);
             next(p);
-            if (is_kw(p, KW_FUNCTION) && !p->t.nl) { ps_error(p, "async functions are not supported by the guest"); return 0; }
+            if (is_kw(p, KW_FUNCTION) && !p->t.nl) {   /* Lot 114 */
+                n = parse_function_k(p, 1, 0, FK_ASYNC);
+                p->nest--;
+                return n;
+            }
             lex_restore(p, &sv);
             break;
         }

@@ -33,6 +33,8 @@ int shell_page_load(const char* path, const char* url, char* status, int st_max)
 int shell_page_preview(int field, char* out, int cap);
 int shell_page_fill_cmd(const char* line, char* out, int cap);
 int shell_page_css_cmd(const char* line, char* out, int cap);
+/* Lot 114 (US-031): web-js events after load (console and GUI, one path) */
+int shell_page_js(const char* line, char* src, int src_max, char* out, int out_max);
 /* Lot 104: the layout geometry of the presented page back to the reader
  * (doc a we_doc_t laid out from its section 0); section 0 reduced again
  * in src, 0 when the page did not wait for it */

@@ -202,7 +202,7 @@ static void test_l113_window(void) {
         "</script></body>");
     CHECK_STR("10.0.2.2 8067 /lot113/a.html ?q=1 #frag http://10.0.2.2:8067\n"
                              "a=3; b=2 true 1 null\n"
-                             "TW9oaGR5IQ== 2 undefined undefined true\n"
+                             "TW9oaGR5IQ== 2 function function true\n"   /* Lot 114: fetch and XMLHttpRequest */
                              "true true true 1024 false\n"
                              "alert: hi\nconfirm: ?\nprompt: ?\nfalse null\n"
                              "BODY HEAD 1 9 HTML\n", logtext());

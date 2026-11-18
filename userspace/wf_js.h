@@ -9,8 +9,12 @@
  * and its subtypes, a fixed-clock Date) and a console that writes to a
  * bounded log. Numbers are binary64 in software (wf_jsnum.h).
  *
- * What it is not: no generators, async functions, Promise, Proxy,
- * Symbol, typed arrays, getters on arbitrary built-ins, labels on
+ * Lot 114 adds generators (function*, yield, yield*), async functions
+ * and arrows (await), Promise (then/catch/finally, resolve, reject,
+ * all, allSettled, any, race) and queueMicrotask; microtasks run when
+ * the host calls js_run_jobs.
+ *
+ * What it is not: no async generators, for await, Proxy, Symbol, typed arrays, getters on arbitrary built-ins, labels on
  * blocks, with, eval, or tail calls. Strings are byte strings (UTF-8
  * bytes as they come; length counts bytes, not UTF-16 units). There is
  * no garbage collector: one realm lives in one caller-given arena and
@@ -65,5 +69,11 @@ void js_set_budget(js_vm_t *vm, uint32_t steps);
 uint32_t js_mem_used(const js_vm_t *vm);
 uint32_t js_mem_size(const js_vm_t *vm);
 uint32_t js_steps_used(const js_vm_t *vm);
+/* Lot 114: run the queued microtasks (promise reactions, await
+ * resumptions, queueMicrotask callbacks) until the queue is empty.
+ * JS_OK, JS_THROWN when a callback threw or a rejection was not handled
+ * (vm->err has the first, the log has every one), JS_ABORTED on a bound. */
+int  js_run_jobs(js_vm_t *vm);
+int  js_jobs_pending(const js_vm_t *vm);
 
 #endif
