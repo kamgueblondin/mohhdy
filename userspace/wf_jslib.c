@@ -334,6 +334,80 @@ static void define_from_desc(js_vm_t *vm, uint32_t o, uint32_t key, jv desc) {
     js_define(vm, o, key, v, flags);
 }
 
+static int same_value(js_vm_t *vm, jv a, jv b) {
+    if (jv_is_num(a) && jv_is_num(b)) return jf_same_value(jv_f64(a), jv_f64(b));
+    return js_strict_eq(vm, a, b);
+}
+
+/* Lot 115: may desc be applied to o.key? (ValidateAndApplyPropertyDescriptor:
+ * a new key needs an extensible object; a non-configurable property only
+ * takes what does not change it). 1 yes, 0 no, -1 an exception. Arrays'
+ * indexes and length and host objects keep their own paths. */
+static int define_allowed(js_vm_t *vm, uint32_t o, uint32_t key, jv desc) {
+    js_obj_t *ob = JOBJ(vm, o);
+    js_prop_t *p;
+    uint32_t flags, idx;
+    int frozen = (ob->oflags & O_FROZEN) != 0, has_v, has_w, has_g, has_s, has_e, has_c;
+    jv v = jv_undef(), w = jv_undef(), g = jv_undef(), st = jv_undef(), e = jv_undef(), c = jv_undef();
+    if (desc.t != JT_OBJ || ob->cls == JS_CLASS_HOST) return 1;
+    if ((ob->cls == JS_CLASS_ARRAY || ob->cls == JS_CLASS_ARGS) &&
+        (key == vm->s_length || js_str_index_key(vm, key, &idx))) return 1;
+    p = js_own_prop(vm, o, key);
+    if (!p) return (ob->oflags & O_EXT) && !frozen ? 1 : 0;
+    flags = p->flags;
+    if ((flags & P_CONF) && !frozen) return 1;
+    has_v = js_has(vm, desc.a, vm->s_value);
+    has_w = js_has(vm, desc.a, vm->s_writable);
+    has_g = js_has(vm, desc.a, vm->s_get);
+    has_s = js_has(vm, desc.a, vm->s_set);
+    has_e = js_has(vm, desc.a, vm->s_enumerable);
+    has_c = js_has(vm, desc.a, vm->s_configurable);
+    if (has_v) v = js_get(vm, desc, vm->s_value);
+    if (has_w) w = js_get(vm, desc, vm->s_writable);
+    if (has_g) g = js_get(vm, desc, vm->s_get);
+    if (has_s) st = js_get(vm, desc, vm->s_set);
+    if (has_e) e = js_get(vm, desc, vm->s_enumerable);
+    if (has_c) c = js_get(vm, desc, vm->s_configurable);
+    if (vm->ctl) return -1;
+    p = js_own_prop(vm, o, key);           /* the getters above may have moved it */
+    if (!p) return 1;
+    flags = p->flags;
+    if (has_c && js_truthy(vm, c)) return 0;
+    if (has_e && js_truthy(vm, e) != ((flags & P_ENUM) != 0)) return 0;
+    if (flags & P_ACCESSOR) {
+        if (has_v || has_w) return 0;
+        if (has_g && (g.t == JT_OBJ ? g.a : 0) != p->v.a) return 0;
+        if (has_s && (st.t == JT_OBJ ? st.a : 0) != p->v.b) return 0;
+        return 1;
+    }
+    if (has_g || has_s) return 0;
+    if (!(flags & P_WRITE) || frozen) {
+        if (has_w && js_truthy(vm, w)) return 0;
+        if (has_v && !same_value(vm, v, p->v)) return 0;
+    }
+    return 1;
+}
+
+/* Lot 115: Object.defineProperty throws where Reflect.defineProperty
+ * returns false; both share define_allowed. */
+int js_define_desc(js_vm_t *vm, uint32_t o, uint32_t key, jv desc, int throw_on_fail) {
+    int ok;
+    if (desc.t != JT_OBJ) { js_throw_err(vm, JE_TYPE, "Property description must be an object"); return 0; }
+    ok = define_allowed(vm, o, key, desc);
+    if (ok < 0) return 0;
+    if (!ok) {
+        if (throw_on_fail) {
+            uint32_t name = JS_KEY_IS_SYM(vm, key) ? js_sym_descr(vm, key) : key;
+            if (js_own_prop(vm, o, key)) js_throw_err2(vm, JE_TYPE, "Cannot redefine property: ", name);
+            else js_throw_err2(vm, JE_TYPE, "", js_str_cat(vm, js_str_cat(vm, js_str_c(vm, "Cannot define property "), name),
+                                                           js_str_c(vm, ", object is not extensible")));
+        }
+        return 0;
+    }
+    define_from_desc(vm, o, key, desc);
+    return vm->ctl ? 0 : 1;
+}
+
 /* defineProperty 0, defineProperties 1 */
 static jv obj_define(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     jv o = JARG(0);
@@ -342,7 +416,7 @@ static jv obj_define(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     if (m == 0) {
         uint32_t k = js_to_key(vm, JARG(1));
         if (vm->ctl) return jv_undef();
-        define_from_desc(vm, o.a, k, JARG(2));
+        js_define_desc(vm, o.a, k, JARG(2), 1);
     } else {
         jv props = JARG(1);
         uint32_t keys, i;
@@ -352,7 +426,7 @@ static jv obj_define(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
             jv k = js_array_get(vm, keys, i);
             jv d = js_get(vm, props, k.a);
             if (vm->ctl) break;
-            define_from_desc(vm, o.a, k.a, d);
+            js_define_desc(vm, o.a, k.a, d, 1);
         }
     }
     return vm->ctl ? jv_undef() : o;
@@ -374,6 +448,21 @@ static jv obj_create(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     return vm->ctl ? jv_undef() : jv_obj(o);
 }
 
+/* Lot 115: [[SetPrototypeOf]]: 1 done, 0 refused (a cycle, or a new
+ * prototype for an object that is not extensible) */
+int js_set_proto(js_vm_t *vm, uint32_t o, uint32_t p) {
+    uint32_t q;
+    int d = 0;
+    if (JOBJ(vm, o)->proto == p) return 1;
+    if (!(JOBJ(vm, o)->oflags & O_EXT) || (JOBJ(vm, o)->oflags & O_FROZEN)) return 0;
+    for (q = p; q && d++ < 256; q = JOBJ(vm, q)->proto)
+        if (q == o) return 0;
+    JOBJ(vm, o)->proto = p;
+    return 1;
+}
+
+jv js_desc_of(js_vm_t *vm, jv o, uint32_t key);
+
 /* getPrototypeOf 0, setPrototypeOf 1 */
 static jv obj_proto_of(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     jv o = JARG(0);
@@ -386,7 +475,8 @@ static jv obj_proto_of(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
             int d = 0;
             for (q = p.t == JT_OBJ ? p.a : 0; q && d++ < 256; q = JOBJ(vm, q)->proto)
                 if (q == o.a) return js_throw_err(vm, JE_TYPE, "Cyclic __proto__ value");
-            JOBJ(vm, o.a)->proto = p.t == JT_OBJ ? p.a : 0;
+            if (js_set_proto(vm, o.a, p.t == JT_OBJ ? p.a : 0) != 1)
+                return js_throw_err(vm, JE_TYPE, "#<Object> is not extensible");
         }
         return o;
     }
@@ -458,6 +548,8 @@ static jv desc_of(js_vm_t *vm, jv o, uint32_t key) {
     }
     return jv_obj(d);
 }
+
+jv js_desc_of(js_vm_t *vm, jv o, uint32_t key) { return desc_of(vm, o, key); }
 
 static jv obj_get_desc(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     uint32_t k;
@@ -572,6 +664,10 @@ static const char *class_tag(js_vm_t *vm, jv v) {
     case JS_CLASS_SET: return "Set";
     case JS_CLASS_PROMISE: return "Promise";
     case JS_CLASS_GEN: return "Generator";
+    case JS_CLASS_WEAKMAP: return "WeakMap";
+    case JS_CLASS_WEAKSET: return "WeakSet";
+    case JS_CLASS_WEAKREF: return "WeakRef";
+    case JS_CLASS_FINREG: return "FinalizationRegistry";
     default: return "Object";
     }
 }
@@ -1733,6 +1829,10 @@ static void disp(js_vm_t *vm, dsp_t *d, jv v, int quote, int depth) {
         disp_array(vm, d, jv_obj(arr), depth);
         return;
     }
+    if (o->cls == JS_CLASS_WEAKMAP || o->cls == JS_CLASS_WEAKSET) {     /* as node prints them */
+        dputs(d, o->cls == JS_CLASS_WEAKMAP ? "WeakMap { <items unknown> }" : "WeakSet { <items unknown> }");
+        return;
+    }
     if (o->cls == JS_CLASS_HOST) {
         jv t = js_get(vm, v, KEY(vm, "tagName"));
         if (vm->ctl == CTL_THROW) { vm->ctl = CTL_NONE; t = jv_undef(); }
@@ -1994,7 +2094,7 @@ int js_init(js_vm_t *vm, void *mem, uint32_t size) {
     JENV(vm, vm->genv)->kind |= E_CAPTURED;
     JENV(vm, vm->genv)->thisv = jv_obj(vm->global);
     if (js_lib_init(vm) != 0 || js_lib2_init(vm) != 0 || js_regexp_init(vm) != 0 || js_co_init(vm) != 0 ||
-        js_sym_init(vm) != 0) return -1;
+        js_sym_init(vm) != 0 || js_weak_init(vm) != 0) return -1;
     return vm->ctl == CTL_ABORT ? -1 : 0;
 }
 

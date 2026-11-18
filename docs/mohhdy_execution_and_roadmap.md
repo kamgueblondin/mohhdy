@@ -15,8 +15,9 @@ first 150 nodes of the page, instead of the Lot 114 block model. A QEMU
 page (`make qemu-lot115`, CI job lot115-js-layout) checks it. The
 JavaScript subset gains Symbol, the iterator protocol, class private
 members and static blocks, UTF-16 string indexes, and an arena
-collector (mark and sweep between runs) for the REPL and live pages.
-Fifteen real-page fixtures log in the guest what jsdom logs for them
+collector (mark and sweep between runs) for the REPL and live pages,
+with WeakMap, WeakSet, WeakRef and FinalizationRegistry on top of it,
+and Reflect. Fifteen real-page fixtures log in the guest what jsdom logs for them
 (test_lot115_compat.c), and window titles and desktop labels stay clear
 of the title buttons and the screen edge at every text scale
 (test_lot115_chrome.c).

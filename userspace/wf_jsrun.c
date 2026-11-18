@@ -1478,6 +1478,7 @@ static void ex_forin(js_vm_t *vm, uint32_t env, uint32_t n, uint32_t label) {
             js_define(vm, seen, k.a, jv_bool(1), P_DEFAULT);
             p = js_own_prop(vm, proto, k.a);
             if (p && !(p->flags & P_ENUM)) continue;
+            if (!p && (k.a == vm->s_length || k.a == vm->s_name)) continue;   /* built-in, not enumerable */
             js_array_push(vm, keys, k);
         }
     }

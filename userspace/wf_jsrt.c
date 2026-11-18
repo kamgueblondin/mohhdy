@@ -1031,6 +1031,22 @@ uint32_t js_own_keys(js_vm_t *vm, uint32_t obj, int only_enum) {
                 have_last = 1;
                 if (!js_array_push(vm, out, jv_str(best))) return out;
             } else {
+                /* Lot 115: the built-in non-enumerable names the engine
+                 * answers without a property (getOwnPropertyNames,
+                 * Reflect.ownKeys): length of arrays, arguments and String
+                 * objects after their indexes, length and name of functions */
+                if (!only_enum) {
+                    int c = o->cls;
+                    if ((c == JS_CLASS_ARRAY || c == JS_CLASS_ARGS || (c == JS_CLASS_STRING && o->x0 == JT_STR) ||
+                         c == JS_CLASS_FUNC || c == JS_CLASS_NATIVE) && !js_own_prop(vm, obj, vm->s_length)) {
+                        if (!js_array_push(vm, out, jv_str(vm->s_length))) return out;
+                    }
+                    o = JOBJ(vm, obj);
+                    if ((c == JS_CLASS_FUNC || c == JS_CLASS_NATIVE) && !js_own_prop(vm, obj, vm->s_name)) {
+                        if (!js_array_push(vm, out, jv_str(vm->s_name))) return out;
+                    }
+                    o = JOBJ(vm, obj);
+                }
                 for (i = 0; i < o->nprop; i++) {
                     js_prop_t *p = (js_prop_t *)JPTR(vm, o->props) + i;
                     uint32_t idx;

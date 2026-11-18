@@ -230,6 +230,8 @@ static void scan_jv(js_vm_t *vm, const jv *v) {
     cand(vm, v->b);
 }
 
+static void weak_note(js_vm_t *vm, uint32_t b);
+
 static void scan_block(js_vm_t *vm, uint32_t b) {
     uint32_t h = HDR(vm, b), n = H_WORDS(h) << 2, i;
     int kind = (int)H_KIND(h);
@@ -266,6 +268,8 @@ static void scan_block(js_vm_t *vm, uint32_t b) {
         for (i = 0; i + (uint32_t)sizeof(jv) <= n; i += (uint32_t)sizeof(jv), v++) scan_jv(vm, v);
     } else if (kind == JK_CO) {
         js_co_gc_scan(vm, b);
+    } else if (kind == JK_WEAK) {
+        weak_note(vm, b);
     } else if (kind == JK_NODE && n >= (uint32_t)sizeof(js_node_t)) {
         js_node_t *d = JNODE(vm, b);
         cand(vm, d->a);
@@ -276,6 +280,18 @@ static void scan_block(js_vm_t *vm, uint32_t b) {
     } else {
         js_gc_scan(vm, JPTR(vm, b), n);
     }
+}
+
+/* a weak table: remembered for weak_settle; past JS_GC_WEAK tables a
+ * table is marked strongly (it keeps its keys: garbage kept, never a live
+ * entry lost) */
+static void weak_note(js_vm_t *vm, uint32_t b) {
+    int i;
+    for (i = 0; i < vm->gc_nweak; i++)
+        if (vm->gc_weak[i] == b) return;
+    if (vm->gc_nweak < JS_GC_WEAK) { vm->gc_weak[vm->gc_nweak++] = b; return; }
+    vm->gc_weak_strong++;
+    js_gc_scan(vm, JPTR(vm, b), H_WORDS(HDR(vm, b)) << 2);
 }
 
 static void drain(js_vm_t *vm) {
@@ -293,6 +309,57 @@ static void rescan(js_vm_t *vm) {
             p = r + (H_WORDS(h) << 2);
         }
     }
+}
+
+/* ---- weak tables (ephemerons) ---- */
+
+/* is the value alive after marking? (non-references always are, so are
+ * blocks below the heap) */
+static int jv_alive(js_vm_t *vm, const jv *v) {
+    uint32_t b;
+    if (v->t != JT_OBJ && v->t != JT_SYM && v->t != JT_STR) return 1;
+    if (v->a < vm->gc_heap_lo + 4u || v->a >= vm->top) return 1;
+    b = start_at_or_below(vm, v->a);
+    return !b || (HDR(vm, b) & H_MARK) != 0;
+}
+
+/* A value lives while its key does: mark the values of live keys until
+ * nothing new is marked (a value may hold the key of another entry), then
+ * drop the entries whose key died. Runs before the sweep. */
+static void weak_settle(js_vm_t *vm) {
+    uint32_t before, cleared = 0;
+    int i;
+    do {
+        before = vm->gc_marked_bytes;
+        for (i = 0; i < vm->gc_nweak; i++) {
+            uint32_t b = vm->gc_weak[i], k, used = ((js_weak_t *)JPTR(vm, b))->used;
+            for (k = 0; k < used; k++) {
+                js_weak_ent_t *e = JWEAK_ENT(vm, b) + k;
+                if (e->k.t == JT_EMPTY || !jv_alive(vm, &e->k)) continue;
+                vm->gc_last = 0;
+                vm->gc_last_end = 0;
+                scan_jv(vm, &e->v);
+                drain(vm);
+                rescan(vm);
+            }
+        }
+    } while (vm->gc_marked_bytes != before);
+    for (i = 0; i < vm->gc_nweak; i++) {
+        uint32_t b = vm->gc_weak[i], k, used = ((js_weak_t *)JPTR(vm, b))->used;
+        for (k = 0; k < used; k++) {
+            js_weak_ent_t *e = JWEAK_ENT(vm, b) + k;
+            if (e->k.t == JT_EMPTY) continue;
+            if (!jv_alive(vm, &e->k)) {
+                e->k = jv_empty();
+                e->v = jv_undef();
+                e->t = jv_undef();
+                cleared++;
+            } else if (!jv_alive(vm, &e->t)) {
+                e->t = jv_undef();
+            }
+        }
+    }
+    vm->gc_weak_cleared = cleared;
 }
 
 /* ---- sweep ---- */
@@ -377,11 +444,13 @@ uint32_t js_gc(js_vm_t *vm) {
     vm->gc_marked_bytes = 0;
     vm->gc_last = 0;
     vm->gc_last_end = 0;
+    vm->gc_nweak = 0;
     scan_vm(vm);
     drain(vm);
     if (vm->gc_roots) vm->gc_roots(vm, vm->gc_roots_ctx);
     drain(vm);
     rescan(vm);
+    weak_settle(vm);
     sweep(vm);
     vm->gc_runs++;
     vm->gc_since = 0;

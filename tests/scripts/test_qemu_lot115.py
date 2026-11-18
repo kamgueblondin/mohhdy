@@ -70,9 +70,9 @@ def step_layout(mon, proc, u):
 def step_lang(mon, proc, u):
     lw.run(mon, proc, "web-open %s/lot115/lang.html" % u, "osui web page sections", fail=["error="])
     read = lw.run(mon, proc, "web-read", "end115", 30)
-    need(read, ["lang115 ab 1 true u16 7 d83d sym 0 symbol"], "web-read of the Lot 115 language page")
+    need(read, ["lang115 ab 1 true u16 7 d83d sym 0 symbol weak w true 1 false"], "web-read of the Lot 115 language page")
     refuse(read, ["lang115 wait"], "web-read of the Lot 115 language page")
-    say("private members, Symbol.iterator, a symbol key and UTF-16 lengths ran in the page script")
+    say("private members, Symbol.iterator, a symbol key, UTF-16 lengths, WeakMap, WeakRef and Reflect ran in the page script")
 
 
 def step_gc(mon, proc):

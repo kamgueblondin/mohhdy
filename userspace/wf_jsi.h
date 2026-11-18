@@ -21,7 +21,8 @@ enum {
     JS_CLASS_BOOLEAN, JS_CLASS_NUMBER, JS_CLASS_STRING, JS_CLASS_REGEXP, JS_CLASS_ARGS, JS_CLASS_DATE,
     JS_CLASS_HOST, JS_CLASS_ITER, JS_CLASS_MAP, JS_CLASS_SET,
     JS_CLASS_PROMISE, JS_CLASS_GEN,          /* Lot 114 */
-    JS_CLASS_SYMBOL                          /* Lot 115: Object(symbol); JS_CLASS_ITER is now used */
+    JS_CLASS_SYMBOL,                         /* Lot 115: Object(symbol); JS_CLASS_ITER is now used */
+    JS_CLASS_WEAKMAP, JS_CLASS_WEAKSET, JS_CLASS_WEAKREF, JS_CLASS_FINREG   /* Lot 115: wf_jsweak.c */
 };
 
 typedef struct { uint32_t len; uint32_t hash; uint32_t interned; char s[4]; } js_str_t;
@@ -189,8 +190,10 @@ enum {
     JK_PROPS,         /* js_prop_t[] (properties, scope variables) */
     JK_JVS,           /* jv[] (array elements, arguments) */
     JK_NODE,          /* js_node_t */
-    JK_CO             /* a coroutine record (wf_jsco.c scans it and the live part of its stack) */
+    JK_CO,            /* a coroutine record (wf_jsco.c scans it and the live part of its stack) */
+    JK_WEAK           /* a weak table (wf_jsweak.c): its keys do not keep anything alive */
 };
+#define JS_GC_WEAK 64     /* weak tables the collector clears per run (more are kept strongly) */
 #define JS_GC_CLASSES 16
 #define JS_GC_MSTACK 512
 #define JS_GC_MIN_STEP (256u * 1024u)
@@ -267,6 +270,8 @@ struct js_vm {
     uint32_t s_description;
     uint32_t s_privm;                     /* " privm": the class scope's private method holder */
     uint32_t u16_str, u16_unit, u16_byte; /* wf_jsu16.c: the last index conversion (a cursor) */
+    /* Lot 115: weak collections and Reflect (wf_jsweak.c) */
+    uint32_t p_weakmap, p_weakset, p_weakref, p_finreg;
     /* Lot 115: arena reclaim (wf_jsgc.c) */
     uint32_t gc_bits, gc_bitmap_bytes;    /* the payload start bitmap */
     uint32_t gc_heap_lo;                  /* the first block header */
@@ -279,6 +284,9 @@ struct js_vm {
     uint32_t gc_last, gc_last_end;        /* a cache: the block a candidate fell in last */
     int gc_hold;                          /* > 0 while a script runs (on_stack) */
     int gc_stress, gc_poison, gc_off;
+    uint32_t gc_weak[JS_GC_WEAK];         /* the weak tables reached in this run */
+    int gc_nweak, gc_weak_strong;         /* how many; tables marked strongly (the list was full) */
+    uint32_t gc_weak_cleared;             /* entries dropped in the last run */
     js_gc_roots_fn gc_roots;
     void *gc_roots_ctx;
 };
@@ -446,6 +454,22 @@ jv js_iter_step(js_vm_t *vm, jv it, jv next, int *done);
 void js_iter_close(js_vm_t *vm, jv it);
 uint32_t js_iter_take(js_vm_t *vm, jv v, int max);
 uint32_t js_own_symbols(js_vm_t *vm, uint32_t obj, int only_enum);
+
+/* ---- Lot 115: wf_jslib.c object internals shared with Reflect ---- */
+int js_define_desc(js_vm_t *vm, uint32_t o, uint32_t key, jv desc, int throw_on_fail);
+int js_set_proto(js_vm_t *vm, uint32_t o, uint32_t p);     /* 1 done, 0 refused */
+jv js_desc_of(js_vm_t *vm, jv o, uint32_t key);
+
+/* ---- Lot 115: wf_jsweak.c ---- */
+int js_weak_init(js_vm_t *vm);
+/* A weak table (JK_WEAK): used and cap, then cap entries of three values:
+ * k the weak key (empty: a free slot), v the value (alive while k is), t a
+ * second weak value (FinalizationRegistry's unregister token). The
+ * collector keeps v alive only through k and clears k, v and t when k
+ * dies, and t alone when t dies. */
+typedef struct { uint32_t used, cap; } js_weak_t;
+typedef struct { jv k, v, t; } js_weak_ent_t;
+#define JWEAK_ENT(vm, b) ((js_weak_ent_t *)JPTR(vm, (b) + (uint32_t)sizeof(js_weak_t)))
 /* private names: a TypeError for a missing member */
 jv js_priv_missing(js_vm_t *vm, uint32_t key, int write);
 
