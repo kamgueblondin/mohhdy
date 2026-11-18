@@ -113,8 +113,35 @@ jv js_iter_values(js_vm_t *vm, jv v, uint32_t *arr_out) {
         return jv_obj(arr);
     }
     if (v.t == JT_OBJ) {
-        js_obj_t *o = JOBJ(vm, v.a);
+        js_obj_t *o;
+        {   /* Lot 115: a user [Symbol.iterator] (also one set on a built-in) */
+            jv it, nx;
+            if (js_iter_custom(vm, v, &it, &nx)) {
+                arr = js_array_new(vm, 16);
+                if (!arr) return jv_undef();
+                for (;;) {
+                    int done;
+                    jv x = js_iter_step(vm, it, nx, &done);
+                    if (vm->ctl) return jv_undef();
+                    if (done) break;
+                    if (!js_array_push(vm, arr, x)) return jv_undef();
+                }
+                *arr_out = arr;
+                return jv_obj(arr);
+            }
+            if (vm->ctl) return jv_undef();
+        }
+        o = JOBJ(vm, v.a);
         if (o->cls == JS_CLASS_ARRAY) { *arr_out = v.a; return v; }
+        if (o->cls == JS_CLASS_ITER) {      /* Lot 115: the rest of a snapshot iterator */
+            uint32_t src = o->x0, from = o->x1, len = src ? JOBJ(vm, src)->alen : 0;
+            arr = js_array_new(vm, from < len ? len - from : 1);
+            if (!arr) return jv_undef();
+            for (i = from; i < len; i++) js_array_push(vm, arr, js_array_get(vm, src, i));
+            JOBJ(vm, v.a)->x1 = 0xFFFFFFFFu;
+            *arr_out = arr;
+            return jv_obj(arr);
+        }
         if (o->cls == JS_CLASS_ARGS) {
             arr = js_array_new(vm, o->alen);
             if (!arr) return jv_undef();
@@ -245,6 +272,12 @@ static jv obj_assign(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
         uint32_t keys, i;
         if (argv[a].t != JT_OBJ) continue;
         keys = js_own_keys(vm, argv[a].a, 1);
+        for (i = 0; keys && i < JOBJ(vm, keys)->alen && !vm->ctl; i++) {
+            jv k = js_array_get(vm, keys, i), v = js_get(vm, argv[a], k.a);
+            if (vm->ctl) break;
+            js_put(vm, jv_obj(t), k.a, v);
+        }
+        keys = js_own_symbols(vm, argv[a].a, 1);     /* Lot 115: enumerable symbol keys too */
         for (i = 0; keys && i < JOBJ(vm, keys)->alen && !vm->ctl; i++) {
             jv k = js_array_get(vm, keys, i), v = js_get(vm, argv[a], k.a);
             if (vm->ctl) break;
@@ -520,7 +553,10 @@ static const char *class_tag(js_vm_t *vm, jv v) {
     if (v.t == JT_STR) return "String";
     if (jv_is_num(v)) return "Number";
     if (v.t == JT_BOOL) return "Boolean";
+    if (v.t == JT_SYM) return "Symbol";
     switch (JOBJ(vm, v.a)->cls) {
+    case JS_CLASS_SYMBOL: return "Symbol";
+    case JS_CLASS_ITER: return "Array Iterator";
     case JS_CLASS_ARRAY: return "Array";
     case JS_CLASS_FUNC: case JS_CLASS_NATIVE: case JS_CLASS_BOUND: return "Function";
     case JS_CLASS_ERROR: return "Error";
@@ -541,6 +577,11 @@ static const char *class_tag(js_vm_t *vm, jv v) {
 static jv objp_to_string(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     uint32_t s = js_str_c(vm, "[object ");
     (void)argv; (void)argc; (void)m;
+    if (thisv.t == JT_OBJ && vm->sym_to_string_tag) {    /* Lot 115: [Symbol.toStringTag] */
+        jv tag = js_get(vm, thisv, vm->sym_to_string_tag);
+        if (vm->ctl) return jv_undef();
+        if (tag.t == JT_STR) return jv_str(js_str_cat(vm, js_str_cat(vm, s, tag.a), js_str_c(vm, "]")));
+    }
     s = js_str_cat(vm, s, js_str_c(vm, class_tag(vm, thisv)));
     return jv_str(js_str_cat(vm, s, js_str_c(vm, "]")));
 }
@@ -659,7 +700,8 @@ static jv arr_from(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     if (fn.t != JT_UNDEF && !js_is_callable(vm, fn)) return js_throw_err(vm, JE_TYPE, "Array.from: the map function is not callable");
     out = js_array_new(vm, 4);
     if (!out) return jv_undef();
-    if (src.t == JT_STR || (src.t == JT_OBJ && JOBJ(vm, src.a)->cls != JS_CLASS_OBJECT && JOBJ(vm, src.a)->cls != JS_CLASS_FUNC)) {
+    if (src.t == JT_STR || (src.t == JT_OBJ && JOBJ(vm, src.a)->cls != JS_CLASS_OBJECT && JOBJ(vm, src.a)->cls != JS_CLASS_FUNC) ||
+        (src.t == JT_OBJ && vm->sym_iterator && !jv_is_nullish(js_get(vm, src, vm->sym_iterator)))) {   /* Lot 115: iterables */
         uint32_t arr = 0;
         js_iter_values(vm, src, &arr);
         if (vm->ctl) return jv_undef();
@@ -1134,7 +1176,10 @@ static jv arrp_keys(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
             js_array_push(vm, out, jv_obj(pair));
         }
     }
-    return jv_obj(out);
+    {   /* Lot 115: an iterator (next, Symbol.iterator) over the snapshot */
+        uint32_t it = js_iter_over(vm, out);
+        return it ? jv_obj(it) : jv_undef();
+    }
 }
 
 static jv arrp_at(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
@@ -1488,6 +1533,7 @@ static void disp(js_vm_t *vm, dsp_t *d, jv v, int quote, int depth) {
         return;
     }
     case JT_STR: dstr(vm, d, v.a, quote); return;
+    case JT_SYM: dstr(vm, d, js_sym_descr(vm, v.a), 0); return;     /* Lot 115 */
     default: break;
     }
     o = JOBJ(vm, v.a);
@@ -1603,7 +1649,7 @@ int js_to_cstr(js_vm_t *vm, jv v, char *out, int max) {
     js_str_t *p;
     int i;
     if (max <= 0) return 0;
-    s = js_to_string(vm, v);
+    s = v.t == JT_SYM ? js_sym_descr(vm, v.a) : js_to_string(vm, v);   /* Lot 115: no throw for a symbol */
     if (vm->ctl) { out[0] = 0; return 0; }
     p = JSTR(vm, s);
     for (i = 0; i < (int)p->len && i < max - 1; i++) out[i] = p->s[i];
@@ -1819,7 +1865,8 @@ int js_init(js_vm_t *vm, void *mem, uint32_t size) {
     if (!vm->genv) return -1;
     JENV(vm, vm->genv)->kind |= E_CAPTURED;
     JENV(vm, vm->genv)->thisv = jv_obj(vm->global);
-    if (js_lib_init(vm) != 0 || js_lib2_init(vm) != 0 || js_regexp_init(vm) != 0 || js_co_init(vm) != 0) return -1;
+    if (js_lib_init(vm) != 0 || js_lib2_init(vm) != 0 || js_regexp_init(vm) != 0 || js_co_init(vm) != 0 ||
+        js_sym_init(vm) != 0) return -1;
     return vm->ctl == CTL_ABORT ? -1 : 0;
 }
 

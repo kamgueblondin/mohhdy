@@ -8,7 +8,12 @@ them; the shell lays the page out with the GUI's engine (wf_jslayout.c
 over webeng.c), so the reader shows "layout115 224x74 c220 r2 100 100"
 (the CSS box model and the flex row), where the Lot 114 block model gave
 1008x16 and stacked the items. "web-js status" reports the boxes the
-engine gave (layout_engine, not 0). The Lot 114 page (/lot114/app.html)
+engine gave (layout_engine, not 0). /lot115/lang.html runs a class with
+private fields, a static private counter, a generator [Symbol.iterator]
+and a #x in o brand check, a symbol key and a string with an astral
+character: the reader shows "lang115 ab 1 true u16 7 d83d sym 0 symbol"
+(node prints the same for the script; the Lot 114 subset refused the
+page with a SyntaxError on #items). The Lot 114 page (/lot114/app.html)
 still runs on the same boot. No guest clock is involved (no -rtc option).
 """
 from __future__ import print_function
@@ -54,6 +59,14 @@ def step_layout(mon, proc, u):
         "a flex row; layout_engine %s" % m.group(1))
 
 
+def step_lang(mon, proc, u):
+    lw.run(mon, proc, "web-open %s/lot115/lang.html" % u, "osui web page sections", fail=["error="])
+    read = lw.run(mon, proc, "web-read", "end115", 30)
+    need(read, ["lang115 ab 1 true u16 7 d83d sym 0 symbol"], "web-read of the Lot 115 language page")
+    refuse(read, ["lang115 wait"], "web-read of the Lot 115 language page")
+    say("private members, Symbol.iterator, a symbol key and UTF-16 lengths ran in the page script")
+
+
 def step_lot114(mon, proc, u):
     lw.run(mon, proc, "web-open %s/lot114/app.html" % u, "osui web page sections", fail=["error="])
     read = lw.run(mon, proc, "web-read", "fin114", 30)
@@ -68,6 +81,7 @@ def boot(hp):
         time.sleep(0.5)
         u = "http://10.0.2.2:%d" % hp
         step_layout(mon, proc, u)
+        step_lang(mon, proc, u)
         step_lot114(mon, proc, u)
     finally:
         l88.stop(proc, mon, qmp)

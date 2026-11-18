@@ -988,6 +988,21 @@ LOT115_FILES = {
         "document.getElementById('o').textContent = 'layout115 ' + b.offsetWidth + 'x' + b.offsetHeight +\n"
         "  ' c' + b.clientWidth + ' r2 ' + (r2.offsetLeft - b.offsetLeft) + ' ' + r2.offsetWidth;\n"
         "</script><p>fin115</p></body></html>"),
+    # Lot 115: Symbol, the iterator protocol, private members and UTF-16
+    # strings in a page script (node prints the same line for the script)
+    "/lot115/lang.html": ("text/html; charset=utf-8",
+        "<!doctype html><html><head><title>Lot 115 lang</title></head><body>"
+        "<p id=\"o\">lang115 wait</p><script>\n"
+        "class Store { #items = []; static #made = 0; constructor() { Store.#made++ }\n"
+        "  add(x) { this.#items.push(x); return this } *[Symbol.iterator]() { yield* this.#items }\n"
+        "  static made() { return Store.#made } static is(o) { return #items in o } }\n"
+        "var st = new Store().add('a').add('b'); var parts = [...st];\n"
+        "var word = 'caf\\u00e9 \\u{1F600}';\n"
+        "var tag = Symbol('t'); var o = {}; o[tag] = 1;\n"
+        "document.getElementById('o').textContent = 'lang115 ' + parts.join('') + ' ' + Store.made() + ' ' +\n"
+        "  Store.is(st) + ' u16 ' + word.length + ' ' + word.charCodeAt(5).toString(16) + ' sym ' +\n"
+        "  Object.keys(o).length + ' ' + typeof tag;\n"
+        "</script><p>end115</p></body></html>"),
 }
 
 LOT114_FILES = {

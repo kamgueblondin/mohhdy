@@ -322,8 +322,10 @@ static jv call_func(js_vm_t *vm, uint32_t f, jv thisv, jv *argv, int argc, uint3
         uint32_t parent = JOBJ(vm, f)->proto;
         jv pv = jv_obj(parent);
         if (js_is_callable(vm, pv)) {
-            if (JOBJ(vm, parent)->cls == JS_CLASS_FUNC) (void)call_func(vm, parent, JENV(vm, env)->thisv, argv, argc, newtarget);
-            else {
+            if (JOBJ(vm, parent)->cls == JS_CLASS_FUNC) {
+                jv pr = call_func(vm, parent, JENV(vm, env)->thisv, argv, argc, newtarget);
+                if (!vm->ctl && pr.t == JT_OBJ) JENV(vm, env)->thisv = pr;     /* Lot 115 */
+            } else {
                 uint32_t sv = vm->super_this;
                 vm->super_this = JENV(vm, env)->thisv.a;
                 vm->in_new = 1;
@@ -342,6 +344,10 @@ static jv call_func(js_vm_t *vm, uint32_t f, jv thisv, jv *argv, int argc, uint3
             else if (vm->ctl == CTL_BREAK || vm->ctl == CTL_CONTINUE) vm->ctl = CTL_NONE;
         }
     }
+    /* Lot 115: a derived constructor gives its this (super() may have replaced it) */
+    if (!vm->ctl && r.t != JT_OBJ && (FN_FLAGS(JOBJ(vm, f)) & FN_CLASSCTOR) && (FN_FLAGS(JOBJ(vm, f)) & FN_DERIVED) &&
+        JENV(vm, env)->thisv.t == JT_OBJ)
+        r = JENV(vm, env)->thisv;
     vm->depth--;
     env_free(vm, env);
     return vm->ctl ? jv_undef() : r;
@@ -450,6 +456,21 @@ static void init_fields(js_vm_t *vm, uint32_t fobj, jv thisv) {
     uint32_t cls = FN_CLASS(JOBJ(vm, fobj)), m;
     uint32_t env;
     if (!cls || thisv.t != JT_OBJ) return;
+    {   /* Lot 115: the private methods and accessors first (kept on the class's holder) */
+        js_prop_t *hp = env_own(vm, JOBJ(vm, fobj)->x1, vm->s_privm);
+        if (hp && hp->v.t == JT_OBJ) {
+            uint32_t h = hp->v.a, i;
+            for (i = 0; i < JOBJ(vm, h)->nprop && !vm->ctl; i++) {
+                js_prop_t q = ((js_prop_t *)JPTR(vm, JOBJ(vm, h)->props))[i];
+                if (js_own_prop(vm, thisv.a, q.key)) {
+                    js_throw_err(vm, JE_TYPE, "Cannot initialize private methods of a class twice on the same object");
+                    return;
+                }
+                js_define(vm, thisv.a, q.key, q.v, q.flags);
+            }
+            if (vm->ctl) return;
+        }
+    }
     env = js_env_new(vm, JOBJ(vm, fobj)->x1, E_FUNC);
     if (!env) return;
     JENV(vm, env)->thisv = thisv;
@@ -457,14 +478,24 @@ static void init_fields(js_vm_t *vm, uint32_t fobj, jv thisv) {
     for (m = NODE(cls)->c; m && !vm->ctl; m = NODE(m)->next) {
         js_node_t *mn = NODE(m);
         uint32_t key;
+        int priv = mn->op == MK_PRIVATE;
         jv v = jv_undef();
         if (mn->k != N_FIELD || (mn->fl & F_STATIC)) continue;
-        if (mn->fl & F_COMPUTED) {
+        if (priv) {
+            jv pk = lookup(vm, env, mn->a, 0);
+            if (vm->ctl) break;
+            key = pk.a;
+            if (js_own_prop(vm, thisv.a, key)) {
+                js_throw_err2(vm, JE_TYPE, "Cannot initialize a private field twice on the same object: ", mn->a);
+                break;
+            }
+        } else if (mn->fl & F_COMPUTED) {
             /* computed field keys were evaluated once with the class: kept in d */
             key = mn->d;
         } else key = mn->a;
-        if (mn->b) { v = ev(vm, env, mn->b); if (vm->ctl) break; set_fn_name(vm, v, key); }
-        js_define(vm, thisv.a, key, v, P_DEFAULT);
+        mn = NODE(m);
+        if (mn->b) { v = ev(vm, env, mn->b); if (vm->ctl) break; set_fn_name(vm, v, priv ? NODE(m)->a : key); }
+        js_define(vm, thisv.a, key, v, priv ? P_WRITE : P_DEFAULT);
     }
     env_free(vm, env);
 }
@@ -558,9 +589,12 @@ static void bind_pattern(js_vm_t *vm, uint32_t env, uint32_t pat, jv v, int mode
     }
     {
         uint32_t arr = 0, i = 0;
-        jv src = js_iter_values(vm, v, &arr);
-        (void)src;
-        if (vm->ctl) return;
+        int need = 0;
+        /* Lot 115: a user iterator or a generator gives only what the
+         * pattern reads, then it is closed */
+        for (e = n->a; e; e = NODE(e)->next) { if (NODE(e)->fl & F_REST) { need = -1; break; } need++; }
+        arr = js_iter_take(vm, v, need);
+        if (vm->ctl || !arr) return;
         for (e = n->a; e && !vm->ctl; e = NODE(e)->next, i++) {
             js_node_t *pe = NODE(e);
             jv val;
@@ -663,11 +697,11 @@ static int less_than(js_vm_t *vm, jv a, jv b, int left_first) {
     jf64 x, y;
     if (a.t == JT_INT && b.t == JT_INT) return (int32_t)a.a < (int32_t)b.a;
     if (left_first) {
-        a = js_to_primitive(vm, a, 0); if (vm->ctl) return 0;
-        b = js_to_primitive(vm, b, 0); if (vm->ctl) return 0;
+        a = js_to_primitive(vm, a, 2); if (vm->ctl) return 0;
+        b = js_to_primitive(vm, b, 2); if (vm->ctl) return 0;
     } else {
-        b = js_to_primitive(vm, b, 0); if (vm->ctl) return 0;
-        a = js_to_primitive(vm, a, 0); if (vm->ctl) return 0;
+        b = js_to_primitive(vm, b, 2); if (vm->ctl) return 0;
+        a = js_to_primitive(vm, a, 2); if (vm->ctl) return 0;
     }
     if (a.t == JT_STR && b.t == JT_STR) return js_str_cmp(vm, a.a, b.a) < 0;
     x = js_to_number(vm, a);
@@ -779,7 +813,9 @@ static jv eval_call(js_vm_t *vm, uint32_t env, uint32_t n) {
         eval_args(vm, env, c->b, &a);
         if (vm->ctl) return jv_undef();
         if (JOBJ(vm, parent)->cls == JS_CLASS_FUNC) {
-            (void)call_func(vm, parent, thisv, a.argv, a.argc, JENV(vm, ts)->newtarget);
+            jv pr = call_func(vm, parent, thisv, a.argv, a.argc, JENV(vm, ts)->newtarget);
+            /* Lot 115: a parent constructor that returns an object makes it this */
+            if (!vm->ctl && pr.t == JT_OBJ && pr.a != thisv.a) { thisv = pr; JENV(vm, ts)->thisv = pr; }
         } else if (js_is_callable(vm, jv_obj(parent))) {
             uint32_t sv = vm->super_this;
             int sn = vm->in_new;
@@ -848,13 +884,20 @@ static jv eval_object(js_vm_t *vm, uint32_t env, uint32_t n) {
             jv src = ev(vm, env, p->a);
             uint32_t keys, i;
             if (vm->ctl) return jv_undef();
-            if (src.t == JT_STR) {
-                uint32_t len = JSTR(vm, src.a)->len;
-                for (i = 0; i < len; i++) js_define(vm, o, js_key_of_index(vm, i), jv_str(js_str_sub(vm, src.a, (int)i, (int)i + 1)), P_DEFAULT);
+            if (src.t == JT_STR) {      /* Lot 115: one key per UTF-16 unit */
+                uint32_t len = js_str_units(vm, src.a);
+                for (i = 0; i < len; i++) js_define(vm, o, js_key_of_index(vm, i), jv_str(js_u16_sub(vm, src.a, i, i + 1)), P_DEFAULT);
                 continue;
             }
             if (src.t != JT_OBJ) continue;
             keys = js_own_keys(vm, src.a, 1);
+            for (i = 0; keys && i < JOBJ(vm, keys)->alen && !vm->ctl; i++) {
+                jv k = js_array_get(vm, keys, i);
+                jv val = js_get(vm, src, k.a);
+                if (vm->ctl) return jv_undef();
+                js_define(vm, o, k.a, val, P_DEFAULT);
+            }
+            keys = js_own_symbols(vm, src.a, 1);     /* Lot 115: {...o} copies symbol keys */
             for (i = 0; keys && i < JOBJ(vm, keys)->alen && !vm->ctl; i++) {
                 jv k = js_array_get(vm, keys, i);
                 jv val = js_get(vm, src, k.a);
@@ -1210,6 +1253,8 @@ static jv ev(js_vm_t *vm, uint32_t env, uint32_t n) {
         if (vm->ctl) return jv_undef();
         return js_co_await(vm, v);
     }
+    case N_PRIVNAME:          /* Lot 115: the symbol the class body bound to #x */
+        return lookup(vm, env, x->a, 0);
     case N_SPREAD:
         return js_throw_err(vm, JE_SYNTAX, "Unexpected spread");
     default:
@@ -1257,10 +1302,45 @@ static jv eval_class(js_vm_t *vm, uint32_t env, uint32_t n) {
     js_define(vm, f, vm->s_prototype, jv_obj(proto), 0);
     js_define(vm, proto, vm->s_constructor, jv_obj(f), P_HIDDEN);
     if (NODE(n)->a) js_env_declare(vm, cenv, NODE(n)->a, jv_obj(f), V_CONST);
+    /* Lot 115: every private name of this evaluation of the class gets a
+     * new symbol in the class scope; instance private methods go on a
+     * holder object init_fields copies to each instance */
+    for (m = NODE(n)->c; m && !vm->ctl; m = NODE(m)->next) {
+        js_node_t *mn = NODE(m);
+        if (mn->op != MK_PRIVATE || (mn->k != N_FIELD && mn->k != N_METHOD)) continue;
+        if (!env_own(vm, cenv, mn->a)) {
+            uint32_t sym = js_sym_new(vm, NODE(m)->a, JS_SYM_PRIVATE);
+            if (!sym) return jv_undef();
+            js_env_declare(vm, cenv, NODE(m)->a, jv_sym(sym), V_CONST);
+        }
+        if (NODE(m)->k == N_METHOD && !(NODE(m)->fl & F_STATIC) && !env_own(vm, cenv, vm->s_privm)) {
+            uint32_t h = js_obj_new(vm, JS_CLASS_OBJECT, 0);
+            if (!h) return jv_undef();
+            js_env_declare(vm, cenv, vm->s_privm, jv_obj(h), V_CONST);
+        }
+    }
+    if (vm->ctl) return jv_undef();
     for (m = NODE(n)->c; m && !vm->ctl; m = NODE(m)->next) {
         js_node_t *mn = NODE(m);
         uint32_t key, target = (mn->fl & F_STATIC) ? f : proto;
-        if (mn->fl & F_COMPUTED) {
+        int priv = mn->op == MK_PRIVATE;
+        if (mn->k == N_FIELD && mn->op == MK_SBLOCK) {      /* static { }: runs now with this = the class */
+            uint32_t fb = js_closure(vm, mn->b, cenv);
+            if (!fb) return jv_undef();
+            FN_HOME(JOBJ(vm, fb)) = f;
+            (void)call_func(vm, fb, jv_obj(f), 0, 0, 0);
+            if (vm->ctl) return jv_undef();
+            continue;
+        }
+        if (priv) {
+            js_prop_t *pv = env_own(vm, cenv, mn->a);
+            key = pv ? pv->v.a : 0;
+            if (!key) return js_throw_err(vm, JE_SYNTAX, "private name without a binding");
+            if (NODE(m)->k == N_METHOD && !(NODE(m)->fl & F_STATIC)) {
+                js_prop_t *hv = env_own(vm, cenv, vm->s_privm);
+                target = hv ? hv->v.a : proto;
+            }
+        } else if (mn->fl & F_COMPUTED) {
             jv kv = ev(vm, cenv, mn->a);
             if (vm->ctl) return jv_undef();
             key = js_to_key(vm, kv);
@@ -1271,21 +1351,23 @@ static jv eval_class(js_vm_t *vm, uint32_t env, uint32_t n) {
         if (mn->k == N_METHOD) {
             uint32_t fm = js_closure(vm, mn->b, cenv);
             if (!fm) return jv_undef();
-            FN_HOME(JOBJ(vm, fm)) = target;
-            JOBJ(vm, fm)->x2 = key;
-            if (NODE(m)->fl & F_GETTER) js_define_accessor(vm, target, key, fm, 0, P_CONF);
-            else if (NODE(m)->fl & F_SETTER) js_define_accessor(vm, target, key, 0, fm, P_CONF);
-            else js_define(vm, target, key, jv_obj(fm), P_HIDDEN);
+            FN_HOME(JOBJ(vm, fm)) = (priv && !(NODE(m)->fl & F_STATIC)) ? proto : target;
+            JOBJ(vm, fm)->x2 = priv ? NODE(m)->a : key;
+            if (NODE(m)->fl & F_GETTER) js_define_accessor(vm, target, key, fm, 0, priv ? 0 : P_CONF);
+            else if (NODE(m)->fl & F_SETTER) js_define_accessor(vm, target, key, 0, fm, priv ? 0 : P_CONF);
+            else js_define(vm, target, key, jv_obj(fm), priv ? 0 : P_HIDDEN);
         } else if (mn->fl & F_STATIC) {
             uint32_t fe = js_env_new(vm, cenv, E_FUNC);
             jv v = jv_undef();
             if (!fe) return jv_undef();
             JENV(vm, fe)->thisv = jv_obj(f);
             JENV(vm, fe)->fobj = f;
-            if (NODE(m)->b) { v = ev(vm, fe, NODE(m)->b); set_fn_name(vm, v, key); }
+            if (NODE(m)->b) { v = ev(vm, fe, NODE(m)->b); set_fn_name(vm, v, priv ? NODE(m)->a : key); }
             env_free(vm, fe);
             if (vm->ctl) return jv_undef();
-            js_define(vm, f, key, v, P_DEFAULT);
+            if (priv && js_own_prop(vm, f, key))
+                return js_throw_err2(vm, JE_TYPE, "Cannot initialize a private field twice on the same object: ", NODE(m)->a);
+            js_define(vm, f, key, v, priv ? P_WRITE : P_DEFAULT);
         }
     }
     if (vm->ctl) return jv_undef();
@@ -1430,6 +1512,30 @@ static void ex_forof(js_vm_t *vm, uint32_t env, uint32_t n, uint32_t label) {
                 return;
             }
         }
+    }
+    if (src.t == JT_OBJ) {
+        /* Lot 115: a user [Symbol.iterator] is read one value at a time;
+         * an early exit calls the iterator's return() */
+        jv it, nx;
+        if (js_iter_custom(vm, src, &it, &nx)) {
+            for (;;) {
+                uint32_t ie;
+                int done;
+                jv v = js_iter_step(vm, it, nx, &done);
+                if (vm->ctl || done) return;
+                forx_bind(vm, env, NODE(n)->a, v, &ie);
+                if (!vm->ctl) ex(vm, ie, NODE(n)->c);
+                if (ie != env) env_free(vm, ie);
+                if (vm->ctl == CTL_CONTINUE && (!vm->label || vm->label == label)) { vm->ctl = CTL_NONE; vm->label = 0; continue; }
+                if (vm->ctl) {
+                    int brk = vm->ctl == CTL_BREAK && (!vm->label || vm->label == label);
+                    js_iter_close(vm, it);
+                    if (brk && vm->ctl == CTL_BREAK) { vm->ctl = CTL_NONE; vm->label = 0; }
+                    return;
+                }
+            }
+        }
+        if (vm->ctl) return;
     }
     js_iter_values(vm, src, &arr);
     if (vm->ctl) return;

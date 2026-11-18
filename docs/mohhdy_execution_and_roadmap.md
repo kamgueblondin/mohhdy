@@ -7,12 +7,14 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
-### Lot 115 (18 November 2026, PR in progress)
+### Lot 115 (18 November 2026, PR 273 in progress)
 
 US-031 partial, phase3_complete=false. The layout values page scripts
 read now come from the engine the GUI paints with (webeng.c) for the
 first 150 nodes of the page, instead of the Lot 114 block model. A QEMU
-page (`make qemu-lot115`, CI job lot115-js-layout) checks it. First gap
+page (`make qemu-lot115`, CI job lot115-js-layout) checks it. The
+JavaScript subset gains Symbol, the iterator protocol, class private
+members and static blocks, and UTF-16 string indexes. First gap
 for Lot 116: more of the page laid out by the engine. See
 docs/lot115_plan.md.
 

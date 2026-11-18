@@ -11,17 +11,37 @@
 #include "wf_jsnum.h"
 
 /* value tags */
-enum { JT_UNDEF = 0, JT_NULL, JT_BOOL, JT_INT, JT_NUM, JT_STR, JT_OBJ, JT_EMPTY };
+enum { JT_UNDEF = 0, JT_NULL, JT_BOOL, JT_INT, JT_NUM, JT_STR, JT_OBJ, JT_EMPTY,
+       JT_SYM            /* Lot 115: a symbol; a is its record (a js_str_t, see JS_SYM_*) */
+};
 
 /* object classes */
 enum {
     JS_CLASS_OBJECT = 0, JS_CLASS_ARRAY, JS_CLASS_FUNC, JS_CLASS_NATIVE, JS_CLASS_BOUND, JS_CLASS_ERROR,
     JS_CLASS_BOOLEAN, JS_CLASS_NUMBER, JS_CLASS_STRING, JS_CLASS_REGEXP, JS_CLASS_ARGS, JS_CLASS_DATE,
     JS_CLASS_HOST, JS_CLASS_ITER, JS_CLASS_MAP, JS_CLASS_SET,
-    JS_CLASS_PROMISE, JS_CLASS_GEN           /* Lot 114 */
+    JS_CLASS_PROMISE, JS_CLASS_GEN,          /* Lot 114 */
+    JS_CLASS_SYMBOL                          /* Lot 115: Object(symbol); JS_CLASS_ITER is now used */
 };
 
 typedef struct { uint32_t len; uint32_t hash; uint32_t interned; char s[4]; } js_str_t;
+
+/* Lot 115: a symbol is a js_str_t record that is never interned: its
+ * interned field says what it is, s holds the description and hash a
+ * serial number (JS_SYM_NODESC set when Symbol() had no description).
+ * Property keys stay plain uint32 refs, so a symbol key is compared by
+ * identity like an interned string. */
+#define JS_SYM_PUBLIC  2u
+#define JS_SYM_PRIVATE 3u           /* a class private name (#x) */
+#define JS_SYM_NODESC  0x80000000u
+#define JS_STR_KIND_MASK 0xFFu      /* the kind: 0 plain, 1 interned, JS_SYM_* */
+#define JS_KEY_IS_SYM(vm, k) ((JSTR(vm, k)->interned & JS_STR_KIND_MASK) >= JS_SYM_PUBLIC)
+#define JS_KEY_IS_PRIV(vm, k) ((JSTR(vm, k)->interned & JS_STR_KIND_MASK) == JS_SYM_PRIVATE)
+/* Lot 115 (wf_jsu16.c): the UTF-16 length of a string, cached above the kind */
+#define JS_U16_INFO   0x100u       /* the bits below are valid */
+#define JS_U16_ASCII  0x200u       /* every byte < 0x80: units = bytes */
+#define JS_U16_SHIFT  10           /* the unit count (JS_U16_MAXC: too big to cache) */
+#define JS_U16_MAXC   0x3FFFFFu
 
 #define P_ENUM     1u
 #define P_WRITE    2u
@@ -83,8 +103,15 @@ enum {
     N_VARNAME, N_METHOD, N_FIELD, N_DEBUGGER,
     /* Lot 114 */
     N_YIELD,          /* op 1: yield* (delegate) */
-    N_AWAIT
+    N_AWAIT,
+    /* Lot 115 */
+    N_PRIVNAME        /* a: "#x"; evaluates to the class's private symbol (obj.#x is N_INDEX on it) */
 };
+
+/* Lot 115: N_METHOD / N_FIELD op values */
+#define MK_PUBLIC  0
+#define MK_PRIVATE 1      /* #x: a is the "#x" name */
+#define MK_SBLOCK  2      /* N_FIELD: a static { } block, b its block statement */
 
 /* Lot 114: N_FUNC op bits (the 16 fl bits are all taken) */
 #define FK_GEN   1u       /* function* */
@@ -212,6 +239,17 @@ struct js_vm {
     uint32_t unhandled[JS_UNHANDLED_MAX];
     int nunhandled;
     uint32_t jobs_run, rejections_reported, rejections_lost;
+    /* Lot 115: symbols and the iterator protocol (wf_jssym.c) */
+    uint32_t p_symbol, c_symbol;
+    uint32_t sym_iterator, sym_async_iterator, sym_has_instance, sym_to_primitive, sym_to_string_tag,
+        sym_species, sym_unscopables, sym_is_concat_spreadable, sym_match;
+    uint32_t sym_registry;                /* Symbol.for: an object from key to symbol */
+    uint32_t sym_serial;
+    uint32_t fn_iter_values, fn_iter_self; /* the built-in iterator methods (fast paths) */
+    uint32_t fn_str_iter, fn_map_iter, fn_set_iter;
+    uint32_t s_description;
+    uint32_t s_privm;                     /* " privm": the class scope's private method holder */
+    uint32_t u16_str, u16_unit, u16_byte; /* wf_jsu16.c: the last index conversion (a cursor) */
 };
 
 #define JPTR(vm, r) ((void *)((vm)->mem + (r)))
@@ -355,6 +393,36 @@ int js_jobs_drain(js_vm_t *vm);
 /* wf_jsrun.c: the body of a function whose environment is ready */
 jv js_fn_body(js_vm_t *vm, uint32_t f, uint32_t env);
 
+/* ---- wf_jssym.c (Lot 115) ---- */
+int js_sym_init(js_vm_t *vm);
+jv jv_sym(uint32_t r);
+uint32_t js_sym_new(js_vm_t *vm, uint32_t desc, uint32_t kind);   /* desc: a string ref or 0 */
+uint32_t js_sym_descr(js_vm_t *vm, uint32_t sym);                  /* "Symbol(desc)" */
+/* an iterator object over a snapshot array (keys(), values(), entries()) */
+uint32_t js_iter_over(js_vm_t *vm, uint32_t arr);
+/* the iterator protocol: 1 when v has an [Symbol.iterator] method other
+ * than the built-in ones the fast paths know; *it gets the iterator and
+ * *next its next method */
+int js_iter_custom(js_vm_t *vm, jv v, jv *it, jv *next);
+jv js_iter_step(js_vm_t *vm, jv it, jv next, int *done);
+void js_iter_close(js_vm_t *vm, jv it);
+uint32_t js_iter_take(js_vm_t *vm, jv v, int max);
+uint32_t js_own_symbols(js_vm_t *vm, uint32_t obj, int only_enum);
+/* private names: a TypeError for a missing member */
+jv js_priv_missing(js_vm_t *vm, uint32_t key, int write);
+
+/* ---- wf_jsu16.c (Lot 115): UTF-16 units over UTF-8 bytes ---- */
+uint32_t js_str_units(js_vm_t *vm, uint32_t r);
+int js_str_ascii(js_vm_t *vm, uint32_t r);
+int js_u16_off(js_vm_t *vm, uint32_t r, uint32_t unit, int *mid);
+uint32_t js_u16_unit_of(js_vm_t *vm, uint32_t r, int off);
+int js_u16_at(js_vm_t *vm, uint32_t r, uint32_t unit);
+int js_u16_cp_at(js_vm_t *vm, uint32_t r, uint32_t unit);
+uint32_t js_u16_sub(js_vm_t *vm, uint32_t r, uint32_t from, uint32_t to);
+int js_u8_step(js_vm_t *vm, uint32_t r, int i);
+uint32_t js_u16_join(js_vm_t *vm, uint32_t a, uint32_t b);
+uint32_t js_u16_lone_at(const char *s, int left);
+
 /* ---- wf_jsre.c ---- */
 int js_regexp_init(js_vm_t *vm);
 uint32_t js_regexp_new(js_vm_t *vm, uint32_t source, uint32_t flags);
@@ -372,6 +440,9 @@ int js_regexp_ncap(js_vm_t *vm, uint32_t re);      /* groups + 1 */
 int js_regexp_global(js_vm_t *vm, uint32_t re);
 /* the exec() result array for a match */
 jv js_regexp_result(js_vm_t *vm, uint32_t re, uint32_t str, const int *caps);
+
+/* wf_jsu16.c: String.fromCharCode units into a builder */
+void js_u16_put_units(js_vm_t *vm, js_sb_t *b, const uint32_t *u, int n);
 
 #define JARG(i) ((i) < argc ? argv[(i)] : jv_undef())
 #define JCK(vm) do { if ((vm)->ctl) return jv_undef(); } while (0)

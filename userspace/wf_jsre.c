@@ -1041,7 +1041,7 @@ jv js_regexp_result(js_vm_t *vm, uint32_t re, uint32_t str, const int *caps) {
     if (!a) return jv_undef();
     for (k = 0; k < nc; k++)
         js_array_push(vm, a, caps[2 * k] < 0 || caps[2 * k + 1] < 0 ? jv_undef() : jv_str(js_str_sub(vm, str, caps[2 * k], caps[2 * k + 1])));
-    js_define(vm, a, vm->s_index, jv_int(caps[0]), P_DEFAULT);
+    js_define(vm, a, vm->s_index, jv_int((int32_t)js_u16_unit_of(vm, str, caps[0])), P_DEFAULT);   /* Lot 115: units */
     js_define(vm, a, vm->s_input, jv_str(str), P_DEFAULT);
     if (names) {
         groups = js_obj_new(vm, JS_CLASS_OBJECT, 0);
@@ -1058,7 +1058,7 @@ jv js_regexp_result(js_vm_t *vm, uint32_t re, uint32_t str, const int *caps) {
 jv js_regexp_exec(js_vm_t *vm, uint32_t re, uint32_t str) {
     int caps[2 * JS_RE_MAXCAP], r, start = 0;
     uint32_t bits = JOBJ(vm, re)->x1;
-    int len = (int)JSTR(vm, str)->len;
+    int len = (int)js_str_units(vm, str);      /* Lot 115: lastIndex counts UTF-16 units */
     if (bits & (RF_G | RF_Y)) {
         jv li = js_get(vm, jv_obj(re), vm->s_lastIndex);
         jf64 n;
@@ -1073,7 +1073,7 @@ jv js_regexp_exec(js_vm_t *vm, uint32_t re, uint32_t str) {
             js_put(vm, jv_obj(re), vm->s_lastIndex, jv_int(0));
             return jv_null();
         }
-        start = (int)v;
+        start = js_u16_off(vm, str, (uint32_t)v, 0);
     }
     r = js_regexp_search(vm, re, str, start, caps);
     if (r < 0) return jv_undef();
@@ -1081,7 +1081,7 @@ jv js_regexp_exec(js_vm_t *vm, uint32_t re, uint32_t str) {
         if (bits & (RF_G | RF_Y)) js_put(vm, jv_obj(re), vm->s_lastIndex, jv_int(0));
         return jv_null();
     }
-    if (bits & (RF_G | RF_Y)) js_put(vm, jv_obj(re), vm->s_lastIndex, jv_int(caps[1]));
+    if (bits & (RF_G | RF_Y)) js_put(vm, jv_obj(re), vm->s_lastIndex, jv_int((int32_t)js_u16_unit_of(vm, str, caps[1])));
     if (vm->ctl) return jv_undef();
     return js_regexp_result(vm, re, str, caps);
 }

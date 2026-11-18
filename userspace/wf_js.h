@@ -14,9 +14,20 @@
  * all, allSettled, any, race) and queueMicrotask; microtasks run when
  * the host calls js_run_jobs.
  *
- * What it is not: no async generators, for await, Proxy, Symbol, typed arrays, getters on arbitrary built-ins, labels on
- * blocks, with, eval, or tail calls. Strings are byte strings (UTF-8
- * bytes as they come; length counts bytes, not UTF-16 units). There is
+ * Lot 115 adds Symbol (Symbol.for, the well-known symbols iterator,
+ * hasInstance, toPrimitive and toStringTag honoured by the runtime), the
+ * iterator protocol for user objects (lazy for-of with return(), spread,
+ * destructuring that reads only what it needs), class private members
+ * (#x fields, methods, accessors, static ones, #x in o) and static
+ * blocks, and UTF-16 string semantics: strings stay UTF-8 bytes in the
+ * arena but length and every index count UTF-16 code units
+ * (wf_jsu16.c).
+ *
+ * What it is not: no async generators, for await, Proxy, typed arrays, getters on arbitrary built-ins, labels on
+ * blocks, with, eval, or tail calls. String comparison (<, sort) orders
+ * UTF-8 bytes, which differs from UTF-16 order only between astral
+ * characters and U+E000..U+FFFF; case mapping covers ASCII and the
+ * 2-byte letters whose two cases have the same length. There is
  * no garbage collector: one realm lives in one caller-given arena and
  * an allocation past its end aborts the run (RangeError-like, not
  * catchable). A step budget and a call-depth limit stop runaway code
