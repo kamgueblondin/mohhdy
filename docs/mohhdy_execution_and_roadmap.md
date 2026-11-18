@@ -7,6 +7,22 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 114 (18 November 2026, PR 272)
+
+US-031 partial, phase3_complete=false. The JavaScript subset gains
+generators, async/await and Promise (REPL and pages). With `web-js on`
+(off by default) pages run external scripts through the guest fetch
+path, scripts inserted by scripts, on* attributes, fetch() and
+XMLHttpRequest on their own origin, and get approximate layout values.
+The page realm stays alive after load: clicks, keys, input, focus and
+submit from the console, the GUI input line, GUI clicks on marked
+elements and unused GUI keys reach the scripts through one shared path,
+and the rewritten page goes through the unchanged sanitizer. The host
+coverage CI job is back under 15 minutes (parallel test runner, gcov
+pool, platform boot in its own job). A QEMU page (`make qemu-lot114`,
+CI job lot114-js-page) checks it. First gap for Lot 115: keys typed
+into reader form fields reaching page scripts. See docs/lot114_plan.md.
+
 ### Lot 113 (17 November 2026, PR 270 merged)
 
 US-031 partial, phase3_complete=false. A bounded JavaScript subset runs

@@ -24,6 +24,7 @@
 #include "wf_sitecss.h"
 #include "webeng.h"   /* Lot 104: we_geom_feed */
 #include "wf_jsweb.h"  /* Lot 113: the page script pass */
+#include "wf_jsdom.h"  /* Lot 114: the live page, its fetch hook */
 
 extern const fsops_io_t shell_fs_io;
 #include "../include/os_syscalls.h"
@@ -308,6 +309,41 @@ static int page_fetch(const char* url, const wf_fetch_req_t* req, char* src, int
     return page_present(req, g_css_on, src, src_max, final_url, url_max, status, st_max);
 }
 
+static int g_js_replay;     /* Lot 114: the page written again by an event: no new script pass */
+
+/* Lot 114 (US-031): the network of the page pass. External scripts,
+ * fetch() and XMLHttpRequest go through the same guest fetch path as the
+ * page (settings net off refuses them); a page opened with web-load
+ * reads its scripts from the same directory, as its sheets (sheet_get). */
+static int js_fetch_hook(void *ctx, wf_jsreq_t *r) {
+    static wf_fetch_result_t jres;
+    wf_fetch_req_t q;
+    int i;
+    (void)ctx;
+    if (g_load_dir[0]) {
+        if (r->method && r->method[0] == 'P') return -1;
+        r->len = sheet_get(0, r->url, r->out, r->out_max);
+        if (r->len < 0) return -1;
+        r->status = 200;
+        return 0;
+    }
+    for (i = 0; i < (int)sizeof(jres); i++) ((char *)&jres)[i] = 0;
+    q.method = r->method;
+    q.body = r->body;
+    q.body_len = r->body ? r->body_len : 0;
+    q.ctype = r->ctype;
+    q.extra = 0;
+    if (wf_guest_fetch_ex(r->url, &q, (uint8_t *)r->out, r->out_max, &jres, 0) != 0) return -1;
+    r->status = jres.status;
+    r->len = jres.body_len;
+    r->truncated = jres.truncated;
+    for (i = 0; jres.content_type[i] && i < (int)sizeof(r->ctype_out) - 1; i++) r->ctype_out[i] = jres.content_type[i];
+    r->ctype_out[i] = 0;
+    for (i = 0; jres.url[i] && i < (int)sizeof(r->final_url) - 1; i++) r->final_url[i] = jres.url[i];
+    r->final_url[i] = 0;
+    return 0;
+}
+
 static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int src_max, char* final_url, int url_max,
                         char* status, int st_max) {
     static char line_out[600];
@@ -322,7 +358,9 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
     /* Lot 113 (US-031): with web-js on, the inline scripts of an HTML page
      * run against its DOM first; everything below (blocks, reducer, the
      * sanitizer of the GUI) sees the page as the scripts left it */
-    if (wf_jsweb_enabled() && is_html(&g_res, g_body, g_res.body_len)) {
+    if (!g_js_replay) wf_jspage_close();     /* Lot 114: a new page ends the live one */
+    if (!g_js_replay && wf_jsweb_enabled() && is_html(&g_res, g_body, g_res.body_len)) {
+        wf_jspage_set_fetch(js_fetch_hook, 0);
         g_res.body_len = wf_jsweb_page((char *)g_body, g_res.body_len, (int)sizeof(g_body), g_res.url);
         g_body[g_res.body_len] = 0;
     }
@@ -895,4 +933,118 @@ int shell_page_css_cmd(const char *line, char *out, int cap) {
         if (wf_csslink_stats_text(&g_css_st, line, (int)sizeof(line)) > 0) scat(out, cap, line);
     }
     return 0;
+}
+
+/* Lot 114 (US-031): events after load, one path for the console words
+ * (web-js click|key|input|focus|blur|submit|event|clicks) and the GUI
+ * (a click on a "?__wfjs=N" link, keys the page view does not use, as
+ * "web-js gkey KEY"). The event runs in the live realm of the page, the
+ * page is written again and presented without a new script pass (the
+ * reader, the sanitizer and the forms see it as the scripts left it).
+ * Returns the source length of the current section (src), 0 when there
+ * is nothing to show again, -1 when the line is not for a live page. */
+static const char *js_word(const char *s, char *w, int cap) {
+    int n = 0;
+    while (*s == ' ') s++;
+    while (*s && *s != ' ' && n < cap - 1) w[n++] = *s++;
+    w[n] = 0;
+    while (*s == ' ') s++;
+    return s;
+}
+
+int shell_page_js(const char *line, char *src, int src_max, char *out, int out_max) {
+    static char word[24], target[256], type[40], fu[600], st[640], cur_url[600];
+    const char *a = line, *arg = 0;
+    int r, n = 0, cur, log0 = 0, gui_key = 0, i;
+    if (out && out_max > 0) out[0] = 0;
+    a = js_word(a, word, (int)sizeof(word));          /* web-js */
+    a = js_word(a, word, (int)sizeof(word));
+    if (s_eq(word, "clicks")) {
+        static char cl[3000];
+        int len = wf_jsweb_clickables(cl, (int)sizeof(cl)), c = 0;
+        for (i = 0; i < len; i++) if (cl[i] == '\n') c++;
+        scat(out, out_max, "osui web-js clicks ");
+        scat_int(out, out_max, wf_jspage_alive() ? c : -1);
+        scat(out, out_max, "\n");
+        if (len > 0) scat(out, out_max, cl);
+        return 0;
+    }
+    if (s_eq(word, "gkey")) {
+        if (!g_page_ok || !wf_jsweb_wants_keys()) return -1;
+        gui_key = 1;
+        word[0] = 0; scat(word, (int)sizeof(word), "key");
+    }
+    if (s_eq(word, "key")) {
+        static char key[24];
+        a = js_word(a, key, (int)sizeof(key));
+        type[0] = 0; scat(type, (int)sizeof(type), "key");
+        arg = key;
+        target[0] = 0; scat(target, (int)sizeof(target), a);
+    } else if (s_eq(word, "event")) {
+        a = js_word(a, type, (int)sizeof(type));
+        target[0] = 0; scat(target, (int)sizeof(target), a);
+    } else if (s_eq(word, "click") || s_eq(word, "input") || s_eq(word, "focus") ||
+               s_eq(word, "blur") || s_eq(word, "submit")) {
+        type[0] = 0; scat(type, (int)sizeof(type), word);
+        a = js_word(a, target, (int)sizeof(target));
+        arg = a;
+    } else return -1;
+    {   /* a "?__wfjs=N" URL from the GUI is node N */
+        int k = wf_jspage_mark_node(target);
+        if (k >= 0) {
+            target[0] = '@';
+            target[1] = 0;
+            scat_int(target, (int)sizeof(target), k);
+        }
+    }
+    if (!g_page_ok || !wf_jspage_alive()) {
+        if (!gui_key) scat(out, out_max, "osui web-js event error=no_live_page (web-js on, then open a page whose scripts ran)\n");
+        return -1;
+    }
+    (void)wf_jspage_log(&log0);
+    r = wf_jsweb_event(type, target, arg, (char *)g_body, (int)sizeof(g_body));
+    if (r < 0) {
+        scat(out, out_max, r == -2 ? "osui web-js event error=no_target " : r == -3 ? "osui web-js event error=arena_full " :
+                           "osui web-js event error=no_live_page ");
+        scat(out, out_max, type);
+        scat(out, out_max, " ");
+        scat(out, out_max, target[0] ? target : "(focus)");
+        scat(out, out_max, "\n");
+        return r == -2 ? 0 : -1;
+    }
+    cur = g_cur;
+    cur_url[0] = 0; scat(cur_url, (int)sizeof(cur_url), g_res.url);
+    g_res.body_len = r;
+    g_js_replay = 1;
+    n = page_present(0, g_css_on, src, src_max, fu, (int)sizeof(fu), st, (int)sizeof(st));
+    g_js_replay = 0;
+    if (n > 0 && cur > 0 && cur < g_sec.n) n = shell_page_section(cur, src, src_max);
+    scat(out, out_max, "osui web-js event ");
+    scat(out, out_max, type);
+    scat(out, out_max, " ");
+    scat(out, out_max, target[0] ? target : "(focus)");
+    scat(out, out_max, n > 0 ? " ok" : " error=present");
+    wf_jsweb_event_note(out, out_max);
+    scat(out, out_max, "\n");
+    {   /* the console lines the event added */
+        int ln;
+        const char *lg = wf_jspage_log(&ln);
+        int s0 = log0;
+        while (s0 < ln) {
+            int e = s0;
+            while (e < ln && lg[e] != '\n') e++;
+            scat(out, out_max, "osui web-js log: ");
+            {
+                static char one[200];
+                int m = e - s0 < (int)sizeof(one) - 1 ? e - s0 : (int)sizeof(one) - 1;
+                for (i = 0; i < m; i++) one[i] = lg[s0 + i];
+                one[m] = 0;
+                scat(out, out_max, one);
+            }
+            scat(out, out_max, "\n");
+            s0 = e + 1;
+        }
+    }
+    (void)cur_url;
+    return n > 0 ? n : 0;
 }

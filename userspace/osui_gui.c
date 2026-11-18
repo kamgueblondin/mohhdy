@@ -640,10 +640,42 @@ static int web_form_command(const char *line, char *out, int out_max) {
     return 0;
 }
 
+/* Lot 114 (US-031): a web-js event line through the shell page
+ * (page_js); the page written again replaces the view. 1 when handled. */
+static int web_js_word(const char *a, const char *w) {
+    int n = slen(w);
+    return sncmp(a, w, n) == 0 && (a[n] == ' ' || !a[n]);
+}
+
+static int web_js_show(int n) {
+    int rc, scroll = g_web_scroll;
+    if (n <= 0) return 0;
+    g_web_src[n < OSUI_WEB_SRC_MAX ? n : OSUI_WEB_SRC_MAX - 1] = 0;
+    rc = osui_web_pipeline(g_web_src, n);
+    if (rc == 0) g_web_scroll = we_scroll(&g_web, scroll);
+    return rc == 0;
+}
+
+static int web_js_line(const char *line, char *out, int out_max) {
+    const char *a;
+    int n;
+    if (sncmp(line, "web-js ", 7) != 0) return 0;
+    a = line + 7;
+    while (*a == ' ') a++;
+    if (!web_js_word(a, "click") && !web_js_word(a, "key") && !web_js_word(a, "input") && !web_js_word(a, "focus") &&
+        !web_js_word(a, "blur") && !web_js_word(a, "submit") && !web_js_word(a, "event") && !web_js_word(a, "clicks"))
+        return 0;
+    if (!g_wops || !g_wops->page_js) return 0;
+    n = g_wops->page_js(line, g_web_src, OSUI_WEB_SRC_MAX, out, out_max);
+    if (n > 0 && g_web_active) (void)web_js_show(n);
+    return 1;
+}
+
 int osui_gui_web_command(const char *line, char *out, int out_max) {
     const char *a;
     int n = 0, neg = 0;
     if (out && out_max > 0) out[0] = 0;
+    if (web_js_line(line, out, out_max)) return 1;
     /* Lot 113 (US-031): js and web-js, one path for the console and the GUI */
     if (wf_jsweb_command(line, out, out_max)) return 1;
     if (sncmp(line, "web-open", 8) == 0 && (line[8] == ' ' || !line[8])) {
@@ -1373,6 +1405,21 @@ static void web_event(const char *p, char *out, int out_max) {
             if (fr >= 0) { web_form_result(fr, out, out_max); return; }
         }
         if (we_link_at(&g_web, x, y, href, (int)sizeof(href)) <= 0) return;
+        if (g_wops && g_wops->page_js) {
+            /* Lot 114: a clickable element of the page scripts (?__wfjs=N) */
+            int q;
+            for (q = 0; href[q]; q++) {
+                if (sncmp(href + q, "__wfjs=", 7) == 0) {
+                    static char jl[300];
+                    int jn;
+                    scpy(jl, (int)sizeof(jl), "web-js click ");
+                    scat(jl, (int)sizeof(jl), href + q);
+                    jn = g_wops->page_js(jl, g_web_src, OSUI_WEB_SRC_MAX, out, out_max);
+                    if (jn > 0) (void)web_js_show(jn);
+                    return;
+                }
+            }
+        }
         if (sncmp(href, "mohhdy-form:", 12) == 0) {
             /* Lot 71: a form control: focus the field or submit */
             int t = (g_wops && g_wops->form_link) ? g_wops->form_link(href) : -1;
@@ -2635,6 +2682,19 @@ int osui_gui_feed_key(int key, char *out, int out_max) {
             return 0;
         }
         if (fk == 1) { (void)web_submit(-1, out, out_max); return 0; }
+        if (!g_web_mobile && g_wops && g_wops->page_js && ((key >= 0x20 && key < 0x7f) || key == '\n' || key == '\r' || key == '\b')) {
+            /* Lot 114: a key the page view does not use goes to the page
+             * scripts when they listen to keys (gkey answers -1 if not) */
+            static char jl[40];
+            int jn;
+            scpy(jl, (int)sizeof(jl), "web-js gkey ");
+            if (key == '\n' || key == '\r') scat(jl, (int)sizeof(jl), "Enter");
+            else if (key == '\b') scat(jl, (int)sizeof(jl), "Backspace");
+            else if (key == ' ') scat(jl, (int)sizeof(jl), "Space");
+            else { char c[2]; c[0] = (char)key; c[1] = 0; scat(jl, (int)sizeof(jl), c); }
+            jn = g_wops->page_js(jl, g_web_src, OSUI_WEB_SRC_MAX, out, out_max);
+            if (jn >= 0) { if (jn > 0) (void)web_js_show(jn); return 0; }
+        }
         if (key == OS_VGA_KEY_ESC) {
             g_web_active = 0;
             g_web_mobile = 0;

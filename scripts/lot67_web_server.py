@@ -968,6 +968,45 @@ LOT113_PAGES = {
 }
 
 
+# Lot 114 (US-031): a page whose scripts use the Lot 114 parts of the page
+# pass: an external script (src=) and a deferred one, a missing one
+# (onerror), fetch() of JSON, an XMLHttpRequest POST (echo114), an async
+# function reading a layout value, a cross-origin fetch the guest refuses,
+# and click, key and input listeners reached after load through
+# "web-js click|key|input" (tests/scripts/test_qemu_lot114.py)
+LOT114_FILES = {
+    "/lot114/app.html": ("text/html; charset=utf-8",
+        "<!doctype html><html><head><title>Lot 114 js</title>"
+        "<script src=\"lib114.js\"></script><script src=\"late114.js\" defer></script></head><body>"
+        "<h1 id=\"h\">static114</h1><p id=\"c\">count114 0</p><button id=\"inc\">plus114</button>"
+        "<ul id=\"l\"></ul><p id=\"x\">xhr114 wait</p><p id=\"k\">keys114 none</p><p id=\"a\">async114 wait</p>"
+        "<input id=\"q\" value=\"\">"
+        "<script src=\"missing114.js\" onerror=\"document.getElementById('h').setAttribute('data-e', '1')\"></script>"
+        "<script>\n"
+        "document.getElementById('h').textContent = 'ext114 ' + Lib114.twice(21);\n"
+        "var n = 0;\n"
+        "document.getElementById('inc').addEventListener('click', function () {\n"
+        "  n++; document.getElementById('c').textContent = 'count114 ' + n; });\n"
+        "fetch('data114.json').then(r => r.json()).then(d => d.items.forEach(i => {\n"
+        "  var li = document.createElement('li'); li.textContent = 'item114 ' + i; document.getElementById('l').appendChild(li); }));\n"
+        "var x = new XMLHttpRequest(); x.open('POST', 'echo114'); x.setRequestHeader('Content-Type', 'text/plain');\n"
+        "x.onload = function () { document.getElementById('x').textContent = 'xhr114 ' + x.status + ' ' + x.responseText; };\n"
+        "x.send('ping');\n"
+        "(async function () { await null; var w = document.getElementById('inc').offsetWidth;\n"
+        "  document.getElementById('a').textContent = 'async114 ' + w; })();\n"
+        "document.addEventListener('keydown', function (e) { document.getElementById('k').textContent = 'keys114 ' + e.key; });\n"
+        "document.getElementById('q').addEventListener('input', function (e) {\n"
+        "  document.getElementById('k').textContent = 'input114 ' + e.target.value; });\n"
+        "fetch('http://example.com/').catch(e => console.log('cors114', e.message));\n"
+        "</script><p>fin114</p></body></html>"),
+    "/lot114/lib114.js": ("text/javascript", "var Lib114 = { twice: function (x) { return 2 * x; } };\n"),
+    "/lot114/late114.js": ("text/javascript",
+        "var p = document.createElement('p'); p.textContent = 'defer114 ' + document.readyState;\n"
+        "document.body.appendChild(p);\n"),
+    "/lot114/data114.json": ("application/json", "{\"items\": [1, 2, 3]}"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -1096,6 +1135,11 @@ class H(http.server.BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", "0") or "0")
         body = self.rfile.read(n) if n > 0 else b""
         print(f"POST {self.path} ctype={self.headers.get('Content-Type')} body={body!r}", flush=True)
+        if self.path == "/lot114/echo114":
+            # Lot 114: the XMLHttpRequest POST of /lot114/app.html
+            self._send(200, ("echo114 %s %s" % (self.headers.get("Content-Type"), body.decode("utf-8", "replace"))).encode(),
+                       "text/plain")
+            return
         if self.path.startswith("/post-redirect"):
             # 303 after a POST: the client follows with a GET
             self.send_response(303)
@@ -1214,6 +1258,10 @@ class H(http.server.BaseHTTPRequestHandler):
             return True
         if p in LOT113_PAGES:
             self._send(200, LOT113_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
+            return True
+        if p in LOT114_FILES:
+            ct, body = LOT114_FILES[p]
+            self._send(200, body.encode("utf-8"), ct)
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a
