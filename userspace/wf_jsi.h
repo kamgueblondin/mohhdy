@@ -227,6 +227,7 @@ struct js_vm {
     int nnat;
     js_host_get_fn host_get;
     js_host_set_fn host_set;
+    js_host_del_fn host_del;              /* Lot 115 */
     void *host_ctx;
     uint32_t rng;
     uint32_t date_now_lo, date_now_hi;    /* fixed clock (ms since 1970) */
@@ -474,6 +475,7 @@ int js_is_regexp(js_vm_t *vm, jv v);
  * match, 0 on none, -1 when the run aborted (budget) */
 int js_regexp_search(js_vm_t *vm, uint32_t re, uint32_t str, int start, int *caps);
 int js_regexp_ncap(js_vm_t *vm, uint32_t re);      /* groups + 1 */
+uint32_t js_regexp_names(js_vm_t *vm, uint32_t re);  /* Lot 115: array of group names, or 0 */
 int js_regexp_global(js_vm_t *vm, uint32_t re);
 /* the exec() result array for a match */
 jv js_regexp_result(js_vm_t *vm, uint32_t re, uint32_t str, const int *caps);

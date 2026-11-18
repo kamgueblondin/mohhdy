@@ -305,14 +305,16 @@ static void lex_string(ps_t *p, int q) {
 /* template characters from p->pos up to '${' or '`' */
 static void lex_tmpl_chars(ps_t *p) {
     sbuf_t sb;
+    int rs = p->pos, re = -1, k, crs = 0;
     sb_init(p, &sb);
     p->t.type = TK_TMPL;
     p->t.tail = 0;
+    p->t.str2 = 0;
     while (p->pos < p->len) {
         int c = (uint8_t)p->s[p->pos];
         if (!sb_room(p, &sb, 8)) return;
-        if (c == '`') { p->pos++; p->t.tail = 1; break; }
-        if (c == '$' && p->pos + 1 < p->len && p->s[p->pos + 1] == '{') { p->pos += 2; break; }
+        if (c == '`') { re = p->pos; p->pos++; p->t.tail = 1; break; }
+        if (c == '$' && p->pos + 1 < p->len && p->s[p->pos + 1] == '{') { re = p->pos; p->pos += 2; break; }
         if (c == '\\') { p->pos++; sb.n = read_escape(p, sb.b, sb.n, sb.cap - 1); continue; }
         if (c == '\n') p->line++;
         if (c == '\r') { p->pos++; continue; }
@@ -321,6 +323,19 @@ static void lex_tmpl_chars(ps_t *p) {
         if (p->pos >= p->len) { ps_error(p, "Unterminated template literal"); return; }
     }
     p->t.str = js_str_new(p->vm, sb.b, sb.n);
+    /* Lot 115: the raw text (String.raw, strings.raw), kept only when it
+     * differs from the cooked one; a CR is dropped as in the cooked text */
+    if (re < 0) return;
+    for (k = rs; k < re; k++) if (p->s[k] == '\\' || p->s[k] == '\r') crs = 1;
+    if (crs) {
+        sbuf_t rb;
+        sb_init(p, &rb);
+        for (k = rs; k < re; k++) {
+            if (!sb_room(p, &rb, 2)) return;
+            if (p->s[k] != '\r') rb.b[rb.n++] = p->s[k];
+        }
+        p->t.str2 = js_str_new(p->vm, rb.b, rb.n);
+    }
 }
 
 static void lex_number(ps_t *p) {
@@ -697,6 +712,7 @@ static uint32_t parse_template(ps_t *p) {
         int tail = p->t.tail;
         if (!s) return 0;
         N(s)->a = p->t.str;
+        N(s)->b = p->t.str2;          /* Lot 115: raw text, 0 when the same */
         list_add(p, &parts, s);
         if (tail) { next(p); break; }
         next(p);

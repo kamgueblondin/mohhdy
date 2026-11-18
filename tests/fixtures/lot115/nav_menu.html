@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Shop - Home</title></head>
+<body class="no-js">
+<header class="site-header">
+  <button class="menu-toggle" aria-controls="primary-menu" aria-expanded="false">Menu</button>
+  <nav id="primary-menu" class="nav" hidden>
+    <ul>
+      <li class="menu-item"><a href="/">Home</a></li>
+      <li class="menu-item has-children"><a href="/shop">Shop</a>
+        <ul class="sub-menu"><li><a href="/shop/new">New</a></li><li><a href="/shop/sale">Sale</a></li></ul></li>
+      <li class="menu-item"><a href="/about" data-track="about-link">About</a></li>
+    </ul>
+  </nav>
+</header>
+<main id="content"><h1>Welcome</h1></main>
+<script>
+(function () {
+  'use strict';
+  document.body.classList.remove('no-js');
+  document.body.classList.add('js');
+  var toggle = document.querySelector('.menu-toggle');
+  var menu = document.getElementById(toggle.getAttribute('aria-controls'));
+  function setOpen(open) {
+    toggle.setAttribute('aria-expanded', String(open));
+    if (open) menu.removeAttribute('hidden'); else menu.setAttribute('hidden', '');
+    document.body.classList.toggle('menu-open', open);
+  }
+  toggle.addEventListener('click', function () {
+    setOpen(toggle.getAttribute('aria-expanded') !== 'true');
+  });
+  var tracked = [];
+  menu.addEventListener('click', function (e) {
+    var link = e.target.closest('a');
+    if (!link || !menu.contains(link)) return;
+    e.preventDefault();
+    tracked.push(link.dataset.track || link.getAttribute('href'));
+  });
+  var parents = menu.querySelectorAll('.has-children');
+  Array.prototype.forEach.call(parents, function (li) {
+    var sub = li.querySelector('.sub-menu');
+    li.setAttribute('data-count', sub.children.length);
+  });
+  toggle.click();
+  console.log('open', toggle.getAttribute('aria-expanded'), menu.hasAttribute('hidden'), document.body.className);
+  menu.querySelector('a[href="/shop/sale"]').click();
+  menu.querySelector('[data-track]').click();
+  console.log('tracked', tracked.join(','));
+  toggle.click();
+  console.log('closed', toggle.getAttribute('aria-expanded'), menu.hasAttribute('hidden'), document.body.className);
+  console.log('items', document.querySelectorAll('.nav > ul > li').length, parents[0].getAttribute('data-count'),
+    parents[0].matches('.menu-item.has-children'), menu.querySelector('li:last-child a').textContent);
+})();
+</script>
+</body></html>

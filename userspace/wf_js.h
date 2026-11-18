@@ -52,6 +52,9 @@ typedef jv (*js_native_fn)(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m
  * JS_CLASS_HOST; return 1 when the hook handled the key */
 typedef int (*js_host_get_fn)(js_vm_t *vm, jv obj, uint32_t key, jv *out);
 typedef int (*js_host_set_fn)(js_vm_t *vm, jv obj, uint32_t key, jv val);
+/* Lot 115: delete obj[key] on a host object; 1 when handled (*ok gets
+ * the result of the delete operator) */
+typedef int (*js_host_del_fn)(js_vm_t *vm, jv obj, uint32_t key, int *ok);
 
 #define JS_OK        0
 #define JS_THROWN   -1      /* an exception nobody caught; vm->err has it */

@@ -979,25 +979,29 @@ static jv eval_template(js_vm_t *vm, uint32_t env, uint32_t n) {
 }
 
 static jv eval_tagged(js_vm_t *vm, uint32_t env, uint32_t n) {
-    uint32_t strs = js_array_new(vm, 4), e, tn = NODE(n)->b;
+    uint32_t strs = js_array_new(vm, 4), raw = js_array_new(vm, 4), e, tn = NODE(n)->b;
     jv fn, thisv = jv_undef(), local[16];
-    int argc = 1;
+    int argc = 1, i = 0;
     js_node_t *cn = NODE(NODE(n)->a);
-    if (!strs) return jv_undef();
+    if (!strs || !raw) return jv_undef();
     if (cn->k == N_MEMBER) {
         thisv = ev(vm, env, cn->a);
         if (vm->ctl) return jv_undef();
         fn = js_get(vm, thisv, NODE(NODE(n)->a)->b);
     } else fn = ev(vm, env, NODE(n)->a);
     if (vm->ctl) return jv_undef();
-    for (e = NODE(tn)->a; e && !vm->ctl; e = NODE(e)->next) {
-        if (NODE(e)->k == N_STR) js_array_push(vm, strs, jv_str(NODE(e)->a));
-        else if (argc < 16) {
+    /* Lot 115: the parts alternate text, expression, text...; an expression
+     * that is itself a string literal is a value, not a text part */
+    for (e = NODE(tn)->a; e && !vm->ctl; e = NODE(e)->next, i++) {
+        if (!(i & 1)) {
+            js_array_push(vm, strs, jv_str(NODE(e)->a));
+            js_array_push(vm, raw, jv_str(NODE(e)->b ? NODE(e)->b : NODE(e)->a));
+        } else if (argc < 16) {
             local[argc++] = ev(vm, env, e);
         }
     }
     if (vm->ctl) return jv_undef();
-    js_define(vm, strs, vm->s_raw, jv_obj(strs), P_HIDDEN);
+    js_define(vm, strs, vm->s_raw, jv_obj(raw), P_HIDDEN);
     local[0] = jv_obj(strs);
     if (!js_is_callable(vm, fn)) return js_throw_err(vm, JE_TYPE, "tag is not a function");
     return js_call(vm, fn, thisv, local, argc);

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Comments</title></head>
+<body>
+<template id="comment-tpl"><li class="comment"><strong class="author"></strong>: <span class="body"></span><time></time></li></template>
+<ol id="comments"></ol>
+<script>
+const data = [
+  { author: 'ana', body: 'First!', at: Date.UTC(2026, 0, 5, 9, 30) },
+  { author: 'ben', body: 'Nice <b>post</b>', at: Date.UTC(2026, 0, 6, 18, 5) },
+  { author: 'chloe', body: 'Thanks & bye', at: Date.UTC(2026, 1, 1, 0, 0) }
+];
+const tpl = document.getElementById('comment-tpl');
+const frag = document.createDocumentFragment();
+const pad = (n) => String(n).padStart(2, '0');
+for (const c of data) {
+  const node = tpl.content.cloneNode(true);
+  node.querySelector('.author').textContent = c.author;
+  node.querySelector('.body').textContent = c.body;
+  const d = new Date(c.at);
+  const t = node.querySelector('time');
+  t.setAttribute('datetime', d.toISOString());
+  t.textContent = ` ${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+  frag.appendChild(node);
+}
+const list = document.getElementById('comments');
+console.log('frag', frag.childNodes.length, list.children.length);
+list.appendChild(frag);
+console.log('list', list.children.length, frag.childNodes.length, tpl.content.childNodes.length);
+console.log(list.lastElementChild.textContent);
+console.log(list.children[1].querySelector('.body').innerHTML);
+console.log(list.querySelector('time').getAttribute('datetime'));
+const authors = Array.from(list.querySelectorAll('.author'), (el) => el.textContent.toUpperCase());
+console.log(authors.join(' '), list.firstElementChild.nextElementSibling.querySelector('strong').textContent);
+</script>
+</body></html>

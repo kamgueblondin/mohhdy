@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Sign up</title></head>
+<body>
+<form id="signup" action="/signup" method="post" novalidate>
+  <label>Email <input name="email" type="email" value="ada@example"></label>
+  <label>Password <input name="password" type="password" value="abc"></label>
+  <label>Country <select name="country"><option value="">--</option><option value="fr" selected>France</option><option value="mu">Mauritius</option></select></label>
+  <label><input type="checkbox" name="terms"> I agree</label>
+  <label><input type="radio" name="plan" value="free" checked> Free</label>
+  <label><input type="radio" name="plan" value="pro"> Pro</label>
+  <ul class="errors"></ul>
+  <button type="submit">Create</button>
+</form>
+<script>
+const form = document.getElementById('signup');
+const rules = {
+  email: (v) => /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v) || 'invalid email',
+  password: (v) => v.length >= 8 || `password too short (${v.length})`,
+  terms: (v, el) => el.checked || 'accept the terms'
+};
+let submitted = 0;
+function validate() {
+  const errors = [];
+  for (const [name, rule] of Object.entries(rules)) {
+    const el = form.elements[name];
+    const ok = rule(el.value, el);
+    el.classList.toggle('invalid', ok !== true);
+    if (ok !== true) errors.push(`${name}: ${ok}`);
+  }
+  form.querySelector('.errors').innerHTML = errors.map((e) => `<li>${e}</li>`).join('');
+  return errors;
+}
+form.addEventListener('submit', (e) => {
+  const errors = validate();
+  if (errors.length) { e.preventDefault(); return; }
+  e.preventDefault();
+  submitted++;
+});
+const ev = () => new Event('submit', { cancelable: true, bubbles: true });
+let ok = form.dispatchEvent(ev());
+console.log('first', ok, form.querySelectorAll('.errors li').length, form.querySelector('.errors').textContent);
+form.elements.email.value = 'ada@example.org';
+form.elements.password.value = 'correct horse';
+form.elements.terms.checked = true;
+ok = form.dispatchEvent(ev());
+console.log('second', ok, submitted, form.querySelectorAll('.invalid').length);
+const data = new FormData(form);
+const pairs = [];
+data.forEach((v, k) => { if (k !== 'password') pairs.push(`${k}=${v}`); });
+console.log(pairs.join('&'));
+console.log(form.elements.plan.value, form.elements.country.selectedIndex, form.elements.length, form.method, form.getAttribute('action'));
+</script>
+</body></html>

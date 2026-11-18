@@ -976,7 +976,8 @@ LOT113_PAGES = {
 # "web-js click|key|input" (tests/scripts/test_qemu_lot114.py)
 # Lot 115 (US-031): layout values from the renderer: a box with padding and
 # border, a flex row of two fixed-width items, read by the page script
-# (tests/scripts/test_qemu_lot115.py)
+# (tests/scripts/test_qemu_lot115.py); /lot115/compat/NAME.html serves the
+# compatibility fixture tests/fixtures/lot115/NAME.html
 LOT115_FILES = {
     "/lot115/layout.html": ("text/html; charset=utf-8",
         "<!doctype html><html><head><title>Lot 115 layout</title><style>"
@@ -1305,6 +1306,15 @@ class H(http.server.BaseHTTPRequestHandler):
             ct, body = LOT115_FILES[p]
             self._send(200, body.encode("utf-8"), ct)
             return True
+        m = re.fullmatch(r"/lot115/compat/([a-z_]+)\.html", p)
+        if m:
+            # Lot 115: the real-page compatibility fixtures, served as they
+            # are in the repository (tests/fixtures/lot115)
+            f = os.path.join(_ROOT, "tests", "fixtures", "lot115", m.group(1) + ".html")
+            if os.path.isfile(f):
+                with open(f, "rb") as fh:
+                    self._send(200, fh.read(), "text/html; charset=utf-8")
+                return True
         if p in LOT114_FILES:
             ct, body = LOT114_FILES[p]
             self._send(200, body.encode("utf-8"), ct)

@@ -1133,6 +1133,35 @@ static void flat_into(js_vm_t *vm, uint32_t out, jv src, int depth) {
 }
 
 /* flat 0, flatMap 1 */
+/* Lot 115: toReversed 0, toSorted 1, with 2: the change on a dense copy
+ * (holes read as undefined), the receiver unchanged */
+static jv arrp_copy_change(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
+    jv o;
+    uint32_t len, i, out;
+    if (!arr_this(vm, thisv, &o, &len)) return jv_undef();
+    if (m == 1 && JARG(0).t != JT_UNDEF && !js_is_callable(vm, JARG(0)))
+        return js_throw_err(vm, JE_TYPE, "The comparison function must be either a function or undefined");
+    out = js_array_new(vm, len);
+    if (!out) return jv_undef();
+    for (i = 0; i < len; i++) {
+        js_array_push(vm, out, elem(vm, o, i));
+        if (vm->ctl) return jv_undef();
+    }
+    if (m == 0) return arrp_reverse(vm, jv_obj(out), argv, 0, 0);
+    if (m == 1) return arrp_sort(vm, jv_obj(out), argv, argc, 0);
+    {
+        jf64 d = js_to_integer(vm, JARG(0));
+        int64_t k = -1;
+        if (vm->ctl) return jv_undef();
+        if (!jf_isinf(d)) (void)jf_to_i64(d, &k);
+        else k = -(int64_t)len - 1;
+        if (k < 0) k += len;
+        if (k < 0 || k >= (int64_t)len) return js_throw_err(vm, JE_RANGE, "Invalid index");
+        js_array_set(vm, out, (uint32_t)k, JARG(1));
+    }
+    return jv_obj(out);
+}
+
 static jv arrp_flat(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     jv o;
     uint32_t len, out, i;
@@ -1434,6 +1463,88 @@ static jv g_decode(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
         }
     }
     return jv_str(js_str_cat(vm, out, js_str_new(vm, b, n)));
+}
+
+/* Lot 115: the legacy escape(): UTF-16 units, %XX below 256, %uXXXX above */
+static jv g_escape(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
+    static const char keep[] = "@*_+-./";
+    uint32_t s;
+    js_sb_t b;
+    int off = 0, len;
+    (void)thisv;
+    (void)m;
+    s = js_to_string(vm, JARG(0));
+    if (vm->ctl) return jv_undef();
+    js_sb_init(vm, &b);
+    len = (int)JSTR(vm, s)->len;
+    while (off < len) {
+        int st = js_u8_step(vm, s, off), k, nu = 1;
+        uint32_t u[2];
+        char e[12];
+        if (st == 1) u[0] = (uint8_t)JSTR(vm, s)->s[off];
+        else {
+            uint32_t ui = js_u16_unit_of(vm, s, off);
+            u[0] = (uint32_t)js_u16_at(vm, s, ui);
+            if (u[0] >= 0xD800 && u[0] < 0xDC00 && st == 4) { u[1] = (uint32_t)js_u16_at(vm, s, ui + 1); nu = 2; }
+        }
+        for (k = 0; k < nu; k++) {
+            uint32_t c = u[k];
+            int ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'), j;
+            for (j = 0; !ok && keep[j] && c < 128; j++) if (keep[j] == (char)c) ok = 1;
+            if (ok) { js_sb_ch(vm, &b, (char)c); continue; }
+            if (c < 256) {
+                e[0] = '%'; e[1] = k_hex[c >> 4]; e[2] = k_hex[c & 15];
+                js_sb_put(vm, &b, e, 3);
+            } else {
+                e[0] = '%'; e[1] = 'u';
+                e[2] = k_hex[(c >> 12) & 15]; e[3] = k_hex[(c >> 8) & 15];
+                e[4] = k_hex[(c >> 4) & 15]; e[5] = k_hex[c & 15];
+                js_sb_put(vm, &b, e, 6);
+            }
+        }
+        off += st;
+    }
+    return vm->ctl ? jv_undef() : jv_str(js_sb_finish(vm, &b));
+}
+
+/* Lot 115: unescape(): %XX and %uXXXX become UTF-16 units, the rest stays */
+static jv g_unescape(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
+    uint32_t s, u[64];
+    js_sb_t b;
+    int i = 0, len, nu = 0;
+    (void)thisv;
+    (void)m;
+    s = js_to_string(vm, JARG(0));
+    if (vm->ctl) return jv_undef();
+    js_sb_init(vm, &b);
+    len = (int)JSTR(vm, s)->len;
+    while (i < len) {
+        const char *p = JSTR(vm, s)->s;
+        int v = -1, used = 0;
+        if (p[i] == '%') {
+            if (i + 5 < len && p[i + 1] == 'u') {
+                int a = hexv(p[i + 2]), c = hexv(p[i + 3]), d = hexv(p[i + 4]), e = hexv(p[i + 5]);
+                if (a >= 0 && c >= 0 && d >= 0 && e >= 0) { v = (a << 12) | (c << 8) | (d << 4) | e; used = 6; }
+            } else if (i + 2 < len && hexv(p[i + 1]) >= 0 && hexv(p[i + 2]) >= 0) {
+                v = hexv(p[i + 1]) * 16 + hexv(p[i + 2]);
+                used = 3;
+            }
+        }
+        if (v >= 0) {
+            /* keep a high half with the low half that may follow */
+            if (nu >= 63 && !(u[nu - 1] >= 0xD800 && u[nu - 1] < 0xDC00)) { js_u16_put_units(vm, &b, u, nu); nu = 0; }
+            if (nu >= 64) { js_u16_put_units(vm, &b, u, nu); nu = 0; }
+            u[nu++] = (uint32_t)v;
+            i += used;
+            continue;
+        }
+        if (nu) { js_u16_put_units(vm, &b, u, nu); nu = 0; }
+        used = js_u8_step(vm, s, i);
+        js_sb_put(vm, &b, JSTR(vm, s)->s + i, used);
+        i += used;
+    }
+    if (nu) js_u16_put_units(vm, &b, u, nu);
+    return vm->ctl ? jv_undef() : jv_str(js_sb_finish(vm, &b));
 }
 
 /* ---- display (console.log and the js command) ---- */
@@ -1742,6 +1853,9 @@ static int lib_array(js_vm_t *vm) {
     js_def_native(vm, o, "fill", arrp_fill, 1, 0);
     js_def_native(vm, o, "flat", arrp_flat, 0, 0);
     js_def_native(vm, o, "flatMap", arrp_flat, 1, 1);
+    js_def_native(vm, o, "toReversed", arrp_copy_change, 0, 0);     /* Lot 115 */
+    js_def_native(vm, o, "toSorted", arrp_copy_change, 1, 1);
+    js_def_native(vm, o, "with", arrp_copy_change, 2, 2);
     def_list(vm, o, kv, arrp_keys, 0);
     js_def_native(vm, o, "at", arrp_at, 1, 0);
     js_def_native(vm, o, "toString", arrp_to_string, 0, 0);
@@ -1786,6 +1900,8 @@ static int lib_globals(js_vm_t *vm) {
     js_def_native(vm, g, "encodeURI", g_encode, 1, 1);
     js_def_native(vm, g, "decodeURIComponent", g_decode, 1, 0);
     js_def_native(vm, g, "decodeURI", g_decode, 1, 1);
+    js_def_native(vm, g, "escape", g_escape, 1, 0);       /* Lot 115 */
+    js_def_native(vm, g, "unescape", g_unescape, 1, 0);
     js_define_c(vm, g, "NaN", jv_num(JF_NAN), 0);
     js_define_c(vm, g, "Infinity", jv_num(JF_INF), 0);
     js_define(vm, g, vm->s_undefined, jv_undef(), 0);

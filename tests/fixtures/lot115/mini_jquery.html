@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Legacy site</title></head>
+<body>
+<div id="box" class="panel">
+  <p class="msg">one</p><p class="msg hot">two</p><p class="msg">three</p>
+  <input id="name" value="Ada">
+</div>
+<script>
+(function (window, document, undefined) {
+  function Q(sel, ctx) {
+    var nodes = typeof sel === 'string' ? (ctx || document).querySelectorAll(sel) : [sel];
+    for (var i = 0; i < nodes.length; i++) this[i] = nodes[i];
+    this.length = nodes.length;
+  }
+  Q.prototype = {
+    constructor: Q,
+    each: function (fn) { for (var i = 0; i < this.length; i++) fn.call(this[i], i, this[i]); return this; },
+    addClass: function (c) { return this.each(function () { this.classList.add(c); }); },
+    removeClass: function (c) { return this.each(function () { this.classList.remove(c); }); },
+    attr: function (k, v) {
+      if (v === undefined) return this.length ? this[0].getAttribute(k) : undefined;
+      return this.each(function () { this.setAttribute(k, v); });
+    },
+    text: function (t) {
+      if (t === undefined) { var s = ''; this.each(function () { s += this.textContent; }); return s; }
+      return this.each(function () { this.textContent = t; });
+    },
+    val: function () { return this.length ? this[0].value : undefined; },
+    on: function (type, fn) { return this.each(function () { this.addEventListener(type, fn, false); }); },
+    find: function (sel) { return new Q(sel, this[0]); },
+    filter: function (sel) {
+      var out = new Q([]), n = 0;
+      this.each(function () { if (this.matches(sel)) out[n++] = this; });
+      out.length = n;
+      return out;
+    },
+    eq: function (i) { return new Q(this[i < 0 ? this.length + i : i]); }
+  };
+  function $(sel, ctx) { return new Q(sel, ctx); }
+  $.extend = function (target) {
+    for (var i = 1; i < arguments.length; i++) for (var k in arguments[i])
+      if (Object.prototype.hasOwnProperty.call(arguments[i], k)) target[k] = arguments[i][k];
+    return target;
+  };
+  $.fn = Q.prototype;
+  window.$ = window.jQueryLite = $;
+})(window, document);
+
+var opts = $.extend({}, { speed: 200, easing: 'swing' }, { speed: 400 });
+console.log(opts.speed, opts.easing, typeof $.fn.each, $ === window.jQueryLite);
+$('.msg').addClass('seen').filter('.hot').attr('data-x', 'y').text('TWO');
+console.log($('.msg').length, $('.seen').length, $('.hot').attr('data-x'), $('#box').find('p').text());
+var clicks = 0;
+$('.msg').on('click', function () { clicks++; this.classList.toggle('on'); });
+$('.msg').eq(-1)[0].click();
+$('.msg').eq(0)[0].click();
+console.log(clicks, $('.on').length, $('.msg').eq(2).attr('class'), $('#name').val());
+</script>
+</body></html>

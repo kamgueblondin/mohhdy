@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Docs - Install</title></head>
+<body>
+<div class="tabs" role="tablist" data-default="mac">
+  <button role="tab" id="tab-linux" data-target="panel-linux" aria-selected="false">Linux</button>
+  <button role="tab" id="tab-mac" data-target="panel-mac" aria-selected="false">macOS</button>
+  <button role="tab" id="tab-win" data-target="panel-win" aria-selected="false">Windows</button>
+</div>
+<section id="panel-linux" role="tabpanel"><pre>apt install tool</pre></section>
+<section id="panel-mac" role="tabpanel"><pre>brew install tool</pre></section>
+<section id="panel-win" role="tabpanel"><pre>winget install tool</pre></section>
+<script>
+class Tabs {
+  constructor(root) {
+    this.root = root;
+    this.tabs = [...root.querySelectorAll('[role="tab"]')];
+    this.root.addEventListener('click', (e) => {
+      const tab = e.target.closest('[role="tab"]');
+      if (tab) this.select(tab.id.replace('tab-', ''));
+    });
+    this.root.addEventListener('keydown', (e) => this.onKey(e));
+    this.select(root.dataset.default);
+  }
+  select(name) {
+    for (const tab of this.tabs) {
+      const on = tab.id === `tab-${name}`;
+      tab.setAttribute('aria-selected', on ? 'true' : 'false');
+      tab.tabIndex = on ? 0 : -1;
+      document.getElementById(tab.dataset.target).hidden = !on;
+    }
+    this.current = name;
+  }
+  onKey(e) {
+    const i = this.tabs.findIndex(t => t.id === `tab-${this.current}`);
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (!step) return;
+    const next = this.tabs[(i + step + this.tabs.length) % this.tabs.length];
+    this.select(next.id.slice(4));
+  }
+  state() {
+    return this.tabs.map(t => `${t.id.slice(4)}:${t.getAttribute('aria-selected')[0]}`).join(' ');
+  }
+}
+const tabs = new Tabs(document.querySelector('.tabs'));
+console.log('init', tabs.state(), document.getElementById('panel-mac').hidden, document.getElementById('panel-win').hidden);
+document.getElementById('tab-win').click();
+console.log('click', tabs.state(), document.querySelector('[role=tabpanel]:not([hidden]) pre').textContent);
+tabs.root.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+console.log('key', tabs.state(), document.getElementById('tab-linux').tabIndex, document.getElementById('tab-mac').tabIndex);
+console.log('hidden', [...document.querySelectorAll('section')].filter(s => s.hidden).map(s => s.id).join(','));
+</script>
+</body></html>

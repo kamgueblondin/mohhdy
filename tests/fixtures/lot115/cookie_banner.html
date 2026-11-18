@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>News</title></head>
+<body>
+<article><h1>Story</h1><p>Text of the story.</p></article>
+<script>
+var Consent = (function () {
+  var KEY = 'consent_v2';
+  function readCookie(name) {
+    var parts = document.cookie ? document.cookie.split(/;\s*/) : [];
+    for (var i = 0; i < parts.length; i++) {
+      var eq = parts[i].indexOf('=');
+      if (decodeURIComponent(parts[i].slice(0, eq)) === name) return decodeURIComponent(parts[i].slice(eq + 1));
+    }
+    return null;
+  }
+  function storageOk() {
+    try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); return true; } catch (e) { return false; }
+  }
+  function save(value) {
+    document.cookie = encodeURIComponent(KEY) + '=' + encodeURIComponent(value) + '; path=/; max-age=31536000';
+    if (storageOk()) localStorage.setItem(KEY, JSON.stringify({ v: value, t: 1700000000000 }));
+  }
+  function banner() {
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="cc" class="cc-banner" role="dialog" aria-label="Cookies">' +
+      '<p>We use cookies &amp; similar tech.</p>' +
+      '<button type="button" data-cc="accept">Accept all</button>' +
+      '<button type="button" data-cc="reject">Reject</button></div>');
+    var el = document.getElementById('cc');
+    el.addEventListener('click', function (e) {
+      var choice = e.target.getAttribute('data-cc');
+      if (!choice) return;
+      save(choice === 'accept' ? 'all' : 'essential');
+      el.parentNode.removeChild(el);
+    });
+    return el;
+  }
+  return { read: readCookie, banner: banner, storageOk: storageOk, key: KEY };
+})();
+console.log('before', Consent.read(Consent.key), Consent.storageOk());
+var b = Consent.banner();
+console.log('banner', !!document.getElementById('cc'), b.querySelectorAll('button').length, b.querySelector('p').textContent);
+b.querySelector('[data-cc=reject]').click();
+console.log('after', Consent.read(Consent.key), document.getElementById('cc'), JSON.parse(localStorage.getItem(Consent.key)).v);
+document.cookie = 'theme=dark; path=/';
+console.log('cookies', document.cookie.split('; ').sort().join(' | '));
+</script>
+</body></html>

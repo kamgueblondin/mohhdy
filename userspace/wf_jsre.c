@@ -922,6 +922,7 @@ int js_regexp_search(js_vm_t *vm, uint32_t re, uint32_t str, int start, int *cap
 /* ---- RegExp objects: x0 source, x1 flag bits, x2 program ---- */
 
 int js_regexp_ncap(js_vm_t *vm, uint32_t re) { return (int)prog_of(vm, re)->ncap; }
+uint32_t js_regexp_names(js_vm_t *vm, uint32_t re) { return prog_of(vm, re)->names; }
 int js_regexp_global(js_vm_t *vm, uint32_t re) { return (JOBJ(vm, re)->x1 & RF_G) != 0; }
 
 int js_is_regexp(js_vm_t *vm, jv v) { return v.t == JT_OBJ && JOBJ(vm, v.a)->cls == JS_CLASS_REGEXP; }

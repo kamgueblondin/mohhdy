@@ -986,6 +986,10 @@ int js_delete(js_vm_t *vm, jv obj, jv key) {
         if (idx < o->alen) ((jv *)JPTR(vm, o->arr))[idx] = jv_empty();
         return 1;
     }
+    if (o->cls == JS_CLASS_HOST && vm->host_del && !JS_KEY_IS_SYM(vm, k)) {
+        int ok = 1;
+        if (vm->host_del(vm, obj, k, &ok)) return vm->ctl ? 0 : ok;
+    }
     return js_delete_own(vm, obj.a, k);
 }
 

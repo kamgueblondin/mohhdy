@@ -18,7 +18,9 @@ that each leave about 900 KiB of garbage in its 3 MiB arena: Lot 114 had
 to drop the realm ("realm reset (arena full)"); now the arena is
 reclaimed between lines (wf_jsgc.c), the array the lines fill keeps its
 six entries and "js" reports the collections ("osui js gc runs N").
-The Lot 114 page (/lot114/app.html) still runs on the same boot. No guest clock is involved (no -rtc option).
+/lot115/compat/templating.html (a fixture of tests/fixtures/lot115) clones
+template.content into a list: the reader shows the three comments. The
+Lot 114 page (/lot114/app.html) still runs on the same boot. No guest clock is involved (no -rtc option).
 """
 from __future__ import print_function
 
@@ -89,6 +91,17 @@ def step_gc(mon, proc):
         % (m.group(1), m.group(3)))
 
 
+def step_compat(mon, proc, u):
+    # a real-page fixture: template.content cloned three times into a list
+    lw.run(mon, proc, "web-open %s/lot115/compat/templating.html" % u, "osui web page sections", fail=["error="])
+    read = lw.run(mon, proc, "web-read", "Thanks & bye", 30)
+    need(read, ["ana", "First!", "Nice <b>post</b>", "Thanks & bye", "2026-02-01 00:00"],
+         "web-read of the templating fixture")
+    out = lw.run(mon, proc, "web-js status", "osui web-js on", 20)
+    need(out, [" failed 0"], "web-js status after the templating fixture")
+    say("the templating fixture filled its list from template.content in the guest")
+
+
 def step_lot114(mon, proc, u):
     lw.run(mon, proc, "web-open %s/lot114/app.html" % u, "osui web page sections", fail=["error="])
     read = lw.run(mon, proc, "web-read", "fin114", 30)
@@ -105,6 +118,7 @@ def boot(hp):
         step_layout(mon, proc, u)
         step_lang(mon, proc, u)
         step_gc(mon, proc)
+        step_compat(mon, proc, u)
         step_lot114(mon, proc, u)
     finally:
         l88.stop(proc, mon, qmp)

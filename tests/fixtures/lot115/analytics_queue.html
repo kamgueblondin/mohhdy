@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Blog</title>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag('js', 'start');
+gtag('config', 'G-TEST', { anonymize_ip: true, page_path: location.pathname });
+(function (w, d, s, l) {
+  w[l] = w[l] || [];
+  w[l].push({ 'gtm.start': 1700000000000, event: 'gtm.js' });
+  var f = d.getElementsByTagName(s)[0];
+  w.__firstScript = f ? f.tagName : 'none';
+})(window, document, 'script', 'dataLayer');
+</script>
+</head>
+<body>
+<a id="buy" href="/buy">Buy</a>
+<script>
+var _q = window._q || (window._q = []);
+_q.push(['track', 'pageview']);
+var Tracker = {
+  queue: [],
+  flushInto: function (sink) {
+    var self = this;
+    while (_q.length) self.queue.push(_q.shift());
+    return self.queue.map(function (a) { return Array.prototype.slice.call(a).join(':'); }).forEach(function (s) { sink.push(s); });
+  }
+};
+var sink = [];
+Tracker.flushInto(sink);
+document.getElementById('buy').addEventListener('click', function (e) {
+  e.preventDefault();
+  gtag('event', 'purchase', { value: 9.99, items: [{ id: 'sku1' }] });
+});
+document.getElementById('buy').click();
+var kinds = dataLayer.map(function (e) {
+  if (typeof e.length === 'number' && !Array.isArray(e)) return 'args:' + e[0] + '/' + e.length;
+  return 'obj:' + e.event;
+});
+console.log(kinds.join(' '));
+console.log(sink.join(','), _q.length, window.__firstScript);
+var last = dataLayer[dataLayer.length - 1];
+console.log(last[0], last[1], JSON.stringify(last[2]), Object.prototype.toString.call(last));
+console.log(dataLayer[1][2].page_path, dataLayer[1][2].anonymize_ip);
+</script>
+</body></html>

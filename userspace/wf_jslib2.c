@@ -554,7 +554,23 @@ static jv strp_split(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     }
 }
 
-/* expand $$, $&, $`, $', $n and $nn of a replacement string */
+/* Lot 115: the group names of the regular expression being replaced ($<name>) */
+static uint32_t g_repl_names;
+
+/* the group number of name[0..len) in g_repl_names, -1 when none */
+static int repl_group(js_vm_t *vm, uint32_t rep, int at, int len, int nc) {
+    int g;
+    for (g = 1; g < nc; g++) {
+        jv nm = js_array_get(vm, g_repl_names, (uint32_t)g);
+        int k;
+        if (nm.t != JT_STR || (int)JSTR(vm, nm.a)->len != len) continue;
+        for (k = 0; k < len && JSTR(vm, nm.a)->s[k] == SCH(rep, at + k); k++) { }
+        if (k == len) return g;
+    }
+    return -1;
+}
+
+/* expand $$, $&, $`, $', $n, $nn and $<name> of a replacement string */
 static void expand_repl(js_vm_t *vm, js_sb_t *b, uint32_t rep, uint32_t s, const int *caps, int nc) {
     int rn = SLEN(rep), i;
     for (i = 0; i < rn; i++) {
@@ -565,7 +581,14 @@ static void expand_repl(js_vm_t *vm, js_sb_t *b, uint32_t rep, uint32_t s, const
         else if (d == '&') { sb_sub(vm, b, s, caps[0], caps[1]); i++; }
         else if (d == '`') { sb_sub(vm, b, s, 0, caps[0]); i++; }
         else if (d == '\'') { sb_sub(vm, b, s, caps[1], SLEN(s)); i++; }
-        else if (d >= '0' && d <= '9') {
+        else if (d == '<' && g_repl_names) {
+            int e = i + 2, g;
+            while (e < rn && SCH(rep, e) != '>') e++;
+            if (e >= rn) { js_sb_ch(vm, b, c); continue; }
+            g = repl_group(vm, rep, i + 2, e - i - 2, nc);
+            if (g > 0 && caps[2 * g] >= 0) sb_sub(vm, b, s, caps[2 * g], caps[2 * g + 1]);
+            i = e;
+        } else if (d >= '0' && d <= '9') {
             int g = d - '0', used = 1;
             if (i + 2 < rn && SCH(rep, i + 2) >= '0' && SCH(rep, i + 2) <= '9' && g * 10 + (SCH(rep, i + 2) - '0') < nc) {
                 g = g * 10 + (SCH(rep, i + 2) - '0');
@@ -619,11 +642,15 @@ static jv strp_replace(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
         int nc = js_regexp_ncap(vm, pat.a), global = js_regexp_global(vm, pat.a), q = 0, r;
         if (m == 1 && !global) return js_throw_err(vm, JE_TYPE, "replaceAll must be called with a global RegExp");
         while (q <= n) {
+            int ok;
             r = js_regexp_search(vm, pat.a, s, q, caps);
             if (r < 0) return jv_undef();
             if (!r) break;
             sb_sub(vm, &b, s, p, caps[0]);
-            if (!apply_repl(vm, &b, rep, reps, s, caps, nc)) return jv_undef();
+            g_repl_names = js_regexp_names(vm, pat.a);
+            ok = apply_repl(vm, &b, rep, reps, s, caps, nc);
+            g_repl_names = 0;
+            if (!ok) return jv_undef();
             p = caps[1];
             if (!global) break;
             q = caps[1] == caps[0] ? caps[1] + js_u8_step(vm, s, caps[1]) : caps[1];

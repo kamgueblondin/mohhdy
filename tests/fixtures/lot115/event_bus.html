@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Widgets</title></head>
+<body>
+<div id="app"><section id="cart"><button id="add">Add</button><span id="count">0</span></section></div>
+<script>
+const log = [];
+const app = document.getElementById('app');
+const cart = document.getElementById('cart');
+const add = document.getElementById('add');
+app.addEventListener('cart:add', (e) => log.push(`app:${e.detail.sku}:${e.eventPhase}`));
+cart.addEventListener('cart:add', (e) => log.push(`cart:${e.target.id}`), { once: true });
+document.addEventListener('cart:add', (e) => log.push(`doc:${e.bubbles}`));
+let n = 0;
+add.addEventListener('click', () => {
+  n++;
+  document.getElementById('count').textContent = n;
+  add.dispatchEvent(new CustomEvent('cart:add', { bubbles: true, detail: { sku: 'A' + n } }));
+});
+add.click();
+add.click();
+console.log(log.join(' '));
+log.length = 0;
+const stopper = (e) => { e.stopPropagation(); log.push('stopped'); };
+cart.addEventListener('cart:add', stopper);
+add.click();
+console.log(log.join(' '), document.getElementById('count').textContent);
+cart.removeEventListener('cart:add', stopper);
+log.length = 0;
+const cancelable = new Event('beforeremove', { cancelable: true });
+cart.addEventListener('beforeremove', (e) => e.preventDefault());
+console.log(cart.dispatchEvent(cancelable), cancelable.defaultPrevented, typeof CustomEvent, new CustomEvent('x').detail);
+setTimeout(() => {
+  add.click();
+  console.log('later', log.join(' '));
+}, 10);
+</script>
+</body></html>
