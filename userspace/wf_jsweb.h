@@ -16,8 +16,8 @@
 #ifndef WF_JSWEB_H
 #define WF_JSWEB_H
 
-#define WF_JSWEB_REPL_ARENA (1536u * 1024u)
-#define WF_JSWEB_PAGE_ARENA (4096u * 1024u)
+#define WF_JSWEB_REPL_ARENA (3u * 1024u * 1024u)    /* Lot 114: room for coroutine stacks */
+#define WF_JSWEB_PAGE_ARENA (6u * 1024u * 1024u)
 #define WF_JSWEB_REPL_BUDGET 2000000u
 
 /* 1 when line is a js or web-js command (out has the answer) */

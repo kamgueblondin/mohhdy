@@ -247,14 +247,15 @@ static void test_l113_bounds(void) {
 static void test_l113_limits(void) {
     fresh();
     TEST_ASSERT_EQUAL_STRING("undefined", ev("typeof Symbol"));
-    TEST_ASSERT_EQUAL_STRING("undefined", ev("typeof Promise"));
+    TEST_ASSERT_EQUAL_STRING("function", ev("typeof Promise"));                 /* Lot 114 */
     TEST_ASSERT_EQUAL_STRING("!Uncaught ReferenceError: eval is not defined", ev("eval('1')"));
     TEST_ASSERT_EQUAL_STRING("EvalError", ev("try { Function('return 1') } catch (e) { e.name }"));
     TEST_ASSERT_EQUAL_STRING("true", ev("Array.isArray(new Map([[1, 2]]).keys())"));
     TEST_ASSERT_EQUAL_STRING("2026", ev("new Date().getUTCFullYear()"));         /* fixed clock */
     TEST_ASSERT_EQUAL_STRING("true", ev("Math.random() === Math.random() ? false : true"));
-    TEST_ASSERT_EQUAL('!', ev("function* g() { yield 1 }")[0]);
-    TEST_ASSERT_EQUAL('!', ev("async function a() {}")[0]);
+    /* Lot 114 runs generators and async functions; these stay refused */
+    TEST_ASSERT_NOT_NULL(strstr(ev("async function* g() { yield 1 }"), "async generators"));
+    TEST_ASSERT_NOT_NULL(strstr(ev("async function a() { for await (const x of []) {} }"), "for await"));
     TEST_ASSERT_NOT_NULL(strstr(ev("class P { #x = 1 }"), "private class members"));
 }
 

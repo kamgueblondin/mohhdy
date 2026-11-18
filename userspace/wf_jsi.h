@@ -17,7 +17,8 @@ enum { JT_UNDEF = 0, JT_NULL, JT_BOOL, JT_INT, JT_NUM, JT_STR, JT_OBJ, JT_EMPTY 
 enum {
     JS_CLASS_OBJECT = 0, JS_CLASS_ARRAY, JS_CLASS_FUNC, JS_CLASS_NATIVE, JS_CLASS_BOUND, JS_CLASS_ERROR,
     JS_CLASS_BOOLEAN, JS_CLASS_NUMBER, JS_CLASS_STRING, JS_CLASS_REGEXP, JS_CLASS_ARGS, JS_CLASS_DATE,
-    JS_CLASS_HOST, JS_CLASS_ITER, JS_CLASS_MAP, JS_CLASS_SET
+    JS_CLASS_HOST, JS_CLASS_ITER, JS_CLASS_MAP, JS_CLASS_SET,
+    JS_CLASS_PROMISE, JS_CLASS_GEN           /* Lot 114 */
 };
 
 typedef struct { uint32_t len; uint32_t hash; uint32_t interned; char s[4]; } js_str_t;
@@ -79,8 +80,15 @@ enum {
     /* statements */
     N_PROG, N_VAR, N_DECL, N_EXPR, N_BLOCK, N_IF, N_FOR, N_FORIN, N_FOROF, N_WHILE, N_DOWHILE, N_RETURN,
     N_BREAK, N_CONTINUE, N_THROW, N_TRY, N_SWITCH, N_CASE, N_LABEL, N_EMPTY, N_FUNCDECL, N_CLASSDECL,
-    N_VARNAME, N_METHOD, N_FIELD, N_DEBUGGER
+    N_VARNAME, N_METHOD, N_FIELD, N_DEBUGGER,
+    /* Lot 114 */
+    N_YIELD,          /* op 1: yield* (delegate) */
+    N_AWAIT
 };
+
+/* Lot 114: N_FUNC op bits (the 16 fl bits are all taken) */
+#define FK_GEN   1u       /* function* */
+#define FK_ASYNC 2u       /* async function */
 
 /* N_VAR op */
 #define DK_VAR   0
@@ -129,6 +137,12 @@ enum { CTL_NONE = 0, CTL_RETURN, CTL_BREAK, CTL_CONTINUE, CTL_THROW, CTL_ABORT }
 #define JS_LOG_MAX 8192
 #define JS_MAX_DEPTH 64
 #define JS_DEFAULT_BUDGET 4000000u
+/* Lot 114: coroutines (generators, async functions) and microtasks */
+#define JS_CO_STACK (192u * 1024u)       /* per started coroutine, in the arena */
+#define JS_CALL_MARGIN (16u * 1024u)     /* calls stop this far above the abort threshold */
+#define JS_CO_MAX 8                      /* coroutines holding a stack at once */
+#define JS_JOBS_MAX 100000u              /* microtasks in one drain */
+#define JS_UNHANDLED_MAX 16
 
 /* JS_CLASS_FUNC objects use arr/alen/acap for: */
 #define FN_HOME(o)  ((o)->arr)        /* home object (super lookups) */
@@ -188,6 +202,16 @@ struct js_vm {
     jv run_fn, run_this;
     jv *run_argv;
     int run_argc;
+    /* Lot 114: promises, generators, async functions (wf_jsco.c) */
+    uint32_t p_promise, p_gen, c_promise;
+    uint32_t co_cur;                      /* the running coroutine, 0 on the main stack */
+    uint32_t co_free_stack;               /* recycled coroutine stacks */
+    int co_live;
+    uint32_t job_head, job_tail;          /* the microtask queue */
+    uint32_t rec_free;                    /* recycled job and reaction records */
+    uint32_t unhandled[JS_UNHANDLED_MAX];
+    int nunhandled;
+    uint32_t jobs_run, rejections_reported, rejections_lost;
 };
 
 #define JPTR(vm, r) ((void *)((vm)->mem + (r)))
@@ -311,6 +335,25 @@ void js_sb_put(js_vm_t *vm, js_sb_t *b, const char *s, int n);
 void js_sb_str(js_vm_t *vm, js_sb_t *b, uint32_t str);
 void js_sb_ch(js_vm_t *vm, js_sb_t *b, char c);
 uint32_t js_sb_finish(js_vm_t *vm, js_sb_t *b);
+
+/* ---- wf_jsco.c (Lot 114) ---- */
+int js_co_init(js_vm_t *vm);
+jv js_gen_new(js_vm_t *vm, uint32_t f, uint32_t env);
+jv js_gen_step(js_vm_t *vm, uint32_t g, int mode, jv v, int *done);   /* mode 0 next, 1 throw, 2 return */
+void js_gen_close(js_vm_t *vm, uint32_t g);
+int js_is_gen(js_vm_t *vm, jv v);
+jv js_co_yield(js_vm_t *vm, jv v, int delegate);
+jv js_co_await(js_vm_t *vm, jv v);
+jv js_async_call(js_vm_t *vm, uint32_t f, uint32_t env);
+jv js_async_rejected(js_vm_t *vm);
+int js_is_promise(js_vm_t *vm, jv v);
+int js_promise_state(js_vm_t *vm, jv v, jv *value);    /* -1 not a promise, 0 pending, 1 fulfilled, 2 rejected */
+uint32_t js_promise_new(js_vm_t *vm);
+void js_promise_resolve(js_vm_t *vm, uint32_t p, jv x);
+void js_promise_reject(js_vm_t *vm, uint32_t p, jv reason);
+int js_jobs_drain(js_vm_t *vm);
+/* wf_jsrun.c: the body of a function whose environment is ready */
+jv js_fn_body(js_vm_t *vm, uint32_t f, uint32_t env);
 
 /* ---- wf_jsre.c ---- */
 int js_regexp_init(js_vm_t *vm);
