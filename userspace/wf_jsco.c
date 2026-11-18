@@ -618,6 +618,80 @@ static jv agen_yield(js_vm_t *vm, uint32_t c, jv v) {
     return r;
 }
 
+/* yield* inside an async generator. An async iterator (Symbol.asyncIterator)
+ * gets every request forwarded: next, throw and return are called on it
+ * and their results awaited; its values are handed out as they are (the
+ * inner generator already awaited them). An iterator without throw is
+ * closed and a TypeError thrown; without return, the return value is
+ * awaited and returned. Any other iterable is read as for-of reads it
+ * and each value is yielded with the await of a plain yield. */
+static jv agen_delegate(js_vm_t *vm, uint32_t c, jv v) {
+    jv m = jv_undef(), it, next, received = jv_undef();
+    int mode = RM_NEXT;
+    if (v.t == JT_OBJ || v.t == JT_STR) m = js_get(vm, v, vm->sym_async_iterator);
+    if (vm->ctl) return jv_undef();
+    if (jv_is_nullish(m)) {
+        uint32_t arr = 0, i;
+        js_iter_values(vm, v, &arr);
+        if (vm->ctl) return jv_undef();
+        for (i = 0; i < JOBJ(vm, arr)->alen && !vm->ctl; i++) (void)agen_yield(vm, c, js_array_get(vm, arr, i));
+        return jv_undef();
+    }
+    if (!js_is_callable(vm, m)) return js_throw_err(vm, JE_TYPE, "Symbol.asyncIterator is not a function");
+    it = js_call(vm, m, v, 0, 0);
+    if (vm->ctl) return jv_undef();
+    if (it.t != JT_OBJ) return js_throw_err(vm, JE_TYPE, "Result of the Symbol.asyncIterator method is not an object");
+    next = js_get(vm, it, vm->s_next);
+    if (vm->ctl) return jv_undef();
+    for (;;) {
+        jv r, fn, yv;
+        if (mode == RM_NEXT) {
+            r = js_call(vm, next, it, &received, 1);
+        } else {
+            fn = js_get(vm, it, KEY(vm, mode == RM_THROW ? "throw" : "return"));
+            if (vm->ctl) return jv_undef();
+            if (jv_is_nullish(fn)) {
+                if (mode == RM_RETURN) {
+                    received = js_co_await(vm, received);
+                    if (vm->ctl) return jv_undef();
+                    vm->ret = received;
+                    vm->ctl = CTL_RETURN;
+                    return jv_undef();
+                }
+                /* no throw: close the inner iterator, then a TypeError */
+                fn = js_get(vm, it, KEY(vm, "return"));
+                if (vm->ctl) return jv_undef();
+                if (!jv_is_nullish(fn)) {
+                    jv rr = js_call(vm, fn, it, 0, 0);
+                    if (vm->ctl) return jv_undef();
+                    (void)js_co_await(vm, rr);
+                    if (vm->ctl) return jv_undef();
+                }
+                return js_throw_err(vm, JE_TYPE, "The iterator does not provide a 'throw' method");
+            }
+            r = js_call(vm, fn, it, &received, 1);
+        }
+        if (vm->ctl) return jv_undef();
+        r = js_co_await(vm, r);
+        if (vm->ctl) return jv_undef();
+        if (r.t != JT_OBJ) return js_throw_err(vm, JE_TYPE, "Iterator result is not an object");
+        if (js_truthy(vm, js_get(vm, r, vm->s_done))) {
+            jv val;
+            if (vm->ctl) return jv_undef();
+            val = js_get(vm, r, vm->s_value);
+            if (vm->ctl) return jv_undef();
+            if (mode == RM_RETURN) { vm->ret = val; vm->ctl = CTL_RETURN; return jv_undef(); }
+            return val;
+        }
+        if (vm->ctl) return jv_undef();
+        yv = js_get(vm, r, vm->s_value);
+        if (vm->ctl) return jv_undef();
+        CO(vm, c)->why = WHY_YIELD;
+        received = co_suspend_raw(vm, yv, &mode);
+        CO(vm, c)->why = WHY_NONE;
+    }
+}
+
 int js_is_agen(js_vm_t *vm, jv v) { return v.t == JT_OBJ && JOBJ(vm, v.a)->cls == JS_CLASS_AGEN; }
 
 jv js_agen_new(js_vm_t *vm, uint32_t f, uint32_t env) {
@@ -757,7 +831,7 @@ int js_agen_init(js_vm_t *vm) {
 /* yield (delegate = 0) and yield* (delegate = 1) inside a generator body */
 jv js_co_yield(js_vm_t *vm, jv v, int delegate) {
     uint32_t c = vm->co_cur;
-    if (c && CO(vm, c)->kind == CO_AGEN && !delegate) return agen_yield(vm, c, v);
+    if (c && CO(vm, c)->kind == CO_AGEN) return delegate ? agen_delegate(vm, c, v) : agen_yield(vm, c, v);
     if (!c || CO(vm, c)->kind != CO_GEN) return js_throw_err(vm, JE_SYNTAX, "yield outside a generator");
     if (!delegate) return co_suspend(vm, v);
     if (js_is_gen(vm, v) || (v.t == JT_OBJ && JOBJ(vm, v.a)->cls != JS_CLASS_ARRAY && JOBJ(vm, v.a)->cls != JS_CLASS_STRING &&

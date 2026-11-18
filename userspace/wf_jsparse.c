@@ -1240,7 +1240,6 @@ static uint32_t parse_assign(ps_t *p, int no_in) {
         if (!y) return 0;
         next(p);
         if (accept(p, OP_MUL)) {
-            if (p->in_async) { ps_error(p, "yield* in async generators is not supported by the guest"); return 0; }
             N(y)->op = 1;
             N(y)->a = parse_assign(p, no_in);
         } else if (!p->t.nl && p->t.type != TK_EOF &&

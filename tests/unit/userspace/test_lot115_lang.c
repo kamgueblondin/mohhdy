@@ -365,13 +365,14 @@ static void test_utf16_log_valid(void) {
     TEST_ASSERT_EQUAL_STRING("\357\277\275|1", run("const h = '\\u{1F600}'[0]; console.log(h); console.log(h.length)"));
 }
 
-/* still refused, honestly: yield* inside an async generator (async
- * generators and for await themselves run since the end of Lot 115,
- * test_lot115_agen.c) */
+/* refused as in the language: for await outside an async function and
+ * over for-in (async generators, yield* and for await themselves run
+ * since the end of Lot 115, test_lot115_agen.c) */
 static void test_still_refused(void) {
     fresh();
-    TEST_ASSERT_EQUAL_STRING("!SyntaxError: yield* in async generators is not supported by the guest (line 1)",
-                             run("async function* g() { yield* [1] }"));
+    TEST_ASSERT_EQUAL_STRING("!SyntaxError: for await is only valid in async functions (line 1)",
+                             run("function f() { for await (const x of []) {} }"));
+    TEST_ASSERT_NOT_NULL(strstr(run("async function f() { for await (const k in {}) {} }"), "!SyntaxError: "));
 }
 
 /* Symbol() costs one record in the arena: a loop that makes them runs

@@ -1008,7 +1008,7 @@ LOT115_FILES = {
         "document.getElementById('o').textContent += ' weak ' + wm.get(st) + ' ' + (wr.deref() === st) + ' ' +\n"
         "  Reflect.ownKeys(o).length + ' ' + Reflect.defineProperty(Object.freeze({}), 'x', { value: 1 }) +\n"
         "  ' px ' + new Proxy({}, { get: function (t, k) { return k.length } }).abcd;\n"
-        "async function* feed() { yield 'x'; await null; yield 'y' }\n"
+        "async function* feed() { yield 'x'; await null; yield* ['y'] }\n"
         "(async function () { var s = ''; for await (var v of feed()) s += v;\n"
         "  document.getElementById('o').textContent += ' ag ' + s })();\n"
         "</script><p>end115</p></body></html>"),

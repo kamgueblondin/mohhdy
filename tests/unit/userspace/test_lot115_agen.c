@@ -6,9 +6,10 @@
  * plain iterable, and awaits return() on an early exit. The cases compare
  * the console lines with what node v24 prints for the same source
  * (expectations produced by node), including the microtask order of
- * queued requests and the await of a return value. The last tests pin the refused yield*, the request
- * bound, and that abandoned suspended generators give their coroutine
- * stacks back to the collector. */
+ * queued requests and the await of a return value, and yield* over
+ * async iterators and plain iterables. The last tests pin the refused
+ * forms, the request bound, and that abandoned suspended generators
+ * give their coroutine stacks back to the collector. */
 #include "../../framework/unity.h"
 #include <string.h>
 #include <stdio.h>
@@ -76,6 +77,24 @@ static const acase_t k_agen[] = {
     { 0, 0 }
 };
 
+static const acase_t k_delegate[] = {
+    { "const out = []; const done = () => console.log(out.join(' ')); async function* inner() { const x = yield 'i1'; out.push('got ' + x); yield 'i2'; return 'iret'; } async function* outer() { const r = yield* inner(); out.push('r ' + r); yield* ['s1', Promise.resolve('s2')]; yield* 'ab'; } (async () => { const g = outer(); const vs = []; let r = await g.next(); while (!r.done) { vs.push(r.value); r = await g.next(vs.length); } out.push(vs.join(',')); done(); })()",
+      "got 1 r iret i1,i2,s1,s2,a,b" },
+    { "const out = []; const done = () => console.log(out.join(' ')); async function* thr() { try { yield 1; } catch (e) { yield 'inner caught ' + e; } } (async () => { const t = (async function* () { yield* thr(); })(); await t.next(); out.push((await t.throw('E')).value); done(); })()",
+      "inner caught E" },
+    { "const out = []; const done = () => console.log(out.join(' ')); async function* fin() { try { yield 1; yield 2; } finally { out.push('fin closed'); } } (async () => { const f = (async function* () { yield* fin(); })(); await f.next(); const fr = await f.return('R'); out.push(fr.value + ' ' + fr.done); done(); })()",
+      "fin closed R true" },
+    { "const out = []; const done = () => console.log(out.join(' ')); const noThrow = { [Symbol.asyncIterator]() { return { next: () => Promise.resolve({ value: 'n', done: false }), return: () => { out.push('nt closed'); return Promise.resolve({ done: true }); } }; } }; (async () => { const n = (async function* () { yield* noThrow; })(); await n.next(); try { await n.throw('X'); } catch (e) { out.push(e.constructor.name); } done(); })()",
+      "nt closed TypeError" },
+    { "const out = []; const done = () => console.log(out.join(' ')); (async () => { const p = (async function* () { yield* { [Symbol.asyncIterator]() { return { next: () => ({ value: 1, done: false }) }; } }; })(); await p.next(); const pr = await p.return(Promise.resolve('pp')); out.push(pr.value + ' ' + pr.done); for await (const v of (async function* () { yield* (async function* () { yield 'q1'; yield 'q2'; })(); yield 'q3'; })()) out.push(v); done(); })()",
+      "pp true q1 q2 q3" },
+    { "const out = []; const done = () => console.log(out.join(' ')); (async () => { try { for await (const v of (async function* () { yield* { [Symbol.asyncIterator]() { return { next: () => 5 }; } }; })()) out.push(v); } catch (e) { out.push(e.constructor.name); } done(); })()",
+      "TypeError" },
+    { "const log = []; async function* inner() { yield 1; yield 2; } async function* g() { yield* inner(); } const it = g(); it.next().then(r => log.push('a' + r.value)); it.next().then(r => log.push('b' + r.value)); it.next().then(r => log.push('c' + r.done)); Promise.resolve().then(() => log.push('m1')).then(() => log.push('m2')).then(() => log.push('m3')).then(() => log.push('m4')).then(() => log.push('m5')).then(() => log.push('m6')).then(() => log.push('m7')).then(() => log.push('m8')).then(() => console.log(log.join(' ')))",
+      "m1 m2 a1 m3 m4 b2 m5 ctrue m6 m7 m8" },
+    { 0, 0 }
+};
+
 static const acase_t k_forawait[] = {
     { "const out = []; const done = () => console.log(out.join(' ')); (async () => { for await (const v of [Promise.resolve('a'), 'b', new Promise(r => queueMicrotask(() => r('c')))]) out.push(v); for await (const ch of 'hi') out.push(ch); done(); })()",
       "a b c h i" },
@@ -96,10 +115,10 @@ static const acase_t k_forawait[] = {
 
 void test_async_generators(void) { run_cases(k_agen); }
 void test_for_await(void) { run_cases(k_forawait); }
+void test_delegate(void) { run_cases(k_delegate); }
 
 void test_refused(void) {
     fresh();
-    TEST_ASSERT_NOT_NULL(strstr(run("async function* g() { yield* [1, 2] }"), "yield* in async generators is not supported"));
     TEST_ASSERT_NOT_NULL(strstr(run("function f() { for await (const x of []) {} }"), "for await is only valid in async functions"));
     TEST_ASSERT_NOT_NULL(strstr(run("async function f() { for await (const x in {}) {} }"), "for await needs of"));
     TEST_ASSERT_NOT_NULL(strstr(run("async function f() { for await (;;) {} }"), "for await needs of"));
@@ -136,6 +155,7 @@ int main(void) {
     unity_init();
     RUN_TEST(test_async_generators);
     RUN_TEST(test_for_await);
+    RUN_TEST(test_delegate);
     RUN_TEST(test_refused);
     RUN_TEST(test_request_bound);
     RUN_TEST(test_abandoned_reclaimed);

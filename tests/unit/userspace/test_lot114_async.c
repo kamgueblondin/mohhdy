@@ -305,7 +305,7 @@ static void test_l114_refused(void) {
     TEST_ASSERT_NOT_NULL(strstr(run("function f(){ for await (const x of y) {} }"), "for await is only valid in async functions"));
     TEST_ASSERT_NOT_NULL(strstr(run("function f(){ await 1 }"), "await is only valid in async functions"));
     TEST_ASSERT_EQUAL_STRING("function", run("class A { async *g(){} } console.log(typeof new A().g().next)"));
-    TEST_ASSERT_NOT_NULL(strstr(run("async function* g(){ yield* [1] }"), "yield* in async generators is not supported"));
+    TEST_ASSERT_NOT_NULL(strstr(run("async function f(){ for await (const x in y) {} }"), "for await needs of"));
     TEST_ASSERT_NOT_NULL(strstr(run("class A { async constructor(){} }"), "Class constructor may not be"));
     /* yield is an identifier outside generators (sloppy scripts) */
     TEST_ASSERT_EQUAL_STRING("3", run("var yield = 3; console.log(yield)"));
