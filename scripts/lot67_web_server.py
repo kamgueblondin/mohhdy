@@ -990,7 +990,7 @@ LOT115_FILES = {
         "  ' c' + b.clientWidth + ' r2 ' + (r2.offsetLeft - b.offsetLeft) + ' ' + r2.offsetWidth;\n"
         "</script><p>fin115</p></body></html>"),
     # Lot 115: Symbol, the iterator protocol, private members, UTF-16
-    # strings, WeakMap, WeakRef and Reflect in a page script (node prints
+    # strings, WeakMap, WeakRef, Reflect and Proxy in a page script (node prints
     # the same line for the script)
     "/lot115/lang.html": ("text/html; charset=utf-8",
         "<!doctype html><html><head><title>Lot 115 lang</title></head><body>"
@@ -1006,7 +1006,8 @@ LOT115_FILES = {
         "  Object.keys(o).length + ' ' + typeof tag;\n"
         "var wm = new WeakMap([[st, 'w']]), wr = new WeakRef(st);\n"
         "document.getElementById('o').textContent += ' weak ' + wm.get(st) + ' ' + (wr.deref() === st) + ' ' +\n"
-        "  Reflect.ownKeys(o).length + ' ' + Reflect.defineProperty(Object.freeze({}), 'x', { value: 1 });\n"
+        "  Reflect.ownKeys(o).length + ' ' + Reflect.defineProperty(Object.freeze({}), 'x', { value: 1 }) +\n"
+        "  ' px ' + new Proxy({}, { get: function (t, k) { return k.length } }).abcd;\n"
         "</script><p>end115</p></body></html>"),
 }
 

@@ -407,7 +407,8 @@ int js_is_callable(js_vm_t *vm, jv v) {
     int c;
     if (v.t != JT_OBJ) return 0;
     c = JOBJ(vm, v.a)->cls;
-    return c == JS_CLASS_FUNC || c == JS_CLASS_NATIVE || c == JS_CLASS_BOUND;
+    return c == JS_CLASS_FUNC || c == JS_CLASS_NATIVE || c == JS_CLASS_BOUND ||
+           (c == JS_CLASS_PROXY && (JOBJ(vm, v.a)->x2 & 1u));
 }
 
 int js_is_array(js_vm_t *vm, jv v) {
@@ -791,6 +792,8 @@ jv js_get_recv(js_vm_t *vm, jv objv, uint32_t key, jv recv) {
         js_prop_t *p;
         uint32_t idx;
         switch (ob->cls) {
+        case JS_CLASS_PROXY:      /* Lot 115: also a proxy on the prototype chain */
+            return js_proxy_get(vm, o, key, recv);
         case JS_CLASS_HOST:
             if (vm->host_get && !JS_KEY_IS_SYM(vm, key)) {
                 jv out;
@@ -890,6 +893,7 @@ int js_put(js_vm_t *vm, jv objv, uint32_t key, jv v) {
     }
     start = objv.a;
     ob = JOBJ(vm, start);
+    if (ob->cls == JS_CLASS_PROXY) { js_proxy_set(vm, start, key, v, objv); return !vm->ctl; }
     if (ob->oflags & O_FROZEN) return 1;
     if (ob->cls == JS_CLASS_HOST && vm->host_set && !JS_KEY_IS_SYM(vm, key)) {
         if (vm->host_set(vm, objv, key, v)) return !vm->ctl;
@@ -916,7 +920,9 @@ int js_put(js_vm_t *vm, jv objv, uint32_t key, jv v) {
     }
     o = JOBJ(vm, start)->proto;
     while (o && depth++ < 256) {
-        js_prop_t *q = js_own_prop(vm, o, key);
+        js_prop_t *q;
+        if (JOBJ(vm, o)->cls == JS_CLASS_PROXY) { js_proxy_set(vm, o, key, v, objv); return !vm->ctl; }
+        q = js_own_prop(vm, o, key);
         if (q) {
             if (q->flags & P_ACCESSOR) {
                 if (q->v.b) { js_call(vm, jv_obj(q->v.b), objv, &v, 1); return !vm->ctl; }
@@ -948,6 +954,7 @@ int js_has(js_vm_t *vm, uint32_t o, uint32_t key) {
     while (o && depth++ < 256) {
         js_obj_t *ob = JOBJ(vm, o);
         uint32_t idx;
+        if (ob->cls == JS_CLASS_PROXY) return js_proxy_has(vm, o, key);
         if (ob->cls == JS_CLASS_HOST && vm->host_get && !JS_KEY_IS_SYM(vm, key)) {
             jv out;
             if (vm->host_get(vm, jv_obj(o), key, &out)) return 1;
@@ -981,6 +988,7 @@ int js_delete(js_vm_t *vm, jv obj, jv key) {
     k = js_to_key(vm, key);
     if (vm->ctl) return 0;
     o = JOBJ(vm, obj.a);
+    if (o->cls == JS_CLASS_PROXY) return js_proxy_delete(vm, obj.a, k);
     if ((o->cls == JS_CLASS_ARRAY || o->cls == JS_CLASS_ARGS) && js_str_index_key(vm, k, &idx)) {
         if (o->oflags & O_FROZEN) return 0;
         if (idx < o->alen) ((jv *)JPTR(vm, o->arr))[idx] = jv_empty();
@@ -994,8 +1002,10 @@ int js_delete(js_vm_t *vm, jv obj, jv key) {
 }
 
 uint32_t js_own_keys(js_vm_t *vm, uint32_t obj, int only_enum) {
-    uint32_t out = js_array_new(vm, 8), i, pass;
+    uint32_t out, i, pass;
     js_obj_t *o;
+    if (JOBJ(vm, obj)->cls == JS_CLASS_PROXY) return js_proxy_keys(vm, obj, only_enum, 0);
+    out = js_array_new(vm, 8);
     if (!out) return 0;
     o = JOBJ(vm, obj);
     if (o->cls == JS_CLASS_ARRAY || o->cls == JS_CLASS_ARGS) {

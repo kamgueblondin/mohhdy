@@ -374,6 +374,7 @@ jv js_call(js_vm_t *vm, jv fn, jv thisv, jv *argv, int argc) {
     if (!js_is_callable(vm, fn)) return js_throw_err(vm, JE_TYPE, "value is not a function");
     js_step(vm);
     o = JOBJ(vm, fn.a);
+    if (o->cls == JS_CLASS_PROXY) return js_proxy_call(vm, fn.a, thisv, argv, argc);
     if (o->cls == JS_CLASS_NATIVE) {
         int saved_new = vm->in_new;
         jv r;
@@ -414,6 +415,7 @@ jv js_construct(js_vm_t *vm, jv ctor, jv *argv, int argc, jv newtarget) {
     if (vm->ctl) return jv_undef();
     if (!js_is_callable(vm, ctor)) return js_throw_err(vm, JE_TYPE, "value is not a constructor");
     o = JOBJ(vm, ctor.a);
+    if (o->cls == JS_CLASS_PROXY) return js_proxy_construct(vm, ctor.a, argv, argc, newtarget);
     if (o->cls == JS_CLASS_BOUND) {
         uint32_t blk = o->x1, nb = o->x2, k;
         jv local[16], *all = local, target = jv_obj(o->x0);

@@ -135,6 +135,22 @@ jv js_iter_values(js_vm_t *vm, jv v, uint32_t *arr_out) {
         }
         o = JOBJ(vm, v.a);
         if (o->cls == JS_CLASS_ARRAY) { *arr_out = v.a; return v; }
+        if (o->cls == JS_CLASS_PROXY) {
+            /* Lot 115: the built-in array iterator over a proxy reads its
+             * length and indexes through the traps, as the language does */
+            uint32_t len = 0;
+            js_length_of(vm, v, &len);
+            if (vm->ctl) return jv_undef();
+            if (len > 1048576u) return js_throw_err(vm, JE_RANGE, "array-like too long for the guest");
+            arr = js_array_new(vm, len ? len : 1u);
+            for (i = 0; arr && i < len && !vm->ctl; i++) {
+                jv x = js_get_v(vm, v, jv_int((int32_t)i));
+                js_array_push(vm, arr, x.t == JT_EMPTY ? jv_undef() : x);
+            }
+            if (!arr || vm->ctl) return jv_undef();
+            *arr_out = arr;
+            return jv_obj(arr);
+        }
         if (o->cls == JS_CLASS_ITER) {      /* Lot 115: the rest of a snapshot iterator */
             uint32_t src = o->x0, from = o->x1, len = src ? JOBJ(vm, src)->alen : 0;
             arr = js_array_new(vm, from < len ? len - from : 1);
@@ -393,6 +409,13 @@ static int define_allowed(js_vm_t *vm, uint32_t o, uint32_t key, jv desc) {
 int js_define_desc(js_vm_t *vm, uint32_t o, uint32_t key, jv desc, int throw_on_fail) {
     int ok;
     if (desc.t != JT_OBJ) { js_throw_err(vm, JE_TYPE, "Property description must be an object"); return 0; }
+    if (JOBJ(vm, o)->cls == JS_CLASS_PROXY) {
+        ok = js_proxy_define(vm, o, key, desc);
+        if (!ok && throw_on_fail && !vm->ctl)
+            js_throw_err2(vm, JE_TYPE, "'defineProperty' on proxy: trap returned falsish for property ",
+                          JS_KEY_IS_SYM(vm, key) ? js_sym_descr(vm, key) : key);
+        return ok;
+    }
     ok = define_allowed(vm, o, key, desc);
     if (ok < 0) return 0;
     if (!ok) {
@@ -453,6 +476,7 @@ static jv obj_create(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
 int js_set_proto(js_vm_t *vm, uint32_t o, uint32_t p) {
     uint32_t q;
     int d = 0;
+    if (JOBJ(vm, o)->cls == JS_CLASS_PROXY) return js_proxy_setproto(vm, o, p);
     if (JOBJ(vm, o)->proto == p) return 1;
     if (!(JOBJ(vm, o)->oflags & O_EXT) || (JOBJ(vm, o)->oflags & O_FROZEN)) return 0;
     for (q = p; q && d++ < 256; q = JOBJ(vm, q)->proto)
@@ -485,6 +509,7 @@ static jv obj_proto_of(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
         if (!w) return jv_undef();
         o = jv_obj(w);
     }
+    if (JOBJ(vm, o.a)->cls == JS_CLASS_PROXY) return js_proxy_getproto(vm, o.a);
     return JOBJ(vm, o.a)->proto ? jv_obj(JOBJ(vm, o.a)->proto) : jv_null();
 }
 
@@ -549,14 +574,17 @@ static jv desc_of(js_vm_t *vm, jv o, uint32_t key) {
     return jv_obj(d);
 }
 
-jv js_desc_of(js_vm_t *vm, jv o, uint32_t key) { return desc_of(vm, o, key); }
+jv js_desc_of(js_vm_t *vm, jv o, uint32_t key) {
+    if (o.t == JT_OBJ && JOBJ(vm, o.a)->cls == JS_CLASS_PROXY) return js_proxy_desc(vm, o.a, key);
+    return desc_of(vm, o, key);
+}
 
 static jv obj_get_desc(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     uint32_t k;
     (void)thisv; (void)m;
     k = js_to_key(vm, JARG(1));
     if (vm->ctl) return jv_undef();
-    return desc_of(vm, JARG(0), k);
+    return js_desc_of(vm, JARG(0), k);
 }
 
 static jv obj_is(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
@@ -595,6 +623,10 @@ static jv objp_has_own(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     o = js_to_object(vm, target);
     if (!o) return jv_undef();
     ob = JOBJ(vm, o);
+    if (ob->cls == JS_CLASS_PROXY) {          /* Lot 115: [[GetOwnProperty]] through the trap */
+        jv d = js_proxy_desc(vm, o, k);
+        return vm->ctl ? jv_undef() : jv_bool(d.t == JT_OBJ);
+    }
     if (ob->cls == JS_CLASS_ARRAY || ob->cls == JS_CLASS_ARGS) {
         if (k == vm->s_length) return jv_bool(1);
         if (js_str_index_key(vm, k, &idx)) return jv_bool(idx < ob->alen && ((jv *)JPTR(vm, ob->arr))[idx].t != JT_EMPTY);
@@ -796,7 +828,13 @@ static jv arr_ctor(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
 
 static jv arr_is_array(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     (void)thisv; (void)m;
-    return jv_bool(js_is_array(vm, JARG(0)));
+    jv a = JARG(0);
+    if (a.t == JT_OBJ && JOBJ(vm, a.a)->cls == JS_CLASS_PROXY) {     /* Lot 115: sees through a proxy */
+        uint32_t t = js_proxy_target(vm, a.a);
+        if (!t) return js_throw_err(vm, JE_TYPE, "Cannot perform 'IsArray' on a proxy that has been revoked");
+        a = jv_obj(t);
+    }
+    return jv_bool(js_is_array(vm, a));
 }
 
 static jv arr_from(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
@@ -1755,6 +1793,12 @@ static void disp(js_vm_t *vm, dsp_t *d, jv v, int quote, int depth) {
     default: break;
     }
     o = JOBJ(vm, v.a);
+    if (o->cls == JS_CLASS_PROXY) {          /* Lot 115: shown as its target, as node does */
+        uint32_t t = js_proxy_target(vm, v.a);
+        if (!t) { dputs(d, "<Revoked Proxy>"); return; }
+        disp(vm, d, jv_obj(t), quote, depth);
+        return;
+    }
     switch (o->cls) {
     case JS_CLASS_FUNC: case JS_CLASS_NATIVE: case JS_CLASS_BOUND: {
         int is_class = o->cls == JS_CLASS_FUNC && (FN_FLAGS(o) & FN_CLASSCTOR);
@@ -2094,7 +2138,7 @@ int js_init(js_vm_t *vm, void *mem, uint32_t size) {
     JENV(vm, vm->genv)->kind |= E_CAPTURED;
     JENV(vm, vm->genv)->thisv = jv_obj(vm->global);
     if (js_lib_init(vm) != 0 || js_lib2_init(vm) != 0 || js_regexp_init(vm) != 0 || js_co_init(vm) != 0 ||
-        js_sym_init(vm) != 0 || js_weak_init(vm) != 0) return -1;
+        js_sym_init(vm) != 0 || js_weak_init(vm) != 0 || js_proxy_init(vm) != 0) return -1;
     return vm->ctl == CTL_ABORT ? -1 : 0;
 }
 

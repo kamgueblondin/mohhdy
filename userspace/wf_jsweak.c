@@ -335,14 +335,17 @@ static jv *list_ptr(js_vm_t *vm, uint32_t arr) {
     return JOBJ(vm, arr)->alen ? (jv *)JPTR(vm, JOBJ(vm, arr)->arr) : 0;
 }
 
-/* [[Set]] with a receiver (OrdinarySet): 1 done, 0 refused */
-static int reflect_set(js_vm_t *vm, jv target, uint32_t key, jv v, jv recv) {
+/* [[Set]] with a receiver (OrdinarySet): 1 done, 0 refused; a proxy on
+ * the way answers through its set trap */
+int js_reflect_set(js_vm_t *vm, jv target, uint32_t key, jv v, jv recv) {
     uint32_t o = target.a, idx;
     int depth = 0;
     js_prop_t *p;
     while (o && depth++ < 256) {
         js_obj_t *ob = JOBJ(vm, o);
-        int exotic = ob->cls == JS_CLASS_HOST || ob->cls == JS_CLASS_STRING ||
+        int exotic;
+        if (ob->cls == JS_CLASS_PROXY) return js_proxy_set(vm, o, key, v, recv);
+        exotic = ob->cls == JS_CLASS_HOST || ob->cls == JS_CLASS_STRING ||
                      ((ob->cls == JS_CLASS_ARRAY || ob->cls == JS_CLASS_ARGS) &&
                       (key == vm->s_length || js_str_index_key(vm, key, &idx)));
         if (exotic) {
@@ -365,6 +368,26 @@ static int reflect_set(js_vm_t *vm, jv target, uint32_t key, jv v, jv recv) {
         o = ob->proto;
     }
     if (recv.t != JT_OBJ) return 0;
+    if (JOBJ(vm, recv.a)->cls == JS_CLASS_PROXY) {
+        /* a proxy receiver: its [[GetOwnProperty]] and [[DefineOwnProperty]]
+         * (the traps, or its target) take the write */
+        jv d = js_proxy_desc(vm, recv.a, key);
+        uint32_t nd;
+        if (vm->ctl) return 0;
+        if (d.t == JT_OBJ) {
+            jv w = js_get(vm, d, vm->s_writable);
+            if (vm->ctl || js_has(vm, d.a, vm->s_get) || js_has(vm, d.a, vm->s_set) || !js_truthy(vm, w)) return 0;
+        }
+        nd = js_obj_new(vm, JS_CLASS_OBJECT, vm->p_object);
+        if (!nd) return 0;
+        js_define(vm, nd, vm->s_value, v, P_DEFAULT);
+        if (d.t != JT_OBJ) {
+            js_define(vm, nd, vm->s_writable, jv_bool(1), P_DEFAULT);
+            js_define(vm, nd, vm->s_enumerable, jv_bool(1), P_DEFAULT);
+            js_define(vm, nd, vm->s_configurable, jv_bool(1), P_DEFAULT);
+        }
+        return js_proxy_define(vm, recv.a, key, jv_obj(nd)) && !vm->ctl;
+    }
     p = js_own_prop(vm, recv.a, key);
     if (p) {
         if ((p->flags & P_ACCESSOR) || !(p->flags & P_WRITE) || (JOBJ(vm, recv.a)->oflags & O_FROZEN)) return 0;
@@ -420,13 +443,21 @@ static jv reflect_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     case RF_DESC:
         return js_desc_of(vm, t, key);
     case RF_GETPROTO:
+        if (JOBJ(vm, t.a)->cls == JS_CLASS_PROXY) return js_proxy_getproto(vm, t.a);
         return JOBJ(vm, t.a)->proto ? jv_obj(JOBJ(vm, t.a)->proto) : jv_null();
     case RF_HAS:
         return jv_bool(js_has(vm, t.a, key));
     case RF_ISEXT:
         return jv_bool((JOBJ(vm, t.a)->oflags & O_EXT) && !(JOBJ(vm, t.a)->oflags & O_FROZEN));
     case RF_OWNKEYS: {
-        uint32_t names = js_own_keys(vm, t.a, 0), syms, i;
+        uint32_t names, syms, i;
+        if (JOBJ(vm, t.a)->cls == JS_CLASS_PROXY) {
+            names = js_proxy_keys(vm, t.a, 0, 0);
+            syms = names ? js_proxy_keys(vm, t.a, 0, 1) : 0;
+            for (i = 0; syms && i < JOBJ(vm, syms)->alen && !vm->ctl; i++) js_array_push(vm, names, js_array_get(vm, syms, i));
+            return names && !vm->ctl ? jv_obj(names) : jv_undef();
+        }
+        names = js_own_keys(vm, t.a, 0);
         if (!names) return jv_undef();
         syms = js_own_symbols(vm, t.a, 0);
         for (i = 0; syms && i < JOBJ(vm, syms)->alen && !vm->ctl; i++) js_array_push(vm, names, js_array_get(vm, syms, i));
@@ -436,7 +467,7 @@ static jv reflect_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
         JOBJ(vm, t.a)->oflags &= (uint8_t)~O_EXT;
         return jv_bool(1);
     case RF_SET:
-        return jv_bool(reflect_set(vm, t, key, JARG(2), argc > 3 ? argv[3] : t));
+        return jv_bool(js_reflect_set(vm, t, key, JARG(2), argc > 3 ? argv[3] : t));
     default: {      /* RF_SETPROTO */
         jv p = JARG(1);
         if (p.t != JT_OBJ && p.t != JT_NULL) return js_throw_err(vm, JE_TYPE, "Object prototype may only be an Object or null");

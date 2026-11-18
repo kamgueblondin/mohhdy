@@ -154,7 +154,9 @@ static jv sym_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
 
 /* Object.getOwnPropertySymbols: the public symbol keys in creation order */
 uint32_t js_own_symbols(js_vm_t *vm, uint32_t obj, int only_enum) {
-    uint32_t out = js_array_new(vm, 4), i;
+    uint32_t out, i;
+    if (JOBJ(vm, obj)->cls == JS_CLASS_PROXY) return js_proxy_keys(vm, obj, only_enum, 1);
+    out = js_array_new(vm, 4);
     if (!out) return 0;
     for (i = 0; i < JOBJ(vm, obj)->nprop; i++) {
         js_prop_t *p = (js_prop_t *)JPTR(vm, JOBJ(vm, obj)->props) + i;

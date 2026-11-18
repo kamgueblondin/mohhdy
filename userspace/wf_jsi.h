@@ -22,7 +22,8 @@ enum {
     JS_CLASS_HOST, JS_CLASS_ITER, JS_CLASS_MAP, JS_CLASS_SET,
     JS_CLASS_PROMISE, JS_CLASS_GEN,          /* Lot 114 */
     JS_CLASS_SYMBOL,                         /* Lot 115: Object(symbol); JS_CLASS_ITER is now used */
-    JS_CLASS_WEAKMAP, JS_CLASS_WEAKSET, JS_CLASS_WEAKREF, JS_CLASS_FINREG   /* Lot 115: wf_jsweak.c */
+    JS_CLASS_WEAKMAP, JS_CLASS_WEAKSET, JS_CLASS_WEAKREF, JS_CLASS_FINREG,  /* Lot 115: wf_jsweak.c */
+    JS_CLASS_PROXY                           /* Lot 115: wf_jsproxy.c (x0 target, x1 handler) */
 };
 
 typedef struct { uint32_t len; uint32_t hash; uint32_t interned; char s[4]; } js_str_t;
@@ -462,6 +463,23 @@ jv js_desc_of(js_vm_t *vm, jv o, uint32_t key);
 
 /* ---- Lot 115: wf_jsweak.c ---- */
 int js_weak_init(js_vm_t *vm);
+int js_reflect_set(js_vm_t *vm, jv target, uint32_t key, jv v, jv recv);
+
+/* ---- Lot 115: wf_jsproxy.c ---- */
+int js_proxy_init(js_vm_t *vm);
+jv js_proxy_get(js_vm_t *vm, uint32_t p, uint32_t key, jv recv);
+int js_proxy_set(js_vm_t *vm, uint32_t p, uint32_t key, jv v, jv recv);
+int js_proxy_has(js_vm_t *vm, uint32_t p, uint32_t key);
+int js_proxy_delete(js_vm_t *vm, uint32_t p, uint32_t key);
+jv js_proxy_desc(js_vm_t *vm, uint32_t p, uint32_t key);
+int js_proxy_define(js_vm_t *vm, uint32_t p, uint32_t key, jv desc);
+uint32_t js_proxy_keys(js_vm_t *vm, uint32_t p, int only_enum, int symbols);
+jv js_proxy_getproto(js_vm_t *vm, uint32_t p);
+int js_proxy_setproto(js_vm_t *vm, uint32_t p, uint32_t proto);
+jv js_proxy_call(js_vm_t *vm, uint32_t p, jv thisv, jv *argv, int argc);
+jv js_proxy_construct(js_vm_t *vm, uint32_t p, jv *argv, int argc, jv newtarget);
+uint32_t js_proxy_target(js_vm_t *vm, uint32_t p);
+int js_proxy_is_array(js_vm_t *vm, jv v);       /* a proxy whose final target is an array */
 /* A weak table (JK_WEAK): used and cap, then cap entries of three values:
  * k the weak key (empty: a free slot), v the value (alive while k is), t a
  * second weak value (FinalizationRegistry's unregister token). The

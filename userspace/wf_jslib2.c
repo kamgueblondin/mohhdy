@@ -1084,7 +1084,7 @@ static int json_value(js_vm_t *vm, json_out_t *j, jv holder, uint32_t key, jv v)
             if (j->stack[i] == v.a) { js_throw_err(vm, JE_TYPE, "Converting circular structure to JSON"); return 0; }
         if (j->depth >= JSON_MAX_DEPTH) { js_throw_err(vm, JE_RANGE, "JSON nesting too deep for the guest"); return 0; }
         j->stack[j->depth++] = v.a;
-        if (js_is_array(vm, v)) {
+        if (js_is_array(vm, v) || js_proxy_is_array(vm, v)) {      /* Lot 115: IsArray sees through a proxy */
             uint32_t len, k;
             js_length_of(vm, v, &len);
             js_sb_ch(vm, &j->b, '[');
