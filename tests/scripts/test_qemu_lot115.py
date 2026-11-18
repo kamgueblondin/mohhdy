@@ -18,9 +18,9 @@ that each leave about 900 KiB of garbage in its 3 MiB arena: Lot 114 had
 to drop the realm ("realm reset (arena full)"); now the arena is
 reclaimed between lines (wf_jsgc.c), the array the lines fill keeps its
 six entries and "js" reports the collections ("osui js gc runs N").
-/lot115/compat/templating.html (a fixture of tests/fixtures/lot115) clones
-template.content into a list: the reader shows the three comments. The
-Lot 114 page (/lot114/app.html) still runs on the same boot. No guest clock is involved (no -rtc option).
+/lot115/compat/templating.html and tabs.html (fixtures of
+tests/fixtures/lot115: template.content clones, a KeyboardEvent) log in the
+guest exactly what jsdom logs for them (expected.txt). The Lot 114 page (/lot114/app.html) still runs on the same boot. No guest clock is involved (no -rtc option).
 """
 from __future__ import print_function
 
@@ -91,15 +91,36 @@ def step_gc(mon, proc):
         % (m.group(1), m.group(3)))
 
 
+FIXTURES = os.path.join(ROOT, "tests", "fixtures", "lot115")
+
+
+def expected_lines(name):
+    """The console lines jsdom gave for a fixture (tests/fixtures/lot115/expected.txt)."""
+    lines, on = [], False
+    with open(os.path.join(FIXTURES, "expected.txt")) as fh:
+        for line in fh.read().split("\n"):
+            if line.startswith("== "):
+                on = line[3:] == name
+            elif on and line:
+                lines.append(line)
+    if not lines:
+        raise RuntimeError("no expected lines for fixture %s" % name)
+    return lines
+
+
 def step_compat(mon, proc, u):
-    # a real-page fixture: template.content cloned three times into a list
-    lw.run(mon, proc, "web-open %s/lot115/compat/templating.html" % u, "osui web page sections", fail=["error="])
-    read = lw.run(mon, proc, "web-read", "Thanks & bye", 30)
-    need(read, ["ana", "First!", "Nice <b>post</b>", "Thanks & bye", "2026-02-01 00:00"],
-         "web-read of the templating fixture")
-    out = lw.run(mon, proc, "web-js status", "osui web-js on", 20)
-    need(out, [" failed 0"], "web-js status after the templating fixture")
-    say("the templating fixture filled its list from template.content in the guest")
+    # real-page fixtures: the guest's console for each page is what jsdom
+    # logged for it, line for line (template.content, KeyboardEvent)
+    for name in ("templating", "tabs"):
+        lw.run(mon, proc, "web-open %s/lot115/compat/%s.html" % (u, name), "osui web page sections", fail=["error="])
+        out = lw.run(mon, proc, "web-js status", "osui web-js on", 20)
+        need(out, [" failed 0"], "web-js status after the %s fixture" % name)
+        want = expected_lines(name)
+        out = lw.run(mon, proc, "web-js log", "osui web-js log: " + want[-1], 30)
+        got = [l.split("osui web-js log: ", 1)[1].rstrip("\r") for l in out.split("\n") if "osui web-js log: " in l]
+        if got[-len(want):] != want:
+            raise RuntimeError("%s fixture: guest console %r, jsdom %r" % (name, got[-len(want):], want))
+        say("the %s fixture logged what jsdom logs (%d lines)" % (name, len(want)))
 
 
 def step_lot114(mon, proc, u):
