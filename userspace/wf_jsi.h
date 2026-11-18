@@ -11,17 +11,40 @@
 #include "wf_jsnum.h"
 
 /* value tags */
-enum { JT_UNDEF = 0, JT_NULL, JT_BOOL, JT_INT, JT_NUM, JT_STR, JT_OBJ, JT_EMPTY };
+enum { JT_UNDEF = 0, JT_NULL, JT_BOOL, JT_INT, JT_NUM, JT_STR, JT_OBJ, JT_EMPTY,
+       JT_SYM            /* Lot 115: a symbol; a is its record (a js_str_t, see JS_SYM_*) */
+};
 
 /* object classes */
 enum {
     JS_CLASS_OBJECT = 0, JS_CLASS_ARRAY, JS_CLASS_FUNC, JS_CLASS_NATIVE, JS_CLASS_BOUND, JS_CLASS_ERROR,
     JS_CLASS_BOOLEAN, JS_CLASS_NUMBER, JS_CLASS_STRING, JS_CLASS_REGEXP, JS_CLASS_ARGS, JS_CLASS_DATE,
     JS_CLASS_HOST, JS_CLASS_ITER, JS_CLASS_MAP, JS_CLASS_SET,
-    JS_CLASS_PROMISE, JS_CLASS_GEN           /* Lot 114 */
+    JS_CLASS_PROMISE, JS_CLASS_GEN,          /* Lot 114 */
+    JS_CLASS_SYMBOL,                         /* Lot 115: Object(symbol); JS_CLASS_ITER is now used */
+    JS_CLASS_WEAKMAP, JS_CLASS_WEAKSET, JS_CLASS_WEAKREF, JS_CLASS_FINREG,  /* Lot 115: wf_jsweak.c */
+    JS_CLASS_PROXY,                          /* Lot 115: wf_jsproxy.c (x0 target, x1 handler) */
+    JS_CLASS_AGEN                            /* Lot 115: an async generator (wf_jsco.c) */
 };
 
 typedef struct { uint32_t len; uint32_t hash; uint32_t interned; char s[4]; } js_str_t;
+
+/* Lot 115: a symbol is a js_str_t record that is never interned: its
+ * interned field says what it is, s holds the description and hash a
+ * serial number (JS_SYM_NODESC set when Symbol() had no description).
+ * Property keys stay plain uint32 refs, so a symbol key is compared by
+ * identity like an interned string. */
+#define JS_SYM_PUBLIC  2u
+#define JS_SYM_PRIVATE 3u           /* a class private name (#x) */
+#define JS_SYM_NODESC  0x80000000u
+#define JS_STR_KIND_MASK 0xFFu      /* the kind: 0 plain, 1 interned, JS_SYM_* */
+#define JS_KEY_IS_SYM(vm, k) ((JSTR(vm, k)->interned & JS_STR_KIND_MASK) >= JS_SYM_PUBLIC)
+#define JS_KEY_IS_PRIV(vm, k) ((JSTR(vm, k)->interned & JS_STR_KIND_MASK) == JS_SYM_PRIVATE)
+/* Lot 115 (wf_jsu16.c): the UTF-16 length of a string, cached above the kind */
+#define JS_U16_INFO   0x100u       /* the bits below are valid */
+#define JS_U16_ASCII  0x200u       /* every byte < 0x80: units = bytes */
+#define JS_U16_SHIFT  10           /* the unit count (JS_U16_MAXC: too big to cache) */
+#define JS_U16_MAXC   0x3FFFFFu
 
 #define P_ENUM     1u
 #define P_WRITE    2u
@@ -83,8 +106,15 @@ enum {
     N_VARNAME, N_METHOD, N_FIELD, N_DEBUGGER,
     /* Lot 114 */
     N_YIELD,          /* op 1: yield* (delegate) */
-    N_AWAIT
+    N_AWAIT,
+    /* Lot 115 */
+    N_PRIVNAME        /* a: "#x"; evaluates to the class's private symbol (obj.#x is N_INDEX on it) */
 };
+
+/* Lot 115: N_METHOD / N_FIELD op values */
+#define MK_PUBLIC  0
+#define MK_PRIVATE 1      /* #x: a is the "#x" name */
+#define MK_SBLOCK  2      /* N_FIELD: a static { } block, b its block statement */
 
 /* Lot 114: N_FUNC op bits (the 16 fl bits are all taken) */
 #define FK_GEN   1u       /* function* */
@@ -152,6 +182,24 @@ enum { CTL_NONE = 0, CTL_RETURN, CTL_BREAK, CTL_CONTINUE, CTL_THROW, CTL_ABORT }
 #define FN_DERIVED   2u
 #define FN_DEFAULT   4u               /* synthesized default constructor */
 
+/* Lot 115: block kinds and collector bounds (wf_jsgc.c) */
+enum {
+    JK_SCAN = 0,      /* every word is a candidate */
+    JK_LEAF,          /* no reference (strings, symbols) */
+    JK_OBJ,           /* js_obj_t: proto, props, arr, x0..x2 */
+    JK_COSTACK,       /* a coroutine stack: every word, also as a pointer */
+    JK_ENV,           /* js_env_t */
+    JK_PROPS,         /* js_prop_t[] (properties, scope variables) */
+    JK_JVS,           /* jv[] (array elements, arguments) */
+    JK_NODE,          /* js_node_t */
+    JK_CO,            /* a coroutine record (wf_jsco.c scans it and the live part of its stack) */
+    JK_WEAK           /* a weak table (wf_jsweak.c): its keys do not keep anything alive */
+};
+#define JS_GC_WEAK 64     /* weak tables the collector clears per run (more are kept strongly) */
+#define JS_GC_CLASSES 16
+#define JS_GC_MSTACK 512
+#define JS_GC_MIN_STEP (256u * 1024u)
+
 /* error kinds */
 enum { JE_ERROR = 0, JE_TYPE, JE_RANGE, JE_SYNTAX, JE_REFERENCE, JE_URI, JE_EVAL, JE_COUNT };
 
@@ -184,6 +232,7 @@ struct js_vm {
     int nnat;
     js_host_get_fn host_get;
     js_host_set_fn host_set;
+    js_host_del_fn host_del;              /* Lot 115 */
     void *host_ctx;
     uint32_t rng;
     uint32_t date_now_lo, date_now_hi;    /* fixed clock (ms since 1970) */
@@ -212,6 +261,37 @@ struct js_vm {
     uint32_t unhandled[JS_UNHANDLED_MAX];
     int nunhandled;
     uint32_t jobs_run, rejections_reported, rejections_lost;
+    /* Lot 115: symbols and the iterator protocol (wf_jssym.c) */
+    uint32_t p_symbol, c_symbol;
+    uint32_t sym_iterator, sym_async_iterator, sym_has_instance, sym_to_primitive, sym_to_string_tag,
+        sym_species, sym_unscopables, sym_is_concat_spreadable, sym_match;
+    uint32_t sym_registry;                /* Symbol.for: an object from key to symbol */
+    uint32_t sym_serial;
+    uint32_t fn_iter_values, fn_iter_self; /* the built-in iterator methods (fast paths) */
+    uint32_t fn_str_iter, fn_map_iter, fn_set_iter;
+    uint32_t s_description;
+    uint32_t s_privm;                     /* " privm": the class scope's private method holder */
+    uint32_t u16_str, u16_unit, u16_byte; /* wf_jsu16.c: the last index conversion (a cursor) */
+    /* Lot 115: weak collections and Reflect (wf_jsweak.c) */
+    uint32_t p_weakmap, p_weakset, p_weakref, p_finreg;
+    uint32_t p_agen;                      /* Lot 115: async generator objects (wf_jsco.c) */
+    /* Lot 115: arena reclaim (wf_jsgc.c) */
+    uint32_t gc_bits, gc_bitmap_bytes;    /* the payload start bitmap */
+    uint32_t gc_heap_lo;                  /* the first block header */
+    uint32_t gc_free[JS_GC_CLASSES];      /* free lists by size class */
+    uint32_t gc_free_bytes;
+    uint32_t gc_since;                    /* bytes allocated since the last collection */
+    uint32_t gc_live, gc_freed_last, gc_freed_total, gc_runs, gc_marked_bytes;
+    uint32_t gc_mstack[JS_GC_MSTACK];
+    int gc_msp, gc_overflow;
+    uint32_t gc_last, gc_last_end;        /* a cache: the block a candidate fell in last */
+    int gc_hold;                          /* > 0 while a script runs (on_stack) */
+    int gc_stress, gc_poison, gc_off;
+    uint32_t gc_weak[JS_GC_WEAK];         /* the weak tables reached in this run */
+    int gc_nweak, gc_weak_strong;         /* how many; tables marked strongly (the list was full) */
+    uint32_t gc_weak_cleared;             /* entries dropped in the last run */
+    js_gc_roots_fn gc_roots;
+    void *gc_roots_ctx;
 };
 
 #define JPTR(vm, r) ((void *)((vm)->mem + (r)))
@@ -235,6 +315,13 @@ int jv_is_obj(jv v);
 int jv_is_nullish(jv v);
 
 uint32_t js_alloc(js_vm_t *vm, uint32_t n);          /* 0 on exhaustion (vm aborted) */
+/* ---- wf_jsgc.c (Lot 115) ---- */
+uint32_t js_alloc_k(js_vm_t *vm, uint32_t n, int kind);   /* JK_*: JK_LEAF holds no reference */
+int js_gc_init(js_vm_t *vm);
+int js_gc_busy(const js_vm_t *vm);
+void js_gc_mark_ref(js_vm_t *vm, uint32_t r);
+int js_gc_check(js_vm_t *vm);
+void js_co_gc_scan(js_vm_t *vm, uint32_t c);        /* wf_jsco.c: a JK_CO record */
 void js_abort(js_vm_t *vm, const char *msg);
 uint32_t js_str_new(js_vm_t *vm, const char *s, int len);
 uint32_t js_str_cat(js_vm_t *vm, uint32_t a, uint32_t b);
@@ -342,6 +429,9 @@ jv js_gen_new(js_vm_t *vm, uint32_t f, uint32_t env);
 jv js_gen_step(js_vm_t *vm, uint32_t g, int mode, jv v, int *done);   /* mode 0 next, 1 throw, 2 return */
 void js_gen_close(js_vm_t *vm, uint32_t g);
 int js_is_gen(js_vm_t *vm, jv v);
+jv js_agen_new(js_vm_t *vm, uint32_t f, uint32_t env);      /* Lot 115 */
+int js_is_agen(js_vm_t *vm, jv v);
+int js_agen_init(js_vm_t *vm);
 jv js_co_yield(js_vm_t *vm, jv v, int delegate);
 jv js_co_await(js_vm_t *vm, jv v);
 jv js_async_call(js_vm_t *vm, uint32_t f, uint32_t env);
@@ -354,6 +444,69 @@ void js_promise_reject(js_vm_t *vm, uint32_t p, jv reason);
 int js_jobs_drain(js_vm_t *vm);
 /* wf_jsrun.c: the body of a function whose environment is ready */
 jv js_fn_body(js_vm_t *vm, uint32_t f, uint32_t env);
+
+/* ---- wf_jssym.c (Lot 115) ---- */
+int js_sym_init(js_vm_t *vm);
+jv jv_sym(uint32_t r);
+uint32_t js_sym_new(js_vm_t *vm, uint32_t desc, uint32_t kind);   /* desc: a string ref or 0 */
+uint32_t js_sym_descr(js_vm_t *vm, uint32_t sym);                  /* "Symbol(desc)" */
+/* an iterator object over a snapshot array (keys(), values(), entries()) */
+uint32_t js_iter_over(js_vm_t *vm, uint32_t arr);
+/* the iterator protocol: 1 when v has an [Symbol.iterator] method other
+ * than the built-in ones the fast paths know; *it gets the iterator and
+ * *next its next method */
+int js_iter_custom(js_vm_t *vm, jv v, jv *it, jv *next);
+jv js_iter_step(js_vm_t *vm, jv it, jv next, int *done);
+void js_iter_close(js_vm_t *vm, jv it);
+uint32_t js_iter_take(js_vm_t *vm, jv v, int max);
+uint32_t js_own_symbols(js_vm_t *vm, uint32_t obj, int only_enum);
+
+/* ---- Lot 115: wf_jslib.c object internals shared with Reflect ---- */
+int js_define_desc(js_vm_t *vm, uint32_t o, uint32_t key, jv desc, int throw_on_fail);
+int js_set_proto(js_vm_t *vm, uint32_t o, uint32_t p);     /* 1 done, 0 refused */
+jv js_desc_of(js_vm_t *vm, jv o, uint32_t key);
+
+/* ---- Lot 115: wf_jsweak.c ---- */
+int js_weak_init(js_vm_t *vm);
+int js_reflect_set(js_vm_t *vm, jv target, uint32_t key, jv v, jv recv);
+
+/* ---- Lot 115: wf_jsproxy.c ---- */
+int js_proxy_init(js_vm_t *vm);
+jv js_proxy_get(js_vm_t *vm, uint32_t p, uint32_t key, jv recv);
+int js_proxy_set(js_vm_t *vm, uint32_t p, uint32_t key, jv v, jv recv);
+int js_proxy_has(js_vm_t *vm, uint32_t p, uint32_t key);
+int js_proxy_delete(js_vm_t *vm, uint32_t p, uint32_t key);
+jv js_proxy_desc(js_vm_t *vm, uint32_t p, uint32_t key);
+int js_proxy_define(js_vm_t *vm, uint32_t p, uint32_t key, jv desc);
+uint32_t js_proxy_keys(js_vm_t *vm, uint32_t p, int only_enum, int symbols);
+jv js_proxy_getproto(js_vm_t *vm, uint32_t p);
+int js_proxy_setproto(js_vm_t *vm, uint32_t p, uint32_t proto);
+jv js_proxy_call(js_vm_t *vm, uint32_t p, jv thisv, jv *argv, int argc);
+jv js_proxy_construct(js_vm_t *vm, uint32_t p, jv *argv, int argc, jv newtarget);
+uint32_t js_proxy_target(js_vm_t *vm, uint32_t p);
+int js_proxy_is_array(js_vm_t *vm, jv v);       /* a proxy whose final target is an array */
+/* A weak table (JK_WEAK): used and cap, then cap entries of three values:
+ * k the weak key (empty: a free slot), v the value (alive while k is), t a
+ * second weak value (FinalizationRegistry's unregister token). The
+ * collector keeps v alive only through k and clears k, v and t when k
+ * dies, and t alone when t dies. */
+typedef struct { uint32_t used, cap; } js_weak_t;
+typedef struct { jv k, v, t; } js_weak_ent_t;
+#define JWEAK_ENT(vm, b) ((js_weak_ent_t *)JPTR(vm, (b) + (uint32_t)sizeof(js_weak_t)))
+/* private names: a TypeError for a missing member */
+jv js_priv_missing(js_vm_t *vm, uint32_t key, int write);
+
+/* ---- wf_jsu16.c (Lot 115): UTF-16 units over UTF-8 bytes ---- */
+uint32_t js_str_units(js_vm_t *vm, uint32_t r);
+int js_str_ascii(js_vm_t *vm, uint32_t r);
+int js_u16_off(js_vm_t *vm, uint32_t r, uint32_t unit, int *mid);
+uint32_t js_u16_unit_of(js_vm_t *vm, uint32_t r, int off);
+int js_u16_at(js_vm_t *vm, uint32_t r, uint32_t unit);
+int js_u16_cp_at(js_vm_t *vm, uint32_t r, uint32_t unit);
+uint32_t js_u16_sub(js_vm_t *vm, uint32_t r, uint32_t from, uint32_t to);
+int js_u8_step(js_vm_t *vm, uint32_t r, int i);
+uint32_t js_u16_join(js_vm_t *vm, uint32_t a, uint32_t b);
+uint32_t js_u16_lone_at(const char *s, int left);
 
 /* ---- wf_jsre.c ---- */
 int js_regexp_init(js_vm_t *vm);
@@ -369,9 +522,13 @@ int js_is_regexp(js_vm_t *vm, jv v);
  * match, 0 on none, -1 when the run aborted (budget) */
 int js_regexp_search(js_vm_t *vm, uint32_t re, uint32_t str, int start, int *caps);
 int js_regexp_ncap(js_vm_t *vm, uint32_t re);      /* groups + 1 */
+uint32_t js_regexp_names(js_vm_t *vm, uint32_t re);  /* Lot 115: array of group names, or 0 */
 int js_regexp_global(js_vm_t *vm, uint32_t re);
 /* the exec() result array for a match */
 jv js_regexp_result(js_vm_t *vm, uint32_t re, uint32_t str, const int *caps);
+
+/* wf_jsu16.c: String.fromCharCode units into a builder */
+void js_u16_put_units(js_vm_t *vm, js_sb_t *b, const uint32_t *u, int n);
 
 #define JARG(i) ((i) < argc ? argv[(i)] : jv_undef())
 #define JCK(vm) do { if ((vm)->ctl) return jv_undef(); } while (0)

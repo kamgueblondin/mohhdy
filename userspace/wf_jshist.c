@@ -468,3 +468,9 @@ int js_hist_init(js_vm_t *vm, const char *page_url) {
     js_def_native(vm, vm->global, "structuredClone", clone_fn, 1, 0);
     return 0;
 }
+
+/* Lot 115: the history entries and the prototype kept here (wf_jsgc.c) */
+void js_hist_gc_roots(js_vm_t *vm) {
+    const uint32_t r[] = { g_entries, g_p_hist, g_trav };
+    js_gc_scan(vm, r, (uint32_t)sizeof(r));
+}

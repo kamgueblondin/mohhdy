@@ -45,6 +45,14 @@ int gfx_wm_hit(gfx_wm_rect_t win, int title_h, int scale, int x, int y) {
     return GFX_WM_HIT_BODY;
 }
 
+int gfx_wm_title_room(gfx_wm_rect_t win, int title_h, int scale, int text_x) {
+    int bx, room;
+    if (win.w <= 0) return 0;
+    gfx_wm_button_pos(win, title_h, scale, GFX_WM_HIT_MIN, &bx, 0);
+    room = bx - GFX_WM_TITLE_GAP - text_x;
+    return room > 0 ? room : 0;
+}
+
 int gfx_wm_visible(const gfx_wm_win_t *s) { return !s || (!s->closed && !s->minimized); }
 
 void gfx_wm_place(const gfx_wm_win_t *s, gfx_wm_rect_t base, gfx_wm_rect_t area, gfx_wm_rect_t *out) {

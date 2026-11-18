@@ -21,7 +21,7 @@ static int sb_grow(js_vm_t *vm, js_sb_t *b, uint32_t need) {
     if (vm->ctl == CTL_ABORT) return 0;
     if (need > (1u << 24)) { js_abort(vm, "RangeError: string too long for the guest"); return 0; }
     while (cap < need) cap *= 2;
-    r = js_alloc(vm, 12 + cap + 1);
+    r = js_alloc_k(vm, 12 + cap + 1, JK_LEAF);
     if (!r) return 0;
     for (i = 0; i < b->len; i++) JSTR(vm, r)->s[i] = JSTR(vm, b->ref)->s[i];
     b->ref = r;
@@ -40,6 +40,17 @@ void js_sb_put(js_vm_t *vm, js_sb_t *b, const char *s, int n) {
 void js_sb_str(js_vm_t *vm, js_sb_t *b, uint32_t str) {
     uint32_t n = JSTR(vm, str)->len, i;
     if (!n) return;
+    if (b->len >= 3 && n >= 3 && (uint8_t)JSTR(vm, str)->s[0] == 0xED &&
+        js_u16_lone_at(JSTR(vm, b->ref)->s + b->len - 3, 3) >= 0xD800u && js_u16_lone_at(JSTR(vm, b->ref)->s + b->len - 3, 3) <= 0xDBFFu &&
+        js_u16_lone_at(JSTR(vm, str)->s, (int)n) >= 0xDC00u) {
+        /* Lot 115: a high surrogate half then a low one make one code point */
+        uint32_t hi = js_u16_lone_at(JSTR(vm, b->ref)->s + b->len - 3, 3), lo = js_u16_lone_at(JSTR(vm, str)->s, (int)n), u[2];
+        u[0] = hi; u[1] = lo;
+        b->len -= 3;
+        js_u16_put_units(vm, b, u, 2);
+        for (i = 3; i < n && vm->ctl != CTL_ABORT; i++) js_sb_ch(vm, b, JSTR(vm, str)->s[i]);
+        return;
+    }
     if (b->len + n > b->cap && !sb_grow(vm, b, b->len + n)) return;
     for (i = 0; i < n; i++) JSTR(vm, b->ref)->s[b->len + i] = JSTR(vm, str)->s[i];
     b->len += n;
@@ -94,6 +105,9 @@ jv js_this_number(js_vm_t *vm, jv thisv, int *ok) {
 
 #define THIS_STR(s) uint32_t s = js_this_string(vm, thisv); if (!s) return jv_undef()
 #define SLEN(r_) ((int)JSTR(vm, r_)->len)
+#define ULEN(r_) ((int)js_str_units(vm, r_))      /* Lot 115: the length a script sees */
+#define U2B(r_, u_) js_u16_off(vm, r_, (uint32_t)(u_), 0)
+#define B2U(r_, b_) ((int)js_u16_unit_of(vm, r_, (b_)))
 #define SCH(r_, i_) (JSTR(vm, r_)->s[(i_)])
 
 static int str_idx(js_vm_t *vm, jv v, int len, int dflt) {
@@ -133,7 +147,9 @@ static int find_sub(js_vm_t *vm, uint32_t s, uint32_t pat, int from) {
 /* ---- String ---- */
 
 static jv str_ctor(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
-    uint32_t s = argc ? js_to_string(vm, argv[0]) : vm->s_empty;
+    uint32_t s;
+    if (argc && argv[0].t == JT_SYM && !vm->in_new) return jv_str(js_sym_descr(vm, argv[0].a));   /* Lot 115 */
+    s = argc ? js_to_string(vm, argv[0]) : vm->s_empty;
     (void)thisv; (void)m;
     if (vm->ctl) return jv_undef();
     if (vm->in_new) return jv_obj(js_to_object(vm, jv_str(s)));
@@ -146,6 +162,21 @@ static jv str_from_code(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     int i;
     (void)thisv;
     js_sb_init(vm, &b);
+    if (m == 0) {           /* Lot 115: UTF-16 units; a high then a low unit is one code point */
+        uint32_t units[64];
+        int k = 0;
+        for (i = 0; i < argc && !vm->ctl; i++) {
+            units[k++] = js_to_uint32(vm, argv[i]) & 0xFFFFu;
+            if (k == 64 || i + 1 == argc) {
+                int keep = (k == 64 && units[63] >= 0xD800u && units[63] <= 0xDBFFu) ? 1 : 0;
+                js_u16_put_units(vm, &b, units, k - keep);
+                if (keep) units[0] = units[63];
+                k = keep;
+            }
+        }
+        if (k && !vm->ctl) js_u16_put_units(vm, &b, units, k);
+        return vm->ctl ? jv_undef() : jv_str(js_sb_finish(vm, &b));
+    }
     for (i = 0; i < argc && !vm->ctl; i++) {
         uint32_t c = js_to_uint32(vm, argv[i]);
         char u[4];
@@ -195,7 +226,7 @@ static jv strp_char(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     jf64 x;
     int64_t k = 0;
     THIS_STR(s);
-    n = SLEN(s);
+    n = ULEN(s);            /* Lot 115: indexes are UTF-16 units */
     x = js_to_integer(vm, JARG(0));
     if (vm->ctl) return jv_undef();
     if (jf_isinf(x)) k = -1 - n;
@@ -207,19 +238,9 @@ static jv strp_char(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
         return jv_undef();
     }
     i = (int)k;
-    if (m == 0 || m == 3) return jv_str(js_str_sub(vm, s, i, i + 1));
-    if (m == 1) return jv_int((uint8_t)SCH(s, i));
-    {   /* codePointAt decodes the UTF-8 sequence that starts at i */
-        uint8_t c = (uint8_t)SCH(s, i);
-        uint32_t cp;
-        int l, j;
-        if (c < 0x80) return jv_int(c);
-        l = c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : c >= 0xC0 ? 2 : 1;
-        if (l == 1 || i + l > n) return jv_int(c);
-        cp = c & (0x7Fu >> l);
-        for (j = 1; j < l; j++) cp = (cp << 6) | ((uint8_t)SCH(s, i + j) & 63u);
-        return jv_int((int32_t)cp);
-    }
+    if (m == 0 || m == 3) return jv_str(js_u16_sub(vm, s, (uint32_t)i, (uint32_t)i + 1));
+    if (m == 1) return jv_int(js_u16_at(vm, s, (uint32_t)i));
+    return jv_int(js_u16_cp_at(vm, s, (uint32_t)i));     /* codePointAt: a pair is one code point */
 }
 
 /* indexOf 0, lastIndexOf 1, includes 2, startsWith 3, endsWith 4 */
@@ -230,30 +251,31 @@ static jv strp_find(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     if (m >= 2 && js_is_regexp(vm, JARG(0))) return js_throw_err(vm, JE_TYPE, "First argument must not be a regular expression");
     pat = js_to_string(vm, JARG(0));
     if (vm->ctl) return jv_undef();
+    /* Lot 115: positions in and out are UTF-16 units; the search runs on bytes */
     n = SLEN(s);
     pn = SLEN(pat);
     switch (m) {
     case 0: case 2:
-        from = str_idx(vm, JARG(1), n, 0);
+        from = U2B(s, str_idx(vm, JARG(1), ULEN(s), 0));
         i = find_sub(vm, s, pat, from);
-        return m == 0 ? jv_int(i) : jv_bool(i >= 0);
+        return m == 0 ? jv_int(i < 0 ? -1 : B2U(s, i)) : jv_bool(i >= 0);
     case 1: {
         jf64 x = js_to_number(vm, JARG(1));
         from = n;
-        if (!jf_isnan(x)) from = str_idx(vm, JARG(1), n, n);
+        if (!jf_isnan(x)) from = U2B(s, str_idx(vm, JARG(1), ULEN(s), ULEN(s)));
         for (i = from + pn > n ? n - pn : from; i >= 0; i--) {
             for (j = 0; j < pn && SCH(s, i + j) == SCH(pat, j); j++) {}
-            if (j == pn) return jv_int(i);
+            if (j == pn) return jv_int(B2U(s, i));
         }
         return jv_int(-1);
     }
     case 3:
-        from = str_idx(vm, JARG(1), n, 0);
+        from = U2B(s, str_idx(vm, JARG(1), ULEN(s), 0));
         if (from + pn > n) return jv_bool(0);
         for (j = 0; j < pn; j++) if (SCH(s, from + j) != SCH(pat, j)) return jv_bool(0);
         return jv_bool(1);
     default:
-        from = str_idx(vm, JARG(1), n, n);
+        from = U2B(s, str_idx(vm, JARG(1), ULEN(s), ULEN(s)));
         if (from - pn < 0) return jv_bool(0);
         for (j = 0; j < pn; j++) if (SCH(s, from - pn + j) != SCH(pat, j)) return jv_bool(0);
         return jv_bool(1);
@@ -264,7 +286,7 @@ static jv strp_find(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
 static jv strp_slice(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     int n, a, b;
     THIS_STR(s);
-    n = SLEN(s);
+    n = ULEN(s);            /* Lot 115: UTF-16 units */
     if (m == 0) {
         a = rel_idx(vm, JARG(0), n, 0);
         b = rel_idx(vm, JARG(1), n, n);
@@ -279,10 +301,42 @@ static jv strp_slice(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     }
     if (vm->ctl) return jv_undef();
     if (b <= a) return jv_str(vm->s_empty);
-    return jv_str(js_str_sub(vm, s, a, b));
+    return jv_str(js_u16_sub(vm, s, (uint32_t)a, (uint32_t)b));
 }
 
-/* toUpperCase 0, toLowerCase 1 (ASCII) */
+/* Lot 115: simple case mapping of the 2-byte UTF-8 range where both
+ * cases have the same length: Latin-1 (not the sharp s, whose upper
+ * case is "SS"), Latin Extended-A pairs, basic Greek and Cyrillic.
+ * up: 0 to upper, 1 to lower. */
+static uint32_t case_map(uint32_t c, uint32_t up) {
+    if (up == 0) {
+        if ((c >= 0xE0 && c <= 0xFE && c != 0xF7)) return c - 0x20;
+        if (c == 0xFF) return 0x178;
+        if (c >= 0x100 && c <= 0x17F && c != 0x130 && c != 0x131 && c != 0x138 && c != 0x149 && c != 0x17F) {
+            int odd_lower = (c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17E);
+            if (odd_lower ? (c & 1) == 0 : (c & 1) == 1) return c - 1;
+            return c;
+        }
+        if (c >= 0x3B1 && c <= 0x3C9 && c != 0x3C2) return c - 0x20;
+        if (c == 0x3C2) return 0x3A3;
+        if (c >= 0x430 && c <= 0x44F) return c - 0x20;
+        if (c >= 0x450 && c <= 0x45F) return c - 0x50;
+        return c;
+    }
+    if (c >= 0xC0 && c <= 0xDE && c != 0xD7) return c + 0x20;
+    if (c == 0x178) return 0xFF;
+    if (c >= 0x100 && c <= 0x17F && c != 0x130 && c != 0x131 && c != 0x138 && c != 0x149 && c != 0x17F) {
+        int odd_lower = (c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17E);
+        if (odd_lower ? (c & 1) == 1 : (c & 1) == 0) return c + 1;
+        return c;
+    }
+    if (c >= 0x391 && c <= 0x3A9 && c != 0x3A2) return c + 0x20;
+    if (c >= 0x410 && c <= 0x42F) return c + 0x20;
+    if (c >= 0x400 && c <= 0x40F) return c + 0x50;
+    return c;
+}
+
+/* toUpperCase 0, toLowerCase 1 (ASCII, and the 2-byte letters of case_map) */
 static jv strp_case(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     uint32_t r;
     int i, n;
@@ -295,8 +349,18 @@ static jv strp_case(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     if (vm->ctl) return jv_undef();
     for (i = 0; i < n; i++) {
         char c = JSTR(vm, r)->s[i];
+        uint8_t u = (uint8_t)c;
         if (m == 0 && c >= 'a' && c <= 'z') JSTR(vm, r)->s[i] = (char)(c - 32);
         if (m == 1 && c >= 'A' && c <= 'Z') JSTR(vm, r)->s[i] = (char)(c + 32);
+        if (u >= 0xC2 && u <= 0xDF && i + 1 < n && ((uint8_t)JSTR(vm, r)->s[i + 1] & 0xC0) == 0x80) {
+            /* Lot 115: the 2-byte letters whose other case has the same length */
+            uint32_t cp = ((uint32_t)(u & 0x1F) << 6) | ((uint8_t)JSTR(vm, r)->s[i + 1] & 63u), o = case_map(cp, m);
+            if (o != cp) {
+                JSTR(vm, r)->s[i] = (char)(0xC0 | (o >> 6));
+                JSTR(vm, r)->s[i + 1] = (char)(0x80 | (o & 63));
+            }
+            i++;
+        }
     }
     return jv_str(r);
 }
@@ -365,12 +429,17 @@ static jv strp_pad(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     if (target > (1 << 22)) return js_throw_err(vm, JE_RANGE, "Invalid string length");
     fill = JARG(1).t == JT_UNDEF ? js_intern(vm, " ", 1) : js_to_string(vm, JARG(1));
     if (vm->ctl) return jv_undef();
-    need = (int)target - SLEN(s);
-    fl = SLEN(fill);
+    need = (int)target - ULEN(s);      /* Lot 115: UTF-16 units */
+    fl = ULEN(fill);
     if (need <= 0 || fl == 0) return jv_str(s);
     js_sb_init(vm, &b);
     if (m == 1) js_sb_str(vm, &b, s);
-    for (i = 0; i < need; i++) js_sb_ch(vm, &b, SCH(fill, i % fl));
+    if (js_str_ascii(vm, fill)) {
+        for (i = 0; i < need; i++) js_sb_ch(vm, &b, SCH(fill, i % fl));
+    } else {
+        for (i = 0; i + fl <= need && !vm->ctl; i += fl) js_sb_str(vm, &b, fill);
+        if (i < need) js_sb_str(vm, &b, js_u16_sub(vm, fill, 0, (uint32_t)(need - i)));
+    }
     if (m == 0) js_sb_str(vm, &b, s);
     return jv_str(js_sb_finish(vm, &b));
 }
@@ -449,7 +518,7 @@ static jv strp_split(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
                 r = js_regexp_search(vm, sep.a, s, q, caps);
                 if (r < 0) return jv_undef();
                 if (!r || caps[0] >= n) break;
-                if (caps[1] == p) { q = caps[0] + 1; continue; }
+                if (caps[1] == p) { q = caps[0] + js_u8_step(vm, s, caps[0]); continue; }
                 js_array_push(vm, out, jv_str(js_str_sub(vm, s, p, caps[0])));
                 if (JOBJ(vm, out)->alen >= lim) return jv_obj(out);
                 for (k = 1; k < nc; k++) {
@@ -468,12 +537,10 @@ static jv strp_split(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
             int pn;
             if (vm->ctl) return jv_undef();
             pn = SLEN(ps);
-            if (pn == 0) {    /* one element per UTF-8 sequence */
-                uint32_t arr = 0, i;
-                js_iter_values(vm, jv_str(s), &arr);
-                if (vm->ctl) return jv_undef();
-                for (i = 0; i < JOBJ(vm, arr)->alen && JOBJ(vm, out)->alen < lim; i++)
-                    js_array_push(vm, out, js_array_get(vm, arr, i));
+            if (pn == 0) {    /* Lot 115: one element per UTF-16 unit (a pair gives two halves) */
+                uint32_t i, un = js_str_units(vm, s);
+                for (i = 0; i < un && JOBJ(vm, out)->alen < lim && !vm->ctl; i++)
+                    js_array_push(vm, out, jv_str(js_u16_sub(vm, s, i, i + 1)));
                 return jv_obj(out);
             }
             while ((q = find_sub(vm, s, ps, p)) >= 0) {
@@ -487,7 +554,23 @@ static jv strp_split(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     }
 }
 
-/* expand $$, $&, $`, $', $n and $nn of a replacement string */
+/* Lot 115: the group names of the regular expression being replaced ($<name>) */
+static uint32_t g_repl_names;
+
+/* the group number of name[0..len) in g_repl_names, -1 when none */
+static int repl_group(js_vm_t *vm, uint32_t rep, int at, int len, int nc) {
+    int g;
+    for (g = 1; g < nc; g++) {
+        jv nm = js_array_get(vm, g_repl_names, (uint32_t)g);
+        int k;
+        if (nm.t != JT_STR || (int)JSTR(vm, nm.a)->len != len) continue;
+        for (k = 0; k < len && JSTR(vm, nm.a)->s[k] == SCH(rep, at + k); k++) { }
+        if (k == len) return g;
+    }
+    return -1;
+}
+
+/* expand $$, $&, $`, $', $n, $nn and $<name> of a replacement string */
 static void expand_repl(js_vm_t *vm, js_sb_t *b, uint32_t rep, uint32_t s, const int *caps, int nc) {
     int rn = SLEN(rep), i;
     for (i = 0; i < rn; i++) {
@@ -498,7 +581,14 @@ static void expand_repl(js_vm_t *vm, js_sb_t *b, uint32_t rep, uint32_t s, const
         else if (d == '&') { sb_sub(vm, b, s, caps[0], caps[1]); i++; }
         else if (d == '`') { sb_sub(vm, b, s, 0, caps[0]); i++; }
         else if (d == '\'') { sb_sub(vm, b, s, caps[1], SLEN(s)); i++; }
-        else if (d >= '0' && d <= '9') {
+        else if (d == '<' && g_repl_names) {
+            int e = i + 2, g;
+            while (e < rn && SCH(rep, e) != '>') e++;
+            if (e >= rn) { js_sb_ch(vm, b, c); continue; }
+            g = repl_group(vm, rep, i + 2, e - i - 2, nc);
+            if (g > 0 && caps[2 * g] >= 0) sb_sub(vm, b, s, caps[2 * g], caps[2 * g + 1]);
+            i = e;
+        } else if (d >= '0' && d <= '9') {
             int g = d - '0', used = 1;
             if (i + 2 < rn && SCH(rep, i + 2) >= '0' && SCH(rep, i + 2) <= '9' && g * 10 + (SCH(rep, i + 2) - '0') < nc) {
                 g = g * 10 + (SCH(rep, i + 2) - '0');
@@ -522,7 +612,7 @@ static int apply_repl(js_vm_t *vm, js_sb_t *b, jv rep, uint32_t reps, uint32_t s
         int k;
         uint32_t rs;
         for (k = 0; k < nc; k++) a[k] = caps[2 * k] < 0 ? jv_undef() : jv_str(js_str_sub(vm, s, caps[2 * k], caps[2 * k + 1]));
-        a[nc] = jv_int(caps[0]);
+        a[nc] = jv_int(B2U(s, caps[0]));        /* Lot 115: the offset in UTF-16 units */
         a[nc + 1] = jv_str(s);
         r = js_call(vm, rep, jv_undef(), a, nc + 2);
         if (vm->ctl) return 0;
@@ -552,17 +642,22 @@ static jv strp_replace(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
         int nc = js_regexp_ncap(vm, pat.a), global = js_regexp_global(vm, pat.a), q = 0, r;
         if (m == 1 && !global) return js_throw_err(vm, JE_TYPE, "replaceAll must be called with a global RegExp");
         while (q <= n) {
+            int ok;
             r = js_regexp_search(vm, pat.a, s, q, caps);
             if (r < 0) return jv_undef();
             if (!r) break;
             sb_sub(vm, &b, s, p, caps[0]);
-            if (!apply_repl(vm, &b, rep, reps, s, caps, nc)) return jv_undef();
+            g_repl_names = js_regexp_names(vm, pat.a);
+            ok = apply_repl(vm, &b, rep, reps, s, caps, nc);
+            g_repl_names = 0;
+            if (!ok) return jv_undef();
             p = caps[1];
             if (!global) break;
-            q = caps[1] == caps[0] ? caps[1] + 1 : caps[1];
-            if (caps[1] == caps[0] && caps[0] < n) {   /* keep the byte an empty match skipped */
-                sb_sub(vm, &b, s, caps[0], caps[0] + 1);
-                p = caps[0] + 1;
+            q = caps[1] == caps[0] ? caps[1] + js_u8_step(vm, s, caps[1]) : caps[1];
+            if (caps[1] == caps[0] && caps[0] < n) {   /* keep the character an empty match skipped */
+                int st = js_u8_step(vm, s, caps[0]);
+                sb_sub(vm, &b, s, caps[0], caps[0] + st);
+                p = caps[0] + st;
             }
         }
         if (global) js_put(vm, pat, vm->s_lastIndex, jv_int(0));
@@ -582,9 +677,11 @@ static jv strp_replace(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
             p = q + pn;
             if (m == 0) break;
             if (pn == 0) {
+                int st;
                 if (q >= n) { p = n + 1; break; }
-                sb_sub(vm, &b, s, q, q + 1);
-                p = q + 1;
+                st = js_u8_step(vm, s, q);
+                sb_sub(vm, &b, s, q, q + st);
+                p = q + st;
             }
         }
         if (p < n) sb_sub(vm, &b, s, p, n);
@@ -614,7 +711,7 @@ static jv strp_match(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
     if (m == 2) {
         r = js_regexp_search(vm, re, s, 0, caps);
         if (r < 0) return jv_undef();
-        return jv_int(r ? caps[0] : -1);
+        return jv_int(r ? B2U(s, caps[0]) : -1);
     }
     if (m == 0 && !global) return js_regexp_exec(vm, re, s);
     out = js_array_new(vm, 4);
@@ -625,7 +722,7 @@ static jv strp_match(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
         if (!r) break;
         if (m == 0) js_array_push(vm, out, jv_str(js_str_sub(vm, s, caps[0], caps[1])));
         else js_array_push(vm, out, js_regexp_result(vm, re, s, caps));
-        q = caps[1] == caps[0] ? caps[1] + 1 : caps[1];
+        q = caps[1] == caps[0] ? caps[1] + js_u8_step(vm, s, caps[1]) : caps[1];
     }
     if (js_is_regexp(vm, JARG(0))) js_put(vm, JARG(0), vm->s_lastIndex, jv_int(0));
     if (m == 0 && JOBJ(vm, out)->alen == 0) return jv_null();
@@ -911,6 +1008,18 @@ static void json_quote(js_vm_t *vm, js_sb_t *b, uint32_t s) {
         case '\t': esc = "\\t"; break;
         default: break;
         }
+        if (c == 0xED) {            /* Lot 115: a lone surrogate is written as \udxxx (well-formed JSON.stringify) */
+            uint32_t lone = js_u16_lone_at(JSTR(vm, s)->s + i, n - i);
+            if (lone) {
+                if (run) sb_sub(vm, b, s, i - run, i);
+                run = 0;
+                u[0] = '\\'; u[1] = 'u'; u[2] = hx[(lone >> 12) & 15]; u[3] = hx[(lone >> 8) & 15];
+                u[4] = hx[(lone >> 4) & 15]; u[5] = hx[lone & 15];
+                js_sb_put(vm, b, u, 6);
+                i += 2;
+                continue;
+            }
+        }
         if (!esc && c >= 0x20) { run++; continue; }
         if (run) sb_sub(vm, b, s, i - run, i);
         run = 0;
@@ -975,7 +1084,7 @@ static int json_value(js_vm_t *vm, json_out_t *j, jv holder, uint32_t key, jv v)
             if (j->stack[i] == v.a) { js_throw_err(vm, JE_TYPE, "Converting circular structure to JSON"); return 0; }
         if (j->depth >= JSON_MAX_DEPTH) { js_throw_err(vm, JE_RANGE, "JSON nesting too deep for the guest"); return 0; }
         j->stack[j->depth++] = v.a;
-        if (js_is_array(vm, v)) {
+        if (js_is_array(vm, v) || js_proxy_is_array(vm, v)) {      /* Lot 115: IsArray sees through a proxy */
             uint32_t len, k;
             js_length_of(vm, v, &len);
             js_sb_ch(vm, &j->b, '[');
@@ -2007,6 +2116,16 @@ static int lib_date(js_vm_t *vm) {
     return 0;
 }
 
+/* Lot 115: keys(), values() and entries() give an iterator (next,
+ * Symbol.iterator) over a snapshot instead of a bare array */
+static jv coll_iter_method(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m) {
+    jv r = coll_method(vm, thisv, argv, argc, m);
+    uint32_t it;
+    if (vm->ctl || r.t != JT_OBJ || JOBJ(vm, r.a)->cls != JS_CLASS_ARRAY) return r;
+    it = js_iter_over(vm, r.a);
+    return it ? jv_obj(it) : jv_undef();
+}
+
 static int lib_coll(js_vm_t *vm, const char *name, int cls, uint32_t proto) {
     static const char *const mm[] = { "get", "set", "has", "delete", "clear", "", "forEach", "keys", "values", "entries", 0 };
     uint32_t c = js_native_new(vm, name, coll_ctor, 0, (uint32_t)cls), sz;
@@ -2018,7 +2137,8 @@ static int lib_coll(js_vm_t *vm, const char *name, int cls, uint32_t proto) {
     for (i = 0; mm[i]; i++) {
         if (!mm[i][0]) continue;
         if (cls == JS_CLASS_SET && (i == 0 || i == 1)) continue;
-        js_def_native(vm, proto, mm[i], coll_method, i == 1 ? 2 : 1, ((uint32_t)cls << 8) | (uint32_t)i);
+        js_def_native(vm, proto, mm[i], i >= 7 ? coll_iter_method : coll_method, i == 1 ? 2 : 1,
+                      ((uint32_t)cls << 8) | (uint32_t)i);
     }
     if (cls == JS_CLASS_SET) js_def_native(vm, proto, "add", coll_method, 1, ((uint32_t)cls << 8) | 1u);
     sz = js_native_new(vm, "size", coll_method, 0, ((uint32_t)cls << 8) | 5u);

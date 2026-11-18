@@ -25,6 +25,7 @@
 #include "webeng.h"   /* Lot 104: we_geom_feed */
 #include "wf_jsweb.h"  /* Lot 113: the page script pass */
 #include "wf_jsdom.h"  /* Lot 114: the live page, its fetch hook */
+#include "wf_jslayout.h"  /* Lot 115: layout values from the engine */
 
 extern const fsops_io_t shell_fs_io;
 #include "../include/os_syscalls.h"
@@ -361,6 +362,7 @@ static int page_present(const wf_fetch_req_t* req, int use_css, char* src, int s
     if (!g_js_replay) wf_jspage_close();     /* Lot 114: a new page ends the live one */
     if (!g_js_replay && wf_jsweb_enabled() && is_html(&g_res, g_body, g_res.body_len)) {
         wf_jspage_set_fetch(js_fetch_hook, 0);
+        wf_jspage_set_layout(wf_jslayout_engine, 0);    /* Lot 115: the renderer's boxes */
         g_res.body_len = wf_jsweb_page((char *)g_body, g_res.body_len, (int)sizeof(g_body), g_res.url);
         g_body[g_res.body_len] = 0;
     }

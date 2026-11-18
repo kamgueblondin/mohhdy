@@ -704,6 +704,9 @@ int we_geom(const we_doc_t *d, int node, wf_geom_box_t *g);
  * wins), the root scrollport and range into g; g is cleared first.
  * Returns the boxes filled. */
 int we_geom_feed(const we_doc_t *d, const char *prefix, wf_geom_t *g);
+/* Lot 115: the padding box (border box without borders) of element node
+ * for clientWidth / clientHeight; 0, or -1 for a text node. */
+int we_client_box(const we_doc_t *d, int node, int *cw, int *ch);
 typedef void (*we_out_fn)(void* ctx, const char* s);
 void we_dump_dom(const we_doc_t* d, we_out_fn out, void* ctx);
 void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx);

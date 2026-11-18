@@ -9,6 +9,7 @@
 #include "wf_jsnet.h"
 #include "wf_jsapi.h"
 #include "wf_jshist.h"
+#include "wf_entity.h"
 
 enum { DN_ELEM = 1, DN_TEXT = 3, DN_COMMENT = 8, DN_DOC = 9, DN_DOCTYPE = 10, DN_FRAG = 11 };
 
@@ -141,56 +142,53 @@ static void attr_remove(int k, const char *name, int nl) {
 
 /* ---- entities ---- */
 
+/* Lot 115: the full HTML character reference table of the web stack
+ * (wf_entity.c, Lot 71) instead of a short list, so &ucirc; or &hearts;
+ * read as browsers read them */
+/* the HTML 4 references that the display table leaves out (no glyph in
+ * the desktop fonts; a script string is UTF-8 and has no such limit) */
+typedef struct { const char *name; uint16_t cp; } ent_extra_t;
+static const ent_extra_t k_ent_extra[] = {
+    { "alefsym", 0x2135 }, { "ang", 0x2220 }, { "clubs", 0x2663 }, { "cong", 0x2245 }, { "crarr", 0x21B5 },
+    { "dArr", 0x21D3 }, { "diams", 0x2666 }, { "frasl", 0x2044 }, { "hearts", 0x2665 }, { "image", 0x2111 },
+    { "lang", 0x2329 }, { "lceil", 0x2308 }, { "lfloor", 0x230A }, { "lowast", 0x2217 }, { "loz", 0x25CA },
+    { "ni", 0x220B }, { "nsub", 0x2284 }, { "oline", 0x203E }, { "oplus", 0x2295 }, { "otimes", 0x2297 },
+    { "perp", 0x22A5 }, { "piv", 0x03D6 }, { "prop", 0x221D }, { "rang", 0x232A }, { "rceil", 0x2309 },
+    { "real", 0x211C }, { "rfloor", 0x230B }, { "sdot", 0x22C5 }, { "sim", 0x223C }, { "spades", 0x2660 },
+    { "sube", 0x2286 }, { "supe", 0x2287 }, { "there4", 0x2234 }, { "thetasym", 0x03D1 }, { "uArr", 0x21D1 },
+    { "upsih", 0x03D2 }, { "weierp", 0x2118 }, { 0, 0 }
+};
+
+static uint32_t ent_extra(const char *s, int n, int *used) {
+    int l = 1, q;
+    while (l < n && l < 12 && (((s[l] | 32) >= 'a' && (s[l] | 32) <= 'z') || (s[l] >= '0' && s[l] <= '9'))) l++;
+    if (l >= n || s[l] != ';' || l < 3) return 0;
+    for (q = 0; k_ent_extra[q].name; q++) {
+        const char *e = k_ent_extra[q].name;
+        int m;
+        for (m = 0; m < l - 1 && e[m] == s[1 + m]; m++) {}
+        if (m == l - 1 && !e[m]) { *used = l + 1; return k_ent_extra[q].cp; }
+    }
+    return 0;
+}
+
 static int ent_decode(const char *s, int n, char *out, int max) {
-    static const char *const names[] = { "amp", "&", "lt", "<", "gt", ">", "quot", "\"", "apos", "'", "nbsp", "\xC2\xA0",
-                                         "copy", "\xC2\xA9", "reg", "\xC2\xAE", "hellip", "\xE2\x80\xA6", "mdash", "\xE2\x80\x94",
-                                         "ndash", "\xE2\x80\x93", "laquo", "\xC2\xAB", "raquo", "\xC2\xBB", "eacute", "\xC3\xA9",
-                                         "egrave", "\xC3\xA8", "agrave", "\xC3\xA0", "ccedil", "\xC3\xA7", "euro", "\xE2\x82\xAC", 0 };
     int i = 0, o = 0;
     while (i < n) {
-        if (s[i] == '&') {
-            int j = i + 1, k;
-            if (j < n && s[j] == '#') {
-                uint32_t v = 0;
-                int hex = 0, any = 0;
-                j++;
-                if (j < n && (s[j] == 'x' || s[j] == 'X')) { hex = 1; j++; }
-                while (j < n && v < 0x110000) {
-                    char c = s[j];
-                    int d = (c >= '0' && c <= '9') ? c - '0' : (hex && c >= 'a' && c <= 'f') ? c - 'a' + 10 : (hex && c >= 'A' && c <= 'F') ? c - 'A' + 10 : -1;
-                    if (d < 0) break;
-                    v = v * (hex ? 16u : 10u) + (uint32_t)d;
-                    any = 1;
-                    j++;
-                }
-                if (any && v > 0 && v < 0x110000) {
-                    if (j < n && s[j] == ';') j++;
-                    if (v < 0x80) { if (o < max) out[o++] = (char)v; }
-                    else if (v < 0x800) { if (o + 2 <= max) { out[o++] = (char)(0xC0 | (v >> 6)); out[o++] = (char)(0x80 | (v & 63)); } }
-                    else if (v < 0x10000) {
-                        if (o + 3 <= max) { out[o++] = (char)(0xE0 | (v >> 12)); out[o++] = (char)(0x80 | ((v >> 6) & 63)); out[o++] = (char)(0x80 | (v & 63)); }
-                    } else if (o + 4 <= max) {
-                        out[o++] = (char)(0xF0 | (v >> 18)); out[o++] = (char)(0x80 | ((v >> 12) & 63));
-                        out[o++] = (char)(0x80 | ((v >> 6) & 63)); out[o++] = (char)(0x80 | (v & 63));
-                    }
-                    i = j;
-                    continue;
-                }
-            } else {
-                for (k = 0; names[k]; k += 2) {
-                    int l = dlen(names[k]), m;
-                    if (j + l > n) continue;
-                    for (m = 0; m < l && s[j + m] == names[k][m]; m++) {}
-                    if (m == l && (j + l == n || s[j + l] == ';' || !((s[j + l] | 32) >= 'a' && (s[j + l] | 32) <= 'z'))) {
-                        const char *r = names[k + 1];
-                        int q;
-                        for (q = 0; r[q] && o < max; q++) out[o++] = r[q];
-                        i = j + l + (j + l < n && s[j + l] == ';');
-                        break;
-                    }
-                }
-                if (names[k]) continue;
+        int used = 0;
+        uint32_t v = s[i] == '&' ? wf_entity_decode(s + i, n - i, &used) : 0;
+        if (s[i] == '&' && used == 0) v = ent_extra(s + i, n - i, &used);
+        if (used > 0) {
+            if (v < 0x80) { if (o < max) out[o++] = (char)v; }
+            else if (v < 0x800) { if (o + 2 <= max) { out[o++] = (char)(0xC0 | (v >> 6)); out[o++] = (char)(0x80 | (v & 63)); } }
+            else if (v < 0x10000) {
+                if (o + 3 <= max) { out[o++] = (char)(0xE0 | (v >> 12)); out[o++] = (char)(0x80 | ((v >> 6) & 63)); out[o++] = (char)(0x80 | (v & 63)); }
+            } else if (o + 4 <= max) {
+                out[o++] = (char)(0xF0 | (v >> 18)); out[o++] = (char)(0x80 | ((v >> 12) & 63));
+                out[o++] = (char)(0x80 | ((v >> 6) & 63)); out[o++] = (char)(0x80 | (v & 63));
             }
+            i += used;
+            continue;
         }
         if (o < max) out[o++] = s[i];
         i++;
@@ -459,14 +457,46 @@ static void fix_document(int doc) {
     }
 }
 
+/* Lot 115: the content fragment of each <template> (template.content):
+ * the parsed children move there, so selectors and text of the document
+ * do not see them, as in browsers */
+#define WF_DOM_TPL 32
+static int g_tpl[WF_DOM_TPL][2];       /* template node, its fragment */
+static int g_ntpl;
+
+static int tpl_content(int k) {
+    int i, f = -1, c;
+    for (i = 0; i < g_ntpl; i++) if (g_tpl[i][0] == k) { f = g_tpl[i][1]; break; }
+    if (f < 0) {
+        if (g_ntpl >= WF_DOM_TPL) { g_trunc = 1; return -1; }
+        f = node_new(DN_FRAG);
+        if (f < 0) return -1;
+        g_tpl[g_ntpl][0] = k;
+        g_tpl[g_ntpl][1] = f;
+        g_ntpl++;
+    }
+    /* children added to the element itself (parser, innerHTML) join the content */
+    while ((c = g_n[k].first) >= 0) insert_before(f, c, -1);
+    return f;
+}
+
+/* the fragment of template k for the serializer, -1 when none */
+static int tpl_frag_of(int k) {
+    int i;
+    for (i = 0; i < g_ntpl; i++) if (g_tpl[i][0] == k) return g_tpl[i][1];
+    return -1;
+}
+
 static int dom_parse(const char *s, int n) {
-    int doc;
+    int doc, k, n0;
     g_nn = g_na = 0;
     g_nb = 0;
     g_trunc = 0;
+    g_ntpl = 0;
     doc = node_new(DN_DOC);
     parse_into(doc, s, n);
     fix_document(doc);
+    for (k = 0, n0 = g_nn; k < n0; k++) if (name_is(k, "template")) (void)tpl_content(k);
     return doc;
 }
 
@@ -480,6 +510,8 @@ typedef struct {
     int skip_scripts;
     int marks;          /* Lot 114: clickable elements inside "?__wfjs=N" links */
     int in_link;        /* inside a link: no nested mark */
+    int budget;         /* Lot 115: element and text nodes still written (-1: no bound) */
+    int quiet;          /* Lot 115: a full buffer is not a DOM bound (layout copy) */
 } dout_t;
 
 static int g_alive_marking;
@@ -492,7 +524,7 @@ static void dw(dout_t *o, const char *s, int n) {
     if (o->sb) { js_sb_put(o->vm, o->sb, s, n); return; }
     while (n-- > 0) {
         if (o->n < o->max - 1) o->out[o->n] = *s;
-        else g_trunc = 1;
+        else if (!o->quiet) g_trunc = 1;
         o->n++;
         s++;
     }
@@ -503,6 +535,10 @@ static void ser(dout_t *o, int k, int depth) {
     dnode_t *d = &g_n[k];
     int c, a, mark, is_a;
     if (depth > PSTACK) return;
+    if (o->budget >= 0 && (d->type == DN_TEXT || d->type == DN_ELEM)) {
+        if (o->budget == 0) return;         /* Lot 115: the layout copy stops here */
+        o->budget--;
+    }
     switch (d->type) {
     case DN_TEXT: dw(o, g_b + d->text, (int)d->text_len); return;
     case DN_COMMENT: dws(o, "<!--"); dw(o, g_b + d->text, (int)d->text_len); dws(o, "-->"); return;
@@ -543,6 +579,7 @@ static void ser(dout_t *o, int k, int depth) {
     if (mark && !is_a) { dws(o, "<a href=\"?__wfjs="); dw_int(o, k); dws(o, "\">"); }
     if (mark || is_a) o->in_link++;
     for (c = d->first; c >= 0; c = g_n[c].next) ser(o, c, depth + 1);
+    if (g_ntpl && name_is(k, "template") && (c = tpl_frag_of(k)) >= 0) ser(o, c, depth + 1);    /* Lot 115 */
     if (mark || is_a) o->in_link--;
     if (mark && !is_a) dws(o, "</a>");
     dws(o, "</");
@@ -572,6 +609,8 @@ int wf_jsdom_roundtrip(const char *html, int n, char *out, int out_max) {
     o.skip_scripts = 0;
     o.marks = 0;
     o.in_link = 0;
+    o.budget = -1;
+    o.quiet = 0;
     ser(&o, doc, 0);
     if (o.n >= out_max) o.n = out_max - 1;
     out[o.n] = 0;
@@ -794,7 +833,8 @@ static int walk_next(int k, int root) {
 
 /* ---- the JavaScript side ---- */
 
-enum { HK_NODE = 0, HK_STYLE = 1, HK_CLASSLIST = 2, HK_DATASET = 3, HK_CHILDREN = 4, HK_CHILDNODES = 5 };
+enum { HK_NODE = 0, HK_STYLE = 1, HK_CLASSLIST = 2, HK_DATASET = 3, HK_CHILDREN = 4, HK_CHILDNODES = 5,
+       HK_ATTRS = 6, HK_ELEMENTS = 7 /* Lot 115: el.attributes, form.elements */ };
 
 enum {
     K_nodeType, K_nodeName, K_tagName, K_id, K_className, K_textContent, K_innerText, K_innerHTML, K_outerHTML,
@@ -804,7 +844,8 @@ enum {
     K_data, K_body, K_head, K_documentElement, K_title, K_readyState, K_cookie, K_ownerDocument, K_URL,
     K_defaultView, K_cssText, K_length, K_location, K_offsetWidth, K_offsetHeight, K_clientWidth, K_clientHeight,
     K_scrollTop, K_isConnected, K_dataset, K_offsetTop, K_offsetLeft, K_offsetParent, K_scrollHeight, K_scrollWidth,
-    K_scrollLeft, K_currentScript, K_activeElement, K_selectedIndex, K_form, K_COUNT
+    K_scrollLeft, K_currentScript, K_activeElement, K_selectedIndex, K_form,
+    K_attributes, K_elements, K_tabIndex, K_COUNT
 };
 static const char *const k_names[K_COUNT] = {
     "nodeType", "nodeName", "tagName", "id", "className", "textContent", "innerText", "innerHTML", "outerHTML",
@@ -814,17 +855,20 @@ static const char *const k_names[K_COUNT] = {
     "data", "body", "head", "documentElement", "title", "readyState", "cookie", "ownerDocument", "URL",
     "defaultView", "cssText", "length", "location", "offsetWidth", "offsetHeight", "clientWidth", "clientHeight",
     "scrollTop", "isConnected", "dataset", "offsetTop", "offsetLeft", "offsetParent", "scrollHeight", "scrollWidth",
-    "scrollLeft", "currentScript", "activeElement", "selectedIndex", "form"
+    "scrollLeft", "currentScript", "activeElement", "selectedIndex", "form",
+    "attributes", "elements", "tabIndex"
 };
 /* string attributes reflected as properties of the same name */
 static const char *const k_reflect[] = { "href", "src", "alt", "type", "name", "placeholder", "rel", "lang", "dir",
-                                         "action", "method", "target", "content", "htmlFor", "width", "height", "role", 0 };
+                                         "action", "method", "target", "content", "htmlFor", "width", "height", "role",
+                                         "srcset", "sizes", "download", "media", 0 };
 
 typedef struct {
     js_vm_t *vm;
     uint32_t key[K_COUNT];
     uint32_t reflect[24];
     uint32_t p_node, p_style, p_classlist, p_coll;
+    uint32_t p_evk[4];          /* Lot 115: KeyboardEvent, MouseEvent, InputEvent, FocusEvent prototypes */
     int doc;
     char ready[16];
     uint32_t cookie;            /* the document.cookie string */
@@ -961,14 +1005,18 @@ static uint32_t serialize_js(js_vm_t *vm, int k, int outer) {
     dout_t o;
     int c;
     js_sb_init(vm, &b);
-    o.out = 0; o.n = 0; o.max = 0; o.vm = vm; o.sb = &b; o.skip_scripts = 0; o.marks = 0; o.in_link = 0;
+    o.out = 0; o.n = 0; o.max = 0; o.vm = vm; o.sb = &b; o.skip_scripts = 0; o.marks = 0; o.in_link = 0; o.budget = -1; o.quiet = 0;
     if (outer) ser(&o, k, 0);
-    else for (c = g_n[k].first; c >= 0; c = g_n[c].next) ser(&o, c, 1);
+    else {
+        for (c = g_n[k].first; c >= 0; c = g_n[c].next) ser(&o, c, 1);
+        if (g_ntpl && name_is(k, "template") && (c = tpl_frag_of(k)) >= 0) ser(&o, c, 1);    /* Lot 115 */
+    }
     return js_sb_finish(vm, &b);
 }
 
 static void set_inner_html(js_vm_t *vm, int k, uint32_t s) {
     int c;
+    if (name_is(k, "template") && (c = tpl_content(k)) >= 0) k = c;     /* Lot 115: the content takes it */
     remove_children(k);
     if (node_in_list(k, k_raw)) { set_text(vm, k, s); return; }
     c = g_nn;
@@ -1273,7 +1321,7 @@ static int class_count(js_vm_t *vm, int k) {
  * document are computed again after a DOM change, when read. ---- */
 
 enum { LD_NONE, LD_BLOCK, LD_INLINE, LD_ATOM };
-typedef struct { int32_t x, y, w, h; } dbox_t;
+typedef struct { int32_t x, y, w, h, cw, ch; } dbox_t;   /* Lot 115: cw, ch the padding box */
 static dbox_t g_box[WF_DOM_NODES];
 static uint32_t g_lay_mut;
 static int g_lay_valid, g_lay_doc_h;
@@ -1511,6 +1559,74 @@ static void lay_node(int k, lflow_t *f, int depth) {
     }
 }
 
+/* ---- Lot 115: layout values from the renderer (wf_jspage_set_layout).
+ * The document without scripts, cut at WF_JSLAY_NODES nodes, goes to the
+ * hook; its boxes replace the block model's for the elements they match
+ * (same tag, in document order, a short look-ahead on both sides for
+ * elements one side drops: head, title, implied ones). ---- */
+
+static wf_jslayout_fn g_lay_fn;
+static void *g_lay_ctx;
+static char g_lay_html[32 * 1024];
+static wf_jslay_box_t g_lbox[WF_JSLAY_NODES + 16];
+static uint8_t g_lay_eng[WF_DOM_NODES];     /* 1: g_box[k] came from the renderer */
+
+void wf_jspage_set_layout(wf_jslayout_fn fn, void *ctx) {
+    g_lay_fn = fn;
+    g_lay_ctx = ctx;
+}
+
+static int lay_tag_is(int k, const char *tag) {
+    int i, l = (int)g_n[k].name_len;
+    if (l > 11) l = 11;
+    for (i = 0; i < l; i++) if (lower(g_b[g_n[k].name + (uint32_t)i]) != tag[i]) return 0;
+    return tag[l] == 0;
+}
+
+static int lay_skipped(int k) {         /* not written into the layout copy */
+    int p;
+    for (p = k; p >= 0; p = g_n[p].parent)
+        if (g_n[p].type == DN_ELEM && (name_is(p, "script") || name_is(p, "noscript"))) return 1;
+    return 0;
+}
+
+static int lay_engine(void) {
+    dout_t o;
+    int nb, i, k, used = 0;
+    if (!g_lay_fn || g_rt.doc < 0 || g_rt.doc >= g_nn) return 0;
+    o.out = g_lay_html; o.n = 0; o.max = (int)sizeof(g_lay_html); o.vm = 0; o.sb = 0;
+    o.skip_scripts = 1; o.marks = 0; o.in_link = 0; o.budget = WF_JSLAY_NODES; o.quiet = 1;
+    ser(&o, g_rt.doc, 0);
+    if (o.n >= o.max) o.n = o.max - 1;
+    g_lay_html[o.n] = 0;
+    nb = g_lay_fn(g_lay_ctx, g_lay_html, o.n, WF_DOM_VIEW_W, WF_DOM_VIEW_H, g_lbox, WF_JSLAY_NODES + 16);
+    if (nb <= 0) return 0;
+    if (nb > WF_JSLAY_NODES + 16) nb = WF_JSLAY_NODES + 16;
+    k = walk_next(g_rt.doc, g_rt.doc);
+    for (i = 0; i < nb && k >= 0; i++) {
+        int c = k, look, found = -1;
+        for (look = 0; c >= 0 && look < 8; c = walk_next(c, g_rt.doc)) {
+            if (g_n[c].type != DN_ELEM || lay_skipped(c)) continue;
+            if (lay_tag_is(c, g_lbox[i].tag)) { found = c; break; }
+            look++;
+        }
+        if (found < 0) continue;        /* an element only the engine has (implied): skip it */
+        if (g_lbox[i].ok == 2) { k = walk_next(found, g_rt.doc); continue; }   /* the model's box stays */
+        if (g_lbox[i].ok) {
+            dbox_t *b = &g_box[found];
+            b->x = g_lbox[i].x; b->y = g_lbox[i].y; b->w = g_lbox[i].w; b->h = g_lbox[i].h;
+            b->cw = g_lbox[i].cw; b->ch = g_lbox[i].ch;
+        } else {
+            g_box[found].x = g_box[found].y = g_box[found].w = g_box[found].h = 0;
+            g_box[found].cw = g_box[found].ch = 0;
+        }
+        g_lay_eng[found] = 1;
+        used++;
+        k = walk_next(found, g_rt.doc);
+    }
+    return used;
+}
+
 static void layout_ensure(void) {
     lflow_t f;
     int c, i;
@@ -1524,6 +1640,14 @@ static void layout_ensure(void) {
         for (c = g_n[g_rt.doc].first; c >= 0; c = g_n[c].next) lay_node(c, &f, 1);
     if (f.cx > f.left || f.lh) lay_newline(&f);
     g_lay_doc_h = f.cy;
+    for (i = 0; i < g_nn; i++) { g_box[i].cw = g_box[i].w; g_box[i].ch = g_box[i].h; g_lay_eng[i] = 0; }
+    i = lay_engine();
+    if (g_rt.st) g_rt.st->layout_engine = i;
+    if (i > 0) {                        /* the page height from the renderer's boxes */
+        int k;
+        for (k = 0; k < g_nn; k++)
+            if (g_lay_eng[k] && g_box[k].y + g_box[k].h > g_lay_doc_h) g_lay_doc_h = g_box[k].y + g_box[k].h;
+    }
     g_lay_mut = g_mut;
     g_lay_valid = 1;
 }
@@ -1540,10 +1664,10 @@ static int layout_value(int k, int idx) {
     case K_offsetHeight: return b->h;
     case K_offsetTop: return b->y;
     case K_offsetLeft: return b->x;
-    case K_clientWidth: return html ? WF_DOM_VIEW_W : inl ? 0 : b->w;
-    case K_clientHeight: return html ? WF_DOM_VIEW_H : inl ? 0 : b->h;
-    case K_scrollWidth: return html ? WF_DOM_VIEW_W : inl ? 0 : b->w;
-    case K_scrollHeight: return html ? (g_lay_doc_h > WF_DOM_VIEW_H ? g_lay_doc_h : WF_DOM_VIEW_H) : inl ? 0 : b->h;
+    case K_clientWidth: return html ? WF_DOM_VIEW_W : inl ? 0 : b->cw;
+    case K_clientHeight: return html ? WF_DOM_VIEW_H : inl ? 0 : b->ch;
+    case K_scrollWidth: return html ? WF_DOM_VIEW_W : inl ? 0 : b->cw;
+    case K_scrollHeight: return html ? (g_lay_doc_h > WF_DOM_VIEW_H ? g_lay_doc_h : WF_DOM_VIEW_H) : inl ? 0 : b->ch;
     default: return 0;      /* scrollTop, scrollLeft: nothing scrolls in the pass */
     }
 }
@@ -1640,12 +1764,71 @@ static void select_set_value(js_vm_t *vm, int k, uint32_t s) {
 
 static int form_of(int k);
 
+/* Lot 115: the tabIndex of an element: the attribute when it is an
+ * integer, else 0 for the focusable controls and links, -1 otherwise */
+static int tab_index(int k) {
+    const char *v;
+    int vl, i = 0, neg = 0, x = 0;
+    if (attr_val(k, "tabindex", &v, &vl)) {
+        while (i < vl && is_space(v[i])) i++;
+        if (i < vl && (v[i] == '-' || v[i] == '+')) neg = v[i++] == '-';
+        if (i < vl && v[i] >= '0' && v[i] <= '9') {
+            while (i < vl && v[i] >= '0' && v[i] <= '9' && x < 100000) x = x * 10 + (v[i++] - '0');
+            return neg ? -x : x;
+        }
+    }
+    if (name_is(k, "button") || name_is(k, "input") || name_is(k, "select") || name_is(k, "textarea") ||
+        name_is(k, "iframe") || name_is(k, "summary") || ((name_is(k, "a") || name_is(k, "area")) && bool_attr(k, "href")) ||
+        bool_attr(k, "contenteditable"))
+        return 0;
+    return -1;
+}
+
+/* Lot 115: the listed controls of a form (or fieldset) in tree order */
+static int is_form_ctl(int c) {
+    static const char *const ctl[] = { "button", "fieldset", "input", "object", "output", "select", "textarea", 0 };
+    const char *v;
+    int vl, q;
+    for (q = 0; ctl[q] && !name_is(c, ctl[q]); q++) {}
+    if (!ctl[q]) return 0;
+    return !(q == 2 && attr_val(c, "type", &v, &vl) && span_eq_ci(v, vl, "image", 5));
+}
+
+/* the i-th control of form k, or (name != 0) the controls whose id or
+ * name is name: *count gets their number, the first is returned */
+static int form_ctl(js_vm_t *vm, int k, int i, uint32_t name, int *count) {
+    int c, n = 0, first = -1;
+    *count = 0;
+    for (c = walk_next(k, k); c >= 0; c = walk_next(c, k)) {
+        if (!is_form_ctl(c)) continue;
+        if (!name) {
+            if (n++ == i) return c;
+            continue;
+        }
+        {
+            int f1, f2;
+            uint32_t id = attr_get_js(vm, c, "id", &f1), nm = attr_get_js(vm, c, "name", &f2);
+            if ((f1 && js_str_eq(vm, id, name)) || (f2 && js_str_eq(vm, nm, name))) {
+                if (first < 0) first = c;
+                (*count)++;
+            }
+        }
+    }
+    if (!name) *count = n;
+    return first;
+}
+
 static int node_get(js_vm_t *vm, int k, uint32_t key, jv *out) {
     int idx = key_index(key), found, c;
     dnode_t *d = &g_n[k];
     if (idx < 0) {
         int i;
         if (d->type != DN_ELEM) return 0;
+        if (key == g_rt.reflect[12] && name_is(k, "template")) {      /* Lot 115: template.content */
+            *out = node_obj(vm, tpl_content(k));
+            dom_bound(vm);
+            return 1;
+        }
         for (i = 0; k_reflect[i]; i++) {
             if (g_rt.reflect[i] != key) continue;
             *out = jv_str(attr_get_js(vm, k, i == 13 ? "for" : k_reflect[i], &found));
@@ -1755,6 +1938,12 @@ static int node_get(js_vm_t *vm, int k, uint32_t key, jv *out) {
         *out = node_obj(vm, form_of(k));
         return 1;
     }
+    case K_attributes: if (d->type != DN_ELEM) return 0; *out = sub_obj(vm, k, HK_ATTRS, 0); return 1;
+    case K_elements:
+        if (!name_is(k, "form") && !name_is(k, "fieldset")) return 0;
+        *out = sub_obj(vm, k, HK_ELEMENTS, 0);
+        return 1;
+    case K_tabIndex: if (d->type != DN_ELEM) return 0; *out = jv_int(tab_index(k)); return 1;
     case K_activeElement: {
         int html, body;
         if (d->type != DN_DOC) return 0;
@@ -1913,10 +2102,74 @@ static int node_set(js_vm_t *vm, int k, uint32_t key, jv val) {
     case K_ownerDocument: case K_URL: case K_defaultView: case K_isConnected: case K_dataset:
     case K_offsetWidth: case K_offsetHeight: case K_clientWidth: case K_clientHeight: case K_offsetTop:
     case K_offsetLeft: case K_offsetParent: case K_scrollHeight: case K_scrollWidth: case K_currentScript:
-    case K_activeElement: case K_form:
+    case K_activeElement: case K_form: case K_attributes: case K_elements:
         return 1;     /* read-only: ignored as in sloppy-mode browsers */
+    case K_tabIndex: {      /* Lot 115: reflected as the tabindex attribute */
+        char b[12];
+        int32_t x;
+        int n = 0, neg;
+        uint32_t u;
+        if (d->type != DN_ELEM) return 0;
+        x = js_to_int32(vm, val);
+        if (vm->ctl) return 1;
+        neg = x < 0;
+        u = neg ? (uint32_t)(-(int64_t)x) : (uint32_t)x;
+        do { b[n++] = (char)('0' + u % 10); u /= 10; } while (u && n < 11);
+        if (neg) b[n++] = '-';
+        {
+            char r[12];
+            int q;
+            for (q = 0; q < n; q++) r[q] = b[n - 1 - q];
+            attr_set_raw(k, "tabindex", 8, r, n);
+        }
+        dom_bound(vm);
+        return 1;
+    }
     default: return 0;
     }
+}
+
+/* Lot 115: an Attr of el.attributes (a snapshot: name, value) */
+static jv attr_obj(js_vm_t *vm, int k, int a) {
+    uint32_t o = js_obj_new(vm, JS_CLASS_OBJECT, vm->p_object), nm;
+    char b[80];
+    int f, n = (int)g_a[a].name_len, i;
+    if (!o) return jv_undef();
+    if (n > (int)sizeof(b) - 1) n = (int)sizeof(b) - 1;
+    for (i = 0; i < n; i++) b[i] = g_b[g_a[a].name + (uint32_t)i];
+    b[n] = 0;
+    nm = js_str_new(vm, b, n);
+    js_define_c(vm, o, "name", jv_str(nm), P_DEFAULT);
+    js_define_c(vm, o, "localName", jv_str(nm), P_DEFAULT);
+    js_define_c(vm, o, "nodeName", jv_str(nm), P_DEFAULT);
+    js_define_c(vm, o, "value", jv_str(attr_get_js(vm, k, b, &f)), P_DEFAULT);
+    js_define_c(vm, o, "nodeType", jv_int(2), P_DEFAULT);
+    js_define_c(vm, o, "ownerElement", node_obj(vm, k), P_DEFAULT);
+    return jv_obj(o);
+}
+
+/* Lot 115: form.elements[name] for several controls (a radio group): an
+ * array of them with the value of the checked one (RadioNodeList) */
+static jv radio_list(js_vm_t *vm, int k, uint32_t name) {
+    uint32_t arr = js_array_new(vm, 4);
+    int c, f;
+    uint32_t val = vm->s_empty;
+    if (!arr) return jv_undef();
+    for (c = walk_next(k, k); c >= 0; c = walk_next(c, k)) {
+        int f1, f2;
+        uint32_t id, nm;
+        if (!is_form_ctl(c)) continue;
+        id = attr_get_js(vm, c, "id", &f1);
+        nm = attr_get_js(vm, c, "name", &f2);
+        if (!((f1 && js_str_eq(vm, id, name)) || (f2 && js_str_eq(vm, nm, name)))) continue;
+        js_array_push(vm, arr, node_obj(vm, c));
+        if (name_is(c, "input") && bool_attr(c, "checked")) {
+            uint32_t v = attr_get_js(vm, c, "value", &f);
+            val = f ? v : js_str_c(vm, "on");
+        }
+    }
+    js_define_c(vm, arr, "value", jv_str(val), P_DEFAULT);
+    return jv_obj(arr);
 }
 
 static int dom_get(js_vm_t *vm, jv obj, uint32_t key, jv *out) {
@@ -1973,6 +2226,43 @@ static int dom_get(js_vm_t *vm, jv obj, uint32_t key, jv *out) {
         *out = jv_undef();
         return 1;
     }
+    case HK_ATTRS: {
+        uint32_t idx;
+        int a, i = 0;
+        if (key == g_rt.key[K_length]) {
+            for (a = g_n[k].attr; a >= 0; a = g_a[a].next) i++;
+            *out = jv_int(i);
+            return 1;
+        }
+        if (js_str_index_key(vm, key, &idx)) {
+            for (a = g_n[k].attr; a >= 0 && (uint32_t)i < idx; a = g_a[a].next) i++;
+            *out = a >= 0 ? attr_obj(vm, k, a) : jv_undef();
+            return 1;
+        }
+        for (a = g_n[k].attr; a >= 0; a = g_a[a].next) {      /* attributes.id */
+            const js_str_t *ks = JSTR(vm, key);
+            uint32_t q;
+            if (g_a[a].name_len != ks->len) continue;
+            for (q = 0; q < ks->len && g_b[g_a[a].name + q] == ks->s[q]; q++) {}
+            if (q == ks->len) { *out = attr_obj(vm, k, a); return 1; }
+        }
+        return 0;
+    }
+    case HK_ELEMENTS: {
+        uint32_t idx;
+        int n, c;
+        if (key == g_rt.key[K_length]) { (void)form_ctl(vm, k, -1, 0, &n); *out = jv_int(n); return 1; }
+        if (js_str_index_key(vm, key, &idx)) {
+            c = idx < WF_DOM_NODES ? form_ctl(vm, k, (int)idx, 0, &n) : -1;
+            *out = c >= 0 ? node_obj(vm, c) : jv_undef();
+            return 1;
+        }
+        if (js_own_prop(vm, vm->p_object, key)) return 0;
+        c = form_ctl(vm, k, 0, key, &n);
+        if (c < 0) return 0;
+        *out = n == 1 ? node_obj(vm, c) : radio_list(vm, k, key);
+        return 1;
+    }
     default: return 0;
     }
 }
@@ -2012,6 +2302,19 @@ static int dom_set(js_vm_t *vm, jv obj, uint32_t key, jv val) {
     }
     default: return 0;
     }
+}
+
+/* Lot 115: delete el.dataset.x removes the data-x attribute */
+static int dom_del(js_vm_t *vm, jv obj, uint32_t key, int *ok) {
+    js_obj_t *o = JOBJ(vm, obj.a);
+    int k = (int)o->x0;
+    char b[72];
+    int n;
+    if (k < 0 || k >= g_nn || o->x1 != HK_DATASET) return 0;
+    n = dataset_attr(vm, key, b, (int)sizeof(b));
+    attr_remove(k, b, n);
+    *ok = 1;
+    return 1;
 }
 
 /* ---- node and document methods ---- */
@@ -2600,7 +2903,7 @@ static jv compile_handler(js_vm_t *vm, int k, const char *nm, int nl) {
         /* a syntax error aborts the parse; it only drops this handler
          * (an exhausted arena stays an abort) */
         int syn = vm->err[0] == 'S' && vm->err[1] == 'y' && vm->err[6] == 'E';
-        if (vm->ctl == CTL_ABORT && (!syn || js_mem_used(vm) + 65536u >= js_mem_size(vm))) return jv_undef();
+        if (vm->ctl == CTL_ABORT && (!syn || js_mem_free(vm) < 65536u)) return jv_undef();
         vm->ctl = CTL_NONE;
         logc(vm, "error: SyntaxError in the ");
         logc(vm, nm);
@@ -2648,11 +2951,12 @@ static int fire_handler(js_vm_t *vm, jv target, jv ev, uint32_t type) {
 }
 
 /* run the listeners of one target for ev; returns 1 when propagation stopped */
-static int fire_on(js_vm_t *vm, jv target, jv ev, uint32_t type) {
+static int fire_on(js_vm_t *vm, jv target, jv ev, uint32_t type, int phase) {
     uint32_t *lp = listeners_of(vm, target), i, len;
     int handler_first;
     const js_str_t *t = JSTR(vm, type);
     js_put(vm, ev, js_intern(vm, "currentTarget", 13), target);
+    if (!vm->ctl) js_put(vm, ev, js_intern(vm, "eventPhase", 10), jv_int(phase));     /* Lot 115: 2 at target, 3 bubbling */
     if (vm->ctl) return 1;
     handler_first = g_onload_first && target.t == JT_OBJ && target.a == vm->global && t->len == 4 && t->s[0] == 'l' &&
                     t->s[1] == 'o' && t->s[2] == 'a' && t->s[3] == 'd';
@@ -2693,19 +2997,21 @@ static jv dispatch_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic)
     js_put(vm, ev, js_intern(vm, "target", 6), thisv);
     bubbles = js_truthy(vm, js_get_c(vm, ev, "bubbles"));
     JCK(vm);
-    if (!fire_on(vm, thisv, ev, type) && bubbles) {
+    if (!fire_on(vm, thisv, ev, type, 2) && bubbles) {
         k = obj_node(vm, thisv);
         while (k >= 0 && !vm->ctl) {
             k = g_n[k].parent;
             if (k < 0) {   /* the document bubbles to window */
-                if (obj_node(vm, thisv) >= 0 && is_connected(obj_node(vm, thisv))) fire_on(vm, jv_obj(vm->global), ev, type);
+                if (obj_node(vm, thisv) >= 0 && is_connected(obj_node(vm, thisv))) fire_on(vm, jv_obj(vm->global), ev, type, 3);
                 break;
             }
-            if (fire_on(vm, node_obj(vm, k), ev, type)) break;
+            if (fire_on(vm, node_obj(vm, k), ev, type, 3)) break;
         }
     }
     JCK(vm);
     js_put(vm, ev, js_intern(vm, "currentTarget", 13), jv_null());
+    JCK(vm);
+    js_put(vm, ev, js_intern(vm, "eventPhase", 10), jv_int(0));
     return jv_bool(!js_truthy(vm, js_get_c(vm, ev, "defaultPrevented")));
 }
 
@@ -2719,9 +3025,46 @@ static uint32_t event_new(js_vm_t *vm, uint32_t type, int bubbles, int cancelabl
     js_define_c(vm, o, "cancelBubble", jv_bool(0), P_DEFAULT);
     js_define_c(vm, o, "target", jv_null(), P_DEFAULT);
     js_define_c(vm, o, "currentTarget", jv_null(), P_DEFAULT);
+    js_define_c(vm, o, "eventPhase", jv_int(0), P_DEFAULT);
     js_define_c(vm, o, "isTrusted", jv_bool(0), P_DEFAULT);
     js_define_c(vm, o, "timeStamp", jv_int(0), P_DEFAULT);
     return o;
+}
+
+/* Lot 115: the init dictionary fields of the UI event constructors
+ * (kind 0 KeyboardEvent, 1 MouseEvent, 2 InputEvent, 3 FocusEvent): a
+ * missing field takes the default of the specification */
+typedef struct { const char *name; uint8_t kinds, type; } ev_field_t;      /* type 0 bool, 1 int, 2 string, 3 any/null */
+static const ev_field_t k_ev_fields[] = {
+    { "key", 1, 2 }, { "code", 1, 2 }, { "keyCode", 1, 1 }, { "charCode", 1, 1 }, { "which", 1, 1 },
+    { "location", 1, 1 }, { "repeat", 1, 0 }, { "isComposing", 5, 0 },
+    { "altKey", 3, 0 }, { "ctrlKey", 3, 0 }, { "shiftKey", 3, 0 }, { "metaKey", 3, 0 },
+    { "clientX", 2, 1 }, { "clientY", 2, 1 }, { "screenX", 2, 1 }, { "screenY", 2, 1 }, { "pageX", 2, 1 },
+    { "pageY", 2, 1 }, { "offsetX", 2, 1 }, { "offsetY", 2, 1 }, { "button", 2, 1 }, { "buttons", 2, 1 },
+    { "relatedTarget", 10, 3 }, { "data", 4, 3 }, { "inputType", 4, 2 }, { "detail", 15, 1 }, { 0, 0, 0 }
+};
+
+static int event_init_fields(js_vm_t *vm, uint32_t o, int kind, jv init) {
+    int i;
+    if (kind < 0 || kind > 3) return 1;
+    if (g_rt.p_evk[kind]) JOBJ(vm, o)->proto = g_rt.p_evk[kind];
+    for (i = 0; k_ev_fields[i].name; i++) {
+        const ev_field_t *f = &k_ev_fields[i];
+        jv v = jv_undef();
+        if (!(f->kinds & (1u << kind))) continue;
+        if (jv_is_obj(init)) { v = js_get_c(vm, init, f->name); if (vm->ctl) return 0; }
+        if (f->type == 0) v = jv_bool(js_truthy(vm, v));
+        else if (f->type == 1) {
+            jf64 d = v.t == JT_UNDEF ? 0 : js_to_number(vm, v);
+            if (vm->ctl) return 0;
+            v = jv_int(jf_isnan(d) || jf_isinf(d) ? 0 : jf_to_i32(d));
+        } else if (f->type == 2) {
+            v = jv_str(v.t == JT_UNDEF ? vm->s_empty : js_to_string(vm, v));
+            if (vm->ctl) return 0;
+        } else if (v.t == JT_UNDEF) v = jv_null();
+        js_define_c(vm, o, f->name, v, P_DEFAULT);
+    }
+    return 1;
 }
 
 static jv event_ctor(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic) {
@@ -2742,8 +3085,9 @@ static jv event_ctor(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic) 
     if (magic) {     /* CustomEvent */
         jv d = jv_is_obj(JARG(1)) ? js_get_c(vm, argv[1], "detail") : jv_undef();
         JCK(vm);
-        js_define_c(vm, o, "detail", d.t == JT_UNDEF ? jv_null() : d, P_DEFAULT);
+        if (magic == 1) js_define_c(vm, o, "detail", d.t == JT_UNDEF ? jv_null() : d, P_DEFAULT);
     }
+    if (magic >= 2 && !event_init_fields(vm, o, magic - 2, JARG(1))) return jv_undef();
     if (vm->super_this) { JOBJ(vm, o)->proto = JOBJ(vm, vm->super_this)->proto; vm->super_this = 0; }
     return jv_obj(o);
 }
@@ -3021,6 +3365,7 @@ static uint32_t g_dispatch;
 static js_vm_t g_vm;
 
 static uint32_t plain_obj(js_vm_t *vm) { return js_obj_new(vm, JS_CLASS_OBJECT, vm->p_object); }
+static void dom_gc_roots(js_vm_t *vm, void *ctx);
 
 static int realm_setup(js_vm_t *vm, int doc, const char *url) {
     uint32_t g = vm->global, o, ctor;
@@ -3032,9 +3377,12 @@ static int realm_setup(js_vm_t *vm, int doc, const char *url) {
     g_rt.cookie = 0;
     g_rt.win_listeners = 0;
     g_rt.writing = 0;
+    for (i = 0; i < 4; i++) g_rt.p_evk[i] = 0;
     vm->host_get = dom_get;
     vm->host_set = dom_set;
+    vm->host_del = dom_del;
     vm->host_ctx = &g_rt;
+    js_gc_set_roots(vm, dom_gc_roots, 0);
 
     g_rt.p_node = plain_obj(vm);
     g_rt.p_style = plain_obj(vm);
@@ -3069,6 +3417,18 @@ static int realm_setup(js_vm_t *vm, int doc, const char *url) {
             js_define(vm, c2, vm->s_prototype, jv_obj(o), 0);
             js_define(vm, o, vm->s_constructor, jv_obj(c2), P_HIDDEN);
             js_define_c(vm, g, "CustomEvent", jv_obj(c2), P_HIDDEN);
+        }
+    }
+    {   /* Lot 115: the UI events, magic 2.. (event_init_fields) */
+        static const char *const ui[] = { "KeyboardEvent", "MouseEvent", "InputEvent", "FocusEvent", 0 };
+        for (i = 0; ui[i]; i++) {
+            uint32_t c3 = js_native_new(vm, ui[i], event_ctor, 1, (uint32_t)(2 + i)), po = plain_obj(vm);
+            if (!c3 || !po) return -1;
+            JOBJ(vm, po)->proto = g_p_event;
+            g_rt.p_evk[i] = po;
+            js_define(vm, c3, vm->s_prototype, jv_obj(po), 0);
+            js_define(vm, po, vm->s_constructor, jv_obj(c3), P_HIDDEN);
+            js_define_c(vm, g, ui[i], jv_obj(c3), P_HIDDEN);
         }
     }
 
@@ -3153,6 +3513,7 @@ static int realm_setup(js_vm_t *vm, int doc, const char *url) {
 /* ---- the page runner ---- */
 
 static int g_calls, g_alive, g_in_dyn;
+static int g_gc_stress, g_gc_poison;          /* Lot 115: wf_jspage_gc_debug */
 static int g_dyn[WF_DOM_DYN_SCRIPTS], g_ndyn;
 static int g_defer[WF_DOM_EXT_SCRIPTS], g_ndefer;
 static wf_jsfetch_fn g_fetch;
@@ -3222,7 +3583,40 @@ static void copy_err(wf_jspage_stats_t *st, const char *e) {
     st->first_err[i] = 0;
 }
 
-static int arena_full(js_vm_t *vm) { return js_mem_used(vm) + 65536u >= js_mem_size(vm); }
+static int arena_full(js_vm_t *vm) { return js_mem_free(vm) < 65536u; }
+
+/* Lot 115: the references the page keeps outside the arena (wf_jsgc.c
+ * calls this while it marks): the node objects and listener arrays, the
+ * runtime's prototypes and keys, the timers and the statics of the other
+ * page modules */
+static void dom_gc_roots(js_vm_t *vm, void *ctx) {
+    int k;
+    (void)ctx;
+    for (k = 0; k < g_nn; k++) {
+        js_gc_scan(vm, &g_n[k].obj, (uint32_t)sizeof(g_n[k].obj));
+        js_gc_scan(vm, &g_n[k].listeners, (uint32_t)sizeof(g_n[k].listeners));
+    }
+    js_gc_scan(vm, &g_rt, (uint32_t)sizeof(g_rt));
+    for (k = 0; k < WF_DOM_TIMERS; k++) if (g_t[k].active) js_gc_scan(vm, &g_t[k], (uint32_t)sizeof(g_t[k]));
+    js_gc_scan(vm, g_store, (uint32_t)sizeof(g_store));
+    js_gc_scan(vm, &g_p_event, (uint32_t)sizeof(g_p_event));
+    js_gc_scan(vm, &g_dispatch, (uint32_t)sizeof(g_dispatch));
+    js_api_gc_roots(vm);
+    js_net_gc_roots(vm);
+    js_hist_gc_roots(vm);
+}
+
+/* a collection when the realm is idle (no script on the stack, no
+ * reference in a C local of the caller) */
+static void page_idle(js_vm_t *vm) {
+    js_gc_idle(vm);
+    if (g_rt.st) {
+        js_gc_stats_t gs;
+        js_gc_stats(vm, &gs);
+        g_rt.st->gc_runs = gs.runs;
+        g_rt.st->gc_freed = gs.freed_total;
+    }
+}
 
 /* Lot 114: the Promise jobs queued by the last run; 1 when the pass must stop */
 static int drain(js_vm_t *vm, wf_jspage_stats_t *st) {
@@ -3331,6 +3725,10 @@ static int fire_event_ex(js_vm_t *vm, jv target, const char *type, int bubbles, 
         static const char *const mods[] = { "altKey", "ctrlKey", "shiftKey", "metaKey", 0 };
         int i;
         js_define_c(vm, ev, "isTrusted", jv_bool(1), P_DEFAULT);
+        if (ei->kind >= 1 && ei->kind <= 3) {     /* Lot 115: instanceof MouseEvent / KeyboardEvent / InputEvent */
+            static const int8_t pk[4] = { 0, 1, 0, 2 };
+            if (g_rt.p_evk[pk[ei->kind]]) JOBJ(vm, ev)->proto = g_rt.p_evk[pk[ei->kind]];
+        }
         for (i = 0; ei->kind != 3 && mods[i]; i++) js_define_c(vm, ev, mods[i], jv_bool(0), P_DEFAULT);
         if (ei->kind == 1) {
             js_define_c(vm, ev, "button", jv_int(0), P_DEFAULT);
@@ -3489,6 +3887,7 @@ static int run_dynamic(js_vm_t *vm, wf_jspage_stats_t *st) {
 static int run_scripts(js_vm_t *vm, int doc, wf_jspage_stats_t *st) {
     int k, i;
     while ((k = next_script(doc)) >= 0) {
+        page_idle(vm);
         g_n[k].inserted = 2;
         if (bool_attr(k, "src")) {
             st->external++;
@@ -3540,10 +3939,12 @@ static int run_load(js_vm_t *vm, int doc, wf_jspage_stats_t *st) {
     return fire_event(vm, jv_obj(vm->global), "load", 0, st);
 }
 
-static int run_timers(js_vm_t *vm, wf_jspage_stats_t *st) {
+/* may_gc: the caller keeps no reference in a C local (Lot 115) */
+static int run_timers(js_vm_t *vm, wf_jspage_stats_t *st, int may_gc) {
     for (;;) {
         int i, best = -1, rc;
         jv fn;
+        if (may_gc) page_idle(vm);
         for (i = 0; i < WF_DOM_TIMERS; i++) {
             if (!g_t[i].active) continue;
             if (best < 0 || g_t[i].due < g_t[best].due || (g_t[i].due == g_t[best].due && g_t[i].seq < g_t[best].seq)) best = i;
@@ -3632,6 +4033,8 @@ static int emit_page(js_vm_t *vm, char *out, int out_max, wf_jspage_stats_t *st)
     o.skip_scripts = 1;
     o.marks = 1;
     o.in_link = 0;
+    o.budget = -1;
+    o.quiet = 0;
     g_marks = 0;
     g_alive_marking = 1;
     ser(&o, g_rt.doc, 0);
@@ -3642,6 +4045,7 @@ static int emit_page(js_vm_t *vm, char *out, int out_max, wf_jspage_stats_t *st)
     for (i = 0, st->nodes = 0; i < g_nn; i++) if (is_connected(i)) st->nodes++;
     if (g_trunc) st->truncated = 1;
     st->mem = js_mem_used(vm);
+    st->mem_free = js_mem_free(vm);
     return o.n;
 }
 
@@ -3660,6 +4064,7 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
     for (i = 0; url && url[i] && i < (int)sizeof(g_url) - 1; i++) g_url[i] = url[i];
     g_url[i] = 0;
     if (js_init(vm, arena, arena_size) != 0) return -1;
+    js_gc_config(vm, g_gc_stress, g_gc_poison, 0);
     doc = dom_parse(html, n);
     if (doc < 0) return -1;
     g_rt.st = st;
@@ -3674,8 +4079,9 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
     if (realm_setup(vm, doc, url) != 0) { g_rt.st = 0; return -1; }
     if (js_net_init(vm) != 0 || js_api_init(vm, g_url) != 0 || js_hist_init(vm, g_url) != 0) { g_rt.st = 0; return -1; }
     set_ready("loading");
-    if (!body_onload(vm, doc, st) && !run_scripts(vm, doc, st) && !run_load(vm, doc, st)) run_timers(vm, st);
+    if (!body_onload(vm, doc, st) && !run_scripts(vm, doc, st) && !run_load(vm, doc, st)) run_timers(vm, st, 1);
     if (!st->scripts && !st->ext_ran && !st->dynamic) { g_rt.st = 0; return 0; }
+    page_idle(vm);
     r = emit_page(vm, out, out_max, st);
     g_rt.st = 0;
     g_alive = !arena_full(vm);
@@ -3685,6 +4091,13 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
 /* ---- events after load (Lot 114) ---- */
 
 int wf_jspage_alive(void) { return g_alive; }
+
+/* Lot 115: tests run the page realm with a collection at every idle
+ * point and freed memory poisoned (from the next wf_jspage_run on) */
+void wf_jspage_gc_debug(int stress, int poison) {
+    g_gc_stress = stress;
+    g_gc_poison = poison;
+}
 void wf_jspage_close(void) { g_alive = 0; }
 
 /* Lot 114: a control as the reader engine counts them (webeng_finput.inc:
@@ -4019,7 +4432,7 @@ static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_j
         mut0 = g_mut;
         g_dirty = k;
         stop = input_fire(vm, k, 0, "insertText", 0, st);
-        if (!stop) stop = run_timers(vm, st);
+        if (!stop) stop = run_timers(vm, st, 0);
         if (!stop) ev_note_value(vm, k, sent);
     } else if (al == 5 && span_eq_ci(act, 5, "check", 5)) {
         const char *v;
@@ -4050,7 +4463,7 @@ static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_j
             g_ev |= WF_JSEV_PREVENTED;
             mut0 = g_mut;
         } else if (!stop) stop = input_fire(vm, k, 0, "", 1, st);
-        if (!stop) stop = run_timers(vm, st);
+        if (!stop) stop = run_timers(vm, st, 0);
         if (!stop && bool_attr(k, "checked") != on) {
             g_ev_val[0] = bool_attr(k, "checked") ? '1' : '0';
             g_ev_val[1] = 0;
@@ -4065,7 +4478,7 @@ static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_j
         mut0 = g_mut;
         if (g_dirty == k) g_dirty = -1;
         stop = input_fire(vm, k, 0, "", 1, st);
-        if (!stop) stop = run_timers(vm, st);
+        if (!stop) stop = run_timers(vm, st, 0);
         if (!stop) ev_note_value(vm, k, sent);
     } else if ((al == 5 && span_eq_ci(act, 5, "focus", 5)) || (al == 4 && span_eq_ci(act, 4, "blur", 4))) {
         int on = act[0] == 'f' || act[0] == 'F';
@@ -4082,7 +4495,7 @@ static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_j
             stop = fire_event(vm, node_obj(vm, k), on ? "focus" : "blur", 0, st) ||
                    fire_event(vm, node_obj(vm, k), on ? "focusin" : "focusout", 1, st);
         }
-        if (!stop) stop = run_timers(vm, st);
+        if (!stop) stop = run_timers(vm, st, 0);
     } else if (al == 6 && span_eq_ci(act, 6, "submit", 6)) {
         int form = name_is(k, "form") ? k : form_of(k);
         mut0 = g_mut;
@@ -4090,7 +4503,7 @@ static int live_field(js_vm_t *vm, int k, const char *act, const char *arg, wf_j
         stop = field_change_due(vm, k, st);
         if (!stop) stop = fire_event_ex(vm, node_obj(vm, form), "submit", 1, 1, 0, &prevented, st);
         if (!stop && prevented) g_ev |= WF_JSEV_PREVENTED;
-        if (!stop) stop = run_timers(vm, st);
+        if (!stop) stop = run_timers(vm, st, 0);
     } else return -2;
     if (g_mut != mut0) g_ev |= WF_JSEV_DOM;
     return stop;
@@ -4109,13 +4522,16 @@ int wf_jspage_event(const char *type, const char *target, const char *arg, char 
     if (!g_alive) return -1;
     if (!type || !out || out_max <= 0) return -1;
     if (!st) st = &dummy;
+    if (arena_full(vm)) js_gc(vm);          /* Lot 115: reclaim before giving up */
     if (arena_full(vm)) return -3;
     k = find_target(target ? target : "");
     if (k < 0) return -2;
     vm->host_get = dom_get;
     vm->host_set = dom_set;
+    vm->host_del = dom_del;
     g_rt.st = st;
     g_calls = 0;
+    page_idle(vm);
     st->live_events++;
     tl = dlen(type);
     if (tl > 6 && span_eq_ci(type, 6, "field-", 6)) stop = live_field(vm, k, type + 6, arg, st);
@@ -4139,7 +4555,8 @@ int wf_jspage_event(const char *type, const char *target, const char *arg, char 
         return -2;
     }
     if (stop == -2) { g_rt.st = 0; return -2; }
-    if (!stop) (void)run_timers(vm, st);
+    if (!stop) (void)run_timers(vm, st, 1);
+    page_idle(vm);
     r = emit_page(vm, out, out_max, st);
     g_rt.st = 0;
     if (arena_full(vm)) g_alive = 0;

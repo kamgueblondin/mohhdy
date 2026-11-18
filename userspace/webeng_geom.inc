@@ -187,3 +187,19 @@ int we_geom_feed(const we_doc_t *d, const char *prefix, wf_geom_t *g) {
     }
     return g->n;
 }
+
+/* Lot 115: the padding box of element node (its border box without the
+ * borders: what clientWidth / clientHeight read in the page scripts,
+ * scroll bars are not drawn by the engine). 0, or -1 for a text node or
+ * a node out of range. Read only. */
+int we_client_box(const we_doc_t *d, int node, int *cw, int *ch) {
+    const we_node_t *n;
+    int w, h;
+    if (!d || node < 0 || node >= (int)d->nnodes || d->nodes[node].is_text) return -1;
+    n = &d->nodes[node];
+    w = n->w - box_edge(n, 1) - box_edge(n, 3);
+    h = n->h - box_edge(n, 0) - box_edge(n, 2);
+    if (cw) *cw = w > 0 ? w : 0;
+    if (ch) *ch = h > 0 ? h : 0;
+    return 0;
+}

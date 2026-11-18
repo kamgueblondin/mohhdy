@@ -7,7 +7,25 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
-### Lot 114 (18 November 2026, PR 272)
+### Lot 115 (18 November 2026, PR 273 in progress)
+
+US-031 partial, phase3_complete=false. The layout values page scripts
+read now come from the engine the GUI paints with (webeng.c) for the
+first 150 nodes of the page, instead of the Lot 114 block model. A QEMU
+page (`make qemu-lot115`, CI job lot115-js-layout) checks it. The
+JavaScript subset gains Symbol, the iterator protocol, class private
+members and static blocks, UTF-16 string indexes, and an arena
+collector (mark and sweep between runs) for the REPL and live pages,
+with WeakMap, WeakSet, WeakRef and FinalizationRegistry on top of it,
+Reflect, Proxy, async generators and for await. Fifteen real-page fixtures log in the guest what jsdom logs for them
+(test_lot115_compat.c), and window titles and desktop labels stay clear
+of the title buttons and the screen edge at every text scale
+(test_lot115_chrome.c).
+First gap
+for Lot 116: more of the page laid out by the engine. See
+docs/lot115_plan.md.
+
+### Lot 114 (18 November 2026, PR 272 merged)
 
 US-031 partial, phase3_complete=false. The JavaScript subset gains
 generators, async/await and Promise (REPL and pages). With `web-js on`

@@ -14,11 +14,23 @@
  * all, allSettled, any, race) and queueMicrotask; microtasks run when
  * the host calls js_run_jobs.
  *
- * What it is not: no async generators, for await, Proxy, Symbol, typed arrays, getters on arbitrary built-ins, labels on
- * blocks, with, eval, or tail calls. Strings are byte strings (UTF-8
- * bytes as they come; length counts bytes, not UTF-16 units). There is
- * no garbage collector: one realm lives in one caller-given arena and
- * an allocation past its end aborts the run (RangeError-like, not
+ * Lot 115 adds Symbol (Symbol.for, the well-known symbols iterator,
+ * hasInstance, toPrimitive and toStringTag honoured by the runtime), the
+ * iterator protocol for user objects (lazy for-of with return(), spread,
+ * destructuring that reads only what it needs), class private members
+ * (#x fields, methods, accessors, static ones, #x in o) and static
+ * blocks, and UTF-16 string semantics: strings stay UTF-8 bytes in the
+ * arena but length and every index count UTF-16 code units
+ * (wf_jsu16.c).
+ *
+ * What it is not: no async generators, for await, Proxy, typed arrays, getters on arbitrary built-ins, labels on
+ * blocks, with, eval, or tail calls. String comparison (<, sort) orders
+ * UTF-8 bytes, which differs from UTF-16 order only between astral
+ * characters and U+E000..U+FFFF; case mapping covers ASCII and the
+ * 2-byte letters whose two cases have the same length. One realm
+ * lives in one caller-given arena; wf_jsgc.c reclaims unreachable
+ * blocks between runs (mark and sweep, blocks never move) and an
+ * allocation past the end during a run aborts it (RangeError-like, not
  * catchable). A step budget and a call-depth limit stop runaway code
  * the same way. The interpreter runs on its own stack (js_vm_t.stack)
  * so the 64 KiB Ring 3 stack is not used by JavaScript recursion.
@@ -40,6 +52,9 @@ typedef jv (*js_native_fn)(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t m
  * JS_CLASS_HOST; return 1 when the hook handled the key */
 typedef int (*js_host_get_fn)(js_vm_t *vm, jv obj, uint32_t key, jv *out);
 typedef int (*js_host_set_fn)(js_vm_t *vm, jv obj, uint32_t key, jv val);
+/* Lot 115: delete obj[key] on a host object; 1 when handled (*ok gets
+ * the result of the delete operator) */
+typedef int (*js_host_del_fn)(js_vm_t *vm, jv obj, uint32_t key, int *ok);
 
 #define JS_OK        0
 #define JS_THROWN   -1      /* an exception nobody caught; vm->err has it */
@@ -73,6 +88,19 @@ uint32_t js_steps_used(const js_vm_t *vm);
  * resumptions, queueMicrotask callbacks) until the queue is empty.
  * JS_OK, JS_THROWN when a callback threw or a rejection was not handled
  * (vm->err has the first, the log has every one), JS_ABORTED on a bound. */
+/* Lot 115: arena reclaim (wf_jsgc.c). js_gc collects now (0 inside a
+ * running script); js_gc_idle collects when enough was allocated since
+ * the last run. Host roots: the callback calls js_gc_scan on every
+ * area outside the arena that holds references. */
+typedef void (*js_gc_roots_fn)(js_vm_t *vm, void *ctx);
+typedef struct { uint32_t runs, live, freed_last, freed_total, free_bytes, top, bitmap; } js_gc_stats_t;
+uint32_t js_gc(js_vm_t *vm);
+int js_gc_idle(js_vm_t *vm);
+void js_gc_scan(js_vm_t *vm, const void *p, uint32_t bytes);
+void js_gc_set_roots(js_vm_t *vm, js_gc_roots_fn fn, void *ctx);
+void js_gc_config(js_vm_t *vm, int stress, int poison, int off);
+void js_gc_stats(const js_vm_t *vm, js_gc_stats_t *st);
+uint32_t js_mem_free(const js_vm_t *vm);
 int  js_run_jobs(js_vm_t *vm);
 int  js_jobs_pending(const js_vm_t *vm);
 

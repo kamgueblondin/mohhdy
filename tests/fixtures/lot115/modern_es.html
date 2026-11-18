@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Dashboard</title></head>
+<body>
+<div id="out"></div>
+<script>
+const api = {
+  async user(id) { await null; return id === 1 ? { id, name: 'Ada', roles: ['admin', 'dev'], meta: null } : undefined; },
+  delay(ms, v) { return new Promise((r) => setTimeout(() => r(v), ms)); }
+};
+class Store {
+  #state = { items: [], filter: 'all' };
+  #subs = new Set();
+  static create(init) { const s = new Store(); s.set(init); return s; }
+  get state() { return structuredClone(this.#state); }
+  set(patch) { this.#state = { ...this.#state, ...patch }; this.#subs.forEach((f) => f(this.#state)); }
+  subscribe(f) { this.#subs.add(f); return () => this.#subs.delete(f); }
+}
+const seen = [];
+const store = Store.create({ items: [1, 2, 3] });
+const un = store.subscribe((s) => seen.push(s.items.length));
+store.set({ items: [...store.state.items, 4], filter: 'odd' });
+un();
+store.set({ items: [] });
+console.log(seen.join(), store.state.filter, store.state.items.length);
+const grouped = Object.groupBy ? 'native' : 'none';
+const nested = [1, [2, [3, [4]]]].flat(Infinity);
+const pairs = Object.fromEntries([['a', 1], ['b', 2]].map(([k, v]) => [k.toUpperCase(), v * 10]));
+console.log(nested.join(''), JSON.stringify(pairs), [3, 1, 2].toSorted?.().join('') ?? 'no toSorted', grouped.length > 0);
+(async () => {
+  const u = await api.user(1);
+  const missing = await api.user(2);
+  console.log(u?.name, u?.meta?.x ?? 'dflt', missing?.name, u.roles.includes('dev'), u.roles.at(-1));
+  const results = await Promise.allSettled([api.delay(20, 'slow'), Promise.reject(new Error('bad')), api.delay(5, 'fast')]);
+  console.log(results.map((r) => r.status === 'fulfilled' ? r.value : r.reason.message).join(','));
+  const first = await Promise.race([api.delay(30, 'tortoise'), api.delay(10, 'hare')]);
+  const any = await Promise.any([Promise.reject(1), api.delay(1, 'any-ok')]);
+  console.log(first, any);
+  document.getElementById('out').textContent = `${u.name} (${u.roles.length})`;
+  console.log(document.getElementById('out').textContent);
+})();
+</script>
+</body></html>

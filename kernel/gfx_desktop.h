@@ -122,6 +122,13 @@ void gfx_desktop_set_font_mode(int mode);
 int gfx_desktop_font_mode(void);
 int gfx_glyph_source_cell(int q);
 int gfx_desktop_text_q(void);
+/* Lot 115: a window title of maxc cells: *keep_bytes gets the bytes shown,
+ * returns 1 when the title was cut (it is then followed by "...") */
+int gfx_desktop_title_fit(const char *s, int maxc, int *keep_bytes);
+/* Lot 115: left edge of a desktop icon label px wide centred on cx, kept
+ * GFX_LABEL_MARGIN px inside a screen w wide */
+#define GFX_LABEL_MARGIN 4
+int gfx_desktop_label_x(int w, int cx, int px);
 void gfx_desktop_set_text_q(int q);
 void gfx_desktop_get_layout(const os_fb_scene_t *scene, int w, int h, gfx_desktop_layout_t *layout);
 void gfx_desktop_draw(const os_fb_scene_t *scene, uint32_t *fb, int w, int h);

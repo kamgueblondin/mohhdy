@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Store - Products</title>
+<script type="application/json" id="__CONFIG__">{"currency":"EUR","locale":"fr","products":[
+ {"id":101,"name":"Kettle","price":29.9,"tags":["kitchen"],"stock":4},
+ {"id":102,"name":"Lamp <LED>","price":15,"tags":["home","light"],"stock":0},
+ {"id":103,"name":"Mug \"XL\"","price":7.5,"tags":["kitchen"],"stock":12}]}</script>
+</head>
+<body>
+<ul id="list"></ul>
+<p id="summary"></p>
+<script>
+(function () {
+  var cfg = JSON.parse(document.getElementById('__CONFIG__').textContent);
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function money(n) { return n.toFixed(2).replace('.', ',') + ' ' + cfg.currency; }
+  var html = cfg.products.map(function (p) {
+    return '<li data-id="' + p.id + '" class="' + (p.stock ? 'in' : 'out') + '">' +
+      '<span class="name">' + esc(p.name) + '</span> <b>' + money(p.price) + '</b>' +
+      (p.stock ? '' : ' <em>sold out</em>') + '</li>';
+  }).join('');
+  var list = document.getElementById('list');
+  list.innerHTML = html;
+  var inStock = cfg.products.filter(function (p) { return p.stock > 0; });
+  var total = inStock.reduce(function (s, p) { return s + p.price * p.stock; }, 0);
+  document.getElementById('summary').textContent = inStock.length + ' in stock, value ' + money(total);
+  console.log(list.children.length, list.querySelector('.out .name').textContent, list.querySelectorAll('em').length);
+  console.log(document.getElementById('summary').textContent);
+  console.log(list.firstElementChild.outerHTML);
+  console.log(list.children[1].innerHTML);
+  var byTag = {};
+  cfg.products.forEach(function (p) { p.tags.forEach(function (t) { (byTag[t] = byTag[t] || []).push(p.id); }); });
+  console.log(JSON.stringify(byTag), Object.keys(byTag).sort().join('/'));
+})();
+</script>
+</body></html>

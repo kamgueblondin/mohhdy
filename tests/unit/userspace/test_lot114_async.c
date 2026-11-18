@@ -191,6 +191,31 @@ static const acase_t k_promise[] = {
     { 0, 0 }
 };
 
+
+/* Lot 115: every case again in one realm, a collection with freed
+ * memory poisoned after each (wf_jsgc.c): the results must not change */
+static void run_cases_shared(const acase_t *c) {
+    static char src[8192];
+    int i;
+    fresh();
+    js_gc_config(&g_vm, 1, 1, 0);
+    for (i = 0; c[i].src; i++) {
+        const char *got;
+        snprintf(src, sizeof(src), "{\n%s\n}", c[i].src);
+        got = run(src);
+        if (strcmp(got, c[i].want) != 0) printf("  shared case %d: %s\n    got  %s\n    want %s\n", i, c[i].src, got, c[i].want);
+        TEST_ASSERT_EQUAL_STRING(c[i].want, got);
+        TEST_ASSERT_TRUE(js_gc_idle(&g_vm));
+        TEST_ASSERT_EQUAL(0, js_gc_check(&g_vm));
+    }
+}
+
+static void test_shared_realm_reclaim(void) {
+    run_cases_shared(k_gen);
+    run_cases_shared(k_async);
+    run_cases_shared(k_promise);
+}
+
 static void test_l114_generators(void) { run_cases(k_gen); }
 static void test_l114_async(void) { run_cases(k_async); }
 static void test_l114_promise(void) { run_cases(k_promise); }
@@ -275,10 +300,12 @@ static void test_l114_bounds(void) {
 /* refused forms, with a SyntaxError that names them */
 static void test_l114_refused(void) {
     fresh();
-    TEST_ASSERT_NOT_NULL(strstr(run("async function* g(){}"), "async generators are not supported"));
-    TEST_ASSERT_NOT_NULL(strstr(run("async function f(){ for await (const x of y) {} }"), "for await is not supported"));
+    /* Lot 115 runs async generators and for await; what stays refused */
+    TEST_ASSERT_EQUAL_STRING("object", run("async function* g(){} console.log(typeof g())"));
+    TEST_ASSERT_NOT_NULL(strstr(run("function f(){ for await (const x of y) {} }"), "for await is only valid in async functions"));
     TEST_ASSERT_NOT_NULL(strstr(run("function f(){ await 1 }"), "await is only valid in async functions"));
-    TEST_ASSERT_NOT_NULL(strstr(run("class A { async *g(){} }"), "async generators"));
+    TEST_ASSERT_EQUAL_STRING("function", run("class A { async *g(){} } console.log(typeof new A().g().next)"));
+    TEST_ASSERT_NOT_NULL(strstr(run("async function f(){ for await (const x in y) {} }"), "for await needs of"));
     TEST_ASSERT_NOT_NULL(strstr(run("class A { async constructor(){} }"), "Class constructor may not be"));
     /* yield is an identifier outside generators (sloppy scripts) */
     TEST_ASSERT_EQUAL_STRING("3", run("var yield = 3; console.log(yield)"));
@@ -295,6 +322,7 @@ int main(void) {
     RUN_TEST(test_l114_across_runs);
     RUN_TEST(test_l114_bounds);
     RUN_TEST(test_l114_refused);
+    RUN_TEST(test_shared_realm_reclaim);
     unity_print_results();
     unity_cleanup();
     return unity_stats.tests_failed == 0 ? 0 : 1;

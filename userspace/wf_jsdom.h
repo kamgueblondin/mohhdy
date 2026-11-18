@@ -72,6 +72,10 @@ typedef struct {
     uint32_t mem;       /* arena bytes used */
     uint32_t steps;     /* interpreter steps, all runs */
     char first_err[160];
+    int layout_engine;  /* Lot 115: elements whose layout values came from the renderer (last layout) */
+    uint32_t gc_runs;   /* Lot 115: arena collections of the realm so far */
+    uint32_t gc_freed;  /* bytes they gave back */
+    uint32_t mem_free;  /* arena bytes free after the run (free lists and the top) */
 } wf_jspage_stats_t;
 
 /* run the inline scripts of html[0..n) against its DOM; the page as
@@ -104,8 +108,30 @@ typedef struct {
 typedef int (*wf_jsfetch_fn)(void *ctx, wf_jsreq_t *r);
 void wf_jspage_set_fetch(wf_jsfetch_fn fn, void *ctx);
 
+/* Lot 115: layout values from the renderer. The pass hands the hook the
+ * document serialized without scripts (at most WF_JSLAY_NODES element and
+ * text nodes: the rest is left out, closed tags kept) and the viewport;
+ * the hook lays it out (wf_jslayout.c: webeng, the engine the GUI paints
+ * with) and writes the border box of each element it laid out, in
+ * document order, into out (at most max). It returns the boxes written,
+ * or -1. The pass matches them to its elements by tag in document order
+ * and keeps its block model for the elements the engine did not lay out
+ * (past the node budget, or refused). No hook: the block model only. */
+#define WF_JSLAY_NODES 150
+typedef struct {
+    char tag[12];               /* lowercased, cut at 11 characters */
+    int x, y, w, h;             /* border box in page px */
+    int cw, ch;                 /* the padding box (clientWidth / clientHeight) */
+    unsigned char ok;           /* 1: a box, 0: no box (display:none), 2: the engine has no box
+                                 * for it (an inline element without painted text): keep the model */
+} wf_jslay_box_t;
+typedef int (*wf_jslayout_fn)(void *ctx, const char *html, int n, int vw, int vh, wf_jslay_box_t *out, int max);
+void wf_jspage_set_layout(wf_jslayout_fn fn, void *ctx);
+
 /* 1 while the realm of the last pass that ran scripts is alive (until the
  * next wf_jspage_run or wf_jspage_close) */
+/* Lot 115: test hook: collect at every idle point, poison freed memory */
+void wf_jspage_gc_debug(int stress, int poison);
 int wf_jspage_alive(void);
 void wf_jspage_close(void);
 /* an event after load: type "click", "key" (arg: a key name such as "a"

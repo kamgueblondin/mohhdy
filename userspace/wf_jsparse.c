@@ -5,7 +5,7 @@
  * stack is checked as well. */
 #include "wf_jsi.h"
 
-enum { TK_EOF = 0, TK_NUM, TK_STR, TK_TMPL, TK_IDENT, TK_OP, TK_REGEX, TK_ERR };
+enum { TK_EOF = 0, TK_NUM, TK_STR, TK_TMPL, TK_IDENT, TK_OP, TK_REGEX, TK_ERR, TK_PRIV /* Lot 115: #name */ };
 
 enum {
     KW_NONE = 0, KW_VAR, KW_LET, KW_CONST, KW_FUNCTION, KW_RETURN, KW_IF, KW_ELSE, KW_FOR, KW_WHILE, KW_DO,
@@ -62,6 +62,7 @@ typedef struct {
 } lexsave_t;
 
 #define PS_MAX_NEST 120
+#define PS_MAX_PRIV 96          /* Lot 115: private names in nested class bodies */
 
 typedef struct {
     js_vm_t *vm;
@@ -76,6 +77,15 @@ typedef struct {
     int fn_flags;               /* F_ARGS seen in the current function */
     int in_func, in_class;
     int in_gen, in_async;       /* Lot 114: yield / await are operators here */
+    /* Lot 115: private names. Each class body declares names (pdecl from
+     * its pbase); references (pref) not declared by the class that ends
+     * move out to the enclosing class; none may be left at the outermost */
+    int cdepth;
+    int npdecl, npref;
+    uint32_t pdecl[PS_MAX_PRIV];
+    uint8_t pkind[PS_MAX_PRIV];     /* 1 getter, 2 setter, 3 field or method; 4 static */
+    uint32_t pref[PS_MAX_PRIV];
+    uint32_t pref_line[PS_MAX_PRIV];
     char buf[1024];             /* string literal decoding */
 } ps_t;
 
@@ -263,7 +273,7 @@ static int sb_room(ps_t *p, sbuf_t *sb, int need) {
         char *nb;
         while (cap < sb->n + need + 1) cap *= 2;
         if (cap > (1 << 20)) { ps_error(p, "string literal too long"); return 0; }
-        r = js_alloc(p->vm, (uint32_t)cap);
+        r = js_alloc_k(p->vm, (uint32_t)cap, JK_LEAF);
         if (!r) { p->failed = 1; return 0; }
         nb = (char *)JPTR(p->vm, r);
         for (i = 0; i < sb->n; i++) nb[i] = sb->b[i];
@@ -295,14 +305,16 @@ static void lex_string(ps_t *p, int q) {
 /* template characters from p->pos up to '${' or '`' */
 static void lex_tmpl_chars(ps_t *p) {
     sbuf_t sb;
+    int rs = p->pos, re = -1, k, crs = 0;
     sb_init(p, &sb);
     p->t.type = TK_TMPL;
     p->t.tail = 0;
+    p->t.str2 = 0;
     while (p->pos < p->len) {
         int c = (uint8_t)p->s[p->pos];
         if (!sb_room(p, &sb, 8)) return;
-        if (c == '`') { p->pos++; p->t.tail = 1; break; }
-        if (c == '$' && p->pos + 1 < p->len && p->s[p->pos + 1] == '{') { p->pos += 2; break; }
+        if (c == '`') { re = p->pos; p->pos++; p->t.tail = 1; break; }
+        if (c == '$' && p->pos + 1 < p->len && p->s[p->pos + 1] == '{') { re = p->pos; p->pos += 2; break; }
         if (c == '\\') { p->pos++; sb.n = read_escape(p, sb.b, sb.n, sb.cap - 1); continue; }
         if (c == '\n') p->line++;
         if (c == '\r') { p->pos++; continue; }
@@ -311,6 +323,19 @@ static void lex_tmpl_chars(ps_t *p) {
         if (p->pos >= p->len) { ps_error(p, "Unterminated template literal"); return; }
     }
     p->t.str = js_str_new(p->vm, sb.b, sb.n);
+    /* Lot 115: the raw text (String.raw, strings.raw), kept only when it
+     * differs from the cooked one; a CR is dropped as in the cooked text */
+    if (re < 0) return;
+    for (k = rs; k < re; k++) if (p->s[k] == '\\' || p->s[k] == '\r') crs = 1;
+    if (crs) {
+        sbuf_t rb;
+        sb_init(p, &rb);
+        for (k = rs; k < re; k++) {
+            if (!sb_room(p, &rb, 2)) return;
+            if (p->s[k] != '\r') rb.b[rb.n++] = p->s[k];
+        }
+        p->t.str2 = js_str_new(p->vm, rb.b, rb.n);
+    }
 }
 
 static void lex_number(ps_t *p) {
@@ -443,8 +468,17 @@ static void next(ps_t *p) {
         lex_regex(p);
         p->last_sig = 0;
     } else if (c == '#') {
-        ps_error(p, "private class members (#name) are not supported by the guest");
-        return;
+        /* Lot 115: a private name #x, only inside a class body */
+        int st = p->pos;
+        if (p->pos + 1 >= p->len || !is_id_start((uint8_t)p->s[p->pos + 1]) || p->s[p->pos + 1] == '\\') {
+            ps_error(p, "Invalid or unexpected token '#'");
+            return;
+        }
+        p->pos++;
+        while (p->pos < p->len && is_id_char((uint8_t)p->s[p->pos])) p->pos++;
+        p->t.type = TK_PRIV;
+        p->t.str = js_intern(p->vm, p->s + st, p->pos - st);
+        p->last_sig = 0;
     } else {
         int k;
         for (k = 0; k_punct[k].s; k++) {
@@ -499,7 +533,7 @@ static void semi(ps_t *p) {
 /* ---- nodes ---- */
 
 uint32_t js_node_new(js_vm_t *vm, int k, uint32_t line) {
-    uint32_t r = js_alloc(vm, sizeof(js_node_t));
+    uint32_t r = js_alloc_k(vm, sizeof(js_node_t), JK_NODE);
     if (!r) return 0;
     JNODE(vm, r)->k = (uint8_t)k;
     JNODE(vm, r)->line = line;
@@ -524,6 +558,20 @@ static uint32_t mk2(ps_t *p, int k, int op, uint32_t a, uint32_t b) {
 #define N(r) JNODE(p->vm, (r))
 
 typedef struct { uint32_t head, tail; } list_t;
+/* Lot 115: obj.#x, obj?.#x and #x in obj */
+static uint32_t priv_ref(ps_t *p) {
+    uint32_t n;
+    if (p->cdepth == 0) { ps_error(p, "Private field must be declared in an enclosing class"); return 0; }
+    if (p->npref >= PS_MAX_PRIV) { ps_error(p, "too many private name uses in one class for the guest"); return 0; }
+    p->pref[p->npref] = p->t.str;
+    p->pref_line[p->npref] = p->t.line;
+    p->npref++;
+    n = mk(p, N_PRIVNAME);
+    if (n) N(n)->a = p->t.str;
+    next(p);
+    return n;
+}
+
 static void list_add(ps_t *p, list_t *l, uint32_t n) {
     if (!n) return;
     if (!l->head) l->head = n; else N(l->tail)->next = n;
@@ -664,6 +712,7 @@ static uint32_t parse_template(ps_t *p) {
         int tail = p->t.tail;
         if (!s) return 0;
         N(s)->a = p->t.str;
+        N(s)->b = p->t.str2;          /* Lot 115: raw text, 0 when the same */
         list_add(p, &parts, s);
         if (tail) { next(p); break; }
         next(p);
@@ -738,11 +787,11 @@ static uint32_t parse_object(ps_t *p) {
                 !is_op(p, OP_ASSIGN)) {
                 if (kw == KW_ASYNC) {   /* Lot 114: async name() {} */
                     if (p->t.nl) { ps_error(p, "Unexpected token in object literal"); return 0; }
-                    if (is_op(p, OP_MUL)) { ps_error(p, "async generators are not supported by the guest"); return 0; }
+                    int star = accept(p, OP_MUL);    /* Lot 115: async *name() {} */
                     N(pr)->a = parse_prop_key(p, &computed);
                     if (computed) N(pr)->fl |= F_COMPUTED;
                     N(pr)->fl |= F_METHOD;
-                    N(pr)->b = parse_function_k(p, 0, 1, FK_ASYNC);
+                    N(pr)->b = parse_function_k(p, 0, 1, star ? (FK_ASYNC | FK_GEN) : FK_ASYNC);
                     list_add(p, &l, pr);
                     if (!is_op(p, OP_RBRACE)) expect(p, OP_COMMA, ",");
                     continue;
@@ -834,6 +883,14 @@ static uint32_t parse_primary(ps_t *p) {
         return n;
     case TK_TMPL:
         return parse_template(p);
+    case TK_PRIV: {                     /* Lot 115: #x in obj (the brand check) */
+        lexsave_t sv;
+        lex_save(p, &sv);
+        next(p);
+        if (!is_kw(p, KW_IN)) { ps_error(p, "Unexpected private name (only #x in obj stands alone)"); return 0; }
+        lex_restore(p, &sv);
+        return priv_ref(p);
+    }
     case TK_REGEX:
         n = mk(p, N_REGEX);
         if (n) { N(n)->a = p->t.str; N(n)->b = p->t.str2; }
@@ -912,6 +969,12 @@ static uint32_t parse_chain(ps_t *p, uint32_t e, int no_call) {
         if (is_op(p, OP_DOT)) {
             uint32_t m;
             next(p);
+            if (p->t.type == TK_PRIV) {         /* Lot 115: obj.#x */
+                uint32_t pn = priv_ref(p);
+                if (!pn) return 0;
+                e = mk2(p, N_INDEX, 0, e, pn);
+                continue;
+            }
             if (p->t.type != TK_IDENT) { ps_error(p, "Unexpected token after . (name expected)"); return 0; }
             m = mk2(p, N_MEMBER, 0, e, js_intern_str(p->vm, p->t.str));
             next(p);
@@ -936,6 +999,11 @@ static uint32_t parse_chain(ps_t *p, uint32_t e, int no_call) {
                 e = mk2(p, N_MEMBER, 0, e, js_intern_str(p->vm, p->t.str));
                 if (e) N(e)->fl |= F_OPT;
                 next(p);
+            } else if (p->t.type == TK_PRIV) {   /* Lot 115: obj?.#x */
+                uint32_t pn = priv_ref(p);
+                if (!pn) return 0;
+                e = mk2(p, N_INDEX, 0, e, pn);
+                if (e) N(e)->fl |= F_OPT;
             } else { ps_error(p, "Unexpected token after ?."); return 0; }
         } else if (is_op(p, OP_LBRACK)) {
             uint32_t ix;
@@ -1046,6 +1114,10 @@ static uint32_t parse_unary(ps_t *p) {
         next(p);
         e = parse_unary(p);
         p->nest--;
+        if (op == OP_DELETE && e && N(e)->k == N_INDEX && N(e)->b && N(N(e)->b)->k == N_PRIVNAME) {
+            ps_error(p, "Private fields can not be deleted");
+            return 0;
+        }
         if (op != OP_TYPEOF && op != OP_DELETE && op != OP_VOID && is_op(p, OP_EXP)) {
             ps_error(p, "Unary operator used immediately before exponentiation expression");
             return 0;
@@ -1314,7 +1386,6 @@ static uint32_t parse_function_k(ps_t *p, int is_decl, int is_method, int kind) 
     } else {
         N(fn)->fl |= F_METHOD;
     }
-    if ((kind & FK_GEN) && (kind & FK_ASYNC)) { ps_error(p, "async generators are not supported by the guest"); return 0; }
     N(fn)->op = (uint8_t)kind;
     p->vhead = p->vtail = 0;
     p->fn_flags = 0;
@@ -1344,6 +1415,75 @@ static uint32_t parse_function_k(ps_t *p, int is_decl, int is_method, int kind) 
     return fn;
 }
 
+/* Lot 115: a private name declared by the class body being parsed; a
+ * getter and a setter may share a name, nothing else may repeat */
+static void priv_declare(ps_t *p, uint32_t name, int kind, int base) {
+    int i;
+    if (name == js_intern(p->vm, "#constructor", 12)) { ps_error(p, "Classes may not have a private field named '#constructor'"); return; }
+    for (i = base; i < p->npdecl; i++) {
+        if (p->pdecl[i] != name) continue;
+        if ((p->pkind[i] & 3) != 3 && (kind & 3) != 3 && (p->pkind[i] & 3) != (kind & 3) &&
+            (p->pkind[i] & 4) == (kind & 4)) {
+            p->pkind[i] = (uint8_t)(p->pkind[i] | (kind & 3));
+            return;
+        }
+        ps_error(p, "Identifier has already been declared (private name)");
+        return;
+    }
+    if (p->npdecl >= PS_MAX_PRIV) { ps_error(p, "too many private names for the guest"); return; }
+    p->pdecl[p->npdecl] = name;
+    p->pkind[p->npdecl] = (uint8_t)kind;
+    p->npdecl++;
+}
+
+/* at the end of a class body: uses it declares are settled, the others
+ * go to the enclosing class (an error at the outermost one) */
+static void priv_settle(ps_t *p, int dbase, int rbase) {
+    int i, j, keep = rbase;
+    for (i = rbase; i < p->npref; i++) {
+        int found = 0;
+        for (j = dbase; j < p->npdecl; j++) if (p->pdecl[j] == p->pref[i]) { found = 1; break; }
+        if (found) continue;
+        if (p->cdepth == 0) {
+            p->t.line = p->pref_line[i];
+            ps_error(p, "Private field must be declared in an enclosing class");
+            return;
+        }
+        p->pref[keep] = p->pref[i];
+        p->pref_line[keep] = p->pref_line[i];
+        keep++;
+    }
+    p->npref = keep;
+    p->npdecl = dbase;
+}
+
+/* static { ... }: a method with no parameters the class calls once */
+static uint32_t parse_static_block(ps_t *p) {
+    uint32_t fn = mk(p, N_FUNC), saved_vh = p->vhead, saved_vt = p->vtail;
+    int saved_flags = p->fn_flags, saved_in = p->in_func, saved_gen = p->in_gen, saved_async = p->in_async;
+    list_t body = { 0, 0 };
+    if (!fn) return 0;
+    N(fn)->fl |= F_METHOD;
+    p->vhead = p->vtail = 0;
+    p->fn_flags = 0;
+    p->in_func = 1;
+    p->in_gen = 0;
+    p->in_async = 0;
+    expect(p, OP_LBRACE, "{");
+    while (!is_op(p, OP_RBRACE) && p->t.type != TK_EOF && !p->failed) list_add(p, &body, parse_statement(p));
+    expect(p, OP_RBRACE, "}");
+    N(fn)->c = body.head;
+    N(fn)->d = p->vhead;
+    N(fn)->fl |= (uint16_t)(p->fn_flags & F_ARGS);
+    p->vhead = saved_vh;
+    p->vtail = saved_vt;
+    p->fn_flags = saved_flags;
+    p->in_func = saved_in;
+    p->in_gen = saved_gen;
+    p->in_async = saved_async;
+    return fn;
+}
+
 static uint32_t parse_class(ps_t *p, int is_decl) {
     uint32_t c = mk(p, N_CLASS);
     list_t members = { 0, 0 };
@@ -1358,9 +1498,12 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
     }
     expect(p, OP_LBRACE, "{");
     p->in_class = 1;
+    {
+    int dbase = p->npdecl, rbase = p->npref;
+    p->cdepth++;
     while (!is_op(p, OP_RBRACE) && p->t.type != TK_EOF && !p->failed) {
         uint32_t m;
-        int is_static = 0, flags = 0, computed = 0, kind = 0;
+        int is_static = 0, flags = 0, computed = 0, kind = 0, priv = 0;
         uint32_t key;
         if (accept(p, OP_SEMI)) continue;
         if (is_kw(p, KW_STATIC)) {
@@ -1369,7 +1512,17 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
             next(p);
             if (is_op(p, OP_LPAREN) || is_op(p, OP_ASSIGN)) lex_restore(p, &sv);
             else is_static = 1;
-            if (is_static && is_op(p, OP_LBRACE)) { ps_error(p, "static blocks are not supported by the guest"); return 0; }
+            if (is_static && is_op(p, OP_LBRACE)) {    /* Lot 115: static { } */
+                uint32_t fn = parse_static_block(p);
+                if (!fn) return 0;
+                m = mk(p, N_FIELD);
+                if (!m) return 0;
+                N(m)->op = MK_SBLOCK;
+                N(m)->b = fn;
+                N(m)->fl = F_STATIC;
+                list_add(p, &members, m);
+                continue;
+            }
         }
         if (is_op(p, OP_MUL)) {             /* Lot 114: *name() {} */
             next(p);
@@ -1379,8 +1532,8 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
             lex_save(p, &sv);
             next(p);
             if (!is_op(p, OP_LPAREN) && !is_op(p, OP_ASSIGN) && !is_op(p, OP_SEMI) && !is_op(p, OP_RBRACE) && !p->t.nl) {
-                if (is_op(p, OP_MUL)) { ps_error(p, "async generators are not supported by the guest"); return 0; }
                 kind = FK_ASYNC;
+                if (accept(p, OP_MUL)) kind |= FK_GEN;     /* Lot 115: async *name() {} */
             } else {
                 lex_restore(p, &sv);
             }
@@ -1394,13 +1547,20 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
                 flags = kw == KW_GET ? F_GETTER : F_SETTER;
             else lex_restore(p, &sv);
         }
-        key = parse_prop_key(p, &computed);
+        if (p->t.type == TK_PRIV) {         /* Lot 115: #x */
+            key = p->t.str;
+            priv = 1;
+            next(p);
+            priv_declare(p, key, (flags == F_GETTER ? 1 : flags == F_SETTER ? 2 : 3) | (is_static ? 4 : 0), dbase);
+        } else {
+            key = parse_prop_key(p, &computed);
+        }
         if (p->failed) return 0;
         if (kind && (flags || !is_op(p, OP_LPAREN))) { ps_error(p, "Unexpected token in class body"); return 0; }
         if (is_op(p, OP_LPAREN)) {
             uint32_t fn = parse_function_k(p, 0, 1, kind);
             if (!fn) return 0;
-            if (!computed && !is_static && !flags && key == js_intern(p->vm, "constructor", 11)) {
+            if (!priv && !computed && !is_static && !flags && key == js_intern(p->vm, "constructor", 11)) {
                 if (kind) { ps_error(p, "Class constructor may not be a generator or async method"); return 0; }
                 N(fn)->fl |= F_CTOR;
                 if (N(c)->b) N(fn)->fl |= F_DERIVED;
@@ -1411,12 +1571,15 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
             if (!m) return 0;
             N(m)->a = key;
             N(m)->b = fn;
+            N(m)->op = (uint8_t)(priv ? MK_PRIVATE : MK_PUBLIC);
             N(m)->fl = (uint16_t)(flags | (is_static ? F_STATIC : 0) | (computed ? F_COMPUTED : 0));
         } else {
             /* a field: name [= initializer]; */
+            if (flags) { ps_error(p, "Unexpected token in class body (accessor without a body)"); return 0; }
             m = mk(p, N_FIELD);
             if (!m) return 0;
             N(m)->a = key;
+            N(m)->op = (uint8_t)(priv ? MK_PRIVATE : MK_PUBLIC);
             N(m)->fl = (uint16_t)((is_static ? F_STATIC : 0) | (computed ? F_COMPUTED : 0));
             if (accept(p, OP_ASSIGN)) {
                 /* the initializer runs as a method body (this = the instance) */
@@ -1435,6 +1598,9 @@ static uint32_t parse_class(ps_t *p, int is_decl) {
             semi(p);
         }
         list_add(p, &members, m);
+    }
+    p->cdepth--;
+    if (!p->failed) priv_settle(p, dbase, rbase);
     }
     expect(p, OP_RBRACE, "}");
     p->in_class = saved_class;
@@ -1498,10 +1664,14 @@ static uint32_t parse_block_body(ps_t *p, uint32_t blk) {
 
 static uint32_t parse_for(ps_t *p) {
     uint32_t n = mk(p, N_FOR), init = 0;
-    int decl_kw = 0;
+    int decl_kw = 0, is_await = 0;
     if (!n) return 0;
     next(p);
-    if (is_kw(p, KW_AWAIT)) { ps_error(p, "for await is not supported by the guest"); return 0; }
+    if (is_kw(p, KW_AWAIT)) {           /* Lot 115: for await (x of it) */
+        if (!p->in_async) { ps_error(p, "for await is only valid in async functions"); return 0; }
+        next(p);
+        is_await = 1;
+    }
     expect(p, OP_LPAREN, "(");
     if (is_op(p, OP_SEMI)) {
         init = 0;
@@ -1514,7 +1684,9 @@ static uint32_t parse_for(ps_t *p) {
     if (p->failed) return 0;
     if (is_kw(p, KW_OF) || is_kw(p, KW_IN)) {
         int of = is_kw(p, KW_OF);
+        if (is_await && !of) { ps_error(p, "for await needs of"); return 0; }
         N(n)->k = (uint8_t)(of ? N_FOROF : N_FORIN);
+        N(n)->op = (uint8_t)is_await;
         next(p);
         if (!decl_kw && init) {
             if (N(init)->k == N_ARRAY || N(init)->k == N_OBJECT) init = to_pattern(p, init);
@@ -1529,6 +1701,7 @@ static uint32_t parse_for(ps_t *p) {
         N(n)->c = parse_statement(p);
         return n;
     }
+    if (is_await) { ps_error(p, "for await needs of"); return 0; }
     N(n)->a = init;
     expect(p, OP_SEMI, ";");
     if (!is_op(p, OP_SEMI)) N(n)->b = parse_expr(p, 0);
@@ -1631,6 +1804,7 @@ static uint32_t parse_statement(ps_t *p) {
         case KW_RETURN:
             if (!p->in_func) { ps_error(p, "Illegal return statement"); return 0; }
             n = mk(p, N_RETURN);
+            if (n && p->in_gen && p->in_async) N(n)->op = 1;     /* Lot 115: return awaits in an async generator */
             next(p);
             if (!is_op(p, OP_SEMI) && !is_op(p, OP_RBRACE) && p->t.type != TK_EOF && !p->t.nl && n) N(n)->a = parse_expr(p, 0);
             semi(p);

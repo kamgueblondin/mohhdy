@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Editor</title></head>
+<body>
+<h1 id="t">Hello, World: Caf&eacute; &amp; Cr&egrave;me Br&ucirc;l&eacute;e!</h1>
+<script>
+function slugify(s) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+const title = document.getElementById('t').textContent;
+console.log(title.length, slugify('Hello World 2026'), slugify('  Tea & Biscuits  '));
+const re = /(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})/u;
+const m = '2026-11-18'.match(re);
+console.log(m.groups.year, m.groups.month, m.index, '2026-11-18'.replace(re, '$<day>/$<month>/$<year>'));
+const words = 'the quick brown fox jumps over the lazy dog the end'.split(' ');
+const freq = words.reduce((acc, w) => (acc[w] = (acc[w] || 0) + 1, acc), {});
+const top = Object.entries(freq).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 3);
+console.log(top.map(([w, c]) => `${w}=${c}`).join(' '));
+console.log('a-b_c d'.split(/[-_ ]/).map((s, i) => i ? s[0].toUpperCase() + s.slice(1) : s).join(''));
+console.log([...'x1y22z333'.matchAll(/\d+/g)].map((r) => r[0] + '@' + r.index).join(' '));
+console.log('one two three'.replaceAll('t', 'T'), 'abc'.at(-1), ' pad '.trim().padEnd(6, '.') + '|');
+const tpl = (strings, ...vals) => strings.raw.map((s, i) => s + (i < vals.length ? `[${vals[i]}]` : '')).join('');
+console.log(tpl`a${1}b${'two'}c`, String.raw`x\ny`, encodeURIComponent('a b&c=d/e'), escape === undefined);
+console.log(escape(title.toUpperCase().slice(14)), title.split(' ').length, title.indexOf('&'));
+</script>
+</body></html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Wiki</title></head>
+<body>
+<div id="toc"></div>
+<article id="art">
+  <h2 id="a">Origins</h2><p>Para <a href="#b">see B</a>.</p>
+  <h2 id="b">Growth</h2><p>Text</p><h3 id="b1">Early</h3><p>More</p>
+  <h2 id="c">Today</h2><!-- note --><p class="last">End</p>
+</article>
+<script>
+var art = document.getElementById('art');
+var heads = art.querySelectorAll('h2, h3');
+var toc = document.getElementById('toc');
+var ul = document.createElement('ul');
+for (var i = 0; i < heads.length; i++) {
+  var h = heads[i], li = document.createElement('li'), a = document.createElement('a');
+  a.href = '#' + h.id;
+  a.textContent = h.textContent;
+  li.className = 'lvl-' + h.tagName.charAt(1);
+  li.appendChild(a);
+  ul.appendChild(li);
+}
+toc.appendChild(ul);
+console.log(ul.childNodes.length, ul.querySelector('.lvl-3 a').getAttribute('href'), toc.innerHTML.length > 50);
+var p = art.querySelector('p.last');
+var prev = p.previousSibling, kinds = [];
+while (prev && kinds.length < 3) { kinds.push(prev.nodeType); prev = prev.previousSibling; }
+console.log(kinds.join(','), p.previousElementSibling.id, p.parentNode === art, art.contains(p), toc.contains(p));
+var texts = [];
+for (var n = art.firstChild; n; n = n.nextSibling) if (n.nodeType === 8) texts.push(n.nodeValue.trim());
+console.log(texts.join('|'), art.childElementCount, art.children[0].tagName, art.lastElementChild.className);
+var link = art.querySelector('a[href^="#"]');
+console.log(link.getAttribute('href'), document.getElementById(link.getAttribute('href').slice(1)).textContent);
+var clone = art.querySelector('h2').cloneNode(true);
+clone.id = 'a2';
+art.insertBefore(clone, art.firstChild);
+art.replaceChild(document.createTextNode('X'), art.querySelector('#c'));
+console.log(art.firstChild.id, art.querySelectorAll('h2').length, art.textContent.replace(/\s+/g, ' ').trim().slice(0, 40));
+var attrs = [];
+var img = document.createElement('img');
+img.setAttribute('alt', 'logo'); img.setAttribute('data-src', '/l.png'); img.removeAttribute('alt');
+for (var k = 0; k < img.attributes.length; k++) attrs.push(img.attributes[k].name + '=' + img.attributes[k].value);
+console.log(attrs.join(' '), img.hasAttribute('alt'), img.outerHTML, document.title, document.documentElement.tagName);
+</script>
+</body></html>

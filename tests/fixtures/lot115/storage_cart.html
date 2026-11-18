@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Cart</title></head>
+<body>
+<ul id="cart"></ul><p id="total"></p>
+<script>
+const CART_KEY = 'cart:v1';
+const Cart = {
+  load() {
+    try { return JSON.parse(localStorage.getItem(CART_KEY)) || { lines: [] }; } catch (e) { return { lines: [], error: e.name }; }
+  },
+  save(c) { localStorage.setItem(CART_KEY, JSON.stringify(c)); },
+  add(c, sku, price, qty = 1) {
+    const line = c.lines.find((l) => l.sku === sku);
+    if (line) line.qty += qty; else c.lines.push({ sku, price, qty });
+    return c;
+  },
+  total(c) { return c.lines.reduce((s, l) => s + Math.round(l.price * 100) * l.qty, 0) / 100; }
+};
+localStorage.setItem(CART_KEY, '{broken');
+let cart = Cart.load();
+console.log('broken', cart.lines.length, cart.error);
+cart = { lines: [] };
+Cart.add(cart, 'tea', 3.2); Cart.add(cart, 'cup', 9.99, 2); Cart.add(cart, 'tea', 3.2, 2);
+Cart.save(cart);
+const again = Cart.load();
+console.log(again.lines.map((l) => `${l.sku}x${l.qty}`).join(' '), Cart.total(again), localStorage.length >= 1);
+sessionStorage.setItem('step', '2');
+sessionStorage.setItem('step', String(Number(sessionStorage.getItem('step')) + 1));
+console.log(sessionStorage.getItem('step'), sessionStorage.getItem('nope'), typeof localStorage.key(0));
+const ul = document.getElementById('cart');
+again.lines.forEach((l) => {
+  const li = document.createElement('li');
+  li.dataset.sku = l.sku;
+  li.append(`${l.sku} `, Object.assign(document.createElement('b'), { textContent: (l.price * l.qty).toFixed(2) }));
+  ul.append(li);
+});
+document.getElementById('total').textContent = `Total: ${Cart.total(again).toFixed(2)}`;
+console.log(ul.innerHTML);
+console.log(document.getElementById('total').textContent, ul.querySelector('[data-sku=cup] b').textContent);
+localStorage.removeItem(CART_KEY);
+console.log(localStorage.getItem(CART_KEY), Cart.load().lines.length);
+</script>
+</body></html>

@@ -34,6 +34,8 @@
 /* the constructors and localStorage/sessionStorage on the global object;
  * page_url gives the storage origin. 0 or -1. */
 int js_api_init(js_vm_t *vm, const char *page_url);
+/* Lot 115: the arena references this module keeps in statics (wf_jsgc.c) */
+void js_api_gc_roots(js_vm_t *vm);
 
 /* a fetch or XMLHttpRequest body: a URLSearchParams (urlencoded) or a
  * FormData (multipart) as its string and content type; 1 when body was

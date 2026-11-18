@@ -974,6 +974,46 @@ LOT113_PAGES = {
 # function reading a layout value, a cross-origin fetch the guest refuses,
 # and click, key and input listeners reached after load through
 # "web-js click|key|input" (tests/scripts/test_qemu_lot114.py)
+# Lot 115 (US-031): layout values from the renderer: a box with padding and
+# border, a flex row of two fixed-width items, read by the page script
+# (tests/scripts/test_qemu_lot115.py); /lot115/compat/NAME.html serves the
+# compatibility fixture tests/fixtures/lot115/NAME.html
+LOT115_FILES = {
+    "/lot115/layout.html": ("text/html; charset=utf-8",
+        "<!doctype html><html><head><title>Lot 115 layout</title><style>"
+        "#b { width: 200px; height: 50px; padding: 10px; border: 2px solid #c00 }"
+        " .row { display: flex; justify-content: flex-start } .row div { width: 100px; height: 20px }</style></head><body>"
+        "<div id=\"b\">box115</div><div class=\"row\"><div id=\"r1\">r1</div><div id=\"r2\">r2</div></div>"
+        "<p id=\"o\">layout115 wait</p><script>\n"
+        "var b = document.getElementById('b'), r2 = document.getElementById('r2');\n"
+        "document.getElementById('o').textContent = 'layout115 ' + b.offsetWidth + 'x' + b.offsetHeight +\n"
+        "  ' c' + b.clientWidth + ' r2 ' + (r2.offsetLeft - b.offsetLeft) + ' ' + r2.offsetWidth;\n"
+        "</script><p>fin115</p></body></html>"),
+    # Lot 115: Symbol, the iterator protocol, private members, UTF-16
+    # strings, WeakMap, WeakRef, Reflect and Proxy in a page script (node prints
+    # the same line for the script)
+    "/lot115/lang.html": ("text/html; charset=utf-8",
+        "<!doctype html><html><head><title>Lot 115 lang</title></head><body>"
+        "<p id=\"o\">lang115 wait</p><script>\n"
+        "class Store { #items = []; static #made = 0; constructor() { Store.#made++ }\n"
+        "  add(x) { this.#items.push(x); return this } *[Symbol.iterator]() { yield* this.#items }\n"
+        "  static made() { return Store.#made } static is(o) { return #items in o } }\n"
+        "var st = new Store().add('a').add('b'); var parts = [...st];\n"
+        "var word = 'caf\\u00e9 \\u{1F600}';\n"
+        "var tag = Symbol('t'); var o = {}; o[tag] = 1;\n"
+        "document.getElementById('o').textContent = 'lang115 ' + parts.join('') + ' ' + Store.made() + ' ' +\n"
+        "  Store.is(st) + ' u16 ' + word.length + ' ' + word.charCodeAt(5).toString(16) + ' sym ' +\n"
+        "  Object.keys(o).length + ' ' + typeof tag;\n"
+        "var wm = new WeakMap([[st, 'w']]), wr = new WeakRef(st);\n"
+        "document.getElementById('o').textContent += ' weak ' + wm.get(st) + ' ' + (wr.deref() === st) + ' ' +\n"
+        "  Reflect.ownKeys(o).length + ' ' + Reflect.defineProperty(Object.freeze({}), 'x', { value: 1 }) +\n"
+        "  ' px ' + new Proxy({}, { get: function (t, k) { return k.length } }).abcd;\n"
+        "async function* feed() { yield 'x'; await null; yield* ['y'] }\n"
+        "(async function () { var s = ''; for await (var v of feed()) s += v;\n"
+        "  document.getElementById('o').textContent += ' ag ' + s })();\n"
+        "</script><p>end115</p></body></html>"),
+}
+
 LOT114_FILES = {
     "/lot114/app.html": ("text/html; charset=utf-8",
         "<!doctype html><html><head><title>Lot 114 js</title>"
@@ -1270,6 +1310,19 @@ class H(http.server.BaseHTTPRequestHandler):
         if p in LOT113_PAGES:
             self._send(200, LOT113_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
+        if p in LOT115_FILES:
+            ct, body = LOT115_FILES[p]
+            self._send(200, body.encode("utf-8"), ct)
+            return True
+        m = re.fullmatch(r"/lot115/compat/([a-z_]+)\.html", p)
+        if m:
+            # Lot 115: the real-page compatibility fixtures, served as they
+            # are in the repository (tests/fixtures/lot115)
+            f = os.path.join(_ROOT, "tests", "fixtures", "lot115", m.group(1) + ".html")
+            if os.path.isfile(f):
+                with open(f, "rb") as fh:
+                    self._send(200, fh.read(), "text/html; charset=utf-8")
+                return True
         if p in LOT114_FILES:
             ct, body = LOT114_FILES[p]
             self._send(200, body.encode("utf-8"), ct)

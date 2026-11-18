@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Search</title></head>
+<body>
+<form id="f"><input name="q" value="red shoes"><select name="sort"><option value="price">price</option><option value="new" selected>new</option></select></form>
+<p id="state"></p>
+<script>
+function readState(href) {
+  const u = new URL(href);
+  return { q: u.searchParams.get('q') || '', page: Number(u.searchParams.get('page') || 1), tags: u.searchParams.getAll('tag') };
+}
+function writeState(st) {
+  const p = new URLSearchParams();
+  if (st.q) p.set('q', st.q);
+  if (st.page > 1) p.set('page', String(st.page));
+  st.tags.forEach((t) => p.append('tag', t));
+  return '?' + p.toString();
+}
+const base = 'https://shop.example/search?q=blue+hat&tag=a&tag=b%20c&page=3#results';
+const st = readState(base);
+console.log(st.q, st.page, st.tags.join('|'), new URL(base).hash, new URL(base).pathname);
+st.page = 1; st.tags.push('x&y');
+console.log(writeState(st));
+const fd = new FormData(document.getElementById('f'));
+const qs = new URLSearchParams(fd).toString();
+console.log(qs, new URLSearchParams('a=1&b=2&a=3').getAll('a').join(','));
+const rel = new URL('../img/p.png?x=1', 'https://cdn.example/a/b/c.html');
+console.log(rel.href, rel.origin, rel.search);
+const sp = new URLSearchParams({ z: '1', a: '2', m: '3' });
+sp.sort(); sp.delete('m');
+console.log(sp.toString(), sp.has('z'), [...sp.keys()].join(''));
+document.getElementById('state').textContent = JSON.stringify(st);
+console.log(document.getElementById('state').textContent);
+</script>
+</body></html>

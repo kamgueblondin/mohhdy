@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Gallery</title></head>
+<body>
+<div class="gallery">
+  <img class="lazy" data-src="/img/1.jpg" alt="one" src="data:,">
+  <img class="lazy" data-src="/img/2.jpg" data-srcset="/img/2.jpg 1x, /img/2@2x.jpg 2x" alt="two" src="data:,">
+  <img src="/img/static.jpg" alt="static">
+  <picture><source data-srcset="/img/3.webp" type="image/webp"><img class="lazy" data-src="/img/3.jpg" alt="three"></picture>
+</div>
+<script>
+(function () {
+  var lazy = [].slice.call(document.querySelectorAll('img.lazy'));
+  function load(img) {
+    if (img.dataset.srcset) img.srcset = img.dataset.srcset;
+    img.src = img.dataset.src;
+    var pic = img.parentNode;
+    if (pic && pic.tagName === 'PICTURE') {
+      [].forEach.call(pic.querySelectorAll('source[data-srcset]'), function (s) {
+        s.setAttribute('srcset', s.getAttribute('data-srcset'));
+        s.removeAttribute('data-srcset');
+      });
+    }
+    img.classList.remove('lazy');
+    img.classList.add('loaded');
+    delete img.dataset.src;
+  }
+  var mode;
+  if ('IntersectionObserver' in window && typeof IntersectionObserver === 'function') {
+    mode = 'io';
+    lazy.forEach(load);
+  } else {
+    mode = 'fallback';
+    lazy.forEach(load);
+  }
+  window.__lazy = { mode: mode, count: lazy.length };
+})();
+var imgs = document.querySelectorAll('.gallery img');
+console.log(window.__lazy.count, document.querySelectorAll('.lazy').length, document.querySelectorAll('.loaded').length);
+console.log(Array.prototype.map.call(imgs, function (i) { return i.getAttribute('src'); }).join(' '));
+console.log(imgs[1].getAttribute('srcset'), imgs[0].hasAttribute('data-src'), imgs[0].dataset.src);
+console.log(document.querySelector('source').getAttribute('srcset'), document.querySelector('source').outerHTML);
+console.log(imgs[3].alt, imgs[2].className === '', imgs[0].getAttribute('class'));
+</script>
+</body></html>

@@ -43,18 +43,7 @@ void js_abort(js_vm_t *vm, const char *msg) {
     vm->ctl = CTL_ABORT;
 }
 
-uint32_t js_alloc(js_vm_t *vm, uint32_t n) {
-    uint32_t r, i;
-    n = (n + 3u) & ~3u;
-    if (n > vm->limit || vm->top > vm->limit - n) {
-        js_abort(vm, "RangeError: out of memory (the realm's arena is full)");
-        return 0;
-    }
-    r = vm->top;
-    vm->top += n;
-    for (i = 0; i < n; i++) vm->mem[r + i] = 0;
-    return r;
-}
+/* js_alloc and js_alloc_k: wf_jsgc.c (Lot 115) */
 
 /* ---- strings ---- */
 
@@ -70,7 +59,7 @@ uint32_t js_str_new(js_vm_t *vm, const char *s, int len) {
     js_str_t *p;
     int i;
     if (len < 0) len = 0;
-    r = js_alloc(vm, (uint32_t)(12 + len + 1));
+    r = js_alloc_k(vm, (uint32_t)(12 + len + 1), JK_LEAF);
     if (!r) return vm->s_empty;
     p = JSTR(vm, r);
     p->len = (uint32_t)len;
@@ -86,8 +75,13 @@ uint32_t js_str_cat(js_vm_t *vm, uint32_t a, uint32_t b) {
     uint32_t r, i, la, lb;
     if (pa->len == 0) return b;
     if (pb->len == 0) return a;
+    if ((uint8_t)pb->s[0] == 0xED) {          /* Lot 115: a high + a low surrogate half join */
+        uint32_t j = js_u16_join(vm, a, b);
+        if (j) return j;
+        pa = JSTR(vm, a); pb = JSTR(vm, b);
+    }
     la = pa->len; lb = pb->len;
-    r = js_alloc(vm, 12 + la + lb + 1);
+    r = js_alloc_k(vm, 12 + la + lb + 1, JK_LEAF);
     if (!r) return vm->s_empty;
     p = JSTR(vm, r);
     pa = JSTR(vm, a); pb = JSTR(vm, b);
@@ -130,7 +124,7 @@ static uint32_t intern_lookup(js_vm_t *vm, const char *s, int len, uint32_t h, i
         if (vm->ctl == CTL_ABORT) return vm->s_empty;
     }
     JSTR(vm, existing)->hash = h;
-    JSTR(vm, existing)->interned = 1;
+    JSTR(vm, existing)->interned = 1;     /* the cached UTF-16 bits are dropped (recomputed) */
     tab = (uint32_t *)JPTR(vm, vm->itab);
     tab[i] = existing;
     vm->icount++;
@@ -147,7 +141,7 @@ uint32_t js_intern_find(js_vm_t *vm, const char *s, int len) {
 
 uint32_t js_intern_str(js_vm_t *vm, uint32_t r) {
     js_str_t *p = JSTR(vm, r);
-    if (p->interned) return r;
+    if ((p->interned & JS_STR_KIND_MASK) == 1u) return r;
     return intern_lookup(vm, p->s, (int)p->len, str_hash(vm, r), 1, r);
 }
 
@@ -155,7 +149,7 @@ int js_str_eq(js_vm_t *vm, uint32_t a, uint32_t b) {
     js_str_t *pa, *pb;
     if (a == b) return 1;
     pa = JSTR(vm, a); pb = JSTR(vm, b);
-    if (pa->interned && pb->interned) return 0;
+    if ((pa->interned & JS_STR_KIND_MASK) && (pb->interned & JS_STR_KIND_MASK)) return 0;
     return pa->len == pb->len && bytes_eq(pa->s, pb->s, (int)pa->len);
 }
 
@@ -177,7 +171,7 @@ uint32_t js_str_sub(js_vm_t *vm, uint32_t r, int from, int to) {
     if (from == 0 && to == (int)p->len) return r;
     if (to <= from) return vm->s_empty;
     {
-        uint32_t n = js_alloc(vm, (uint32_t)(12 + (to - from) + 1));
+        uint32_t n = js_alloc_k(vm, (uint32_t)(12 + (to - from) + 1), JK_LEAF);
         js_str_t *q;
         int i;
         if (!n) return vm->s_empty;
@@ -193,6 +187,7 @@ uint32_t js_str_sub(js_vm_t *vm, uint32_t r, int from, int to) {
 int js_str_index_key(js_vm_t *vm, uint32_t key, uint32_t *idx) {
     js_str_t *p = JSTR(vm, key);
     uint32_t v = 0, i;
+    if ((p->interned & JS_STR_KIND_MASK) >= JS_SYM_PUBLIC) return 0;   /* Lot 115: Symbol("1") is not an index */
     if (p->len == 0 || p->len > 10) return 0;
     if (p->s[0] == '0' && p->len > 1) return 0;
     for (i = 0; i < p->len; i++) {
@@ -224,7 +219,7 @@ uint32_t js_key_of_index(js_vm_t *vm, uint32_t idx) {
 /* ---- objects ---- */
 
 uint32_t js_obj_new(js_vm_t *vm, int cls, uint32_t proto) {
-    uint32_t r = js_alloc(vm, sizeof(js_obj_t));
+    uint32_t r = js_alloc_k(vm, sizeof(js_obj_t), JK_OBJ);
     js_obj_t *o;
     if (!r) return 0;
     o = JOBJ(vm, r);
@@ -238,7 +233,7 @@ uint32_t js_array_new(js_vm_t *vm, uint32_t cap) {
     uint32_t r = js_obj_new(vm, JS_CLASS_ARRAY, vm->p_array);
     if (!r) return 0;
     if (cap) {
-        uint32_t a = js_alloc(vm, cap * (uint32_t)sizeof(jv));
+        uint32_t a = js_alloc_k(vm, cap * (uint32_t)sizeof(jv), JK_JVS);
         if (!a) return r;
         JOBJ(vm, r)->arr = a;
         JOBJ(vm, r)->acap = cap;
@@ -259,7 +254,7 @@ static int array_reserve(js_vm_t *vm, uint32_t arr, uint32_t need) {
     }
     cap = o->acap ? o->acap * 2 : 4;
     while (cap < need) cap *= 2;
-    a = js_alloc(vm, cap * (uint32_t)sizeof(jv));
+    a = js_alloc_k(vm, cap * (uint32_t)sizeof(jv), JK_JVS);
     if (!a) return 0;
     o = JOBJ(vm, arr);
     src = (jv *)JPTR(vm, o->arr);
@@ -328,7 +323,7 @@ int js_define(js_vm_t *vm, uint32_t obj, uint32_t key, jv v, uint32_t flags) {
         uint32_t cap = o->pcap ? (uint32_t)o->pcap * 2u : 4u, r, i;
         js_prop_t *src, *dst;
         if (cap > 60000u) { js_throw_err(vm, JE_RANGE, "too many properties on one object"); return 0; }
-        r = js_alloc(vm, cap * (uint32_t)sizeof(js_prop_t));
+        r = js_alloc_k(vm, cap * (uint32_t)sizeof(js_prop_t), JK_PROPS);
         if (!r) return 0;
         o = JOBJ(vm, obj);
         src = (js_prop_t *)JPTR(vm, o->props);
@@ -412,7 +407,8 @@ int js_is_callable(js_vm_t *vm, jv v) {
     int c;
     if (v.t != JT_OBJ) return 0;
     c = JOBJ(vm, v.a)->cls;
-    return c == JS_CLASS_FUNC || c == JS_CLASS_NATIVE || c == JS_CLASS_BOUND;
+    return c == JS_CLASS_FUNC || c == JS_CLASS_NATIVE || c == JS_CLASS_BOUND ||
+           (c == JS_CLASS_PROXY && (JOBJ(vm, v.a)->x2 & 1u));
 }
 
 int js_is_array(js_vm_t *vm, jv v) {
@@ -463,7 +459,7 @@ int js_truthy(js_vm_t *vm, jv v) {
     case JT_INT: return v.a != 0;
     case JT_NUM: { jf64 n = jv_f64(v); return !jf_isnan(n) && !jf_iszero(n); }
     case JT_STR: return JSTR(vm, v.a)->len != 0;
-    case JT_OBJ: return 1;
+    case JT_OBJ: case JT_SYM: return 1;
     default: return 0;
     }
 }
@@ -508,10 +504,13 @@ jf64 js_to_number(js_vm_t *vm, jv v) {
     case JT_INT: case JT_NUM: return jv_f64(v);
     case JT_STR: return js_str_to_num(vm, v.a);
     case JT_OBJ: {
-        jv p = js_to_primitive(vm, v, 0);
+        jv p = js_to_primitive(vm, v, 2);
         if (vm->ctl) return JF_NAN;
         return js_to_number(vm, p);
     }
+    case JT_SYM:
+        js_throw_err(vm, JE_TYPE, "Cannot convert a Symbol value to a number");
+        return JF_NAN;
     default: return JF_NAN;
     }
 }
@@ -568,6 +567,9 @@ uint32_t js_to_string(js_vm_t *vm, jv v) {
         if (vm->ctl) return vm->s_empty;
         return js_to_string(vm, p);
     }
+    case JT_SYM:
+        js_throw_err(vm, JE_TYPE, "Cannot convert a Symbol value to a string");
+        return vm->s_empty;
     default: return vm->s_empty;
     }
 }
@@ -575,15 +577,40 @@ uint32_t js_to_string(js_vm_t *vm, jv v) {
 uint32_t js_to_key(js_vm_t *vm, jv v) {
     uint32_t s;
     if (v.t == JT_INT && (int32_t)v.a >= 0) return js_key_of_index(vm, v.a);
+    if (v.t == JT_SYM) return v.a;                  /* Lot 115: a symbol is its own key */
+    if (v.t == JT_OBJ) {
+        jv p = js_to_primitive(vm, v, 1);
+        if (vm->ctl) return vm->s_empty;
+        if (p.t == JT_SYM) return p.a;
+        v = p;
+    }
     s = js_to_string(vm, v);
     if (vm->ctl) return vm->s_empty;
     return js_intern_str(vm, s);
 }
 
+/* hint_string: 0 "default", 1 "string", 2 "number" (Lot 115: the hint
+ * reaches a [Symbol.toPrimitive] method; without one, 2 behaves as 0) */
 jv js_to_primitive(js_vm_t *vm, jv v, int hint_string) {
     uint32_t names[2];
     int i;
     if (v.t != JT_OBJ) return v;
+    if (vm->sym_to_primitive) {
+        jv f = js_get(vm, v, vm->sym_to_primitive);
+        if (vm->ctl) return jv_undef();
+        if (!jv_is_nullish(f)) {
+            jv hint, r;
+            static const char *const hn[3] = { "default", "string", "number" };
+            const char *h = hn[hint_string < 0 || hint_string > 2 ? 0 : hint_string];
+            if (!js_is_callable(vm, f)) return js_throw_err(vm, JE_TYPE, "Symbol.toPrimitive is not a function");
+            hint = jv_str(js_intern(vm, h, cslen(h)));
+            r = js_call(vm, f, v, &hint, 1);
+            if (vm->ctl) return jv_undef();
+            if (r.t == JT_OBJ) return js_throw_err(vm, JE_TYPE, "Cannot convert object to primitive value");
+            return r;
+        }
+    }
+    if (hint_string == 2) hint_string = 0;
     if (JOBJ(vm, v.a)->cls == JS_CLASS_DATE && hint_string != 0) hint_string = 1;
     names[0] = hint_string ? vm->s_toString : vm->s_valueOf;
     names[1] = hint_string ? vm->s_valueOf : vm->s_toString;
@@ -609,6 +636,7 @@ uint32_t js_to_object(js_vm_t *vm, jv v) {
         return 0;
     case JT_BOOL: o = js_obj_new(vm, JS_CLASS_BOOLEAN, vm->p_boolean); break;
     case JT_STR: o = js_obj_new(vm, JS_CLASS_STRING, vm->p_string); break;
+    case JT_SYM: o = js_obj_new(vm, JS_CLASS_SYMBOL, vm->p_symbol); break;
     default: o = js_obj_new(vm, JS_CLASS_NUMBER, vm->p_number); break;
     }
     if (!o) return 0;
@@ -628,7 +656,7 @@ int js_strict_eq(js_vm_t *vm, jv a, jv b) {
     case JT_UNDEF: case JT_NULL: return 1;
     case JT_BOOL: return a.a == b.a;
     case JT_STR: return js_str_eq(vm, a.a, b.a);
-    case JT_OBJ: return a.a == b.a;
+    case JT_OBJ: case JT_SYM: return a.a == b.a;
     default: return 0;
     }
 }
@@ -665,6 +693,7 @@ uint32_t js_typeof(js_vm_t *vm, jv v) {
     case JT_BOOL: s = "boolean"; break;
     case JT_INT: case JT_NUM: s = "number"; break;
     case JT_STR: s = "string"; break;
+    case JT_SYM: s = "symbol"; break;
     default: s = js_is_callable(vm, v) ? "function" : "object"; break;
     }
     return js_intern(vm, s, cslen(s));
@@ -717,11 +746,11 @@ static jv fn_prototype(js_vm_t *vm, uint32_t f) {
 }
 
 static jv string_own(js_vm_t *vm, uint32_t s, uint32_t key, int *found) {
-    js_str_t *p = JSTR(vm, s);
     uint32_t idx;
     *found = 1;
-    if (key == vm->s_length) return jv_int((int32_t)p->len);
-    if (js_str_index_key(vm, key, &idx) && idx < p->len) return jv_str(js_str_sub(vm, s, (int)idx, (int)idx + 1));
+    /* Lot 115: length and indexes count UTF-16 units */
+    if (key == vm->s_length) return jv_int((int32_t)js_str_units(vm, s));
+    if (js_str_index_key(vm, key, &idx) && idx < js_str_units(vm, s)) return jv_str(js_u16_sub(vm, s, idx, idx + 1));
     *found = 0;
     return jv_undef();
 }
@@ -732,7 +761,19 @@ jv js_get(js_vm_t *vm, jv objv, uint32_t key) { return js_get_recv(vm, objv, key
 jv js_get_recv(js_vm_t *vm, jv objv, uint32_t key, jv recv) {
     uint32_t o;
     int depth = 0, found;
+    if (JS_KEY_IS_PRIV(vm, key)) {           /* Lot 115: #x reads the object's own member only */
+        js_prop_t *pp;
+        if (objv.t != JT_OBJ) return js_priv_missing(vm, key, 0);
+        pp = js_own_prop(vm, objv.a, key);
+        if (!pp) return js_priv_missing(vm, key, 0);
+        if (pp->flags & P_ACCESSOR) {
+            if (!pp->v.a) return js_throw_err2(vm, JE_TYPE, "", js_str_cat(vm, key, js_str_c(vm, " was defined without a getter")));
+            return js_call(vm, jv_obj(pp->v.a), recv, 0, 0);
+        }
+        return pp->v;
+    }
     switch (objv.t) {
+    case JT_SYM: o = vm->p_symbol; break;
     case JT_STR: {
         jv r = string_own(vm, objv.a, key, &found);
         if (found) return r;
@@ -751,8 +792,10 @@ jv js_get_recv(js_vm_t *vm, jv objv, uint32_t key, jv recv) {
         js_prop_t *p;
         uint32_t idx;
         switch (ob->cls) {
+        case JS_CLASS_PROXY:      /* Lot 115: also a proxy on the prototype chain */
+            return js_proxy_get(vm, o, key, recv);
         case JS_CLASS_HOST:
-            if (vm->host_get) {
+            if (vm->host_get && !JS_KEY_IS_SYM(vm, key)) {
                 jv out;
                 if (vm->host_get(vm, jv_obj(o), key, &out)) return out;
                 if (vm->ctl) return jv_undef();
@@ -809,8 +852,7 @@ jv js_get_v(js_vm_t *vm, jv obj, jv key) {
                 if (v.t != JT_EMPTY) return v;
             }
         } else if (obj.t == JT_STR) {
-            js_str_t *p = JSTR(vm, obj.a);
-            if (key.a < p->len) return jv_str(js_str_sub(vm, obj.a, (int)key.a, (int)key.a + 1));
+            if (key.a < js_str_units(vm, obj.a)) return jv_str(js_u16_sub(vm, obj.a, key.a, key.a + 1));
         }
     }
     if (jv_is_nullish(obj)) {
@@ -829,6 +871,19 @@ int js_put(js_vm_t *vm, jv objv, uint32_t key, jv v) {
     js_prop_t *p;
     uint32_t idx;
     int depth = 0;
+    if (JS_KEY_IS_PRIV(vm, key)) {           /* Lot 115: #x = v needs the member (frozen or not) */
+        if (objv.t != JT_OBJ) { js_priv_missing(vm, key, 1); return 0; }
+        p = js_own_prop(vm, objv.a, key);
+        if (!p) { js_priv_missing(vm, key, 1); return 0; }
+        if (p->flags & P_ACCESSOR) {
+            if (!p->v.b) { js_throw_err2(vm, JE_TYPE, "", js_str_cat(vm, key, js_str_c(vm, " was defined without a setter"))); return 0; }
+            js_call(vm, jv_obj(p->v.b), objv, &v, 1);
+            return !vm->ctl;
+        }
+        if (!(p->flags & P_WRITE)) { js_throw_err2(vm, JE_TYPE, "Private method is not writable: ", key); return 0; }
+        p->v = v;
+        return 1;
+    }
     if (objv.t != JT_OBJ) {
         if (jv_is_nullish(objv)) {
             js_throw_err2(vm, JE_TYPE, "Cannot set properties of undefined (setting '", js_str_cat(vm, key, js_str_c(vm, "')")));
@@ -838,8 +893,9 @@ int js_put(js_vm_t *vm, jv objv, uint32_t key, jv v) {
     }
     start = objv.a;
     ob = JOBJ(vm, start);
+    if (ob->cls == JS_CLASS_PROXY) { js_proxy_set(vm, start, key, v, objv); return !vm->ctl; }
     if (ob->oflags & O_FROZEN) return 1;
-    if (ob->cls == JS_CLASS_HOST && vm->host_set) {
+    if (ob->cls == JS_CLASS_HOST && vm->host_set && !JS_KEY_IS_SYM(vm, key)) {
         if (vm->host_set(vm, objv, key, v)) return !vm->ctl;
         if (vm->ctl) return 0;
     }
@@ -864,7 +920,9 @@ int js_put(js_vm_t *vm, jv objv, uint32_t key, jv v) {
     }
     o = JOBJ(vm, start)->proto;
     while (o && depth++ < 256) {
-        js_prop_t *q = js_own_prop(vm, o, key);
+        js_prop_t *q;
+        if (JOBJ(vm, o)->cls == JS_CLASS_PROXY) { js_proxy_set(vm, o, key, v, objv); return !vm->ctl; }
+        q = js_own_prop(vm, o, key);
         if (q) {
             if (q->flags & P_ACCESSOR) {
                 if (q->v.b) { js_call(vm, jv_obj(q->v.b), objv, &v, 1); return !vm->ctl; }
@@ -892,10 +950,12 @@ int js_put_v(js_vm_t *vm, jv obj, jv key, jv v) {
 
 int js_has(js_vm_t *vm, uint32_t o, uint32_t key) {
     int depth = 0;
+    if (JS_KEY_IS_PRIV(vm, key)) return o && js_own_prop(vm, o, key) != 0;   /* #x in obj: own only */
     while (o && depth++ < 256) {
         js_obj_t *ob = JOBJ(vm, o);
         uint32_t idx;
-        if (ob->cls == JS_CLASS_HOST && vm->host_get) {
+        if (ob->cls == JS_CLASS_PROXY) return js_proxy_has(vm, o, key);
+        if (ob->cls == JS_CLASS_HOST && vm->host_get && !JS_KEY_IS_SYM(vm, key)) {
             jv out;
             if (vm->host_get(vm, jv_obj(o), key, &out)) return 1;
         }
@@ -928,17 +988,24 @@ int js_delete(js_vm_t *vm, jv obj, jv key) {
     k = js_to_key(vm, key);
     if (vm->ctl) return 0;
     o = JOBJ(vm, obj.a);
+    if (o->cls == JS_CLASS_PROXY) return js_proxy_delete(vm, obj.a, k);
     if ((o->cls == JS_CLASS_ARRAY || o->cls == JS_CLASS_ARGS) && js_str_index_key(vm, k, &idx)) {
         if (o->oflags & O_FROZEN) return 0;
         if (idx < o->alen) ((jv *)JPTR(vm, o->arr))[idx] = jv_empty();
         return 1;
     }
+    if (o->cls == JS_CLASS_HOST && vm->host_del && !JS_KEY_IS_SYM(vm, k)) {
+        int ok = 1;
+        if (vm->host_del(vm, obj, k, &ok)) return vm->ctl ? 0 : ok;
+    }
     return js_delete_own(vm, obj.a, k);
 }
 
 uint32_t js_own_keys(js_vm_t *vm, uint32_t obj, int only_enum) {
-    uint32_t out = js_array_new(vm, 8), i, pass;
+    uint32_t out, i, pass;
     js_obj_t *o;
+    if (JOBJ(vm, obj)->cls == JS_CLASS_PROXY) return js_proxy_keys(vm, obj, only_enum, 0);
+    out = js_array_new(vm, 8);
     if (!out) return 0;
     o = JOBJ(vm, obj);
     if (o->cls == JS_CLASS_ARRAY || o->cls == JS_CLASS_ARGS) {
@@ -949,7 +1016,7 @@ uint32_t js_own_keys(js_vm_t *vm, uint32_t obj, int only_enum) {
         }
     }
     if (o->cls == JS_CLASS_STRING && o->x0 == JT_STR) {
-        uint32_t n = JSTR(vm, o->x1)->len;
+        uint32_t n = js_str_units(vm, o->x1);
         for (i = 0; i < n; i++) if (!js_array_push(vm, out, jv_str(js_key_of_index(vm, i)))) return out;
     }
     /* integer-like keys ascending first, then the others in creation order */
@@ -974,10 +1041,27 @@ uint32_t js_own_keys(js_vm_t *vm, uint32_t obj, int only_enum) {
                 have_last = 1;
                 if (!js_array_push(vm, out, jv_str(best))) return out;
             } else {
+                /* Lot 115: the built-in non-enumerable names the engine
+                 * answers without a property (getOwnPropertyNames,
+                 * Reflect.ownKeys): length of arrays, arguments and String
+                 * objects after their indexes, length and name of functions */
+                if (!only_enum) {
+                    int c = o->cls;
+                    if ((c == JS_CLASS_ARRAY || c == JS_CLASS_ARGS || (c == JS_CLASS_STRING && o->x0 == JT_STR) ||
+                         c == JS_CLASS_FUNC || c == JS_CLASS_NATIVE) && !js_own_prop(vm, obj, vm->s_length)) {
+                        if (!js_array_push(vm, out, jv_str(vm->s_length))) return out;
+                    }
+                    o = JOBJ(vm, obj);
+                    if ((c == JS_CLASS_FUNC || c == JS_CLASS_NATIVE) && !js_own_prop(vm, obj, vm->s_name)) {
+                        if (!js_array_push(vm, out, jv_str(vm->s_name))) return out;
+                    }
+                    o = JOBJ(vm, obj);
+                }
                 for (i = 0; i < o->nprop; i++) {
                     js_prop_t *p = (js_prop_t *)JPTR(vm, o->props) + i;
                     uint32_t idx;
                     if (only_enum && !(p->flags & P_ENUM)) continue;
+                    if (JS_KEY_IS_SYM(vm, p->key)) continue;   /* Lot 115: symbols are not names */
                     if (js_str_index_key(vm, p->key, &idx)) continue;
                     if (!js_array_push(vm, out, jv_str(p->key))) return out;
                     o = JOBJ(vm, obj);
@@ -993,6 +1077,17 @@ int js_instanceof(js_vm_t *vm, jv v, jv ctor) {
     jv proto;
     uint32_t o;
     int depth = 0;
+    if (ctor.t == JT_OBJ && vm->sym_has_instance) {     /* Lot 115: a [Symbol.hasInstance] method decides */
+        jv h = js_get(vm, ctor, vm->sym_has_instance);
+        if (vm->ctl) return 0;
+        if (!jv_is_nullish(h)) {
+            jv r;
+            if (!js_is_callable(vm, h)) { js_throw_err(vm, JE_TYPE, "Symbol.hasInstance is not a function"); return 0; }
+            r = js_call(vm, h, ctor, &v, 1);
+            if (vm->ctl) return 0;
+            return js_truthy(vm, r);
+        }
+    }
     if (!js_is_callable(vm, ctor)) { js_throw_err(vm, JE_TYPE, "Right-hand side of 'instanceof' is not callable"); return 0; }
     if (JOBJ(vm, ctor.a)->cls == JS_CLASS_BOUND) ctor = jv_obj(JOBJ(vm, ctor.a)->x0);
     if (v.t != JT_OBJ) return 0;
@@ -1033,6 +1128,14 @@ void js_log_put(js_vm_t *vm, const char *s, int n) {
                 vm->log[vm->log_len] = 0;
             }
             return;
+        }
+        if ((uint8_t)s[i] == 0xED && js_u16_lone_at(s + i, n - i)) {
+            /* Lot 115: a lone surrogate half is shown as U+FFFD (the log is UTF-8) */
+            vm->log[vm->log_len++] = (char)0xEF;
+            vm->log[vm->log_len++] = (char)0xBF;
+            vm->log[vm->log_len++] = (char)0xBD;
+            i += 2;
+            continue;
         }
         vm->log[vm->log_len++] = s[i];
     }
