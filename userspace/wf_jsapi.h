@@ -47,6 +47,18 @@ int js_api_aborted(js_vm_t *vm, jv signal, jv *reason);
 /* the storage store, for tests: forget every item */
 void js_api_store_reset(void);
 
+/* Lot 114, for wf_jshist.c: a DOMException object (name gives the code) */
+uint32_t js_api_domexc(js_vm_t *vm, const char *msg, const char *name);
+/* rel resolved against the absolute base by the URL parser into out
+ * (serialized); 0, or -1 when either does not parse or out is short */
+int js_api_resolve(const char *rel, const char *base, char *out, int cap);
+/* 1 when the absolute URLs a and b differ at most in path, query and
+ * fragment (history.pushState's rule), 0 otherwise */
+int js_api_same_document(const char *a, const char *b);
+/* 1 for a URL, URLSearchParams, FormData, Storage, AbortSignal or
+ * AbortController object (structuredClone refuses them) */
+int js_api_platform(js_vm_t *vm, jv v);
+
 /* from wf_jsdom.c: the named controls of a form element as [name, value]
  * pairs pushed onto list (submit buttons, files and disabled controls
  * left out, boxes only when checked); 0, or -1 when form is not a form */

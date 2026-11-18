@@ -1460,3 +1460,31 @@ int js_api_init(js_vm_t *vm, const char *page_url) {
     }
     return vm->ctl ? -1 : 0;
 }
+
+/* ---- for wf_jshist.c (history, structuredClone) ---- */
+
+uint32_t js_api_domexc(js_vm_t *vm, const char *msg, const char *name) {
+    return domexc_c(vm, msg, name);
+}
+
+int js_api_resolve(const char *rel, const char *base, char *out, int cap) {
+    if (!rel || !base || !out || cap < 2) return -1;
+    if (url_parse(base, alen(base), 0, &g_base) != 0) return -1;
+    if (url_parse(rel, alen(rel), &g_base, &g_u) != 0) return -1;
+    return url_format(&g_u, out, cap) < 0 ? -1 : 0;
+}
+
+int js_api_same_document(const char *a, const char *b) {
+    if (!a || !b) return 0;
+    if (url_parse(a, alen(a), 0, &g_base) != 0 || url_parse(b, alen(b), 0, &g_u) != 0) return 0;
+    if (g_base.opaque || g_u.opaque) return 0;          /* mailto:, data: ... have no paths to push */
+    return s_same(g_base.scheme, g_u.scheme) && s_same(g_base.user, g_u.user) && s_same(g_base.pass, g_u.pass) &&
+           s_same(g_base.host, g_u.host) && s_same(g_base.port, g_u.port) && g_base.has_host == g_u.has_host;
+}
+
+int js_api_platform(js_vm_t *vm, jv v) {
+    uint32_t p;
+    if (!jv_is_obj(v)) return 0;
+    p = JOBJ(vm, v.a)->proto;
+    return p && (p == g_p_usp || p == g_p_fd || p == g_p_url || p == g_p_storage || p == g_p_signal || p == g_p_ctrl);
+}

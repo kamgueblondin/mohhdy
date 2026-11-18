@@ -8,6 +8,7 @@
 #include "wf_http.h"
 #include "wf_jsnet.h"
 #include "wf_jsapi.h"
+#include "wf_jshist.h"
 
 enum { DN_ELEM = 1, DN_TEXT = 3, DN_COMMENT = 8, DN_DOC = 9, DN_DOCTYPE = 10, DN_FRAG = 11 };
 
@@ -2969,12 +2970,10 @@ static jv window_fn(js_vm_t *vm, jv thisv, jv *argv, int argc, uint32_t magic) {
     }
 }
 
-static void url_parts(js_vm_t *vm, const char *url) {
-    uint32_t o = js_obj_new(vm, JS_CLASS_OBJECT, vm->p_object);
+/* the fields of location o for url (Lot 114: also history.pushState) */
+static void url_fill(js_vm_t *vm, uint32_t o, const char *url) {
     int n = url ? dlen(url) : 0, i = 0, ps, hs, he, pe, qe, port = -1;
     const char *u = url;
-    if (!o) return;
-    g_rt.location = o;
     if (!n) { u = "about:blank"; n = 11; }
     js_define_c(vm, o, "href", jv_str(js_str_new(vm, u, n)), P_DEFAULT);
     while (i < n && u[i] != ':' && u[i] != '/') i++;
@@ -3007,6 +3006,13 @@ static void url_parts(js_vm_t *vm, const char *url) {
     js_def_native(vm, o, "assign", window_fn, 1, 11);
     js_def_native(vm, o, "replace", window_fn, 1, 11);
     js_def_native(vm, o, "reload", window_fn, 0, 11);
+}
+
+static void url_parts(js_vm_t *vm, const char *url) {
+    uint32_t o = js_obj_new(vm, JS_CLASS_OBJECT, vm->p_object);
+    if (!o) return;
+    g_rt.location = o;
+    url_fill(vm, o, url);
 }
 
 /* ---- realm setup ---- */
@@ -3666,7 +3672,7 @@ int wf_jspage_run(void *arena, uint32_t arena_size, const char *html, int n, con
     g_in_dyn = 0;
     g_lay_valid = 0;
     if (realm_setup(vm, doc, url) != 0) { g_rt.st = 0; return -1; }
-    if (js_net_init(vm) != 0 || js_api_init(vm, g_url) != 0) { g_rt.st = 0; return -1; }
+    if (js_net_init(vm) != 0 || js_api_init(vm, g_url) != 0 || js_hist_init(vm, g_url) != 0) { g_rt.st = 0; return -1; }
     set_ready("loading");
     if (!body_onload(vm, doc, st) && !run_scripts(vm, doc, st) && !run_load(vm, doc, st)) run_timers(vm, st);
     if (!st->scripts && !st->ext_ran && !st->dynamic) { g_rt.st = 0; return 0; }
@@ -4221,4 +4227,30 @@ int wf_jspage_wants_keys(void) {
     if (html >= 0 && arr_listens(vm, g_n[html].listeners)) return 1;
     if (body >= 0 && arr_listens(vm, g_n[body].listeners)) return 1;
     return g_rt.focus >= 0 && is_connected(g_rt.focus) && arr_listens(vm, g_n[g_rt.focus].listeners);
+}
+
+/* Lot 114 (history, wf_jshist.c): location takes the absolute url in
+ * place (the same object), and relative URLs of the page (fetch, links)
+ * resolve against it from now on. 0, or -1 when url does not fit. */
+int wf_jsdom_set_location(js_vm_t *vm, const char *url) {
+    int i;
+    if (!url || !g_rt.location) return -1;
+    for (i = 0; url[i]; i++) if (i >= (int)sizeof(g_url) - 1) return -1;
+    for (i = 0; url[i]; i++) g_url[i] = url[i];
+    g_url[i] = 0;
+    url_fill(vm, g_rt.location, g_url);
+    return 0;
+}
+
+/* Lot 114 (history): a plain event of type dispatched on the window with
+ * up to two extra fields (state for popstate, oldURL/newURL for
+ * hashchange); listeners and the window's on<type> handler run. */
+void wf_jsdom_window_event(js_vm_t *vm, const char *type, const char *k1, jv v1, const char *k2, jv v2) {
+    uint32_t ev = event_new(vm, js_intern(vm, type, dlen(type)), 0, 0);
+    jv e;
+    if (!ev || vm->ctl) return;
+    if (k1) js_define_c(vm, ev, k1, v1, P_DEFAULT);
+    if (k2) js_define_c(vm, ev, k2, v2, P_DEFAULT);
+    e = jv_obj(ev);
+    js_call(vm, jv_obj(g_dispatch), jv_obj(vm->global), &e, 1);
 }

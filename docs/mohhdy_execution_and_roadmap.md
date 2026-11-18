@@ -15,7 +15,8 @@ generators, async/await and Promise (REPL and pages). With `web-js on`
 path, scripts inserted by scripts, on* attributes, fetch() and
 XMLHttpRequest on their own origin, get approximate layout values and the web APIs URL,
 URLSearchParams, FormData, localStorage/sessionStorage (in the shell
-process), AbortController and DOMException.
+process), AbortController, DOMException, history (pushState,
+popstate) and structuredClone.
 The page realm stays alive after load: clicks, keys, input, focus and
 submit from the console, the GUI input line, GUI clicks on marked
 elements, unused GUI keys and the reader's own form controls (GUI and
