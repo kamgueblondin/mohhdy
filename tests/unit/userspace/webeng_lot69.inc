@@ -125,12 +125,14 @@ static void test_l69_wrap_uses_scaled_advance(void) {
 }
 
 static void test_l69_unitless_line_height_follows_font(void) {
+    /* Lot 116: a number is times the font size, 2 x 32 px (Lot 69: times
+     * the normal line, 40) */
     lot52_render(L69("p{font-size:32px;line-height:2}", "<p>a<br>b</p>"), 400);
-    TEST_ASSERT_EQUAL(find_text("a")->y + 40, find_text("b")->y);
+    TEST_ASSERT_EQUAL(find_text("a")->y + 64, find_text("b")->y);
     lot52_render(L69("p{font-size:32px;line-height:30px}", "<p>a<br>b</p>"), 400);
     TEST_ASSERT_EQUAL(find_text("a")->y + 30, find_text("b")->y);
     lot52_render(L69("div{line-height:2}p{font-size:32px}", "<div><p>a<br>b</p></div>"), 400);
-    TEST_ASSERT_EQUAL(find_text("a")->y + 40, find_text("b")->y);   /* the number inherits, not the px */
+    TEST_ASSERT_EQUAL(find_text("a")->y + 64, find_text("b")->y);   /* the number inherits, not the px */
 }
 
 static void test_l69_letter_spacing_scaled(void) {

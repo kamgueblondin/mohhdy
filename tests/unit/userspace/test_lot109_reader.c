@@ -85,8 +85,9 @@ static void test_l109_font_units(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:32px;overflow-y:auto;height:44px\"", style_of("b"));
     prep("#b { overflow: auto; height: max(1ex, 1ch, 1lh) } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:10px\"", style_of("b"));
-    /* another unit is still kept unresolved */
-    prep("#b { overflow: auto; height: 10cap } " RD);
+    /* another unit is still kept unresolved (Lot 116, converted: cqh, as
+     * cap resolves now) */
+    prep("#b { overflow: auto; height: 10cqh } " RD);
     TEST_ASSERT_EQUAL_STRING("", node("b")->htok);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
 }
@@ -158,19 +159,27 @@ static void test_l109_pct_refused(void) {
         TEST_ASSERT_EQUAL_STRING("", node("b")->htok);
         TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     }
-    /* 63 characters pass, 64 do not (WF_SITE_BOXEX) */
-    prep("#b { overflow: auto; height: clamp(calc(1% - 1999px), calc(1% + 1999px), calc(10% - 1998px)) } " RD);
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:clamp(calc(1% - 1999px), calc(1% + 1999px), calc(10% - 1998px))\"",
+    /* 127 characters pass, 128 do not (WF_SITE_BOXEX; Lot 116 converted:
+     * were 63 and 64 with a 64-byte buffer, the engine's math now takes
+     * 32 nodes and 8 arguments) */
+    prep("#b { overflow: auto; height: clamp(calc(1% - 1999px), calc(1% + 1999px)"
+         ", max(calc(9% + 1998px), calc(11% + 1997px), calc(12% + 1996px), calc(13% + 1995px))) } " RD);
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:clamp(calc(1% - 1999px), calc(1% + 1999px)"
+                             ", max(calc(9% + 1998px), calc(11% + 1997px), calc(12% + 1996px), calc(13% + 1995px)))\"",
                              style_of("b"));
-    prep("#b { overflow: auto; height: clamp(calc(1% - 1999px), calc(1% + 1999px), calc(100% - 1998px)) } " RD);
+    prep("#b { overflow: auto; height: clamp(calc(1% - 1999px), calc(1% + 1999px)"
+         ", max(calc(10% + 1998px), calc(11% + 1997px), calc(12% + 1996px), calc(13% + 1995px))) } " RD);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
-    /* 63 characters at 16 px (124ch is 992px) and 64 at the element's
+    /* 127 characters at 16 px (124ch is 992px) and 128 at the element's
      * 20 px (1240px): kept as a token, not passed */
-    prep("#b { overflow: auto; height: clamp(calc(1% - 124ch), calc(1% + 1999px), calc(100% - 1998px)); font-size: 20px } " RD);
+    prep("#b { overflow: auto; height: clamp(calc(1% - 124ch), calc(1% + 1999px)"
+         ", max(calc(10% + 1998px), calc(11% + 1997px), calc(12% + 1996px), calc(13% + 1995px))); font-size: 20px } " RD);
     TEST_ASSERT_EQUAL('@', node("b")->htok[0]);
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:20px\"", style_of("b"));
-    prep("#b { overflow: auto; height: clamp(calc(1% - 124ch), calc(1% + 1999px), calc(100% - 1998px)) } " RD);
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:clamp(calc(1% - 992px), calc(1% + 1999px), calc(100% - 1998px))\"",
+    prep("#b { overflow: auto; height: clamp(calc(1% - 124ch), calc(1% + 1999px)"
+         ", max(calc(10% + 1998px), calc(11% + 1997px), calc(12% + 1996px), calc(13% + 1995px))) } " RD);
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:clamp(calc(1% - 992px), calc(1% + 1999px)"
+                             ", max(calc(10% + 1998px), calc(11% + 1997px), calc(12% + 1996px), calc(13% + 1995px)))\"",
                              style_of("b"));
     /* the literal bound: 2000 passes, 2000.5 rounds past it */
     prep("#b { overflow: auto; height: calc(2000% - 2000px) } " RD);

@@ -374,7 +374,12 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                 d->perf.elements++;
                 /* attributes */
                 while (j < len && html[j] != '>') {
-                    char an[20], av[256];   /* Lot 76: 19-char names (autocomplete) */
+                    /* Lot 76: 19-char names (autocomplete); Lot 116: a style
+                     * value up to WE_STYLE_ATTR_MAX (the reader's style
+                     * attribute with its box lengths), the others up to
+                     * WE_ATTR_MAX as before; static, not on the stack */
+                    static char av[WE_STYLE_ATTR_MAX + 1];
+                    char an[20];
                     int ak = 0, vk = 0, truncated = 0;
                     if (w_space(html[j])) { j++; continue; }
                     if (html[j] == '/') { self = 1; j++; continue; }
@@ -395,6 +400,7 @@ int we_parse(we_doc_t* d, const char* html, int len) {
                         if (q && j < len) j++;
                     }
                     av[vk] = 0;
+                    if (vk > WE_ATTR_MAX && !w_eq(an, "style")) truncated = 1;
                     if (truncated) { diag(d, "attribute exceeds limit", idx); continue; }
                     hints_attr(d, idx, name, an, av, vk);   /* lot 73 */
                     if (w_eq(an, "id")) n->attr_flags |= 1;
@@ -1391,7 +1397,7 @@ static int math_atom(we_math_parser_t *p) {
         p->at++; result = math_sum(p); math_space(p);
         if (result < 0 || p->at == p->length || p->text[p->at++] != ')') return -1;
     } else {
-        int name = p->at, kind, args[4], count = 0;
+        int name = p->at, kind, args[WE_MATH_ARGS_MAX], count = 0;
         while (p->at < p->length && w_low(p->text[p->at]) >= 'a' && w_low(p->text[p->at]) <= 'z') p->at++;
         kind = value_is(p->text + name, p->at - name, "calc") ? M_ADD :
                value_is(p->text + name, p->at - name, "min") ? M_MIN :
@@ -1399,7 +1405,7 @@ static int math_atom(we_math_parser_t *p) {
                value_is(p->text + name, p->at - name, "clamp") ? M_CLAMP : -1;
         if (kind < 0 || p->at == p->length || p->text[p->at++] != '(') return -1;
         for (;;) {
-            if (count == 4) return -1;
+            if (count == WE_MATH_ARGS_MAX) return -1;     /* Lot 116: was 4 */
             args[count] = math_sum(p);
             if (args[count] < 0) return -1;
             if (count && p->out->node[args[count]].dimension != p->out->node[args[0]].dimension) return -1;
@@ -4403,24 +4409,31 @@ static int node_q(const we_doc_t *d, int node) {
 }
 static int node_cw(const we_doc_t *d, int node) { return os_ui_char_w(node_q(d, node)); }
 static int node_gh(const we_doc_t *d, int node) { return os_ui_px(8, node_q(d, node)); }
-/* used line height of a node: explicit px, unitless * font, or normal */
-static int node_lh(const we_doc_t *d, int node) {
+/* Lot 116: used line height of a node in hundredths of a px: px with
+ * its hundredths, a number (or an em line height not yet resolved) times
+ * the node's font size in px (CSS Inline 3 4.2), or normal (the scaled
+ * 8x10 cell); 1 .. WE_LINE_H_MAX px */
+static int node_lh100(const we_doc_t *d, int node) {
     const we_node_t *n = &d->nodes[node];
-    int q = node_q(d, node);
-    if (n->line_height > 0) return n->lh_unitless ? (n->line_height * q + 2) / 4 : n->line_height;
-    return os_ui_line_h(q);
+    int v;
+    if (n->line_height <= 0 && !n->lh_frac) return os_ui_line_h(node_q(d, node)) * 100;
+    if (n->lh_unitless) v = n->line_height * (n->font_px ? n->font_px : WE_FONT_PX_DEFAULT);
+    else v = n->line_height * 100 + n->lh_frac;
+    if (v < 100) v = 100;
+    if (v > WE_LINE_H_MAX * 100) v = WE_LINE_H_MAX * 100;
+    return v;
 }
 /* a block's line box height: its own, raised by any larger inline text
  * inside it (inline descendants only; boxes start their own flow) */
-static int flow_line_h(const we_doc_t *d, int idx) {
-    int best = node_lh(d, idx), stack[16], sp = 0, c;
+static int flow_line_h100(const we_doc_t *d, int idx) {
+    int best = node_lh100(d, idx), stack[16], sp = 0, c;
     c = d->nodes[idx].first;
     while (c >= 0 || sp > 0) {
         if (c < 0) { c = stack[--sp]; c = d->nodes[c].next; continue; }
         {
             const we_node_t *n = &d->nodes[c];
             if (n->display == WE_DISP_INLINE || n->is_text) {
-                int lh = node_lh(d, c);
+                int lh = node_lh100(d, c);
                 if (lh > best) best = lh;
                 if (!n->is_text && n->first >= 0 && sp < 16) { stack[sp++] = c; c = n->first; continue; }
             }
@@ -4428,6 +4441,35 @@ static int flow_line_h(const we_doc_t *d, int idx) {
         }
     }
     return best;
+}
+/* Lot 116: the line box height in whole px (a fraction is carried from
+ * line to line by the inline flow, finish_line) */
+static int flow_line_h(const we_doc_t *d, int idx) {
+    return flow_line_h100(d, idx) / 100;
+}
+
+/* Lot 116: line-height: normal, a number, px, em or a percentage, with
+ * decimals ("1.25", "15.5px", "1.5em", "150%"; three decimals read,
+ * hundredths kept); 0 is kept as the smallest value (the used line
+ * height is at least 1 px). Was: 10..40 whole px or a whole number 1..4
+ * times the normal line height (Lot 56) */
+static int lh_parse(we_node_t *n, const char *v, int vl) {
+    int end = vl, kind = 1, m, h;
+    if (value_is(v, vl, "normal")) { n->line_height = 0; n->lh_unitless = 0; n->lh_frac = 0; return 0; }
+    if (vl >= 2 && value_is(v + vl - 2, 2, "px")) { kind = 0; end -= 2; }
+    else if (vl >= 2 && value_is(v + vl - 2, 2, "em")) { kind = 2; end -= 2; }
+    else if (vl >= 1 && v[vl - 1] == '%') { kind = 3; end -= 1; }
+    m = font_milli(v, end);
+    if (m < 0 || m > (kind == 0 ? WE_LINE_H_MAX * 1000 : kind == 3 ? WE_LH_NUMBER_MAX * 100000 : WE_LH_NUMBER_MAX * 1000))
+        return -1;
+    h = kind == 3 ? (m + 500) / 1000 : (m + 5) / 10;
+    if (kind == 0) {
+        n->line_height = (int16_t)(h / 100); n->lh_frac = (uint8_t)(h % 100); n->lh_unitless = 0;
+        if (!h) n->lh_frac = 1;
+    } else {
+        n->line_height = (int16_t)(h ? h : 1); n->lh_frac = 0; n->lh_unitless = (uint8_t)(kind == 1 ? 1 : 2);
+    }
+    return 0;
 }
 
 static int mode_pass;   /* lot 64: 1 while only writing-mode/direction apply */
@@ -4779,16 +4821,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (bounded_signed(v, vl, WE_Z_MAX, &px) == 0) { n->z_index = (int8_t)px; n->z_set = 1; }
         else diag(d, "z-index refused", -1);
     } else if (w_eq(prop, "line-height")) {
-        int end = vl, number = 0, unitless;
-        if (value_is(v, vl, "normal")) { n->line_height = 0; n->lh_unitless = 0; }
-        else {
-            if (vl >= 2 && value_is(v + vl - 2, 2, "px")) end -= 2;
-            unitless = end == vl;
-            if (bounded_uint(v, end, unitless ? 4 : WE_LINE_H_MAX, &number) == 0 &&
-                number >= (unitless ? 1 : WE_LINE_H))
-                { n->line_height = (int16_t)(unitless ? number * WE_LINE_H : number); n->lh_unitless = (uint8_t)unitless; }
-            else diag(d, "line height refused", -1);
-        }
+        if (lh_parse(n, v, vl)) diag(d, "line height refused", -1);
     } else if (w_eq(prop, "font-size")) {
         int fpx;
         if (we_parse_font_size(v, vl, n->font_parent_px, &fpx) == 0) n->font_px = (uint8_t)fpx;
@@ -5407,6 +5440,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->z_index = 0;
         n->line_height = p ? p->line_height : 0;
         n->lh_unitless = p ? p->lh_unitless : 0;
+        n->lh_frac = p ? p->lh_frac : 0;
         n->font_parent_px = p && p->font_px ? p->font_px : WE_FONT_PX_DEFAULT;
         n->font_px = n->font_parent_px;
         n->text_indent = p ? p->text_indent : 0;
@@ -5469,6 +5503,13 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         /* lot 64: start is left in ltr and right in rtl, end the other way */
         if (n->align_logical & 3) n->align = ((n->align_logical & 3) == 1) != n->dir_rtl ? WE_ALIGN_LEFT : WE_ALIGN_RIGHT;
         if (n->align_logical >> 2) n->align_last = (uint8_t)(1 + (((n->align_logical >> 2) == 1) != n->dir_rtl ? WE_ALIGN_LEFT : WE_ALIGN_RIGHT));
+        /* Lot 116: an em or percentage line height is px of the element's
+         * own font (its children inherit the px, CSS Inline 3 4.2) */
+        if (n->lh_unitless == 2) {
+            int h = n->line_height * (n->font_px ? n->font_px : WE_FONT_PX_DEFAULT);
+            if (h > WE_LINE_H_MAX * 100) h = WE_LINE_H_MAX * 100;
+            n->line_height = (int16_t)(h / 100); n->lh_frac = (uint8_t)(h % 100); n->lh_unitless = 0;
+        }
         if (n->border && n->border_color == (p ? p->color : 0)) n->border_color = n->color;
         if (p && p->display == WE_DISP_NONE) n->display = WE_DISP_NONE;
         /* lot 73: an inline box adds its shift to its parent's; a block starts at 0 */
@@ -5905,6 +5946,7 @@ typedef struct {
     int lines;
     int pending_space, measuring;
     int line_h, indent, indent_used, indent_shift, atom_h, pending_x;
+    int line_frac, frac_acc;   /* Lot 116: hundredths of line_h's px, carried */
     int baseline, origin_y;
     /* Lot 61: last measured baseline, painted first/last baselines (page y),
      * text seen on the open line and its baseline-aligned atomic boxes. */
@@ -6034,6 +6076,12 @@ static void finish_line(we_inline_t *f, int has_text) {
         }
     }
     if (!f->measuring && aligned) shift_line(f, ascent, has_text);
+    /* Lot 116: a fractional line height: the hundredths add up, a line
+     * box of the plain line height takes the whole px they make */
+    if (f->line_frac && step == line_h) {
+        f->frac_acc += f->line_frac;
+        if (f->frac_acc >= 100) { f->frac_acc -= 100; step++; }
+    }
     f->y = limit_coord(f->y + step);
     f->lines++;
     if (!f->measuring) d->perf.lines++;
@@ -6872,7 +6920,9 @@ static void intrinsic_sizes(we_doc_t *d) {
             vertical_inline[i] = (int16_t)limit_coord(flow.maximum);
             lines = size > 0 ? (flow.maximum + size - 1) / size : 1;
             if (lines < 1) lines = 1;
-            n->min_content = n->max_content = (int16_t)limit_coord(lines * node_lh(d, i));
+            /* Lot 116: the line height in hundredths, cut as the carried
+             * line boxes add up (2 x 20.6px lines are 41 px) */
+            n->min_content = n->max_content = (int16_t)limit_coord(lines * node_lh100(d, i) / 100);
         }
     }
 }
@@ -7102,7 +7152,9 @@ static int flow_children(we_doc_t* d, int idx, int cx, int cy, int cwidth, int d
     f->align_last = d->nodes[idx].align_last;
     f->justify_none = d->nodes[idx].justify_none;
     f->start = d->nodes[idx].dir_rtl ? WE_ALIGN_RIGHT : WE_ALIGN_LEFT;
-    f->line_h = flow_line_h(d, idx);
+    f->line_h = flow_line_h100(d, idx);
+    f->line_frac = f->line_h % 100;     /* frac_acc starts at 0 (w_zero) */
+    f->line_h /= 100;
     f->indent = d->nodes[idx].text_indent + marker_inside_w(d, idx);
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) {
         we_node_t *n = &d->nodes[c];

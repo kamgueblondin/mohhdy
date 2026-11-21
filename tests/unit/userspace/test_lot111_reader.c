@@ -80,39 +80,39 @@ static const char *mat(const char *s, int lh, int basis) {
  * the number), a percentage or a length as px (inherited as px), normal
  * 10/16 em (the reader's font) */
 static void test_l111_lh_values(void) {
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:32px;overflow-y:auto;height:96px\"", b_of("#b { overflow: auto; line-height: 2; height: 3lh }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:2;overflow-y:auto;height:96px\"", b_of("#b { overflow: auto; line-height: 2; height: 3lh }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:20px;overflow-y:auto;height:40px\"", b_of("#b { overflow: auto; line-height: 20px; height: 2lh }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:20px;line-height:30px;overflow-y:auto;height:30px\"",
                              b_of("#b { overflow: auto; font-size: 20px; line-height: 150%; height: 1lh }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:20px\"", b_of("#b { overflow: auto; height: 2lh }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:20px;overflow-y:auto;height:20px\"", b_of("#b { overflow: auto; line-height: calc(1em + 4px); height: 1lh }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:24px;overflow-y:auto;height:24px\"", b_of("#b { overflow: auto; line-height: 1.5rem; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px;overflow-y:auto;height:48px\"", b_of("#b { overflow: auto; line-height: 10vh; height: 1lh }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:48px;overflow-y:auto;height:48px\"", b_of("#b { overflow: auto; line-height: 10vh; height: 1lh }"));
     /* with a percentage of the containing block: the engine's expression */
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:32px;overflow-y:auto;height:calc(10% + 32px)\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:2;overflow-y:auto;height:calc(10% + 32px)\"",
                              b_of("#b { overflow: auto; line-height: 2; height: calc(1lh + 10%) }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:32px;overflow-y:auto;height:max(10%, 64px)\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:2;overflow-y:auto;height:max(10%, 64px)\"",
                              b_of("#b { overflow: auto; line-height: 2; height: max(10%, 2lh) }"));
 }
 
 /* inheritance: numbers stay numbers, the rest is the parent's px */
 static void test_l111_lh_inherit(void) {
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;line-height:20px;overflow-y:auto;height:20px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;line-height:2;overflow-y:auto;height:20px\"",
                              b_of("#o { line-height: 2 } #b { overflow: auto; font-size: 10px; height: 1lh }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:32px;line-height:24px;overflow-y:auto;height:24px\"",
                              b_of("#o { line-height: 150% } #b { overflow: auto; font-size: 32px; height: 1lh }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:8px;line-height:32px;overflow-y:auto;height:32px\"",
                              b_of("#o { line-height: 2em } #b { overflow: auto; font-size: 8px; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;line-height:30px;overflow-y:auto;height:30px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;line-height:3;overflow-y:auto;height:30px\"",
                              b_of("#o { line-height: 3 } #b { overflow: auto; line-height: inherit; font-size: 10px; height: 1lh }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:normal;overflow-y:auto;height:10px\"",
                              b_of("#o { line-height: 3 } #b { overflow: auto; line-height: initial; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px;overflow-y:auto;height:48px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:3;overflow-y:auto;height:48px\"",
                              b_of("#o { line-height: 3 } #b { overflow: auto; line-height: unset; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px;overflow-y:auto;height:48px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:3;overflow-y:auto;height:48px\"",
                              b_of("body { line-height: 3 } #b { overflow: auto; height: 1lh }"));
     /* lh inside line-height is the parent's line height */
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px;overflow-y:auto;height:60px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:60px;overflow-y:auto;height:60px\"",
                              b_of("#o { line-height: 30px } #b { overflow: auto; line-height: 2lh; height: 1lh }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:20px;overflow-y:auto;height:20px\"",
                              b_of("#b { overflow: auto; line-height: 2lh; height: 1lh }"));
@@ -137,7 +137,7 @@ static void test_l111_lh_refused(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:18px;overflow-y:auto;height:36px\"",
                              b_of("#b { overflow: auto; line-height: calc(100% + 2px); height: 2lh }"));
     /* a refused value leaves the earlier one */
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px;overflow-y:auto;height:60px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:3;overflow-y:auto;height:60px\"",
                              b_of("#b { overflow: auto; line-height: 3; line-height: -1; height: 1.25lh }"));
 }
 
@@ -151,35 +151,35 @@ static void test_l111_lh_edges(void) {
         snprintf(css, sizeof(css), "#b { overflow: auto; line-height: %s; height: 2lh }", bad[k]);
         TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:20px\"", b_of(css));
     }
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:32px;overflow-y:auto;height:32px\"", b_of("#b { overflow: auto; line-height: +2; height: 1lh }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:2;overflow-y:auto;height:32px\"", b_of("#b { overflow: auto; line-height: +2; height: 1lh }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:24px;overflow-y:auto;height:24px\"", b_of("#b { overflow: auto; line-height: +150%; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px;overflow-y:auto;height:10000px\"", b_of("#b { overflow: auto; line-height: 20000px; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:1px;line-height:40px;overflow-y:auto;height:1000px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:400px;overflow-y:auto;height:10000px\"", b_of("#b { overflow: auto; line-height: 20000px; height: 1lh }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:1px;line-height:400px;overflow-y:auto;height:1000px\"",
                              b_of("#b { overflow: auto; font-size: 1px; line-height: 5000; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:1px;line-height:40px;overflow-y:auto;height:500px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:1px;line-height:400px;overflow-y:auto;height:500px\"",
                              b_of("#b { overflow: auto; font-size: 1px; line-height: 50000%; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:1px;line-height:40px;overflow-y:auto;height:1000px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:1px;line-height:400px;overflow-y:auto;height:1000px\"",
                              b_of("#b { overflow: auto; font-size: 1px; line-height: 500000%; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:1px;line-height:40px;overflow-y:auto;height:1000px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:1px;line-height:400px;overflow-y:auto;height:1000px\"",
                              b_of("#b { overflow: auto; font-size: 1px; line-height: 99999999999; height: 1lh }"));
     /* a big font times a big number: at most WF_CSSMATH_MAX px/1000
      * (a font size this big is not written in the style) */
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px;overflow-y:auto;height:10000px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:400px;overflow-y:auto;height:10000px\"",
                              b_of("#b { overflow: auto; font-size: 1000px; line-height: 1000; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px;overflow-y:auto;height:10000px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:400px;overflow-y:auto;height:10000px\"",
                              b_of("#b { overflow: auto; font-size: 10000px; line-height: 1000; height: 1lh }"));
     /* 96 px (the largest font) times 44739.243%: 96 * 44739243 is 2^32 +
      * 32 in the high part, saturated (not wrapped to 0) */
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:96px;line-height:40px;overflow-y:auto;height:10000px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:96px;line-height:400px;overflow-y:auto;height:10000px\"",
                              b_of("#b { overflow: auto; font-size: 96px; line-height: 44739.243%; height: 1lh }"));
     /* a math function past 10000 px at the element's font (600em of
      * 20px) is normal, not the parent's value */
     TEST_ASSERT_EQUAL_STRING(" style=\"font-size:20px;line-height:normal;overflow-y:auto;height:12px\"",
                              b_of("#o { line-height: 3 } #b { overflow: auto; font-size: 20px; line-height: calc(600em); height: 1lh }"));
     /* the strongest declaration wins: importance, then specificity */
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px;overflow-y:auto;height:48px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:3;overflow-y:auto;height:48px\"",
                              b_of("#b { overflow: auto; line-height: 3 !important; line-height: 2; height: 1lh }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px;overflow-y:auto;height:48px\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:3;overflow-y:auto;height:48px\"",
                              b_of("#b { overflow: auto; line-height: 3; height: 1lh } div { line-height: 2 }"));
 }
 
@@ -238,15 +238,29 @@ static void test_l111_mixed(void) {
     TEST_ASSERT_EQUAL_STRING("2 0 min(1%, 600px)", mlh("calc(min(10%, 1500px * 4) * 0.1)", -1));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mlh("calc(min(10%, 1500px * 4) * 2 * 0.1)", -1));
     /* the node count with a buffer past 63 bytes: a calc() argument is 3
-     * nodes, a clamp() 1 more than its arguments (24 taken, 26 not) */
+     * nodes, a clamp() 1 more than its arguments (24 taken) */
     TEST_ASSERT_EQUAL_STRING("2 0 max(min(calc(1% + 4px), calc(2% + 3px), calc(3% + 2px), calc(4% + 1px)), "
                              "clamp(calc(9% + 9px), calc(10% + 10px), 1%))",
                              mbig("max(min(calc(1% + 4px), calc(2% + 3px), calc(3% + 2px), calc(4% + 1px)), "
                                   "clamp(calc(9% + 9px), calc(10% + 10px), 1%))"));
+    /* Lot 116 (converted, were -1 0 with 24 nodes): 26 and 31 nodes are
+     * taken now (32 nodes, WE_MATH_NODES_MAX) */
+    TEST_ASSERT_EQUAL_STRING("2 0 max(min(calc(1% + 4px), calc(2% + 3px), calc(3% + 2px), calc(4% + 1px)), "
+                             "clamp(calc(9% + 9px), calc(10% + 10px), calc(1% + 1px)))",
+                             mbig("max(min(calc(1% + 4px), calc(2% + 3px), calc(3% + 2px), calc(4% + 1px)), "
+                                  "clamp(calc(9% + 9px), calc(10% + 10px), calc(1% + 1px)))"));
+    TEST_ASSERT_EQUAL_STRING("2 0 max(min(calc(1% + 4px), calc(2% + 3px), calc(3% + 2px), calc(4% + 1px)), "
+                             "min(calc(5% + 8px), calc(6% + 7px), calc(7% + 6px), calc(8% + 5px)))",
+                             mbig("max(min(calc(1% + 4px), calc(2% + 3px), calc(3% + 2px), calc(4% + 1px)), "
+                                  "min(calc(5% + 8px), calc(6% + 7px), calc(7% + 6px), calc(8% + 5px)))"));
+    /* Lot 116: 32 nodes taken (a clamp() of 15 + 15 + 1 nodes), 33 not
+     * (a max() of the same three arguments) */
+    TEST_ASSERT_EQUAL_STRING("2 0 clamp(min(calc(1% + 4px), calc(2% + 3px), calc(3% + 2px), calc(4% + 1px)), "
+                             "min(calc(5% + 8px), calc(6% + 7px), calc(7% + 6px), calc(8% + 5px)), 1%)",
+                             mbig("clamp(min(calc(1% + 4px), calc(2% + 3px), calc(3% + 2px), calc(4% + 1px)), "
+                                  "min(calc(5% + 8px), calc(6% + 7px), calc(7% + 6px), calc(8% + 5px)), 1%)"));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mbig("max(min(calc(1% + 4px), calc(2% + 3px), calc(3% + 2px), calc(4% + 1px)), "
-                                           "clamp(calc(9% + 9px), calc(10% + 10px), calc(1% + 1px)))"));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mbig("max(min(calc(1% + 4px), calc(2% + 3px), calc(3% + 2px), calc(4% + 1px)), "
-                                           "min(calc(5% + 8px), calc(6% + 7px), calc(7% + 6px), calc(8% + 5px)))"));
+                                           "min(calc(5% + 8px), calc(6% + 7px), calc(7% + 6px), calc(8% + 5px)), 1%)"));
     /* Lot 112 (converted): the same values with comparable leaves fit
      * (calc(1% + 1px) covers the other leaves of its min()); were -1 for
      * the last two */
@@ -258,14 +272,33 @@ static void test_l111_mixed(void) {
                                   "clamp(calc(9% + 9px), calc(10% + 10px), calc(1% + 1px)))"));
     TEST_ASSERT_EQUAL_STRING("2 0 calc(5% + 5px)", mbig("max(min(calc(1% + 1px), calc(2% + 2px), calc(3% + 3px), calc(4% + 4px)), "
                                                       "min(calc(5% + 5px), calc(6% + 6px), calc(7% + 7px), calc(8% + 8px)))"));
-    /* the engine's bounds: 4 arguments, 4 functions deep, 24 nodes, the
-     * buffer; no mixed value times a length or over a mixed value */
+    /* the engine's bounds (Lot 116: 8 arguments, 8 functions deep, 32
+     * nodes, were 4, 4 and 24), the buffer; no mixed value times a length
+     * or over a mixed value */
     TEST_ASSERT_EQUAL_STRING("2 0 min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px))",
                              mlh("min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px))", -1));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mbig("min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px), calc(5% - 4px))"));
+    /* Lot 116 (converted, was -1 0): five arguments are taken */
+    TEST_ASSERT_EQUAL_STRING("2 0 min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px), calc(5% - 4px))",
+                             mbig("min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px), calc(5% - 4px))"));
+    /* Lot 116: eight arguments are taken, nine are not */
+    TEST_ASSERT_EQUAL_STRING("2 0 min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px), calc(5% - 4px), "
+                             "calc(6% - 5px), calc(7% - 6px), calc(8% - 7px))",
+                             mbig("min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px), calc(5% - 4px), "
+                                  "calc(6% - 5px), calc(7% - 6px), calc(8% - 7px))"));
+    TEST_ASSERT_EQUAL_STRING("-1 0 ", mbig("min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px), calc(5% - 4px), "
+                                           "calc(6% - 5px), calc(7% - 6px), calc(8% - 7px), calc(9% - 8px))"));
     TEST_ASSERT_EQUAL_STRING("-1 0 ", mlh("calc(min(1%, 1px) + min(2%, 2px) + min(3%, 3px))", -1));
-    TEST_ASSERT_EQUAL_STRING("-1 0 ", mbig("min(calc(9% - 9px), max(calc(1% + 9px), min(calc(9% - 8px), "
-                                           "max(calc(1% + 8px), calc(5% + 1px)))))"));
+    /* Lot 116 (converted, was -1 0): four functions deep with five is
+     * taken */
+    TEST_ASSERT_EQUAL_STRING("2 0 min(calc(9% - 9px), max(calc(1% + 9px), min(calc(9% - 8px), "
+                             "max(calc(1% + 8px), calc(5% + 1px)))))",
+                             mbig("min(calc(9% - 9px), max(calc(1% + 9px), min(calc(9% - 8px), "
+                                  "max(calc(1% + 8px), calc(5% + 1px)))))"));
+    /* Lot 116: eight functions deep are taken, nine are not */
+    TEST_ASSERT_EQUAL_STRING("2 0 min(9%, max(1px, min(8%, max(2px, min(7%, max(3px, min(6%, max(4px, 5%))))))))",
+                             mbig("min(9%, max(1px, min(8%, max(2px, min(7%, max(3px, min(6%, max(4px, 5%))))))))"));
+    TEST_ASSERT_EQUAL_STRING("-1 0 ", mbig("min(9%, max(1px, min(8%, max(2px, min(7%, max(3px, min(6%, max(4px, "
+                                           "min(5%, 9px)))))))))"));
     /* Lot 112 (converted): comparable leaves go first, so these fit
      * (were -1 0 for the last two) */
     TEST_ASSERT_EQUAL_STRING("2 0 min(1%, 1px)", mlh("min(1%, 1px, 2%, 2px)", -1));
@@ -280,10 +313,13 @@ static void test_l111_mixed(void) {
     /* through the reader */
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(calc(50% + 1px), 11px)\"",
                              b_of("#b { overflow: auto; height: calc(min(50%, 10px) + 1px) }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:32px;overflow-y:auto;height:max(calc(10% + 20px), 52px)\"",
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:2;overflow-y:auto;height:max(calc(10% + 20px), 52px)\"",
                              b_of("#b { overflow: auto; line-height: 2; height: calc(max(10%, 1lh) + 20px) }"));
-    TEST_ASSERT_EQUAL_STRING("", b_of("#b { overflow: auto; height: min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px), "
-                                      "calc(5% - 4px)) }"));
+    /* Lot 116 (converted, was ""): five arguments are passed */
+    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px), "
+                             "calc(5% - 4px))\"",
+                             b_of("#b { overflow: auto; height: min(1%, calc(2% - 1px), calc(3% - 2px), calc(4% - 3px), "
+                                  "calc(5% - 4px)) }"));
     /* Lot 112 (converted, was ""): five arguments, two of them left */
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:min(1%, 1px)\"",
                              b_of("#b { overflow: auto; height: min(1%, 1px, 2%, 2px, 3%) }"));

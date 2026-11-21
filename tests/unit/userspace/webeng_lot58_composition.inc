@@ -53,15 +53,15 @@ static void test_l58_composition_responsive_math_relayout_preserves_style(void) 
 }
 
 static void test_l58_composition_exact_expression_node_capacity(void) {
-    lot52_render("<body style='margin:0'><div id=a style='width:clamp(1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px,2px,3px);height:10px'>A</div></body>", 320);
+    lot52_render("<body style='margin:0'><div id=a style='width:clamp(1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px,2px,3px);height:10px'>A</div></body>", 320);
     TEST_ASSERT_EQUAL(WE_MATH_NODES_MAX, lot52_node("a")->length[WE_LEN_WIDTH].count);
-    TEST_ASSERT_EQUAL(11, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(15, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(10, lot52_node("a")->h);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
 static void test_l58_composition_expression_capacity_refuses_atomically(void) {
-    lot52_render("<body style='margin:0'><div id=a style='width:calc(40px + 10px);width:calc(1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px);height:10px'>A</div></body>", 320);
+    lot52_render("<body style='margin:0'><div id=a style='width:calc(40px + 10px);width:calc(1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px + 1px);height:10px'>A</div></body>", 320);
     TEST_ASSERT_EQUAL(3, lot52_node("a")->length[WE_LEN_WIDTH].count);
     TEST_ASSERT_EQUAL(50, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(10, lot52_node("a")->h);

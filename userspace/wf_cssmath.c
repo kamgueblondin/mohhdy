@@ -2,6 +2,7 @@
  * length token, see wf_cssmath.h. Recursive descent over a bounded
  * string. */
 #include "wf_cssmath.h"
+#include "../include/os_ui_scale.h"
 
 typedef struct { int px, em, len, mix; } mv_t;     /* thousandths; len 0: a plain number */
 
@@ -9,7 +10,7 @@ typedef struct { int px, em, len, mix; } mv_t;     /* thousandths; len 0: a plai
  * linear part (px and em fields), MX_MIN / MX_MAX / MX_CLAMP (3) of the
  * kids; mv_t.mix is its index + 1 */
 enum { MX_LIN, MX_MIN, MX_MAX, MX_CLAMP };
-#define MX_NODES 24
+#define MX_NODES 32      /* Lot 116: was 24 */
 #define MX_KIDS 8
 typedef struct { unsigned char op, n, kid[MX_KIDS]; int px, em; } mx_t;
 
@@ -121,6 +122,31 @@ static mv_t with_unit(mp_t *p, int n) {
         p->i += 3;
         if (p->rlh_px >= 0) v.px = mul_milli(n, p->rlh_px, &p->bad);
         else { int x = mul_milli(n, p->rem_px, &p->bad); v.px = x / 16 * 10 + x % 16 * 10 / 16; }
+    }
+    else if (p->box && (pre(p->s + p->i, "rcap") || pre(p->s + p->i, "rex") || pre(p->s + p->i, "rch") ||
+                        pre(p->s + p->i, "ric") || pre(p->s + p->i, "cap") || pre(p->s + p->i, "ic"))) {
+        /* Lot 116: cap (and the root's rcap, rex, rch, ric; CSS Values 4
+         * 6.1.1): the inked rows of a capital in the engine's 8x8 font
+         * are 7 (kernel/gfx_font8.h), so cap is os_ui_px(7, q) of the
+         * font's scale when ex and ch are the engine's (ex_px >= 0), 7/16
+         * of the size otherwise (as ex 5/16 and ch 8/16); the font has no
+         * ideograph, so ic is 1em (CSS Values 4 6.1.1.1). The root ones
+         * take the root's font size (rem_px) */
+        int root = p->s[p->i] == 'r' || p->s[p->i] == 'R', u = p->s[p->i + root], k, f, x;
+        k = u == 'c' || u == 'C' ? (p->s[p->i + root + 1] == 'a' || p->s[p->i + root + 1] == 'A' ? 7 : 8)
+          : u == 'e' || u == 'E' ? 5 : 16;
+        p->i += root + (k == 7 ? 3 : 2);
+        f = root ? p->rem_px : p->em_px;
+        if (k == 16) v.px = mul_milli(n, f, &p->bad);
+        else if (p->ex_px >= 0) {
+            /* the font's px rounded and its scale, as for ex and ch
+             * (wf_sitecss.c font_metrics) */
+            int px = f / 1000 + (f % 1000 >= 500), q = os_ui_q_clamp((px + 2) / 4);
+            v.px = mul_milli(n, os_ui_px(k, q) * 1000, &p->bad);
+        } else {
+            x = mul_milli(n, f, &p->bad);
+            v.px = x / 16 * k + x % 16 * k / 16;
+        }
     }
     else if (p->box && (pre(p->s + p->i, "ex") || pre(p->s + p->i, "ch") || pre(p->s + p->i, "lh"))) {
         /* Lot 109: the font's metrics (wf_cssprop.h, webeng.h at 16 px):
@@ -354,7 +380,7 @@ static int mx_cost(const mp_t *p, int x, int *depth) {
     int j, n, d, dm = 0;
     *depth = 0;     /* also past the argument bound (the cost refuses it) */
     if (t->op == MX_LIN) { *depth = t->em && t->px ? 1 : 0; return t->em && t->px ? 3 : 1; }
-    if (t->n > WF_CSSMATH_ARGS) return WF_CSSMATH_NODES + 1;      /* the engine takes 4 arguments */
+    if (t->n > WF_CSSMATH_ARGS) return WF_CSSMATH_NODES + 1;      /* the engine takes 8 arguments (Lot 116) */
     n = t->op == MX_CLAMP ? 1 : t->n - 1;
     for (j = 0; j < t->n; j++) {
         n += mx_cost(p, t->kid[j], &d);

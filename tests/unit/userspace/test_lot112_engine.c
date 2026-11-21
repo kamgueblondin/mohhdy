@@ -60,17 +60,22 @@ static int sh(int k) {
 /* one-line paragraphs are as high as their line height */
 static void test_l112_lh_layout(void) {
     reduce("#a { line-height: 30px } #b { line-height: calc(1 + 1) } #c { line-height: calc(100% + 4px) }", P3);
-    TEST_ASSERT_NOT_NULL(strstr(g_out, "<p style=\"line-height:30px\">a</p><p style=\"line-height:32px\">b</p>"
+    /* Lot 116 (converted): the number is passed as the number (was 32px) */
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "<p style=\"line-height:30px\">a</p><p style=\"line-height:2\">b</p>"
                                        "<p style=\"line-height:20px\">c</p>"));
     TEST_ASSERT_EQUAL(30, nth("p", 0)->h);
     TEST_ASSERT_EQUAL(32, nth("p", 1)->h);
     TEST_ASSERT_EQUAL(20, nth("p", 2)->h);
     TEST_ASSERT_EQUAL(nth("p", 0)->y + 30 + 16, nth("p", 1)->y);       /* the 16px margin between them */
-    /* the engine's bounds: 10..40 */
+    /* the engine's bounds: Lot 116 (converted) 1..400 px used (was 10..40) */
     reduce("#a { line-height: 100px } #b { line-height: 0.25 } #c { line-height: 0 }", P3);
-    TEST_ASSERT_EQUAL(40, nth("p", 0)->h);
-    TEST_ASSERT_EQUAL(10, nth("p", 1)->h);
-    TEST_ASSERT_EQUAL(10, nth("p", 2)->h);
+    TEST_ASSERT_EQUAL(100, nth("p", 0)->h);
+    TEST_ASSERT_EQUAL(4, nth("p", 1)->h);
+    TEST_ASSERT_EQUAL(1, nth("p", 2)->h);
+    reduce("#a { line-height: 500px } #b { line-height: 30 } #c { line-height: 0.01 }", P3);
+    TEST_ASSERT_EQUAL(400, nth("p", 0)->h);
+    TEST_ASSERT_EQUAL(400, nth("p", 1)->h);      /* 30 x 16 px past 400 */
+    TEST_ASSERT_EQUAL(1, nth("p", 2)->h);
     /* the body's px reaches the paragraphs; normal under it is passed */
     reduce("html { line-height: 25px } #b { line-height: normal } #c { font-size: 20px; line-height: normal }", P3);
     TEST_ASSERT_EQUAL(25, nth("p", 0)->h);

@@ -1188,7 +1188,7 @@ static void test_l58_width_invalid_15(void) {
 
 static void test_l58_width_invalid_16(void) {
     lot52_render("<body style='margin:0'><div id=g style='width:200px'>"
-        "<div id=a style='height:10px;background:red;width:calc(40px + 10px);width:max(1px,2px,3px,4px,5px);'>A"
+        "<div id=a style='height:10px;background:red;width:calc(40px + 10px);width:max(1px,2px,3px,4px,5px,6px,7px,8px,9px);'>A"
         "</div><div id=b style='height:5px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
@@ -1332,8 +1332,8 @@ static void test_l58_width_invalid_23(void) {
 
 static void test_l58_width_invalid_24(void) {
     lot52_render("<body style='margin:0'><div id=g style='width:200px'>"
-        "<div id=a style='height:10px;background:red;width:calc(40px + 10px);width:calc(calc(calc(calc(calc(10px)))));'>"
-        "A</div><div id=b style='height:5px'></div></div></body>", 320);
+        "<div id=a style='height:10px;background:red;width:calc(40px + 10px);width:"
+        "calc(calc(calc(calc(calc(calc(calc(calc(calc(10px)))))))));'>A</div><div id=b style='height:5px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
     TEST_ASSERT_EQUAL(50, lot52_node("a")->w);
