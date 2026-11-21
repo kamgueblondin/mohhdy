@@ -19,7 +19,10 @@
 #ifndef WF_CSSMATH_H
 #define WF_CSSMATH_H
 
-#define WF_CSSMATH_DEPTH 8
+/* factors nested (a function, a parenthesis or calc() and the leaf
+ * inside them); Lot 116: 9 (was 8), so a value WF_CSSMATH_FN_DEPTH
+ * functions deep and its leaves parse */
+#define WF_CSSMATH_DEPTH 9
 #define WF_CSSMATH_MAX 10000000   /* thousandths: 10000 px or 10000 em */
 
 /* 1 and out = the resolved token when s is calc()/min()/max()/clamp();
@@ -55,9 +58,11 @@ int wf_css_token(int milli, const char *unit, char *out, int cap);
  * in a sum or a product with a number: the sums and factors go into the
  * arguments (min(a, b) + c is min(a + c, b + c), -clamp(a, b, c) is
  * min(-a, max(-b, -c))), written within the engine's bounds */
-#define WF_CSSMATH_NODES 24       /* webeng.h WE_MATH_NODES_MAX */
-#define WF_CSSMATH_FN_DEPTH 4     /* webeng.h WE_MATH_DEPTH_MAX */
-#define WF_CSSMATH_ARGS 4         /* arguments of one function (webeng.c math_atom) */
+/* Lot 116: the engine's bounds are 32 nodes, 8 functions deep and 8
+ * arguments (were 24, 4 and 4) */
+#define WF_CSSMATH_NODES 32       /* webeng.h WE_MATH_NODES_MAX */
+#define WF_CSSMATH_FN_DEPTH 8     /* webeng.h WE_MATH_DEPTH_MAX */
+#define WF_CSSMATH_ARGS 8         /* webeng.h WE_MATH_ARGS_MAX */
 int wf_css_math_box(const char *s, int vw, int vh, int em_px, int rem_px, int *px, char *out, int cap);
 /* Lot 111: wf_css_math_box with lh against lh_px, the element's line
  * height in px thousandths (0..WF_CSSMATH_MAX), when it is not negative;

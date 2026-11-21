@@ -87,16 +87,28 @@ static void test_l111_mixed_layout(void) {
            TL TJ, PO);
     TEST_ASSERT_NOT_NULL(strstr(g_out, "max-height:min(30%, 150px)"));
     TEST_ASSERT_EQUAL(60, sh(1));
-    /* five arguments: valid CSS, so the last height wins, but the reader
-     * cannot pass it (the engine takes four): #o has no height and is
-     * not passed as a box scroller (before Lot 111 the engine refused
-     * the written min() and dropped the height alone) */
+    /* Lot 116 (converted): five arguments are passed now (the engine
+     * takes eight): min(180, 161, 142, 123, 104) of 200px (was: not
+     * passed, #o no box scroller, sh(1) -1) */
     reduce("#p { overflow: auto; height: 200px } #o { overflow: auto; height: 50px; "
            "height: min(90%, calc(80% + 1px), calc(70% + 2px), calc(60% + 3px), calc(50% + 4px)) } " TL TJ, PO);
-    TEST_ASSERT_NULL(strstr(g_out, "min(90%"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "height:min(90%, calc(80% + 1px), calc(70% + 2px), calc(60% + 3px), calc(50% + 4px))"));
     TEST_ASSERT_NULL(strstr(g_out, "height:50px"));
     TEST_ASSERT_EQUAL(200, sh(0));
+    TEST_ASSERT_EQUAL(104, sh(1));
+    /* Lot 116: nine arguments are still not passed (WE_MATH_ARGS_MAX),
+     * #o no box scroller; written short to fit WF_SITE_VAL */
+    reduce("#p { overflow: auto; height: 200px } #o { overflow: auto; height: 50px; height: min(max(1%,9px),max(2%,8px),"
+           "max(3%,7px),max(4%,6px),max(5%,5px),max(6%,4px),max(7%,3px),max(8%,2px),max(9%,1px)) } " TL TJ, PO);
+    TEST_ASSERT_NULL(strstr(g_out, "height:min("));
+    TEST_ASSERT_NULL(strstr(g_out, "height:50px"));
     TEST_ASSERT_EQUAL(-1, sh(1));
+    /* eight are passed: min(9, 8, 7, 8, 10, 12, 14, 16) at 200px */
+    reduce("#p { overflow: auto; height: 200px } #o { overflow: auto; height: 50px; height: min(max(1%,9px),max(2%,8px),"
+           "max(3%,7px),max(4%,6px),max(5%,5px),max(6%,4px),max(7%,3px),max(8%,2px)) } " TL TJ, PO);
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "height:min(max(1%, 9px), max(2%, 8px), max(3%, 7px), max(4%, 6px), "
+                                "max(5%, 5px), max(6%, 4px), max(7%, 3px), max(8%, 2px))"));
+    TEST_ASSERT_EQUAL(7, sh(1));
     /* Lot 112 (converted, was the case above): comparable arguments go
      * first (1px covers 2px, 70% covers 80% and 90%), so the two left
      * are passed in their order and the engine takes min(1, 140) */

@@ -2881,10 +2881,12 @@ static void test_l52_overlong_src_is_not_read_as_a_prefix(void) {
 }
 
 static void test_l52_overlong_style_is_refused_atomically(void) {
-    char html[600];
+    char html[1500];
     int i;
     strcpy(html, "<body style='margin:0'><div id=a style='width:10px;");
-    for (i = 0; i < 280; i++) strcat(html, " ");
+    /* Lot 116 (converted, was 280 spaces): a style value is read up to
+     * WE_STYLE_ATTR_MAX (1279) bytes */
+    for (i = 0; i < 1300; i++) strcat(html, " ");
     strcat(html, "height:40px'>word</div></body>");
     lot52_render(html, 160);
     TEST_ASSERT_TRUE(lot52_has_diag("attribute exceeds limit"));

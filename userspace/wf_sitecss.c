@@ -1260,6 +1260,25 @@ static int app_u(char *o, int cap, int n, unsigned v) {
     return n;
 }
 
+/* Lot 116: v hundredths as a decimal, trailing zeros left out (1550 is
+ * "15.5", 2000 "20") */
+static int app_hund(char *o, int cap, int n, unsigned v) {
+    char f[4];
+    n = app_u(o, cap, n, v / 100u);
+    if (!(v % 100u)) return n;
+    f[0] = '.'; f[1] = (char)('0' + v % 100u / 10u); f[2] = (char)('0' + v % 10u); f[3] = 0;
+    if (f[2] == '0') f[2] = 0;
+    return app(o, cap, n, f);
+}
+
+/* Lot 116: the line-height the style attribute passes (lhx, lh_engine) */
+static int app_lhx(char *o, int cap, int n, int x) {
+    if (x == 1) return app(o, cap, n, "normal");
+    if (x < 0) return app_hund(o, cap, n, (unsigned)(-1 - x));
+    n = app_hund(o, cap, n, (unsigned)(x - 2));
+    return app(o, cap, n, "px");
+}
+
 static int app_box(char *o, int cap, int n, const uint8_t side[4]) {
     int i;
     for (i = 0; i < 4; i++) {
@@ -1422,12 +1441,17 @@ static void body_pct(const wf_site_t *d, const wf_site_node_t *nd, int ax, int *
     h = &d->node[p];
     if (!html_len(d, h, ax ? 2 : 0, ax ? d->vw : d->vh, &hv)) {
         /* Lot 112: html's width auto (no width or max-width) fills the
-         * initial containing block, the viewport's width, when html has
-         * no margin or padding of its own (CSS 2, 10.3.3); html's height
-         * auto still leaves the body's percentage to the engine (auto,
-         * CSS 2 10.5) */
-        if (!ax || h->xtok[0][0] || h->xpx[1] || h->xtok[1][0] || h->margin_set || h->pad_set) return;
-        hv = d->vw;
+         * initial containing block, the viewport's width (CSS 2,
+         * 10.3.3); html's height auto leaves the body's percentage to the
+         * engine, which reads it as auto (CSS 2 10.5: the containing
+         * block's height depends on the content). Lot 116: html's content
+         * width is the viewport's less html's left and right margins and
+         * padding (whole px, the only values the reader keeps for them;
+         * html's style is not written, so the engine would read the
+         * percentage of the viewport), at least 0 */
+        if (!ax || h->xtok[0][0] || h->xpx[1] || h->xtok[1][0]) return;
+        hv = d->vw - h->margin[1] - h->margin[3] - h->pad[1] - h->pad[3];
+        if (hv < 0) hv = 0;
     }
     hv = hv * *v / 100;
     *v = hv > WF_SITE_HMAX ? WF_SITE_HMAX : hv;
@@ -1520,8 +1544,7 @@ int wf_site_style_attr(const wf_site_t *d, int offset, char *out, int cap) {
         int x = d->lhx[nd - d->node];
         if (any) n = app(out, cap, n, ";");
         n = app(out, cap, n, "line-height:");
-        if (x == 1) n = app(out, cap, n, "normal");
-        else { n = app_u(out, cap, n, (unsigned)x); n = app(out, cap, n, "px"); }
+        n = app_lhx(out, cap, n, x);
         any = 1;
     }
     {
@@ -1660,9 +1683,11 @@ int wf_site_report(const wf_site_t *d, char *out, int cap) {
         }
         if (d->lhx[i]) {
             /* Lot 112: the line height the style attribute passes on */
+            /* Lot 116: px with up to two decimals, "num N" for a number */
             n = app(out, cap, n, " lh ");
-            if (d->lhx[i] == 1) n = app(out, cap, n, "normal");
-            else n = app_u(out, cap, n, (unsigned)d->lhx[i]);
+            if (d->lhx[i] < 0) n = app(out, cap, n, "num ");
+            if (d->lhx[i] >= 2) n = app_hund(out, cap, n, (unsigned)(d->lhx[i] - 2));
+            else n = app_lhx(out, cap, n, d->lhx[i]);
         }
         n = app(out, cap, n, "\n");
     }
@@ -2337,8 +2362,10 @@ static int height_val(const wf_site_t *d, const char *v, int mx, int *px, char *
     if (v[k]) return 0;
     {
         /* Lot 107: a font or viewport unit: "~L" when it fits, else the
-         * pool (Lot 112: rlh too) */
-        static const char *const un[] = {"em", "rem", "vw", "vh", "vmin", "vmax", "ex", "ch", "lh", "rlh", 0};
+         * pool (Lot 112: rlh too; Lot 116: cap, ic and the root's rex, rch,
+         * rcap and ric) */
+        static const char *const un[] = {"em", "rem", "vw", "vh", "vmin", "vmax", "ex", "ch", "lh", "rlh",
+                                           "cap", "ic", "rex", "rch", "rcap", "ric", 0};   /* Lot 116 */
         int f;
         for (f = 0; un[f]; f++) if (eq(v + u, un[f])) break;
         if (!un[f]) return 1;
@@ -2550,7 +2577,9 @@ static int lh_val(const wf_site_t *d, const char *v, char *tok) {
     if (eq(v, "normal") || eq(v, "initial")) { scopy(tok, WF_SITE_TOK, "n", 1); return 1; }
     if (eq(v, "inherit") || eq(v, "unset")) { scopy(tok, WF_SITE_TOK, "i", 1); return 1; }
     if (v[0] == '-') return 0;
-    if (wf_csslen_abs(v, &q)) {
+    /* Lot 116: a bare 0 is the number 0 (CSS Inline 3 4.2 lists <number>
+     * first; it was read as the length 0px) */
+    if (!(v[0] && v[slen(v) - 1] >= '0' && v[slen(v) - 1] <= '9') && wf_csslen_abs(v, &q)) {
         q /= 10;     /* not negative: v[0] is not '-' */
         tok[0] = 'p';
         return lh_digits(q > WF_CSSMATH_MAX ? WF_CSSMATH_MAX : q, tok + 1);
@@ -2575,6 +2604,14 @@ static int lh_val(const wf_site_t *d, const char *v, char *tok) {
      * math does not read (in, cm, mm, q, pt, pc: px); below 0 is 0 (CSS
      * Values 4 10.12; a number 0 and 0px give the same line heights) */
     if (!d) return 0;
+    {
+        /* Lot 116: a math function of numbers is a number even when the
+         * box math takes it (calc(1 - 2) was read as 0px) */
+        char no[WF_CSSPROP_VAL];
+        int ty = 0;
+        if (wf_cssprop_math_eval(v, &ty, no, (int)sizeof(no)) == 1 && ty == WF_CSSPROP_NUMBER)
+            return lh_val(0, no[0] == '-' ? "0" : no, tok);
+    }
     if (wf_css_math_box(v, d->vw, d->vh, 16000, 16000, &r, mo, (int)sizeof(mo)) < 1) {
         char no[WF_CSSPROP_VAL];
         int ty = 0;
@@ -2585,6 +2622,29 @@ static int lh_val(const wf_site_t *d, const char *v, char *tok) {
     }
     if (slen(v) + 1 < WF_SITE_TOK) { tok[0] = '~'; scopy(tok + 1, WF_SITE_TOK - 1, v, slen(v)); return 1; }
     return tok_pool((wf_site_t *)d, v, tok);
+}
+
+/* Lot 116: the properties outside the kinds that take unset with a clear
+ * initial value (the overflow and box lengths: visible, auto, none, 0;
+ * the timelines, scroll-padding, animation-range and the animation and
+ * transition lists: none, auto, normal), so a var() invalid at
+ * computed-value time is unset there (CSS Variables 1, 3.1) */
+static int unset_prop(const char *prop) {
+    static const char *const up[] = {
+        "overflow", "overflow-x", "overflow-y", "height", "max-height", "min-height", "width", "max-width",
+        "scroll-timeline-name", "scroll-timeline-axis", "view-timeline-name", "view-timeline-axis",
+        "scroll-timeline", "view-timeline", "timeline-scope", "view-timeline-inset",
+        "scroll-padding", "scroll-padding-block", "scroll-padding-inline", "scroll-padding-block-start",
+        "scroll-padding-block-end", "scroll-padding-inline-start", "scroll-padding-inline-end",
+        "scroll-padding-top", "scroll-padding-bottom", "scroll-padding-left", "scroll-padding-right",
+        "animation-range", "animation", "transition", "animation-name", "animation-duration",
+        "animation-timing-function", "animation-delay", "animation-iteration-count", "animation-direction",
+        "animation-fill-mode", "animation-play-state", "animation-composition", "animation-timeline",
+        "animation-range-start", "animation-range-end", "transition-property", "transition-duration",
+        "transition-timing-function", "transition-delay", "transition-behavior", 0};
+    int k;
+    for (k = 0; up[k]; k++) if (eq(prop, up[k])) return 1;
+    return 0;
 }
 
 static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_t *proto) {
@@ -2641,9 +2701,11 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             if (i < n && body[i] == ';') i++;
             continue;
         }
-        if (d && g_vnode < 0 && (prop_kind(prop) || eq(prop, "opacity") || eq(prop, "line-height")) &&
+        if (d && g_vnode < 0 && (prop_kind(prop) || eq(prop, "opacity") || eq(prop, "line-height") || unset_prop(prop)) &&
             names_elem_var(d, val)) {
-            /* Lot 111: opacity as well; Lot 112: and line-height */
+            /* Lot 111: opacity as well; Lot 112: and line-height; Lot
+             * 116: and the properties of unset_prop (their kinds come
+             * from their unset form below) */
             /* Lot 89: read again for each element (wf_site_apply) */
             proto->deferred = 1;
             scopy(proto->dprop, (int)sizeof(proto->dprop), prop, slen(prop));
@@ -2666,6 +2728,13 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                 proto->color = op ? 10000u : 0u;
                 return 1;
             }
+            if (proto->deferred && !prop_kind(prop) && unset_prop(prop)) {
+                /* Lot 116: the kinds this property sets, from its unset
+                 * form (each a copy of proto, deferred: the value comes
+                 * per element) */
+                scopy(val, (int)sizeof(val), "unset", 5);
+                goto computed;
+            }
             if (proto->deferred) {
                 /* no sheet-wide value: the kind alone, the value comes per
                  * element */
@@ -2676,7 +2745,7 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                 more_like(prop, proto, 0);
                 return 1;
             }
-            if (!prop_kind(prop)) {
+            if (!prop_kind(prop) && !unset_prop(prop)) {
                 if (i < n && body[i] == ';') i++;
                 continue;
             }
@@ -2686,6 +2755,7 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
              * initial on the others (the unset path below) */
             scopy(val, (int)sizeof(val), "unset", 5);
         }
+    computed:
         {
             /* Lot 101: the scroll and view timeline names and axes, kept
              * as written; a shorthand gives its two lists */
@@ -2722,6 +2792,12 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                             return 1;
                         }
                     }
+                }
+                if (had_var && !eq(val, "unset")) {
+                    /* Lot 116: a value from var() the property does not
+                     * take is unset (invalid at computed-value time) */
+                    scopy(val, (int)sizeof(val), "unset", 5);
+                    goto computed;
                 }
                 if (i < n && body[i] == ';') i++;
                 continue;
@@ -2868,6 +2944,12 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                     }
                     return 1;
                 }
+                if (had_var && !eq(val, "unset")) {
+                    /* Lot 116: a value from var() the property does not
+                     * take is unset (invalid at computed-value time) */
+                    scopy(val, (int)sizeof(val), "unset", 5);
+                    goto computed;
+                }
                 if (i < n && body[i] == ';') i++;
                 continue;
             }
@@ -2932,6 +3014,12 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                     g_nmore = nv - 1;
                     return 1;
                 }
+                if (had_var && !eq(val, "unset")) {
+                    /* Lot 116: a value from var() the property does not
+                     * take is unset (invalid at computed-value time) */
+                    scopy(val, (int)sizeof(val), "unset", 5);
+                    goto computed;
+                }
                 if (i < n && body[i] == ';') i++;
                 continue;
             }
@@ -2955,6 +3043,12 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                         g_nmore = 1;
                         return 1;
                     }
+                }
+                if (had_var && !eq(val, "unset")) {
+                    /* Lot 116: a value from var() the property does not
+                     * take is unset (invalid at computed-value time) */
+                    scopy(val, (int)sizeof(val), "unset", 5);
+                    goto computed;
                 }
                 if (i < n && body[i] == ';') i++;
                 continue;
@@ -2980,6 +3074,12 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
                 c = q < WF_CSSANIM_LONGS ? wf_cssanim_long(q, val, la, WF_CSSANIM_MAX) :
                                            wf_csstrans_long(q - WF_CSSANIM_LONGS, val, lt, WF_CSSANIM_MAX);
                 if (c > 0 && long_proto(d, WF_SITE_K_LONG0 + q, val, 1, proto)) return 1;
+                if (had_var && !eq(val, "unset")) {
+                    /* Lot 116: a value from var() the property does not
+                     * take is unset (invalid at computed-value time) */
+                    scopy(val, (int)sizeof(val), "unset", 5);
+                    goto computed;
+                }
                 if (i < n && body[i] == ';') i++;
                 continue;
             }
@@ -2999,6 +3099,12 @@ static int parse_decl(const wf_site_t *d, const char *body, int n, wf_site_rule_
             }
             c = an ? wf_cssanim_parse(val, al, WF_CSSANIM_MAX) : wf_csstrans_parse(val, tl, WF_CSSANIM_MAX);
             if (c > 0 && long_proto(d, kind, val, 1, proto)) return 1;
+            if (had_var && !eq(val, "unset")) {
+                /* Lot 116: a value from var() the list does not take is
+                 * unset (invalid at computed-value time) */
+                scopy(val, (int)sizeof(val), "unset", 5);
+                goto computed;
+            }
             if (i < n && body[i] == ';') i++;
             continue;
         }
@@ -4737,17 +4843,25 @@ static void lh_resolve(wf_site_t *d, int i, int f) {
 }
 
 /* Lot 112: what element i passes the engine for line-height (lhx): its
- * line height in whole px (truncated, within the engine's 10..40) when it
- * is not normal, normal when an ancestor's is not (the engine inherits a
- * px line height, and elements it does not keep pass nothing on), else
- * nothing (the engine's own normal) */
+ * line height when it is not normal, normal when an ancestor's is not
+ * (the engine inherits a line height, and elements it does not keep pass
+ * nothing on), else nothing (the engine's own normal). Lot 116: a number
+ * (lhk 1) is passed as the number (hundredths, rounded half up) when it
+ * is at most WF_SITE_LH_NUM_MAX and the element's font size is whole px
+ * (the engine multiplies by its whole px font size and its elements
+ * inherit the number); else the px with two decimals (rounded half up),
+ * at most WF_SITE_LH_MAX (was whole px, truncated, within 10..40) */
 static void lh_engine(wf_site_t *d, int i) {
     const wf_site_node_t *nd = &d->node[i];
-    int par = nd->parent >= 0 && nd->parent < i ? nd->parent : -1, px;
+    int par = nd->parent >= 0 && nd->parent < i ? nd->parent : -1, h;
     d->lhe[i] = (uint8_t)(d->lh[i] || (par >= 0 && d->lhe[par]));
     if (!d->lh[i]) { d->lhx[i] = d->lhe[i]; return; }
-    px = (d->lh[i] - 1) / 1000;
-    d->lhx[i] = (uint8_t)(px < 10 ? 10 : px > 40 ? 40 : px);
+    if (d->lhk[i] == 1 && d->lhv[i] <= WF_SITE_LH_NUM_MAX * 1000 && d->fs[i] % 1000 == 0) {
+        d->lhx[i] = -1 - (d->lhv[i] + 5) / 10;
+        return;
+    }
+    h = (d->lh[i] - 1 + 5) / 10;
+    d->lhx[i] = 2 + (h > WF_SITE_LH_MAX * 100 ? WF_SITE_LH_MAX * 100 : h);
 }
 
 static void resolve_lengths(wf_site_t *d) {
@@ -4760,7 +4874,7 @@ static void resolve_lengths(wf_site_t *d) {
     for (i = 0; i < d->nnodes; i++) {
         wf_site_node_t *nd = &d->node[i];
         int parent = (nd->parent >= 0 && nd->parent < i) ? d->fs[nd->parent] : 16000;
-        int t, f = parent, ok;
+        int t, f = parent, ok, fv = 0, fok = 0;
         const char *ft = nd->tok[WF_SITE_K_FSIZE - WF_SITE_K_LIST];
         int is_root = nd->parent < 0 && eq(nd->tag, "html");
         int rem = is_root ? 16000 : root;
@@ -4769,8 +4883,8 @@ static void resolve_lengths(wf_site_t *d) {
             int k = fs_keyword(ft, parent);
             if (k) f = k;
             else {
-                int v = fs_px(d, i, ft, parent, rem, &ok);     /* Lot 112 */
-                if (ok && v >= lo[0] && v <= hi[0]) f = v;
+                fv = fs_px(d, i, ft, parent, rem, &fok);     /* Lot 112 */
+                if (fok && fv >= lo[0] && fv <= hi[0]) f = fv;
             }
         }
         d->fs[i] = f;
@@ -4784,8 +4898,12 @@ static void resolve_lengths(wf_site_t *d) {
             if (nd->tok_val[slot] != 2) continue;
             if (tk[0] != '=' && !(t == 0 && ends_rem(tk) && rem != 16000)) continue;
             /* font-size against the parent, the other two against the
-             * element's own size */
-            v = t == 0 ? fs_px(d, i, tk, parent, rem, &ok) : tok_px(d, tk, f, rem, &ok);
+             * element's own size. Lot 116: font-size is the value read
+             * above (bug found: read again here, the root's own rex, rch,
+             * rlh, ... were of its new size and line height, not the
+             * initial ones) */
+            if (t == 0) { v = fv; ok = fok; }
+            else v = tok_px(d, tk, f, rem, &ok);
             if (!ok || v < lo[t] || v > hi[t] || wf_css_token(v, "px", tk, WF_SITE_TOK) < 0) {
                 nd->tok_val[slot] = 0;
                 tk[0] = 0;

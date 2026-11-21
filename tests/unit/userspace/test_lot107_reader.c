@@ -125,7 +125,9 @@ static void test_l107_heights(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:64px\"", style_of("b"));
     /* a kept unit the reader does not resolve wins the cascade and
      * passes nothing; an invalid value is dropped */
-    prep("#b { overflow: auto; height: 100px } #b { height: 10cap } " RD);
+    /* Lot 116 (converted): cap resolves now (the engine's capitals), so
+     * cqh stands for a kept unit the reader does not resolve */
+    prep("#b { overflow: auto; height: 100px } #b { height: 10cqh } " RD);
     TEST_ASSERT_EQUAL(0, node("b")->hpx);
     TEST_ASSERT_EQUAL_STRING("", node("b")->htok);
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));

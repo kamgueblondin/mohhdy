@@ -1058,6 +1058,39 @@ LOT114_FILES = {
 }
 
 
+# Lot 116: line-height as the engine reads it now (a number inherited as
+# a number, px with hundredths, past the old 40 px), cap and the root's
+# rcap, a mixed max() of five arguments and var() unset on a box height
+# (tests/scripts/test_qemu_lot116.py)
+LOT116_FILL = "".join("<p>line116 %d</p>" % i for i in range(10))
+LOT116_FILL6 = "".join("<p>line116 %d</p>" % i for i in range(6))
+LOT116_PAGES = {
+    "/lot116/lh.html": (
+        "<!doctype html><html><head><title>Lot 116 lh</title><style>"
+        "@keyframes k116 { from { color: #000000 } to { color: #ffffff } }\n"
+        "html { overflow: hidden; line-height: 15px; height: calc(26rlh + 10px) }\n"
+        "body { overflow: auto; height: 50%; margin: 0; scroll-timeline: --b116; line-height: 1.25 }\n"
+        "#i116 { animation: k116 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "#n116 { animation: k116 1000ms linear; animation-timeline: --b116 }\n"
+        "#r116 { animation: k116 1000ms linear; animation-timeline: view() }\n"
+        "#b116 { font-size: 24px }\n"
+        "#q116 { line-height: 20.5px }\n"
+        "#w116 { line-height: 45px }\n"
+        "#c116 { line-height: 4cap }\n"
+        "#e116 { font-size: 2rcap }\n"
+        "#d116 { overflow: auto; height: max(5% + 10px, 10%, 2% + 30px, 1rlh + 25px, 25% - 5px) }\n"
+        "#v116 { overflow: auto; height: 30px; height: var(--x116) }\n"
+        "#dd116, #vv116 { animation: k116 1000ms linear; animation-timeline: scroll(nearest) }\n"
+        "</style></head><body><h1>Body 116</h1>"
+        "<p id=\"i116\">ikeep116</p><p id=\"n116\">nkeep116</p>"
+        "<p id=\"b116\">bkeep116</p><p id=\"q116\">qkeep116<br>qline116</p><p id=\"w116\">wkeep116</p>"
+        "<p id=\"c116\">ckeep116</p><p id=\"e116\">ekeep116</p>"
+        "<div id=\"d116\"><p id=\"dd116\">dkeep116</p></div><div id=\"v116\"><p id=\"vv116\">vkeep116</p></div>" + LOT116_FILL +
+        "<p id=\"r116\">rkeep116</p>" + LOT116_FILL6 +
+        "<p>fin116</p></body></html>"),
+}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -1326,6 +1359,9 @@ class H(http.server.BaseHTTPRequestHandler):
         if p in LOT114_FILES:
             ct, body = LOT114_FILES[p]
             self._send(200, body.encode("utf-8"), ct)
+            return True
+        if p in LOT116_PAGES:
+            self._send(200, LOT116_PAGES[p].encode("utf-8"), "text/html; charset=utf-8")
             return True
         if p == "/lot89/scope.html":
             # Lot 89: a start list and an end list, & and :scope with a

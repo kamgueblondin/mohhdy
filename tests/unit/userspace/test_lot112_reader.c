@@ -64,24 +64,26 @@ static const char *mctx(const char *s, int lh, int rlh, int basis) {
     return g_o;
 }
 
-/* line-height in the style attribute: whole px within the engine's
- * 10..40, cut toward zero; normal under an ancestor that is not normal;
- * nothing when the whole chain is normal */
+/* line-height in the style attribute: Lot 116 (converted): px with two
+ * decimals within the engine's 0..400 and a number as the number (was
+ * whole px within 10..40, cut toward zero); normal under an ancestor
+ * that is not normal; nothing when the whole chain is normal */
 static void test_l112_lh_style(void) {
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:20px\"", b_of("#b { line-height: 20px }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:24px\"", b_of("#b { line-height: 1.5 }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:20px\"", b_of("#b { line-height: 20.9px }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:40px\"", b_of("#b { line-height: 41px }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:10px\"", b_of("#b { line-height: 9px }"));
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:10px\"", b_of("#b { line-height: 0 }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:1.5\"", b_of("#b { line-height: 1.5 }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:20.9px\"", b_of("#b { line-height: 20.9px }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:41px\"", b_of("#b { line-height: 41px }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:9px\"", b_of("#b { line-height: 9px }"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:0\"", b_of("#b { line-height: 0 }"));
     TEST_ASSERT_EQUAL_STRING("", b_of("#b { line-height: normal }"));
     TEST_ASSERT_EQUAL_STRING("", b_of("#i { line-height: 20px }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:normal\"", b_of("#o { line-height: 20px } #b { line-height: normal }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:normal\"", style_of("i"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:20px\"", b_of("html { line-height: 20px }"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:20px\"", style_of("body"));
-    /* a number inherits as a number: #b's own font gives its px */
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;line-height:20px\"", b_of("#o { line-height: 2 } #b { font-size: 10px }"));
+    /* a number inherits as a number: #b's own font gives its px (Lot
+     * 116: the number is passed, the engine multiplies) */
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10px;line-height:2\"", b_of("#o { line-height: 2 } #b { font-size: 10px }"));
     /* with other properties, before the box (the engine reads it with
      * the font size) */
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:30px;overflow-y:auto;height:60px\"",
@@ -89,7 +91,7 @@ static void test_l112_lh_style(void) {
     /* the report's node line names it */
     prep("#o { line-height: 2 } #b { line-height: normal }");
     TEST_ASSERT_TRUE(wf_site_report(&g_d, g_rep, (int)sizeof(g_rep)) > 0);
-    TEST_ASSERT_NOT_NULL(strstr(g_rep, "node div #o display auto lh 32\n"));
+    TEST_ASSERT_NOT_NULL(strstr(g_rep, "node div #o display auto lh num 2\n"));     /* Lot 116: was lh 32 */
     TEST_ASSERT_NOT_NULL(strstr(g_rep, "node div #b display auto lh normal\n"));
     TEST_ASSERT_NOT_NULL(strstr(g_rep, "node p #i display auto lh normal\n"));
     TEST_ASSERT_NOT_NULL(strstr(g_rep, "node body display auto\n"));
@@ -103,7 +105,7 @@ static void test_l112_lh_math(void) {
     TEST_ASSERT_EQUAL_STRING("0 20001 48001 30001", lh4());     /* #i: 150% of 32px is past 30px */
     prep("#o { line-height: calc(1 + 0.5) } #b { font-size: 10px } #i { line-height: calc(1 - 2) }");
     TEST_ASSERT_EQUAL_STRING("0 24001 15001 1", lh4());     /* the number inherits; 0 px is not normal */
-    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:10px\"", style_of("i"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"line-height:0\"", style_of("i"));
     prep("#o { line-height: max(1, 0.5 * 3); line-height: clamp(10px, 125%, 30px) } #b { line-height: calc(2lh - 50%) }");
     TEST_ASSERT_EQUAL_STRING("0 20001 32001 32001", lh4());
     prep("#o { line-height: 2; line-height: calc(1 + 1px) } #b { line-height: calc(10% * 3) }");
@@ -420,7 +422,11 @@ static void test_l112_fs_units(void) {
     TEST_ASSERT_EQUAL(16000, g_d.fs[4]);
     prep("#b { font-size: 2ex 3px }");
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
+    /* Lot 116 (converted): cap is read now (7 rows at 16px: 14px); cqh
+     * stands for a unit font-size does not take */
     prep("#b { font-size: 2cap }");
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:14px\"", style_of("b"));
+    prep("#b { font-size: 2cqh }");
     TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     prep("#b { font-size: calc(1000ch) }");
     TEST_ASSERT_EQUAL(16000, g_d.fs[4]);
@@ -519,10 +525,12 @@ static void test_l112_unset_all(void) {
     prep(":root { --w: 12px } #o { font-style: italic } #b { --w: 2px } #i { font-style: normal; font-style: var(--w) }");
     TEST_ASSERT_EQUAL_STRING(" style=\"font-style:italic\"", style_of("o"));
     TEST_ASSERT_EQUAL_STRING("", style_of("i"));     /* inherited from #o (italic) */
-    /* not a property the reader keeps as a kind: dropped as before (the
-     * earlier height stays) */
+    /* Lot 116 (converted): not a property the reader keeps as a kind but
+     * one with a clear initial value: unset, height auto, so #b passes no
+     * height and is no box scroller (was dropped, the earlier height
+     * stayed: " style=\"overflow-y:auto;height:50px\"") */
     prep("#b { overflow: auto; height: 50px; height: var(--u) } " RD);
-    TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:50px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING("", style_of("b"));
     /* font-weight: a number 1..1000 with nothing after it */
     prep("#b { font-weight: bold; font-weight: 12px }");
     TEST_ASSERT_EQUAL_STRING(" style=\"font-weight:bold\"", style_of("b"));
@@ -553,11 +561,14 @@ static void test_l112_html_auto(void) {
                              style_of("body"));
     prep("html { overflow: hidden; width: auto } body { overflow: auto; width: 25%; height: 100px } " RD);
     TEST_ASSERT_EQUAL_STRING(" style=\"overflow-y:auto;height:100px;overflow-x:auto;width:160px\"", style_of("body"));
-    /* html with a margin, a padding or a max-width: left as it was */
+    /* Lot 116 (converted, were "width:25%" left as it was): html's
+     * margin and padding come off the viewport's width, (640 - 20) / 4
+     * and (640 - 8) / 4 */
     prep("html { overflow: hidden; margin: 0 10px } body { overflow: auto; width: 25%; height: 100px } " RD);
-    TEST_ASSERT_NOT_NULL(strstr(style_of("body"), "width:25%"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("body"), "width:155px"));
     prep("html { overflow: hidden; padding: 4px } body { overflow: auto; width: 25%; height: 100px } " RD);
-    TEST_ASSERT_NOT_NULL(strstr(style_of("body"), "width:25%"));
+    TEST_ASSERT_NOT_NULL(strstr(style_of("body"), "width:158px"));
+    /* html with a max-width: left as it was */
     prep("html { overflow: hidden; max-width: 500px } body { overflow: auto; width: 25%; height: 100px } " RD);
     TEST_ASSERT_NOT_NULL(strstr(style_of("body"), "width:25%"));
     prep("html { overflow: hidden; max-width: 50% } body { overflow: auto; width: 25%; height: 100px } " RD);

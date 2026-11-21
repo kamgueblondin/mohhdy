@@ -20,7 +20,7 @@ LH_MIN, LH_MAX = 10, 40      # WE_LINE_H, WE_LINE_H_MAX
 ROOT_LH_INIT = 10000         # rlh in the root's line-height: normal at 16px
 
 
-def lh_engine(lhs, parents):
+def lh_engine_lot112(lhs, parents):
     """what each element passes the engine for line-height: lhs are the
     line heights (px thousandths + 1, 0 normal) in document order and
     parents their parent indexes (-1 none); 0 nothing, 1 normal, else whole
@@ -39,9 +39,9 @@ def lh_engine(lhs, parents):
     return out
 
 
-def engine_lh(x, font_px):
-    """the engine's line height (px) of an element given lh_engine's code
-    x for it (0 or 1: normal, the engine's 10 px scaled by its font: q =
+def engine_lh_lot112(x, font_px):
+    """the engine's line height (px) of an element given lh_engine_lot112's
+    code x for it (0 or 1: normal, the engine's 10 px scaled by its font: q =
     (font + 2) / 4 within 4..16, (10 q + 2) / 4) at ui scale 1x"""
     if x > 1:
         return x
@@ -49,11 +49,75 @@ def engine_lh(x, font_px):
     return (10 * q + 2) // 4
 
 
+def lh_style_lot112(x):
+    """the style attribute's line-height part of lh_engine_lot112's code"""
+    if x == 0:
+        return "-"
+    return "line-height:normal" if x == 1 else "line-height:%dpx" % x
+
+
+# Lot 116: the engine keeps px with hundredths up to 400 px and a unitless
+# number (hundredths) up to 40, multiplied by its font size in whole px
+# (CSS Inline 3 4.2); the used line height is 1..400 px
+LH116_MAX, LH116_NUM_MAX = 400, 40
+
+
+def lh_engine(lhs, comps, fss, parents):
+    """Lot 116: what each element passes the engine for line-height: lhs as
+    in lh_engine_lot112, comps the computed values (k, v) (lot111_model
+    lh_comp: k 1 a number in 1/1000), fss the font sizes (px thousandths);
+    0 nothing, 1 normal, -1 - hundredths for a number (at most 40, whole px
+    font), else 2 + px hundredths (rounded half up, at most 400 px)"""
+    out, dirty = [], []
+    for i, lh in enumerate(lhs):
+        p = parents[i]
+        d = bool(lh) or (p >= 0 and dirty[p])
+        dirty.append(d)
+        if not lh:
+            out.append(1 if d else 0)
+            continue
+        k, v = comps[i]
+        if k == 1 and v <= LH116_NUM_MAX * 1000 and fss[i] % 1000 == 0:
+            out.append(-1 - (v + 5) // 10)
+            continue
+        out.append(2 + min((lh - 1 + 5) // 10, LH116_MAX * 100))
+    return out
+
+
+def engine_lh100(x, font_px):
+    """Lot 116: the engine's used line height in hundredths of a px of an
+    element given lh_engine's code x (normal: (10 q + 2) / 4 px)"""
+    if x in (0, 1):
+        q = min(max((font_px + 2) // 4, 4), 16)
+        return (10 * q + 2) // 4 * 100
+    if x < 0:
+        v = max(-1 - x, 1) * font_px
+    else:
+        v = x - 2 if x > 2 else 1
+    return min(max(v, 100), LH116_MAX * 100)
+
+
+def engine_lh(x, font_px):
+    """Lot 116: the height of a one-line block: whole px of the used line
+    height (a fraction is carried to the next line)"""
+    return engine_lh100(x, font_px) // 100
+
+
+def hund(v):
+    """v hundredths as the reader writes them (trailing zeros left out)"""
+    t = "%d" % (v // 100)
+    if v % 100:
+        t += (".%02d" % (v % 100)).rstrip("0")
+    return t
+
+
 def lh_style(x):
     """the style attribute's line-height part of lh_engine's code"""
     if x == 0:
         return "-"
-    return "line-height:normal" if x == 1 else "line-height:%dpx" % x
+    if x == 1:
+        return "line-height:normal"
+    return "line-height:" + (hund(-1 - x) if x < 0 else hund(x - 2) + "px")
 
 
 def lh_decl(t):

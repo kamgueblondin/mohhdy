@@ -639,10 +639,10 @@ def write_mix():
         cases.append(["TEST_ASSERT_EQUAL_STRING(%s, mb(%s, %d, %d));" % (cstr(e), cstr(s), em * 1000, rem * 1000)])
     o = [HEADER % "Lot 111: wf_css_math_box with mixed min()/max()/clamp() nested or in an arithmetic"] + [
         '#include "../../framework/unity.h"', "#include <string.h>", "#include <stdio.h>", '#include "wf_cssmath.h"', "",
-        "static char g_o[160];", "",
+        "static char g_o[%d];" % (M.BOXEX + 32), "",
         "/* \"r px out\" of wf_css_math_box at 640 x 480 */",
         "static const char *mb(const char *s, int em, int rem) {",
-        "    char out[64];",
+        "    char out[%d];" % M.BOXEX,     # Lot 116: WF_SITE_BOXEX (was 64)
         "    int px = -7, r = wf_css_math_box(s, 640, 480, em, rem, &px, out, (int)sizeof(out));",
         "    snprintf(g_o, sizeof(g_o), \"%d %d %s\", r, px, out);",
         "    return g_o;",

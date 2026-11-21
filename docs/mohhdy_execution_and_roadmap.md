@@ -7,6 +7,21 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 116 (21 November 2026, base 326cd7e, PR not opened)
+
+US-031 partial, phase3_complete=false. The engine reads line-height as
+CSS does (a number inherited as a number and multiplied by each
+element's font, px with hundredths carried from line to line, em and %,
+1..400 px) and the reader passes it that way; the engine's math bounds
+are 32 nodes, 8 deep and 8 arguments (the reader mirrors them); var()
+invalid at computed-value time is unset for the box lengths, overflow,
+timelines and animation lists; the body's percentage width is of the
+viewport less html's margins and padding; cap, ic and the root font
+units are read against the engine's font. A QEMU page (`make
+qemu-lot116`, CI job lot116-engine-lh) checks it. The work started as a
+"lot 113" on 2268ae3 and was moved onto the Lot 115 base. First gap for
+Lot 117: see docs/lot116_plan.md.
+
 ### Lot 115 (18 November 2026, PR 273 in progress)
 
 US-031 partial, phase3_complete=false. The layout values page scripts
