@@ -1786,6 +1786,13 @@ qemu-lot115: $(OS_IMAGE) pack-initrd disk
 qemu-lot116: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot116.py
 
+# Lot 117: font-relative lengths in the engine (em of the element's font,
+# rem, ex, ch, cap, ic, lh, rlh), font sizes in hundredths, the clamp's
+# carried sum, read with web-inspect (tests/scripts/test_qemu_lot117.py)
+.PHONY: qemu-lot117
+qemu-lot117: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot117.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

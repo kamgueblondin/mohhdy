@@ -162,15 +162,15 @@ static void test_l116_lh_carry_bounds(void) {
     TEST_ASSERT_EQUAL(21, text_y("c") - text_y("b"));
     TEST_ASSERT_EQUAL(82, el("a")->h);
     /* line-clamp 2 keeps a and b (b ends with the dots), c and d go; the
-     * clamped height counts whole px lines (20 + 20, the last fraction
-     * not added: Not done) */
+     * clamped height is the carried sum of the two lines (Lot 117: 20 +
+     * 21 = 41; Lot 116 counted whole px lines, 40) */
     lays("<body style='margin:0'><div id=a style='width:200px;line-height:20.6px;line-clamp:2'>"
          "a<br>b<br>c<br>d</div><div id=n>after</div></body>");
     TEST_ASSERT_EQUAL(1, text_y("a"));
     TEST_ASSERT_EQUAL(-1000, text_y("c"));
     TEST_ASSERT_EQUAL(-1000, text_y("d"));
-    TEST_ASSERT_EQUAL(40, el("a")->h);
-    TEST_ASSERT_EQUAL(41, text_y("after"));
+    TEST_ASSERT_EQUAL(41, el("a")->h);
+    TEST_ASSERT_EQUAL(42, text_y("after"));
 }
 
 /* an orthogonal (vertical) root contributes its lines times the line

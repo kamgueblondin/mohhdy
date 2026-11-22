@@ -63,6 +63,19 @@
 #define WE_FONT_PX_MAX 64
 int we_font_q(int font_px);
 int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px);
+/* Lot 117: font-relative lengths. A context gives, in hundredths of a
+ * px, the font size (em, ic; ex, ch and cap from its 8x8 glyph scale),
+ * the root font size (rem), the line height (lh) and the root line
+ * height (rlh). */
+typedef struct { int font100, root100, lh100, rlh100; } we_unit_ctx_t;
+/* "1.5em", "-2rem", ".25ch": hundredths of a px (three decimals read, the
+ * whole part at most 2000); 0, or -1 for px, numbers and other units */
+int we_unit_len100(const char *v, int len, const we_unit_ctx_t *c, int *h100);
+/* font-size against the parent context (keywords, smaller/larger, px and
+ * pt with decimals, em/% of the parent, rem, ex, ch, cap, ic, lh, rlh and
+ * calc/min/max/clamp of them): hundredths of a px within
+ * WE_FONT_PX_MIN..WE_FONT_PX_MAX px, 0, or -1 when refused */
+int we_font_size100(const char *v, int vl, const we_unit_ctx_t *parent, int *out100);
 #define WE_TEXT_BASELINE 9
 #define WE_TRACKS_MAX 8
 #define WE_GRID_ROWS_MAX WE_MAX_NODES
@@ -439,6 +452,10 @@ typedef struct {
      * cascade ends (then px of its own font, which children inherit). */
     uint8_t font_px, font_parent_px, lh_unitless;
     uint8_t lh_frac;
+    /* Lot 117: the font size in hundredths of a px (font_px is it rounded;
+     * em, number line heights and the font-relative units use it), 0 on a
+     * node never styled (font_px x 100 then) */
+    uint16_t font100;
     int16_t text_indent;       /* first line only, after float shortening */
     int8_t z_index;            /* absolute paint order, -8..8 */
     uint8_t z_set, clear_side, valign;
