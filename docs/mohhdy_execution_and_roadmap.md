@@ -7,6 +7,18 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 117 (22 November 2026, base 6aeb9b5, PR not opened)
+
+US-031 partial, phase3_complete=false. The engine reads font-relative
+lengths as CSS does: em of the element's own font (was 10 px), rem, ex,
+ch, cap, ic, lh and rlh, in every length it reads, in its math, in
+font-size (against the parent) and in line-height; font sizes keep
+hundredths of a px, so number line heights follow fractional fonts and
+the reader passes them as numbers; line-height reads math; line-clamp
+ends at the carried sum of fractional lines. A QEMU page (`make
+qemu-lot117`, CI job lot117-engine-units) checks it with web-inspect.
+First gap for Lot 118: viewport units in the engine (docs/lot117_plan.md).
+
 ### Lot 116 (21 November 2026, base 326cd7e, PR not opened)
 
 US-031 partial, phase3_complete=false. The engine reads line-height as

@@ -4856,7 +4856,11 @@ static void lh_engine(wf_site_t *d, int i) {
     int par = nd->parent >= 0 && nd->parent < i ? nd->parent : -1, h;
     d->lhe[i] = (uint8_t)(d->lh[i] || (par >= 0 && d->lhe[par]));
     if (!d->lh[i]) { d->lhx[i] = d->lhe[i]; return; }
-    if (d->lhk[i] == 1 && d->lhv[i] <= WF_SITE_LH_NUM_MAX * 1000 && d->fs[i] % 1000 == 0) {
+    /* Lot 117: the engine keeps the font size in hundredths of a px (Lot
+     * 116: whole px only), so a number is passed as the number for any
+     * font size in hundredths within the engine's 4..64 px */
+    if (d->lhk[i] == 1 && d->lhv[i] <= WF_SITE_LH_NUM_MAX * 1000 && d->fs[i] % 10 == 0 &&
+        d->fs[i] >= 4000 && d->fs[i] <= 64000) {
         d->lhx[i] = -1 - (d->lhv[i] + 5) / 10;
         return;
     }

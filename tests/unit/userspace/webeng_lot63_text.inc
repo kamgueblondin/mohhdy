@@ -101,7 +101,7 @@ static void test_l63_text_tab_size_values(void) {
                  "<div id=e style='tab-size:255px'></div><div id=f></div></body>", 320);
     TEST_ASSERT_EQUAL(32, lot52_node("a")->tab_px);
     TEST_ASSERT_EQUAL(32, lot52_node("b")->tab_px);        /* inherited */
-    TEST_ASSERT_EQUAL(10, lot52_node("c")->tab_px);        /* parse_len reads 1em as 10px */
+    TEST_ASSERT_EQUAL(16, lot52_node("c")->tab_px);        /* Lot 117: 1em of the 16 px font (Lot 63: 10px) */
     TEST_ASSERT_EQUAL(248, lot52_node("d")->tab_px);
     TEST_ASSERT_EQUAL(255, lot52_node("e")->tab_px);
     TEST_ASSERT_EQUAL(64, lot52_node("f")->tab_px);        /* 8 spaces by default */

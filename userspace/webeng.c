@@ -1130,10 +1130,129 @@ static int parse_color(const char* v, int n, uint32_t* out) {
     return -1;
 }
 
-/* "12px", "12", "1.5em" (em = 10 px), "50%" (pct set) */
+/* ---------- Lot 117: font-relative units ----------
+ * The element being styled gives em (its font size), ic (1em: the 8x8 font
+ * has no ideograph, CSS Values 4 6.1.1.1), ex, ch and cap (the 8x8 glyph
+ * metrics at the element's scale q: x height 5 rows, cell 8 columns,
+ * capitals 7 rows, as wf_sitecss.c font_metrics), lh (its used line
+ * height); the root element gives rem and rlh (CSS Values 4 6.1.1). All in
+ * hundredths of a px. style_node sets them (the parent's while the
+ * element's own font-size is read, then the element's once its font-size
+ * and line-height are known). */
+static int u_font100 = WE_FONT_PX_DEFAULT * 100, u_root100 = WE_FONT_PX_DEFAULT * 100;
+static int u_lh100 = WE_LINE_H * 100, u_rlh100 = WE_LINE_H * 100, u_q = 4;
+enum { WE_U_EM, WE_U_REM, WE_U_EX, WE_U_CH, WE_U_CAP, WE_U_IC, WE_U_LH, WE_U_RLH, WE_U_COUNT };
+static const char *const unit_names[WE_U_COUNT] = { "em", "rem", "ex", "ch", "cap", "ic", "lh", "rlh" };
+
+/* the unit at v[0..len) (whole suffix), -1 when it is not one of them */
+static int unit_code(const char *v, int len) {
+    int k, j;
+    for (k = 0; k < WE_U_COUNT; k++) {
+        const char *u = unit_names[k];
+        for (j = 0; u[j] && j < len && w_low(v[j]) == u[j]; j++) {}
+        if (!u[j] && j == len) return k;
+    }
+    return -1;
+}
+
+/* the unit v ends in (its trailing letters after something else), -1
+ * when none; only a choice of path for line-height: what precedes the
+ * unit is checked by unit_len100 */
+static int unit_code_tail(const char *v, int len) {
+    int i = len;
+    while (i > 0 && w_low(v[i - 1]) >= 'a' && w_low(v[i - 1]) <= 'z') i--;
+    if (i <= 0 || i >= len) return -1;
+    return unit_code(v + i, len - i);
+}
+
+/* one unit in hundredths of a px in the current context */
+static int unit_base100(int code) {
+    switch (code) {
+    case WE_U_EM: case WE_U_IC: return u_font100;
+    case WE_U_REM: return u_root100;
+    case WE_U_EX: return os_ui_px(5, u_q) * 100;
+    case WE_U_CH: return os_ui_px(8, u_q) * 100;
+    case WE_U_CAP: return os_ui_px(7, u_q) * 100;
+    case WE_U_LH: return u_lh100;
+    default: return u_rlh100;
+    }
+}
+
+/* "1.5em", "-2rem", ".75ch": the number (three decimals read) times the
+ * unit, in hundredths of a px (*h100); the whole part at most 2000. 0 when
+ * v is such a length, -1 when it has another unit or none. */
+static int unit_len100(const char *v, int len, int *h100) {
+    int i = 0, neg = 0, whole = 0, frac = 0, scale = 1000, digits = 0, code, b;
+    if (i < len && (v[i] == '-' || v[i] == '+')) { neg = v[i] == '-'; i++; }
+    while (i < len && v[i] >= '0' && v[i] <= '9') {
+        whole = whole > 2000 ? 2001 : whole * 10 + (v[i] - '0'); i++; digits++;
+    }
+    if (i < len && v[i] == '.') {
+        i++;
+        while (i < len && v[i] >= '0' && v[i] <= '9') {
+            if (scale > 1) { scale /= 10; frac += (v[i] - '0') * scale; }
+            i++; digits++;
+        }
+    }
+    if (!digits) return -1;
+    if (whole > 2000) whole = 2000;
+    code = unit_code(v + i, len - i);
+    if (code < 0) return -1;
+    b = unit_base100(code);
+    /* whole * b <= 2000 * 40000; frac * b < 1000 * 40000 */
+    b = whole * b + (frac * b + 500) / 1000;
+    *h100 = neg ? -b : b;
+    return 0;
+}
+
+/* the same rounded to whole px (half away from zero), within +-2000 */
+static int unit_len(const char *v, int len, int *px) {
+    int h, r;
+    if (unit_len100(v, len, &h)) return -1;
+    r = h < 0 ? -((-h + 50) / 100) : (h + 50) / 100;
+    *px = r > 2000 ? 2000 : r < -2000 ? -2000 : r;
+    return 0;
+}
+
+static int u_ctx_set(const we_unit_ctx_t *c) {
+    int f = c->font100 > 0 ? c->font100 : WE_FONT_PX_DEFAULT * 100;
+    u_font100 = f;
+    u_root100 = c->root100 > 0 ? c->root100 : WE_FONT_PX_DEFAULT * 100;
+    u_lh100 = c->lh100 > 0 ? c->lh100 : WE_LINE_H * 100;
+    u_rlh100 = c->rlh100 > 0 ? c->rlh100 : WE_LINE_H * 100;
+    u_q = we_font_q((f + 50) / 100);
+    return 0;
+}
+
+typedef struct { int font100, root100, lh100, rlh100, q; } we_u_save_t;
+static void u_save(we_u_save_t *s) { s->font100 = u_font100; s->root100 = u_root100; s->lh100 = u_lh100; s->rlh100 = u_rlh100; s->q = u_q; }
+static void u_restore(const we_u_save_t *s) { u_font100 = s->font100; u_root100 = s->root100; u_lh100 = s->lh100; u_rlh100 = s->rlh100; u_q = s->q; }
+
+/* the API sets the unit context for the call only: we_style sets its own
+ * for each element and the layout does not read it (checked on the
+ * initrd pages) */
+int we_unit_len100(const char *v, int len, const we_unit_ctx_t *c, int *h100) {
+    if (!v || !c || !h100) return -1;
+    u_ctx_set(c);
+    return unit_len100(v, len, h100);
+}
+
+/* a px length or one of the units above: the suffix checks of the
+ * properties that took "px or em" (Lot 62 to 75) */
+static int len_suffix_ok(const char *v, int len) {
+    int i = 0;
+    if (i < len && (v[i] == '-' || v[i] == '+')) i++;
+    while (i < len && ((v[i] >= '0' && v[i] <= '9') || v[i] == '.')) i++;
+    return len - i == 2 ? w_ieq_n(v + i, 2, "px") || unit_code(v + i, 2) >= 0 : unit_code(v + i, len - i) >= 0;
+}
+
+/* "12px", "12" (legacy: digits then anything), a font-relative length
+ * (Lot 117: em of the element's font, rem, ex, ch, cap, ic, lh, rlh; was
+ * em = 10 px), "50%" (pct set) */
 static int parse_len(const char* v, int n, int* px, int* pct) {
-    int i = 0, val = 0, frac = 0, fd = 0, neg = 0;
+    int i = 0, val = 0, neg = 0;
     if (pct) *pct = 0;
+    if (unit_len(v, n, px) == 0) return 0;
     if (i < n && v[i] == '-') { neg = 1; i++; }
     if (i >= n || !((v[i] >= '0' && v[i] <= '9') || v[i] == '.')) return w_ieq_n(v, n, "auto") ? 1 : -1;
     while (i < n && v[i] >= '0' && v[i] <= '9') {
@@ -1141,9 +1260,8 @@ static int parse_len(const char* v, int n, int* px, int* pct) {
         if (val > 2000) val = 2000;
         i++;
     }
-    if (i < n && v[i] == '.') { i++; while (i < n && v[i] >= '0' && v[i] <= '9') { if (fd < 1) { frac = v[i] - '0'; fd++; } i++; } }
+    if (i < n && v[i] == '.') { i++; while (i < n && v[i] >= '0' && v[i] <= '9') i++; }
     if (i < n && v[i] == '%') { if (!pct || neg) return -1; *pct = val; *px = 0; return 0; }
-    if (n - i >= 2 && w_ieq_n(v + i, n - i, "em")) val = val * 10 + frac;
     if (val > 2000) val = 2000;
     *px = neg ? -val : val;
     return 0;
@@ -1384,8 +1502,26 @@ static int math_atom(we_math_parser_t *p) {
         sign = p->text[p->at++] == '-' ? -1 : 1;
     }
     first = p->at;
-    if (first < p->length && p->text[first] >= '0' && p->text[first] <= '9') {
+    if (first < p->length && ((p->text[first] >= '0' && p->text[first] <= '9') || p->text[first] == '.')) {
+        int unit_end, h;
         while (p->at < p->length && p->text[p->at] >= '0' && p->text[p->at] <= '9') p->at++;
+        if (p->at < p->length && p->text[p->at] == '.') {
+            p->at++;
+            while (p->at < p->length && p->text[p->at] >= '0' && p->text[p->at] <= '9') p->at++;
+        }
+        unit_end = p->at;
+        while (unit_end < p->length && w_low(p->text[unit_end]) >= 'a' && w_low(p->text[unit_end]) <= 'z') unit_end++;
+        /* Lot 117: a font-relative length (em of the element's font, rem,
+         * ex, ch, cap, ic, lh, rlh), decimals allowed, is px rounded at
+         * the element: the expression keeps px and percentages only */
+        if (unit_end > p->at && unit_code(p->text + p->at, unit_end - p->at) >= 0) {
+            if (unit_len100(p->text + first, unit_end - first, &h)) return -1;
+            h = (h + 50) / 100;
+            if (h > WE_MATH_LITERAL_MAX) return -1;
+            p->at = unit_end;
+            return math_node(p, M_PX, 0, 0, 0, h * sign, 1);
+        }
+        /* decimals: font-relative units only (bounded_uint refuses the point) */
         if (bounded_uint(p->text + first, p->at - first, WE_MATH_LITERAL_MAX, &number)) return -1;
         if (p->at < p->length && p->text[p->at] == '%') { op = M_PERCENT; p->at++; }
         else if (p->at + 2 <= p->length && w_ieq_n(p->text + p->at, 2, "px")) { op = M_PX; p->at += 2; }
@@ -1532,7 +1668,15 @@ static int parse_pack(const char *v, int len, int distribution, int stretch) {
 
 /* Lot 109: a px value up to px_max (a percentage up to 2000) */
 static int parse_dim_max(const char *v, int len, int px_max, int *number, int *percent) {
-    int end = len;
+    int end = len, h;
+    /* Lot 117: a font-relative length (rounded px, 0..px_max) */
+    if (unit_len100(v, len, &h) == 0) {
+        if (h < 0) return -1;
+        h = (h + 50) / 100;
+        if (h > px_max) return -1;
+        *percent = 0; *number = h;
+        return 0;
+    }
     *percent = len > 0 && v[len - 1] == '%';
     if (*percent) end--;
     else if (len >= 2 && value_is(v + len - 2, 2, "px")) end -= 2;
@@ -1883,6 +2027,7 @@ static int inline_atomic(const we_node_t *n);
  * percentage in -1000..1000. */
 static int position_length(const char *v, int len, int *pct, int *px) {
     int at = 0, neg = 0, value = 0, digits = 0;
+    if (unit_len(v, len, px) == 0) { *pct = 0; return 0; }     /* Lot 117 */
     if (at < len && (v[at] == '-' || v[at] == '+')) { neg = v[at] == '-'; at++; }
     while (at < len && v[at] >= '0' && v[at] <= '9') { if (value <= 2000) value = value * 10 + v[at] - '0'; at++; digits++; }
     if (!digits || value > 2000) return -1;
@@ -2905,7 +3050,9 @@ static int logical_pair(we_node_t *n, const char *prop, const char *v, int len) 
         pcts[k] = WE_NO_PCT;
         if (margin && value_is(token, end, "auto")) { values[k] = 0; auto_bits[k] = 1; }
         else if (spacing_percent(token, end, margin, &pcts[k]) == 0) values[k] = 0;
-        else {
+        else if (unit_len(token, end, &values[k]) == 0) {      /* Lot 117 */
+            if (!margin && values[k] < 0) return -1;
+        } else {
             if (end >= 2 && value_is(token + end - 2, 2, "px")) end -= 2;
             if (bounded_signed(token, end, 2000, &values[k]) || (!margin && values[k] < 0)) return -1;
         }
@@ -3057,6 +3204,8 @@ static int inset_declaration(we_node_t *n, const char *prop, const char *v, int 
         if (value_is(token, size, "auto")) automatic[k] = 1;
         else if (math_function(token, size)) {
             if (parse_math(token, size, &expression[k])) return -1;
+        } else if (unit_len(token, size, &values[k]) == 0) {
+            /* Lot 117: a font-relative offset */
         } else {
             percent = size && token[size - 1] == '%';
             if (percent) end--;
@@ -3299,7 +3448,7 @@ static int tf_length(const char *v, int len, int16_t *out, int *percent) {
     unit = len - digits;
     if (digits == negative) return -1;
     if (!(unit == 0 && len - negative == 1 && v[negative] == '0') &&
-        !(unit == 2 && (w_ieq_n(v + digits, 2, "px") || w_ieq_n(v + digits, 2, "em"))) &&
+        !(unit >= 2 && len_suffix_ok(v, len)) &&
         !(unit == 1 && v[digits] == '%')) return -1;
     if (parse_len(v + negative, len - negative, &px, &pct) != 0) return -1;
     *percent = v[len - 1] == '%';
@@ -3790,7 +3939,7 @@ static int outline_width_value(const char *v, int len, int *out) {
     if (value_is(v, len, "medium")) { *out = 3; return 0; }
     if (value_is(v, len, "thick")) { *out = 5; return 0; }
     if (len < 1 || v[0] < '0' || v[0] > '9' || parse_len(v, len, &px, &pct) != 0 || pct) return -1;
-    if (!(len == 1 && v[0] == '0') && !(len > 2 && (w_ieq_n(v + len - 2, 2, "px") || w_ieq_n(v + len - 2, 2, "em")))) return -1;
+    if (!(len == 1 && v[0] == '0') && !(len > 2 && len_suffix_ok(v, len))) return -1;
     *out = border_cap(px);
     return 0;
 }
@@ -4306,7 +4455,7 @@ static int tab_size_value(we_node_t *n, const char *v, int vl) {
         n->tab_px = (uint8_t)(count * WE_CHAR_W);
         return 0;
     }
-    if (!(vl > 2 && (w_ieq_n(v + vl - 2, 2, "px") || w_ieq_n(v + vl - 2, 2, "em"))) || v[0] < '0' || v[0] > '9' ||
+    if (!(vl > 2 && len_suffix_ok(v, vl)) || v[0] < '0' || v[0] > '9' ||
         parse_len(v, vl, &px, &pct) != 0 || pct || px > 255) return -1;
     n->tab_px = (uint8_t)px;
     return 0;
@@ -4404,6 +4553,88 @@ int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px) {
     return 0;
 }
 
+/* Lot 117: the parent context of the element being styled (font-size
+ * and its own line-height lh resolve against it, CSS Values 4 6.1.1) */
+static int fs_parent100 = WE_FONT_PX_DEFAULT * 100, fs_parent_lh100 = WE_LINE_H * 100;
+/* rem and rlh in font-size and line-height: the root's, its initial
+ * values in the root element's own (the main pass applies them again
+ * after the root is known) */
+static int fs_root100 = WE_FONT_PX_DEFAULT * 100, fs_rlh100 = WE_LINE_H * 100;
+
+static int node_font100(const we_node_t *n) {
+    if (n->font100) return n->font100;
+    return (n->font_px ? n->font_px : WE_FONT_PX_DEFAULT) * 100;
+}
+
+/* font-size in hundredths of a px with the unit context of the parent
+ * (u_font100 is the parent's font); see we_font_size100 */
+static int font_size100_in(const char *v, int vl, int *out100) {
+    static const char *const kw[] = { "xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large", 0 };
+    static const uint8_t kpx[] = { 9, 10, 13, 16, 18, 24, 32, 48 };
+    int parent = u_font100, h = -1, m, k;
+    while (vl > 0 && (v[0] == ' ' || v[0] == '\t')) { v++; vl--; }
+    while (vl > 0 && (v[vl - 1] == ' ' || v[vl - 1] == '\t')) vl--;
+    if (vl <= 0) return -1;
+    for (k = 0; kw[k]; k++) if (value_is(v, vl, kw[k])) { *out100 = kpx[k] * 100; return 0; }
+    if (value_is(v, vl, "smaller")) h = (parent * 5 + 3) / 6;
+    else if (value_is(v, vl, "larger")) h = (parent * 6 + 2) / 5;
+    else if (math_function(v, vl)) {
+        /* calc/min/max/clamp: px (font-relative leaves of the parent
+         * context) and percentages of the parent font, whole px */
+        we_length_t e;
+        int px;
+        if (parse_math(v, vl, &e) || math_eval(&e, (parent + 50) / 100, &px)) return -1;
+        h = px > WE_FONT_PX_MAX ? WE_FONT_PX_MAX * 100 : px * 100;
+    } else if (unit_len100(v, vl, &h) == 0) {
+        /* em, rem, ex, ch, cap, ic, lh, rlh */
+    } else if (vl > 2 && value_is(v + vl - 2, 2, "px")) {
+        m = font_milli(v, vl - 2);
+        if (m < 0) return -1;
+        h = m > 100000 ? 10000 : (m + 5) / 10;
+    } else if (vl > 2 && value_is(v + vl - 2, 2, "pt")) {
+        m = font_milli(v, vl - 2);
+        if (m < 0) return -1;
+        h = m > 100000 ? 10000 : (m * 4 / 3 + 5) / 10;
+    } else if (vl > 1 && v[vl - 1] == '%') {
+        m = font_milli(v, vl - 1);
+        if (m < 0) return -1;
+        m = (m + 5) / 10;                 /* hundredths of a percent */
+        if (m > 160000) m = 160000;       /* 1600 %: at least 64 px */
+        h = (parent * m + 5000) / 10000;
+    } else return -1;
+    /* a size under half a px is refused (Lot 69 refused 0 px) */
+    if (h < 50) return -1;
+    if (h < WE_FONT_PX_MIN * 100) h = WE_FONT_PX_MIN * 100;
+    if (h > WE_FONT_PX_MAX * 100) h = WE_FONT_PX_MAX * 100;
+    *out100 = h;
+    return 0;
+}
+
+/* the same in the style context: the parent's font, q and line height */
+static int font_size100(const char *v, int vl, int *out100) {
+    we_u_save_t keep;
+    int r;
+    u_save(&keep);
+    u_font100 = fs_parent100; u_q = we_font_q((fs_parent100 + 50) / 100); u_lh100 = fs_parent_lh100;
+    u_root100 = fs_root100; u_rlh100 = fs_rlh100;
+    r = font_size100_in(v, vl, out100);
+    u_restore(&keep);
+    return r;
+}
+
+int we_font_size100(const char *v, int vl, const we_unit_ctx_t *parent, int *out100) {
+    if (!v || !parent || !out100) return -1;
+    u_ctx_set(parent);
+    return font_size100_in(v, vl, out100);
+}
+
+static void set_font100(we_node_t *n, int h) {
+    if (h < WE_FONT_PX_MIN * 100) h = WE_FONT_PX_MIN * 100;
+    if (h > WE_FONT_PX_MAX * 100) h = WE_FONT_PX_MAX * 100;
+    n->font100 = (uint16_t)h;
+    n->font_px = (uint8_t)((h + 50) / 100);
+}
+
 static int node_q(const we_doc_t *d, int node) {
     return we_font_q(d->nodes[node].font_px);
 }
@@ -4413,16 +4644,17 @@ static int node_gh(const we_doc_t *d, int node) { return os_ui_px(8, node_q(d, n
  * its hundredths, a number (or an em line height not yet resolved) times
  * the node's font size in px (CSS Inline 3 4.2), or normal (the scaled
  * 8x10 cell); 1 .. WE_LINE_H_MAX px */
-static int node_lh100(const we_doc_t *d, int node) {
-    const we_node_t *n = &d->nodes[node];
+static int lh100_of(const we_node_t *n) {
     int v;
-    if (n->line_height <= 0 && !n->lh_frac) return os_ui_line_h(node_q(d, node)) * 100;
-    if (n->lh_unitless) v = n->line_height * (n->font_px ? n->font_px : WE_FONT_PX_DEFAULT);
+    if (n->line_height <= 0 && !n->lh_frac) return os_ui_line_h(we_font_q(n->font_px)) * 100;
+    /* Lot 117: x the font size with its hundredths (was the rounded px) */
+    if (n->lh_unitless) v = (n->line_height * node_font100(n) + 50) / 100;
     else v = n->line_height * 100 + n->lh_frac;
     if (v < 100) v = 100;
     if (v > WE_LINE_H_MAX * 100) v = WE_LINE_H_MAX * 100;
     return v;
 }
+static int node_lh100(const we_doc_t *d, int node) { return lh100_of(&d->nodes[node]); }
 /* a block's line box height: its own, raised by any larger inline text
  * inside it (inline descendants only; boxes start their own flow) */
 static int flow_line_h100(const we_doc_t *d, int idx) {
@@ -4456,6 +4688,23 @@ static int flow_line_h(const we_doc_t *d, int idx) {
 static int lh_parse(we_node_t *n, const char *v, int vl) {
     int end = vl, kind = 1, m, h;
     if (value_is(v, vl, "normal")) { n->line_height = 0; n->lh_unitless = 0; n->lh_frac = 0; return 0; }
+    /* Lot 117: calc/min/max/clamp lengths (percentages of the element's
+     * font) and the font-relative units other than em (lh is the
+     * parent's line height here, CSS Values 4 6.1.1), px with hundredths */
+    if (math_function(v, vl) || (unit_code_tail(v, vl) >= 0 && unit_code_tail(v, vl) != WE_U_EM)) {
+        we_length_t e;
+        int keep = u_lh100, keep_root = u_root100, keep_rlh = u_rlh100;
+        u_lh100 = fs_parent_lh100; u_root100 = fs_root100; u_rlh100 = fs_rlh100;
+        if (math_function(v, vl)) {
+            int px;
+            h = parse_math(v, vl, &e) || math_eval(&e, n->font_px ? n->font_px : WE_FONT_PX_DEFAULT, &px) ? -1 : px * 100;
+        } else if (unit_len100(v, vl, &h)) h = -1;
+        u_lh100 = keep; u_root100 = keep_root; u_rlh100 = keep_rlh;
+        if (h < 0 || h > WE_LINE_H_MAX * 100) return -1;
+        n->line_height = (int16_t)(h / 100); n->lh_frac = (uint8_t)(h % 100); n->lh_unitless = 0;
+        if (!h) n->lh_frac = 1;
+        return 0;
+    }
     if (vl >= 2 && value_is(v + vl - 2, 2, "px")) { kind = 0; end -= 2; }
     else if (vl >= 2 && value_is(v + vl - 2, 2, "em")) { kind = 2; end -= 2; }
     else if (vl >= 1 && v[vl - 1] == '%') { kind = 3; end -= 1; }
@@ -4473,6 +4722,12 @@ static int lh_parse(we_node_t *n, const char *v, int vl) {
 }
 
 static int mode_pass;   /* lot 64: 1 while only writing-mode/direction apply */
+/* Lot 117: 1 while only font-size applies, 2 while only line-height
+ * applies (both before the other declarations of the element, which
+ * resolve em, lh and the other units against them). The main pass
+ * applies them again to the same values (font-size against the parent,
+ * lh in line-height against the parent's line height). */
+static int font_pass;
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[40];
     int px, pct, k;
@@ -4480,6 +4735,8 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     w_cpy(prop, sizeof(prop), p, pl);
     for (k = 0; prop[k]; k++) prop[k] = w_low(prop[k]);
     if (mode_pass && !w_eq(prop, "writing-mode") && !w_eq(prop, "direction") && !w_eq(prop, "text-orientation")) return;
+    if (font_pass == 1 && !w_eq(prop, "font-size")) return;
+    if (font_pass == 2 && !w_eq(prop, "line-height")) return;
     if (cssq_decl_front(d, n, p, pl, &v, &vl)) return;   /* lot 73: --x and var() */
     { const char *mapped = logical_property(n, prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
     while (vl > 0 && w_space(v[vl - 1])) vl--;
@@ -4591,10 +4848,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "auto")) {
             n->basis_content = 0; n->flex_basis = -1; n->basis_pct = 0; n->basis_set = 1;
         } else {
-            int percent = vl > 0 && v[vl - 1] == '%';
+            int percent = vl > 0 && v[vl - 1] == '%', unit = unit_len(v, vl, &value) == 0 && value >= 0;   /* Lot 117 */
             if (percent) end--;
             else if (vl >= 2 && value_is(v + vl - 2, 2, "px")) end -= 2;
-            if (bounded_uint(v, end, 2000, &value) == 0) {
+            if (unit || bounded_uint(v, end, 2000, &value) == 0) {
                 n->basis_content = 0;
                 n->flex_basis = (int16_t)(percent ? -1 : value);
                 n->basis_pct = (int16_t)(percent ? value : 0);
@@ -4823,8 +5080,8 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "line-height")) {
         if (lh_parse(n, v, vl)) diag(d, "line height refused", -1);
     } else if (w_eq(prop, "font-size")) {
-        int fpx;
-        if (we_parse_font_size(v, vl, n->font_parent_px, &fpx) == 0) n->font_px = (uint8_t)fpx;
+        int f100;
+        if (font_size100(v, vl, &f100) == 0) set_font100(n, f100);
         else diag(d, "font size refused", -1);
     } else if (w_eq(prop, "text-indent")) {
         int pct = 0;
@@ -4932,8 +5189,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             int end = lens[t], number = 0;
             const char *tok = v + a[t];
             if (end >= 2 && value_is(tok + end - 2, 2, "px")) end -= 2;
-            if (bounded_uint(tok, end, WE_SPACING_MAX, &number)) ok = 0;
-            else if (t == 0) hx = hy = number;
+            if (unit_len(tok, lens[t], &number) == 0) { if (number < 0 || number > WE_SPACING_MAX) ok = 0; }   /* Lot 117 */
+            else if (bounded_uint(tok, end, WE_SPACING_MAX, &number)) ok = 0;
+            if (!ok) break;
+            if (t == 0) hx = hy = number;
             else hy = number;
         }
         if (!ok) diag(d, "border spacing refused", -1);
@@ -5314,14 +5573,14 @@ static void ua_defaults(we_node_t* n) {
         int hi;
         for (hi = 0; hs[hi]; hi++) {
             if (w_eq(t, hs[hi])) {
-                n->font_px = (uint8_t)font_clamp((n->font_parent_px * hm[hi] + 500) / 1000);
+                set_font100(n, (fs_parent100 * hm[hi] + 500) / 1000);
                 n->bold = 1; n->margin[0] = 8; n->margin[2] = 8;
                 if (n->display == WE_DISP_INLINE) n->display = WE_DISP_BLOCK;
             }
         }
     }
-    if (w_eq(t, "small")) n->font_px = (uint8_t)font_clamp((n->font_parent_px * 5 + 3) / 6);
-    if (w_eq(t, "big")) n->font_px = (uint8_t)font_clamp((n->font_parent_px * 6 + 2) / 5);
+    if (w_eq(t, "small")) set_font100(n, (fs_parent100 * 5 + 3) / 6);
+    if (w_eq(t, "big")) set_font100(n, (fs_parent100 * 6 + 2) / 5);
     if (w_eq(t, "ul")) n->padding[3] = 16;
     if (w_eq(t, "ol")) n->padding[3] = 40;
     if (w_eq(t, "b") || w_eq(t, "strong") || w_eq(t, "th")) n->bold = 1;
@@ -5371,6 +5630,32 @@ static void cascade_rules(we_doc_t *d, int idx, we_node_t *n, int pseudo, int im
 
 /* Computes node i: element i matches its own rules (pseudo 0); a generated
  * box matches the ::before/::after rules of its element match. */
+/* Lot 117: the font pass. font-size, then line-height, are cascaded
+ * before the other declarations of the element (each with both
+ * importance passes), quietly: the main pass applies them again to the
+ * same values, for the diagnostics and counters. Then the
+ * context is the element's own: em, ex, ch, cap, ic and lh of its other
+ * declarations use its font and line height; the root element gives rem
+ * and rlh (its own font-size and line-height used the initial ones). */
+static int u_root_done;
+static void font_pass_run(we_doc_t *d, we_node_t *n, int match, int pseudo, int i) {
+    uint32_t ndiag = d->ndiag, dropped = d->diag_dropped;
+    we_perf_t perf = d->perf;
+    font_pass = 1;
+    cascade_rules(d, match, n, pseudo, 0);
+    cascade_rules(d, match, n, pseudo, 1);
+    u_font100 = node_font100(n); u_q = we_font_q(n->font_px);
+    font_pass = 2;
+    cascade_rules(d, match, n, pseudo, 0);
+    cascade_rules(d, match, n, pseudo, 1);
+    font_pass = 0;
+    u_lh100 = lh100_of(n);
+    d->ndiag = ndiag; d->diag_dropped = dropped; d->perf = perf;
+    if (!pseudo && i > 0 && n->parent == 0 && !u_root_done) {
+        u_root100 = u_font100; u_rlh100 = u_lh100; u_root_done = 1;
+    }
+}
+
 static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) {
     {
         const we_node_t* p = n->parent >= 0 ? &d->nodes[n->parent] : 0;
@@ -5443,6 +5728,13 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->lh_frac = p ? p->lh_frac : 0;
         n->font_parent_px = p && p->font_px ? p->font_px : WE_FONT_PX_DEFAULT;
         n->font_px = n->font_parent_px;
+        /* Lot 117: the parent context (font, line height; the element's
+         * own font-size and line-height resolve against it) */
+        fs_parent100 = p ? node_font100(p) : WE_FONT_PX_DEFAULT * 100;
+        fs_parent_lh100 = p ? lh100_of(p) : os_ui_line_h(we_font_q(WE_FONT_PX_DEFAULT)) * 100;
+        n->font100 = (uint16_t)fs_parent100;
+        u_font100 = fs_parent100; u_q = we_font_q(n->font_px); u_lh100 = fs_parent_lh100;
+        fs_root100 = u_root100; fs_rlh100 = u_rlh100;
         n->text_indent = p ? p->text_indent : 0;
         n->ws_mode = p ? p->ws_mode : 0;
         n->tab_px = p ? p->tab_px : 8 * WE_CHAR_W;
@@ -5495,6 +5787,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         cascade_rules(d, match, n, pseudo, 0);
         cascade_rules(d, match, n, pseudo, 1);
         mode_pass = 0;
+        font_pass_run(d, n, match, pseudo, i);
         /* lot 64: the UA list indent is padding-inline-start: the right in rtl */
         if (!pseudo && n->dir_rtl && n->wmode == WE_WM_HORIZONTAL && (w_eq(n->tag, "ul") || w_eq(n->tag, "ol")))
             n->padding[1] = n->padding[3], n->padding[3] = 0;
@@ -5506,7 +5799,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         /* Lot 116: an em or percentage line height is px of the element's
          * own font (its children inherit the px, CSS Inline 3 4.2) */
         if (n->lh_unitless == 2) {
-            int h = n->line_height * (n->font_px ? n->font_px : WE_FONT_PX_DEFAULT);
+            int h = (n->line_height * node_font100(n) + 50) / 100;
             if (h > WE_LINE_H_MAX * 100) h = WE_LINE_H_MAX * 100;
             n->line_height = (int16_t)(h / 100); n->lh_frac = (uint8_t)(h % 100); n->lh_unitless = 0;
         }
@@ -5659,6 +5952,8 @@ int we_style(we_doc_t* d) {
     if (d->source_nodes) drop_generated(d);
     count = d->source_nodes = (uint16_t)d->nnodes;
     d->source_pool = (uint16_t)d->pool_used;
+    /* Lot 117: rem and rlh are the initial values until the root element */
+    u_root100 = WE_FONT_PX_DEFAULT * 100; u_rlh100 = os_ui_line_h(we_font_q(WE_FONT_PX_DEFAULT)) * 100; u_root_done = 0;
     for (i = 0; i < count; i++) style_node(d, &d->nodes[i], (int)i, (int)i, 0);
     generate_content(d, (int)count);
     forms_accent_apply(d);
@@ -9130,6 +9425,7 @@ static int marker_inside_w(we_doc_t *d, int idx) {
  * boxes of its whole content in order, nested blocks included. */
 static int line_clamp_apply(we_doc_t *d, int idx, int first, int top, int right, int content_h) {
     int line_h = flow_line_h(d, idx), lines = 0, limit = d->nodes[idx].line_clamp, cut_top = -1, cut_bottom = 0;
+    int frac = flow_line_h100(d, idx) % 100;
     int open_top = 0, open_bottom = -1, last = -1, i;
     for (i = first; i < (int)d->nitems; i++) {
         const os_fb_web_item_t *it = &d->items[i];
@@ -9143,6 +9439,11 @@ static int line_clamp_apply(we_doc_t *d, int idx, int first, int top, int right,
         cut_bottom = b;
     }
     if (cut_top < 0) return content_h;
+    /* Lot 117: with a fractional line height the next text line starts
+     * one px lower when the carried fraction (finish_line) passes a px:
+     * the clamped height is then the carried sum of the N line heights
+     * (two lines of 20.6 px: 41, was 40) */
+    if (frac && cut_top == cut_bottom + 1) cut_bottom = cut_top;
     for (i = first; i < (int)d->nitems; i++) {
         os_fb_web_item_t *it = &d->items[i];
         int t;
@@ -13406,6 +13707,9 @@ void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx) {
     out_num(out, ctx, " bold ", n->bold);
     out(ctx, n->align == WE_ALIGN_CENTER ? " align center" : n->align == WE_ALIGN_RIGHT ? " align right" :
              n->align == WE_ALIGN_JUSTIFY ? " align justify" : " align left");
+    /* Lot 117: the font size and the used line height, hundredths of a px */
+    out_num(out, ctx, " font100 ", node_font100(n));
+    out_num(out, ctx, " lh100 ", lh100_of(n));
     out(ctx, "\n");
 }
 

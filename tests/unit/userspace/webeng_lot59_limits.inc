@@ -1575,7 +1575,7 @@ static void test_l59_limits_atomic_width_3(void) {
 
 static void test_l59_limits_atomic_width_4(void) {
     lot52_render("<body style='margin:0'><div id=p style='width:200px'><div id=a style='height:30px;width:fit-content("
-        "40px);width:fit-content(1em)'>AB CDEF</div><div id=b style='height:5px'></div></div></body>", 320);
+        "40px);width:fit-content(1vw)'>AB CDEF</div><div id=b style='height:5px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
     TEST_ASSERT_EQUAL(40, lot52_node("a")->w);

@@ -80,9 +80,15 @@ static void test_l116_lh_pass(void) {
     prep("#b { line-height: 9px } #i { line-height: 0.333 }");
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:9px\"", style_of("b"));
     TEST_ASSERT_EQUAL_STRING(" style=\"line-height:0.33\"", style_of("i"));
-    /* a number with a fractional font size is passed as px (its font) */
+    /* Lot 117: a number with a font size in hundredths is passed as the
+     * number (the engine keeps the hundredths; Lot 116: 21px); with
+     * thousandths (smaller: 13.333 px) as px of its font */
     prep("#b { font-size: 10.5px; line-height: 2 }");
-    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10.5px;line-height:21px\"", style_of("b"));
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:10.5px;line-height:2\"", style_of("b"));
+    prep("#b { font-size: smaller; line-height: 2 }");
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:smaller;line-height:26.67px\"", style_of("b"));
+    prep("#o { font-size: 10.5px } #b { font-size: 1.1em; line-height: 2 }");
+    TEST_ASSERT_EQUAL_STRING(" style=\"font-size:1.1em;line-height:2\"", style_of("b"));
     /* the report: a number as "lh num", px with hundredths */
     prep("#b { line-height: 1.5 } #i { line-height: 12.25px }");
     TEST_ASSERT_NOT_NULL(strstr(line_of("b"), " lh num 1.5"));
