@@ -287,10 +287,21 @@ def math_box(s, em=16, rem=16, exact=False):
 
 def engine_px(text, basis):
     """the px the layout gives a box length the reader wrote (a px value
-    or math_box's expression) against a containing block of basis px: a
-    percentage is basis * N / 100 in whole px (toward zero, the engine's
-    integer math), min()/max()/clamp() as CSS has them; a negative result
-    is 0"""
+    or math_box's expression) against a containing block of basis px; a
+    negative result is 0. Lot 118: the engine's math is that of
+    lot118_model (thousandths, the used px cut toward zero once); the Lot
+    109 reading (each percentage in whole px) is engine_px_lot109."""
+    import lot118_model as M118
+    t = text.strip()
+    v = M118.length_px(t if M118.is_math(t) else "calc(%s)" % t, None, basis)
+    assert v is not None, text
+    return max(0, v)
+
+
+def engine_px_lot109(text, basis):
+    """Lot 109 to 117: a percentage is basis * N / 100 in whole px (toward
+    zero, the engine's integer math), min()/max()/clamp() as CSS has them;
+    a negative result is 0"""
     def val(t):
         t = t.strip()
         for f in ("min(", "max(", "clamp(", "calc("):

@@ -46,6 +46,14 @@ def lh_parse(v):
     (a negative value, a unit it does not read, past the bounds)"""
     if v == "normal":
         return ("n",)
+    import lot118_model as M118
+    if M118.is_math(v):
+        # Lot 118: a number expression is a unitless line height (clamped
+        # to 0..LH_NUM_MAX); a length one is lot117_model's
+        n = M118.number_milli(v)
+        if n is None:
+            return None
+        return ("num", (max(0, min(n, LH_NUM_MAX * 1000)) + 5) // 10 or 1)
     kind, t = "num", v
     if v.endswith("px"):
         kind, t = "px", v[:-2]

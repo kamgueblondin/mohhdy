@@ -236,7 +236,8 @@ static void test_l116_math_bounds(void) {
     TEST_ASSERT_TRUE(has_diag("math length refused"));
     /* the packed node keeps its operator, dimension and operands */
     TEST_ASSERT_EQUAL(1, el("e")->length[WE_LEN_WIDTH].node[0].dimension);
-    TEST_ASSERT_EQUAL(1, el("e")->length[WE_LEN_WIDTH].node[0].value);
+    /* Lot 118: a leaf keeps thousandths (1px is 1000; was 1) */
+    TEST_ASSERT_EQUAL(1000, el("e")->length[WE_LEN_WIDTH].node[0].value);
     /* the 8th and 9th arguments of a percentage min() at a basis */
     lays("<body style='margin:0'><div style='width:200px'><div id=a style='height:5px;width:max(1%,2%,3%,4%,5%,6%,7%,8%)'>"
          "</div></div></body>");

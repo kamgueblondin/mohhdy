@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head><title>Lot 118 CSS math, viewport units, colors, @property</title>
+<style>
+@property --w { syntax: '<length> | auto'; inherits: true; initial-value: 0px }
+@property --k { syntax: '<color>'; inherits: false; initial-value: hwb(240 0% 0%) }
+@property --p { syntax: '<length>+'; inherits: true; initial-value: 1px 2px }
+body { margin: 0 }
+#a118 { width: 50vw; height: 10vh; background: hwb(120 20% 30%) }
+#b118 { width: calc(100vw - 2e2px); height: calc(1e1px); color: rgb(calc(255 / 2) 0 none) }
+#d118 { width: max(10vmin, 5vh); height: calc(sqrt(16) * 5px); background: hsl(0.5turn 100 50) }
+#e118 { font-size: clamp(12px, 2vw, 20px); line-height: calc(1.5) }
+#f118 { margin-top: round(up, 13px, 5px); height: calc(pow(2, 3) * 1px); background: rgb(100% 0 50% / calc(1 / 2)) }
+#g118 { margin-left: calc(atan2(1, 1) / 1deg * 1px); height: 1px }
+/* the custom properties are used in style attributes: the page
+   pipeline (webrt_css_resolve_vars) substitutes var() in style sheets
+   before the engine, as one global table */
+</style></head>
+<body>
+<div id="a118"></div>
+<div id="b118">b</div>
+<div id="c118" style="--w: 3em; margin-left: var(--w); height: 4px"><div id="c118i" style="font-size: 32px; padding-left: var(--w); height: 2px"></div></div>
+<div id="d118"></div>
+<div id="e118">e</div>
+<div id="f118" style="color: var(--k)"></div>
+<div id="g118" style="--k: red; --w: Auto; color: var(--k)"></div>
+</body>
+</html>

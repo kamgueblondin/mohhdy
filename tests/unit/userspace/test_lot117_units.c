@@ -80,8 +80,8 @@ static void test_l117_units_0(void) {
     font_lh("e", 28, 2774, 24, 0, 0);
     TEST_ASSERT_EQUAL(90, el("e")->h);
     lay("<html style='line-height:calc(120% - 2px)'><body style='margin:0'><div id=p style=''><div id=e style='font-size:2zz;width:rem'>x</div></div></body></html>");
-    font_lh("p", 16, 1600, 17, 0, 0);
-    font_lh("e", 16, 1600, 17, 0, 0);
+    font_lh("p", 16, 1600, 17, 0, 20);
+    font_lh("e", 16, 1600, 17, 0, 20);
     TEST_ASSERT_EQUAL(640, el("e")->w);
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:71%'><div id=e style='line-height:2rlh;height:6ex'>x</div></div></body></html>");
     font_lh("p", 11, 1136, 0, 0, 0);
@@ -99,12 +99,12 @@ static void test_l117_units_0(void) {
 
 static void test_l117_units_1(void) {
     lay("<html style='font-size:3cap;font-size:10.5pt'><body style='margin:0'><div id=p style='font-size:1.5ch;font-size:2.27lh;line-height:calc(120% - 2px)'><div id=e style='line-height:1;height:6.3cap;font-size:1.25em'>x</div></div></body></html>");
-    font_lh("p", 23, 2270, 25, 0, 0);
+    font_lh("p", 23, 2270, 25, 0, 60);
     font_lh("e", 28, 2838, 100, 1, 0);
     TEST_ASSERT_EQUAL(76, el("e")->h);
     lay("<html style='font-size:0.4em'><body style='margin:0'><div id=p style='line-height:calc(1rem + 1ex)'><div id=e style='padding-left:10rem;font-size:medium;line-height:1lh;padding-left:2.16rem'>x</div></div></body></html>");
-    font_lh("p", 6, 640, 11, 0, 0);
-    font_lh("e", 16, 1600, 11, 0, 0);
+    font_lh("p", 6, 640, 11, 0, 40);
+    font_lh("e", 16, 1600, 11, 0, 40);
     TEST_ASSERT_EQUAL(14, el("e")->padding[3]);
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:3px;font-size:0.0ch;line-height:2.0EX'><div id=e style='padding-left:6.35rlh'>x</div></div></body></html>");
     font_lh("p", 4, 400, 10, 0, 0);
@@ -166,8 +166,8 @@ static void test_l117_units_2(void) {
     font_lh("e", 64, 6400, 0, 0, 0);
     TEST_ASSERT_EQUAL(168, el("e")->h);
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:larger;line-height:max(1.2em, 18px)'><div id=e style='font-size:9.75px;width:6.72lh'>x</div></div></body></html>");
-    font_lh("p", 19, 1920, 23, 0, 0);
-    font_lh("e", 10, 975, 23, 0, 0);
+    font_lh("p", 19, 1920, 23, 0, 4);
+    font_lh("e", 10, 975, 23, 0, 4);
     TEST_ASSERT_EQUAL(155, el("e")->w);
     lay("<html style='line-height:normal'><body style='margin:0'><div id=p style='font-size:8.29pt;line-height:normal'><div id=e style='font-size:2.054ic;text-indent:11.3em;line-height:3'>x</div></div></body></html>");
     font_lh("p", 11, 1105, 0, 0, 0);
@@ -186,8 +186,8 @@ static void test_l117_units_2(void) {
     font_lh("e", 16, 1600, 150, 1, 0);
     TEST_ASSERT_EQUAL(31, el("e")->padding[3]);
     lay("<html style='font-size:0.939rlh'><body style='margin:0'><div id=p style='line-height:calc(1rem + 1ex)'><div id=e style='font-size:35.97px;width:1rlh'>x</div></div></body></html>");
-    font_lh("p", 9, 939, 14, 0, 0);
-    font_lh("e", 36, 3597, 14, 0, 0);
+    font_lh("p", 9, 939, 14, 0, 39);
+    font_lh("e", 36, 3597, 14, 0, 39);
     TEST_ASSERT_EQUAL(10, el("e")->w);
     lay("<html style='font-size:15.33px;line-height:1rem'><body style='margin:0'><div id=p style='font-size:9.75px'><div id=e style='height:lh'>x</div></div></body></html>");
     font_lh("p", 10, 975, 16, 0, 0);
@@ -221,7 +221,7 @@ static void test_l117_units_3(void) {
     font_lh("e", 17, 1694, 0, 0, 0);
     TEST_ASSERT_EQUAL(72, el("e")->margin[3]);
     lay("<html style='line-height:1'><body style='margin:0'><div id=p style='font-size:0.4em;line-height:calc(1em + 4px)'><div id=e style='margin-left:3.681ch;font-size:max(10px, 0.75em);line-height:.427ch'>x</div></div></body></html>");
-    font_lh("p", 6, 640, 10, 0, 0);
+    font_lh("p", 6, 640, 10, 0, 40);
     font_lh("e", 10, 1000, 3, 0, 42);
     TEST_ASSERT_EQUAL(29, el("e")->margin[3]);
     lay("<html style='font-size:px'><body style='margin:0'><div id=p style='font-size:64px'><div id=e style='margin-left:9.930rem'>x</div></div></body></html>");
@@ -233,7 +233,7 @@ static void test_l117_units_3(void) {
     font_lh("e", 16, 1600, 19, 0, 20);
     TEST_ASSERT_EQUAL(58, el("e")->w);
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:240.4%;line-height:max(1.2em, 18px)'><div id=e style='height:3.1REM;height:9.256em;line-height:2ex;font-size:2.21rem'>x</div></div></body></html>");
-    font_lh("p", 38, 3846, 46, 0, 0);
+    font_lh("p", 38, 3846, 46, 0, 15);
     font_lh("e", 35, 3536, 22, 0, 0);
     TEST_ASSERT_EQUAL(327, el("e")->h);
     lay("<html style='font-size:calc(1em + 2px)'><body style='margin:0'><div id=p style='font-size:3px;line-height:.1ex'><div id=e style='font-size:small;margin-left:2.2ic;margin-left:0.55ch;font-size:47.1pt'>x</div></div></body></html>");
@@ -323,8 +323,8 @@ static void test_l117_units_5(void) {
     font_lh("e", 24, 2400, 10, 0, 0);
     TEST_ASSERT_EQUAL(110, el("e")->text_indent);
     lay("<html style='font-size:103.12%;font-size:34.8px;line-height:calc(2)'><body style='margin:0'><div id=p style='font-size:1.25lh;line-height:2.146ic'><div id=e style='padding-left:7.19rem;padding-left:2.58REM;font-size:2EX'>x</div></div></body></html>");
-    font_lh("p", 29, 2875, 61, 0, 70);
-    font_lh("e", 18, 1800, 61, 0, 70);
+    font_lh("p", 64, 6400, 137, 0, 34);
+    font_lh("e", 40, 4000, 137, 0, 34);
     TEST_ASSERT_EQUAL(90, el("e")->padding[3]);
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:1..5em;font-size:0.9rem;line-height:1'><div id=e style='margin-left:0rlh;line-height:1.5pt;font-size:15.627pt'>x</div></div></body></html>");
     font_lh("p", 14, 1440, 100, 1, 0);
@@ -382,8 +382,8 @@ static void test_l117_units_6(void) {
     font_lh("e", 20, 1967, 0, 0, 0);
     TEST_ASSERT_EQUAL(105, el("e")->padding[3]);
     lay("<html style='line-height:0.983'><body style='margin:0'><div id=p style='font-size:15.905px;line-height:clamp(10px, 1.5em, 40px)'><div id=e style='height:7.0ch'>x</div></div></body></html>");
-    font_lh("p", 16, 1591, 24, 0, 0);
-    font_lh("e", 16, 1591, 24, 0, 0);
+    font_lh("p", 16, 1591, 23, 0, 87);
+    font_lh("e", 16, 1591, 23, 0, 87);
     TEST_ASSERT_EQUAL(56, el("e")->h);
     lay("<html style='font-size:x-large'><body style='margin:0'><div id=p style='font-size:215%'><div id=e style='width:2rlh;width:9.687cap;font-size:217.5%'>x</div></div></body></html>");
     font_lh("p", 52, 5160, 0, 0, 0);
@@ -438,7 +438,7 @@ static void test_l117_units_7(void) {
     TEST_ASSERT_EQUAL(20, el("e")->text_indent);
     lay("<html style='font-size:2.4cap;font-size:calc(0px)'><body style='margin:0'><div id=p style=''><div id=e style='padding-left:10.44cap;font-size:calc(50% + 0.5em);padding-left:3rlh;line-height:1.2rem'>x</div></div></body></html>");
     font_lh("p", 17, 1680, 0, 0, 0);
-    font_lh("e", 16, 1600, 20, 0, 16);
+    font_lh("e", 17, 1690, 20, 0, 16);
     TEST_ASSERT_EQUAL(30, el("e")->padding[3]);
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:22.5px;line-height:0'><div id=e style='width:8.1EX;line-height:calc(1em * 1em);font-size:64px'>x</div></div></body></html>");
     font_lh("p", 23, 2250, 1, 1, 0);
@@ -460,8 +460,8 @@ static void test_l117_units_8(void) {
     font_lh("e", 23, 2300, 11, 0, 44);
     TEST_ASSERT_EQUAL(285, el("e")->margin[3]);
     lay("<html style='line-height:15px'><body style='margin:0'><div id=p style='font-size:1.5ch;line-height:calc(120% - 2px)'><div id=e style='line-height:calc(2);width:0.883rem'>x</div></div></body></html>");
-    font_lh("p", 12, 1200, 12, 0, 0);
-    font_lh("e", 12, 1200, 12, 0, 0);
+    font_lh("p", 12, 1200, 12, 0, 40);
+    font_lh("e", 12, 1200, 200, 1, 0);
     TEST_ASSERT_EQUAL(14, el("e")->w);
     lay("<html style='font-size:20px'><body style='margin:0'><div id=p style='font-size:1e2px;line-height:calc(1rem + 1ex)'><div id=e style='font-size:0.875em;line-height:1.5lh;margin-left:3lh'>x</div></div></body></html>");
     font_lh("p", 20, 2000, 26, 0, 0);
@@ -500,7 +500,7 @@ static void test_l117_units_8(void) {
     font_lh("e", 60, 6035, 100, 1, 0);
     TEST_ASSERT_EQUAL(288, el("e")->padding[3]);
     lay("<html style='font-size:2.4ch;line-height:clamp(10px, 1.5em, 40px)'><body style='margin:0'><div id=p style='font-size:4.24px'><div id=e style='text-indent:7.5cap;text-indent:6.33em;font-size:;line-height:1.2'>x</div></div></body></html>");
-    font_lh("p", 4, 424, 29, 0, 0);
+    font_lh("p", 4, 424, 28, 0, 80);
     font_lh("e", 4, 424, 120, 1, 0);
     TEST_ASSERT_EQUAL(27, el("e")->text_indent);
 }
@@ -516,8 +516,8 @@ static void test_l117_units_9(void) {
     TEST_ASSERT_EQUAL(269, el("e")->margin[3]);
     lay("<html style='font-size:0.9rem'><body style='margin:0'><div id=p style=''><div id=e style='width:4.763em;line-height:2rlh;font-size:calc(1em + 2px)'>x</div></div></body></html>");
     font_lh("p", 14, 1440, 0, 0, 0);
-    font_lh("e", 16, 1600, 20, 0, 0);
-    TEST_ASSERT_EQUAL(76, el("e")->w);
+    font_lh("e", 16, 1640, 20, 0, 0);
+    TEST_ASSERT_EQUAL(78, el("e")->w);
     lay("<html style=''><body style='margin:0'><div id=p style=''><div id=e style='margin-left:-7.965ic;font-size:calc(0px);line-height:0.34ex'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 0, 0, 0);
     font_lh("e", 16, 1600, 1, 0, 70);
@@ -532,7 +532,7 @@ static void test_l117_units_9(void) {
     TEST_ASSERT_EQUAL(200, el("e")->padding[3]);
     lay("<html style='line-height:.48'><body style='margin:0'><div id=p style='font-size:2.6cap;line-height:2.3cap'><div id=e style='font-size:0.2px;margin-left:7.38rlh;font-size:calc(1em + 2px)'>x</div></div></body></html>");
     font_lh("p", 18, 1820, 20, 0, 70);
-    font_lh("e", 20, 2000, 20, 0, 70);
+    font_lh("e", 20, 2020, 20, 0, 70);
     TEST_ASSERT_EQUAL(57, el("e")->margin[3]);
     lay("<html style='font-size:2ch;line-height:2.237em'><body style='margin:0'><div id=p style='font-size:0;font-size:0.010ex;line-height:20.6px'><div id=e style='padding-left:4.27ic;font-size:22.5px;line-height:1.5'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 20, 0, 60);
@@ -548,10 +548,10 @@ static void test_l117_units_9(void) {
     TEST_ASSERT_EQUAL(104, el("e")->text_indent);
     lay("<html style=''><body style='margin:0'><div id=p style='line-height:1.9lh'><div id=e style='font-size:22.5px;text-indent:11.5em;line-height:clamp(10px, 1.5em, 40px)'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 19, 0, 0);
-    font_lh("e", 23, 2250, 34, 0, 0);
+    font_lh("e", 23, 2250, 33, 0, 75);
     TEST_ASSERT_EQUAL(259, el("e")->text_indent);
     lay("<html style='font-size:10.5pt'><body style='margin:0'><div id=p style='font-size:max(10px, 0.75em);line-height:1'><div id=e style='line-height:0;font-size:29.355px;text-indent:4.545cap;font-size:2.95ch'>x</div></div></body></html>");
-    font_lh("p", 11, 1100, 100, 1, 0);
+    font_lh("p", 11, 1050, 100, 1, 0);
     font_lh("e", 24, 2360, 1, 1, 0);
     TEST_ASSERT_EQUAL(50, el("e")->text_indent);
 }
@@ -587,7 +587,7 @@ static void test_l117_units_10(void) {
     TEST_ASSERT_EQUAL(46, el("e")->h);
     lay("<html style='font-size:0.2px;line-height:20.6px'><body style='margin:0'><div id=p style='line-height:2.9rlh'><div id=e style='font-size:0.8rlh;line-height:calc(1em + 4px);height:0cap'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 59, 0, 74);
-    font_lh("e", 16, 1648, 20, 0, 0);
+    font_lh("e", 16, 1648, 20, 0, 48);
     TEST_ASSERT_EQUAL(0, el("e")->h);
     lay("<html style='font-size:3px;font-size:0.4em;line-height:calc(120% - 2px)'><body style='margin:0'><div id=p style='font-size:20px;line-height:2'><div id=e style='font-size:10.70pt;padding-left:9.675ex;padding-left:8lh'>x</div></div></body></html>");
     font_lh("p", 20, 2000, 200, 1, 0);
@@ -595,15 +595,15 @@ static void test_l117_units_10(void) {
     TEST_ASSERT_EQUAL(228, el("e")->padding[3]);
     lay("<html style='font-size:87.5%'><body style='margin:0'><div id=p style='font-size:smaller;line-height:401px'><div id=e style='padding-left:9.360lh;line-height:normal;font-size:clamp(10px, 1.5em, 30px);padding-left:10.309em'>x</div></div></body></html>");
     font_lh("p", 12, 1167, 0, 0, 0);
-    font_lh("e", 18, 1800, 0, 0, 0);
-    TEST_ASSERT_EQUAL(186, el("e")->padding[3]);
+    font_lh("e", 18, 1751, 0, 0, 0);
+    TEST_ASSERT_EQUAL(181, el("e")->padding[3]);
     lay("<html style='font-size:1.5ch;line-height:20.6px'><body style='margin:0'><div id=p style='font-size:min(2rem, 24px);font-size:calc(1em + 2px);line-height:1.68CH'><div id=e style='width:7.061lh;font-size:12pt'>x</div></div></body></html>");
     font_lh("p", 14, 1400, 13, 0, 44);
     font_lh("e", 16, 1600, 13, 0, 44);
     TEST_ASSERT_EQUAL(95, el("e")->w);
     lay("<html style='font-size:1.5;font-size:2em;line-height:2.9'><body style='margin:0'><div id=p style='font-size:9.75px;line-height:1lh'><div id=e style='margin-left:2.20ch;font-size:calc(1em + 2px);margin-left:9ex'>x</div></div></body></html>");
     font_lh("p", 10, 975, 92, 0, 80);
-    font_lh("e", 12, 1200, 92, 0, 80);
+    font_lh("e", 12, 1175, 92, 0, 80);
     TEST_ASSERT_EQUAL(45, el("e")->margin[3]);
 }
 
@@ -633,8 +633,8 @@ static void test_l117_units_11(void) {
     font_lh("e", 16, 1571, 10, 0, 0);
     TEST_ASSERT_EQUAL(14, el("e")->padding[3]);
     lay("<html style='font-size:39.5px;line-height:2ex'><body style='margin:0'><div id=p style='line-height:calc(1em + 4px)'><div id=e style='height:3.54CAP;font-size:1.8EM;height:3.115rem'>x</div></div></body></html>");
-    font_lh("p", 40, 3950, 44, 0, 0);
-    font_lh("e", 64, 6400, 44, 0, 0);
+    font_lh("p", 40, 3950, 43, 0, 50);
+    font_lh("e", 64, 6400, 43, 0, 50);
     TEST_ASSERT_EQUAL(123, el("e")->h);
     lay("<html style='font-size:0;line-height:0.387lh'><body style='margin:0'><div id=p style='font-size:70px;line-height:calc(1em + 4px)'><div id=e style='font-size:38px;width:11em'>x</div></div></body></html>");
     font_lh("p", 64, 6400, 68, 0, 0);
@@ -650,7 +650,7 @@ static void test_l117_units_11(void) {
     TEST_ASSERT_EQUAL(31, el("e")->h);
     lay("<html style='font-size:min(2rem, 24px);line-height:1rem'><body style='margin:0'><div id=p style=''><div id=e style='margin-left:3.9ch;line-height:max(1.2em, 18px)'>x</div></div></body></html>");
     font_lh("p", 24, 2400, 16, 0, 0);
-    font_lh("e", 24, 2400, 29, 0, 0);
+    font_lh("e", 24, 2400, 28, 0, 80);
     TEST_ASSERT_EQUAL(47, el("e")->margin[3]);
     lay("<html style='font-size:-2px;font-size:.5EX;line-height:3ch'><body style='margin:0'><div id=p style='font-size:28pt;line-height:2.5cap'><div id=e style='height:5em'>x</div></div></body></html>");
     font_lh("p", 37, 3733, 40, 0, 0);
@@ -668,7 +668,7 @@ static void test_l117_units_12(void) {
     font_lh("e", 16, 1600, 20, 0, 0);
     TEST_ASSERT_EQUAL(27, el("e")->text_indent);
     lay("<html style='font-size:1.028lh'><body style='margin:0'><div id=p style='font-size:128.11%;line-height:calc(120% - 2px)'><div id=e style='font-size:16px;font-size:3px;line-height:1.25;width:10.138em'>x</div></div></body></html>");
-    font_lh("p", 13, 1317, 13, 0, 0);
+    font_lh("p", 13, 1317, 13, 0, 60);
     font_lh("e", 4, 400, 125, 1, 0);
     TEST_ASSERT_EQUAL(41, el("e")->w);
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:53.326pt;line-height:1lh'><div id=e style='text-indent:9cap;font-size:2zz;font-size:0.1rlh;text-indent:12EM'>x</div></div></body></html>");
@@ -711,11 +711,11 @@ static void test_l117_units_12(void) {
 
 static void test_l117_units_13(void) {
     lay("<html style='line-height:calc(120% - 2px)'><body style='margin:0'><div id=p style='font-size:9.75px'><div id=e style='height:xem;font-size:17.777px;height:3lh;line-height:.3em'>x</div></div></body></html>");
-    font_lh("p", 10, 975, 17, 0, 0);
+    font_lh("p", 10, 975, 17, 0, 20);
     font_lh("e", 18, 1778, 5, 0, 33);
     TEST_ASSERT_EQUAL(16, el("e")->h);
     lay("<html style='line-height:calc(120% - 2px)'><body style='margin:0'><div id=p style=''><div id=e style='line-height:1.25;margin-left:11.51cap'>x</div></div></body></html>");
-    font_lh("p", 16, 1600, 17, 0, 0);
+    font_lh("p", 16, 1600, 17, 0, 20);
     font_lh("e", 16, 1600, 125, 1, 0);
     TEST_ASSERT_EQUAL(81, el("e")->margin[3]);
     lay("<html style='font-size:176%;line-height:0.7ch'><body style='margin:0'><div id=p style='font-size:1e2px;line-height:3ch'><div id=e style='margin-left:6.4cap;font-size:-1em;line-height:1.5pt'>x</div></div></body></html>");
@@ -771,7 +771,7 @@ static void test_l117_units_14(void) {
     TEST_ASSERT_EQUAL(5, el("e")->padding[3]);
     lay("<html style=''><body style='margin:0'><div id=p style=''><div id=e style='width:10.0ic;line-height:calc(120% - 2px);font-size:2.648cap'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 0, 0, 0);
-    font_lh("e", 19, 1854, 20, 0, 0);
+    font_lh("e", 19, 1854, 20, 0, 80);
     TEST_ASSERT_EQUAL(185, el("e")->w);
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:1.25em'><div id=e style='line-height:1.2rem;width:5.9lh'>x</div></div></body></html>");
     font_lh("p", 20, 2000, 0, 0, 0);
@@ -802,9 +802,9 @@ static void test_l117_units_14(void) {
     font_lh("e", 8, 800, 0, 0, 0);
     TEST_ASSERT_EQUAL(149, el("e")->w);
     lay("<html style='font-size:108.1%;font-size:2.413lh'><body style='margin:0'><div id=p style='line-height:calc(2)'><div id=e style='line-height:calc(1em + 4px);font-size:max(10px, 0.75em);padding-left:10.6ic'>x</div></div></body></html>");
-    font_lh("p", 24, 2413, 0, 0, 0);
-    font_lh("e", 18, 1800, 22, 0, 0);
-    TEST_ASSERT_EQUAL(191, el("e")->padding[3]);
+    font_lh("p", 24, 2413, 200, 1, 0);
+    font_lh("e", 18, 1810, 22, 0, 10);
+    TEST_ASSERT_EQUAL(192, el("e")->padding[3]);
     lay("<html style='font-size:1.875lh;font-size:0.2px'><body style='margin:0'><div id=p style=''><div id=e style='padding-left:5.0rem;font-size:1.5'>x</div></div></body></html>");
     font_lh("p", 19, 1875, 0, 0, 0);
     font_lh("e", 19, 1875, 0, 0, 0);
@@ -919,8 +919,8 @@ static void test_l117_units_17(void) {
     font_lh("e", 20, 1960, 100, 1, 0);
     TEST_ASSERT_EQUAL(54, el("e")->margin[3]);
     lay("<html style='font-size:2.4REM;line-height:1.25'><body style='margin:0'><div id=p style='font-size:max(10px, 0.75em);line-height:20.6px'><div id=e style='height:3.708ic;line-height:0.8;height:3cap'>x</div></div></body></html>");
-    font_lh("p", 29, 2900, 20, 0, 60);
-    font_lh("e", 29, 2900, 80, 1, 0);
+    font_lh("p", 29, 2880, 20, 0, 60);
+    font_lh("e", 29, 2880, 80, 1, 0);
     TEST_ASSERT_EQUAL(36, el("e")->h);
     lay("<html style='font-size:9.75px;line-height:1.5pt'><body style='margin:0'><div id=p style='font-size:22.5px'><div id=e style='padding-left:10rlh;line-height:2.6ch'>x</div></div></body></html>");
     font_lh("p", 23, 2250, 0, 0, 0);
@@ -1101,7 +1101,7 @@ static void test_l117_units_20(void) {
     TEST_ASSERT_EQUAL(26, el("e")->w);
     lay("<html style='font-size:1.25em'><body style='margin:0'><div id=p style='font-size:3cap'><div id=e style='font-size:1.5;line-height:max(1.2em, 18px);margin-left:-4.7ex'>x</div></div></body></html>");
     font_lh("p", 27, 2700, 0, 0, 0);
-    font_lh("e", 27, 2700, 32, 0, 0);
+    font_lh("e", 27, 2700, 32, 0, 40);
     TEST_ASSERT_EQUAL(-42, el("e")->margin[3]);
     lay("<html style='line-height:1.6ch'><body style='margin:0'><div id=p style='font-size:1..5em'><div id=e style='margin-left:4.4ex'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 12, 0, 80);
@@ -1135,8 +1135,8 @@ static void test_l117_units_21(void) {
     font_lh("e", 14, 1350, 11, 0, 88);
     TEST_ASSERT_EQUAL(1, el("e")->text_indent);
     lay("<html style='line-height:max(1.2em, 18px)'><body style='margin:0'><div id=p style=''><div id=e style='font-size:191.3%;width:2.33ic;font-size:3cap'>x</div></div></body></html>");
-    font_lh("p", 16, 1600, 19, 0, 0);
-    font_lh("e", 21, 2100, 19, 0, 0);
+    font_lh("p", 16, 1600, 19, 0, 20);
+    font_lh("e", 21, 2100, 19, 0, 20);
     TEST_ASSERT_EQUAL(49, el("e")->w);
     lay("<html style='font-size:0px'><body style='margin:0'><div id=p style='line-height:1.5pt'><div id=e style='padding-left:10.1lh;font-size:28.8pt'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 0, 0, 0);
@@ -1160,7 +1160,7 @@ static void test_l117_units_21(void) {
     TEST_ASSERT_EQUAL(50, el("e")->padding[3]);
     lay("<html style='font-size:17.7pt;line-height:2'><body style='margin:0'><div id=p style='font-size:0.8ch;line-height:2zz'><div id=e style='font-size:calc(1em + 2px);text-indent:2.1REM;line-height:2.325'>x</div></div></body></html>");
     font_lh("p", 10, 960, 200, 1, 0);
-    font_lh("e", 12, 1200, 233, 1, 0);
+    font_lh("e", 12, 1160, 233, 1, 0);
     TEST_ASSERT_EQUAL(50, el("e")->text_indent);
     lay("<html style='line-height:2rlh'><body style='margin:0'><div id=p style=''><div id=e style='line-height:2rlh;padding-left:11.920CH'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 20, 0, 0);
@@ -1215,13 +1215,13 @@ static void test_l117_units_22(void) {
     TEST_ASSERT_EQUAL(54, el("e")->text_indent);
     lay("<html style='font-size:44.6px;line-height:0.80ch'><body style='margin:0'><div id=p style='font-size:173.5%;line-height:15px'><div id=e style='margin-left:7lh;line-height:max(1.2em, 18px)'>x</div></div></body></html>");
     font_lh("p", 64, 6400, 15, 0, 0);
-    font_lh("e", 64, 6400, 77, 0, 0);
-    TEST_ASSERT_EQUAL(539, el("e")->margin[3]);
+    font_lh("e", 64, 6400, 76, 0, 80);
+    TEST_ASSERT_EQUAL(538, el("e")->margin[3]);
 }
 
 static void test_l117_units_23(void) {
     lay("<html style='font-size:122.9%;font-size:-2px;line-height:clamp(10px, 1.5em, 40px)'><body style='margin:0'><div id=p style='font-size:0.9ic'><div id=e style='line-height:120%;margin-left:-7.4cap'>x</div></div></body></html>");
-    font_lh("p", 18, 1769, 29, 0, 0);
+    font_lh("p", 18, 1769, 29, 0, 49);
     font_lh("e", 18, 1769, 21, 0, 23);
     TEST_ASSERT_EQUAL(-67, el("e")->margin[3]);
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:1.2cap'><div id=e style='line-height:1.5;height:7.50rem;font-size:0.4em'>x</div></div></body></html>");
@@ -1245,8 +1245,8 @@ static void test_l117_units_23(void) {
     font_lh("e", 10, 1000, 15, 0, 20);
     TEST_ASSERT_EQUAL(70, el("e")->h);
     lay("<html style='font-size:31.35px'><body style='margin:0'><div id=p style='font-size:calc(50% + 0.5em)'><div id=e style='height:2.400rlh'>x</div></div></body></html>");
-    font_lh("p", 31, 3100, 0, 0, 0);
-    font_lh("e", 31, 3100, 0, 0, 0);
+    font_lh("p", 31, 3118, 0, 0, 0);
+    font_lh("e", 31, 3118, 0, 0, 0);
     TEST_ASSERT_EQUAL(48, el("e")->h);
     lay("<html style='font-size:0.27rem;line-height:3'><body style='margin:0'><div id=p style='line-height:2zz'><div id=e style='width:10.2lh'>x</div></div></body></html>");
     font_lh("p", 4, 432, 300, 1, 0);
@@ -1281,7 +1281,7 @@ static void test_l117_units_24(void) {
     TEST_ASSERT_EQUAL(50, el("e")->h);
     lay("<html style='font-size:10.5pt;line-height:max(1.2em, 18px)'><body style='margin:0'><div id=p style='font-size:10.08px'><div id=e style='font-size:larger;font-size:calc(1em + 2px);text-indent:em'>x</div></div></body></html>");
     font_lh("p", 10, 1008, 18, 0, 0);
-    font_lh("e", 12, 1200, 18, 0, 0);
+    font_lh("e", 12, 1208, 18, 0, 0);
     TEST_ASSERT_EQUAL(0, el("e")->text_indent);
     lay("<html style='font-size:-2px'><body style='margin:0'><div id=p style='font-size:1.471ch;font-size:150%'><div id=e style='padding-left:6.4ex'>x</div></div></body></html>");
     font_lh("p", 24, 2400, 0, 0, 0);
@@ -1304,8 +1304,8 @@ static void test_l117_units_24(void) {
     font_lh("e", 19, 1942, 145, 1, 0);
     TEST_ASSERT_EQUAL(91, el("e")->h);
     lay("<html style='font-size:1.5'><body style='margin:0'><div id=p style='font-size:51pt;line-height:max(1.2em, 18px)'><div id=e style='height:10.596ic'>x</div></div></body></html>");
-    font_lh("p", 64, 6400, 77, 0, 0);
-    font_lh("e", 64, 6400, 77, 0, 0);
+    font_lh("p", 64, 6400, 76, 0, 80);
+    font_lh("e", 64, 6400, 76, 0, 80);
     TEST_ASSERT_EQUAL(678, el("e")->h);
     lay("<html style='font-size:-1em;line-height:0.616'><body style='margin:0'><div id=p style='font-size:150%;font-size:1.677em'><div id=e style='line-height:120%;margin-left:9.390REM'>x</div></div></body></html>");
     font_lh("p", 27, 2683, 62, 1, 0);
@@ -1316,7 +1316,7 @@ static void test_l117_units_24(void) {
     font_lh("e", 62, 6191, 21, 0, 0);
     TEST_ASSERT_EQUAL(153, el("e")->h);
     lay("<html style='font-size:0px;line-height:max(1.2em, 18px)'><body style='margin:0'><div id=p style='font-size:0.875em'><div id=e style='line-height:1.25;padding-left:10.0ch;padding-left:8.194ic;font-size:calc(2)'>x</div></div></body></html>");
-    font_lh("p", 14, 1400, 19, 0, 0);
+    font_lh("p", 14, 1400, 19, 0, 20);
     font_lh("e", 14, 1400, 125, 1, 0);
     TEST_ASSERT_EQUAL(115, el("e")->padding[3]);
 }
@@ -1324,7 +1324,7 @@ static void test_l117_units_24(void) {
 static void test_l117_units_25(void) {
     lay("<html style='line-height:min(2lh, 30px)'><body style='margin:0'><div id=p style='font-size:larger;font-size:2.2cap;line-height:15px'><div id=e style='line-height:1.25;font-size:clamp(10px, 1.5em, 30px);margin-left:3.6rem'>x</div></div></body></html>");
     font_lh("p", 15, 1540, 15, 0, 0);
-    font_lh("e", 23, 2300, 125, 1, 0);
+    font_lh("e", 23, 2310, 125, 1, 0);
     TEST_ASSERT_EQUAL(58, el("e")->margin[3]);
     lay("<html style=''><body style='margin:0'><div id=p style='line-height:0.127'><div id=e style='text-indent:3.8rem'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 13, 1, 0);
@@ -1352,8 +1352,8 @@ static void test_l117_units_25(void) {
     TEST_ASSERT_EQUAL(0, el("e")->padding[3]);
     lay("<html style='font-size:max(10px, 0.75em);line-height:calc(2)'><body style='margin:0'><div id=p style='font-size:3px;line-height:.68'><div id=e style='font-size:3cap;height:-em;height:10ic;font-size:1rlh'>x</div></div></body></html>");
     font_lh("p", 4, 400, 68, 1, 0);
-    font_lh("e", 10, 1000, 68, 1, 0);
-    TEST_ASSERT_EQUAL(100, el("e")->h);
+    font_lh("e", 24, 2400, 68, 1, 0);
+    TEST_ASSERT_EQUAL(240, el("e")->h);
     lay("<html style='font-size:0;line-height:2.2'><body style='margin:0'><div id=p style='line-height:120%'><div id=e style='text-indent:11.9RLH;font-size:39px;text-indent:4.891rem'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 19, 0, 20);
     font_lh("e", 39, 3900, 19, 0, 20);
@@ -1391,7 +1391,7 @@ static void test_l117_units_26(void) {
     TEST_ASSERT_EQUAL(202, el("e")->margin[3]);
     lay("<html style=''><body style='margin:0'><div id=p style=''><div id=e style='line-height:calc(120% - 2px);width:10.99IC;width:3.750em;font-size:1.2rem'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 0, 0, 0);
-    font_lh("e", 19, 1920, 20, 0, 0);
+    font_lh("e", 19, 1920, 20, 0, 80);
     TEST_ASSERT_EQUAL(72, el("e")->w);
     lay("<html style='line-height:0.899'><body style='margin:0'><div id=p style='font-size:13.8px'><div id=e style='line-height:20.6px;font-size:-2px;width:6.9ch'>x</div></div></body></html>");
     font_lh("p", 14, 1380, 90, 1, 0);
@@ -1418,9 +1418,9 @@ static void test_l117_units_26(void) {
     font_lh("e", 4, 400, 4, 0, 7);
     TEST_ASSERT_EQUAL(4, el("e")->h);
     lay("<html style='line-height:calc(120% - 2px)'><body style='margin:0'><div id=p style='font-size:1.25lh;line-height:calc(1rem + 1ex)'><div id=e style='height:3.3lh;height:12rlh;line-height:1.676;font-size:1.1ch'>x</div></div></body></html>");
-    font_lh("p", 21, 2125, 22, 0, 0);
-    font_lh("e", 11, 1100, 168, 1, 0);
-    TEST_ASSERT_EQUAL(204, el("e")->h);
+    font_lh("p", 22, 2150, 24, 0, 0);
+    font_lh("e", 13, 1320, 168, 1, 0);
+    TEST_ASSERT_EQUAL(206, el("e")->h);
 }
 
 static void test_l117_units_27(void) {
@@ -1442,7 +1442,7 @@ static void test_l117_units_27(void) {
     TEST_ASSERT_EQUAL(68, el("e")->text_indent);
     lay("<html style='font-size:15.33px'><body style='margin:0'><div id=p style='line-height:calc(120% - 2px)'><div id=e style='width:-em;font-size:max(10px, 0.75em);width:3ch'>x</div></div></body></html>");
     font_lh("p", 15, 1533, 16, 0, 0);
-    font_lh("e", 12, 1200, 16, 0, 0);
+    font_lh("e", 12, 1150, 16, 0, 0);
     TEST_ASSERT_EQUAL(24, el("e")->w);
     lay("<html style='font-size:1..5em;font-size:11.2px;line-height:2'><body style='margin:0'><div id=p style='font-size:30px;font-size:1ic;line-height:3'><div id=e style='line-height:15px;font-size:269%;height:.7rem;height:11cap'>x</div></div></body></html>");
     font_lh("p", 11, 1120, 300, 1, 0);
@@ -1540,7 +1540,7 @@ static void test_l117_units_29(void) {
     TEST_ASSERT_EQUAL(98, el("e")->margin[3]);
     lay("<html style=''><body style='margin:0'><div id=p style=''><div id=e style='font-size:large;line-height:max(1.2em, 18px);width:0.725ch'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 0, 0, 0);
-    font_lh("e", 18, 1800, 22, 0, 0);
+    font_lh("e", 18, 1800, 21, 0, 60);
     TEST_ASSERT_EQUAL(7, el("e")->w);
     lay("<html style='font-size:0.138lh'><body style='margin:0'><div id=p style='font-size:0;line-height:normal'><div id=e style='margin-left:1.45lh'>x</div></div></body></html>");
     font_lh("p", 4, 400, 0, 0, 0);
@@ -1638,7 +1638,7 @@ static void test_l117_units_31(void) {
     TEST_ASSERT_EQUAL(181, el("e")->text_indent);
     lay("<html style='line-height:3ch'><body style='margin:0'><div id=p style='font-size:12pt'><div id=e style='text-indent:6.1em;line-height:calc(120% - 2px);font-size:3rem'>x</div></div></body></html>");
     font_lh("p", 16, 1600, 24, 0, 0);
-    font_lh("e", 48, 4800, 55, 0, 0);
+    font_lh("e", 48, 4800, 55, 0, 60);
     TEST_ASSERT_EQUAL(293, el("e")->text_indent);
     lay("<html style='font-size:x-large;line-height:2.78rem'><body style='margin:0'><div id=p style='line-height:1rem'><div id=e style='text-indent:3.0em;text-indent:1.05ex'>x</div></div></body></html>");
     font_lh("p", 24, 2400, 24, 0, 0);
@@ -1674,8 +1674,8 @@ static void test_l117_units_31(void) {
     TEST_ASSERT_EQUAL(9, el("e")->padding[3]);
     lay("<html style='line-height:3.0'><body style='margin:0'><div id=p style='font-size:13.5px;font-size:0.9rem'><div id=e style='font-size:calc(50% + 0.5em);height:10.79em'>x</div></div></body></html>");
     font_lh("p", 14, 1440, 300, 1, 0);
-    font_lh("e", 14, 1400, 300, 1, 0);
-    TEST_ASSERT_EQUAL(151, el("e")->h);
+    font_lh("e", 14, 1420, 300, 1, 0);
+    TEST_ASSERT_EQUAL(153, el("e")->h);
 }
 
 static void test_l117_units_32(void) {
@@ -1704,8 +1704,8 @@ static void test_l117_units_32(void) {
     font_lh("e", 24, 2400, 200, 1, 0);
     TEST_ASSERT_EQUAL(216, el("e")->w);
     lay("<html style='font-size:2.81lh;line-height:1ic'><body style='margin:0'><div id=p style='font-size:150.1%;line-height:calc(1em + 4px)'><div id=e style='font-size:1..5em;font-size:10.5pt;text-indent:5.58ch'>x</div></div></body></html>");
-    font_lh("p", 42, 4218, 46, 0, 0);
-    font_lh("e", 14, 1400, 46, 0, 0);
+    font_lh("p", 42, 4218, 46, 0, 18);
+    font_lh("e", 14, 1400, 46, 0, 18);
     TEST_ASSERT_EQUAL(45, el("e")->text_indent);
     lay("<html style='font-size:106.17%;line-height:calc(120% - 2px)'><body style='margin:0'><div id=p style='font-size:1.510em;line-height:.43'><div id=e style='height:9.63ic;font-size:clamp(10px, 1.5em, 30px)'>x</div></div></body></html>");
     font_lh("p", 26, 2565, 43, 1, 0);

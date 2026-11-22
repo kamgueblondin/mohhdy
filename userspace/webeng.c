@@ -821,6 +821,8 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth, int layer) {
                     if (lr == -1) { diag(d, "css layer table full", body_a); lr = layer; }
                     parse_css_range(d, body_a, body_b, depth + 1, lr);
                 }
+            } else if (cssq_is(s + name_a, name_b - name_a, "property")) {
+                prop_rule(d, s + pre, body_a - 1 - pre, s + body_a, body_b - body_a);   /* Lot 118 */
             } else if (cssq_is(s + name_a, name_b - name_a, "font-face")) {
                 /* Lot 74: no downloadable fonts; the block is read and refused. */
                 diag(d, "font face refused", body_a);
@@ -1038,8 +1040,9 @@ static int color_alpha(int milli, int percent) {
 
 /* hsl() to rgb in 32-bit integer arithmetic (no 64-bit division on i386):
  * hue in 1/1000 degrees, s and l in 1/1000 percent, reduced to 1/10
- * degree and per-mille. */
-static uint32_t hsl_rgb(int hue, int sat, int light) {
+ * degree and per-mille. Lot 118: the channels in per-mille (hsl_milli),
+ * shared with hwb(). */
+static void hsl_milli(int hue, int sat, int light, int rgb[3]) {
     int c, x, m, h6, part, r = 0, g = 0, b = 0;
     hue = (hue / 100) % 3600;
     if (hue < 0) hue += 3600;
@@ -1052,22 +1055,76 @@ static uint32_t hsl_rgb(int hue, int sat, int light) {
     m = light - c / 2;
     if (h6 == 0) { r = c; g = x; } else if (h6 == 1) { r = x; g = c; } else if (h6 == 2) { g = c; b = x; }
     else if (h6 == 3) { g = x; b = c; } else if (h6 == 4) { r = x; b = c; } else { r = c; b = x; }
-    r = ((r + m) * 255 + 500) / 1000; g = ((g + m) * 255 + 500) / 1000; b = ((b + m) * 255 + 500) / 1000;
-    return ((uint32_t)clamp_int(r, 0, 255) << 16) | ((uint32_t)clamp_int(g, 0, 255) << 8) | (uint32_t)clamp_int(b, 0, 255);
+    rgb[0] = r + m; rgb[1] = g + m; rgb[2] = b + m;
+}
+
+/* per-mille channels to 0xRRGGBB, each rounded to 0..255 */
+static uint32_t milli_rgb(const int rgb[3]) {
+    uint32_t out = 0;
+    int k;
+    for (k = 0; k < 3; k++) out = (out << 8) | (uint32_t)clamp_int((rgb[k] * 255 + 500) / 1000, 0, 255);
+    return out;
+}
+
+static uint32_t hsl_rgb(int hue, int sat, int light) {
+    int rgb[3];
+    hsl_milli(hue, sat, light, rgb);
+    return milli_rgb(rgb);
+}
+
+/* Lot 118: hwb() (CSS Color 4, 8): the pure hue (hsl 100% 50%) scaled by
+ * 1 - w - b plus w; when w + b reaches 1, the gray w / (w + b). w and b
+ * in 1/1000 percent. */
+static uint32_t hwb_rgb(int hue, int white, int black) {
+    int rgb[3], k;
+    white = clamp_int(white, 0, 100000) / 100;
+    black = clamp_int(black, 0, 100000) / 100;
+    if (white + black >= 1000) {
+        int gray = white * 1000 / (white + black);
+        rgb[0] = rgb[1] = rgb[2] = gray;
+        return milli_rgb(rgb);
+    }
+    hsl_milli(hue, 100000, 50000, rgb);
+    for (k = 0; k < 3; k++) rgb[k] = rgb[k] * (1000 - white - black) / 1000 + white;
+    return milli_rgb(rgb);
+}
+
+static int tf_angle_milli(const char *v, int len, int *out);
+static int math_function(const char *v, int len);
+static int math_number_milli(const char *v, int len, int *milli);
+static int math_angle_milli(const char *v, int len, int *milli);
+
+/* Lot 118: one channel of a color function: a number or a percentage, a
+ * math function of a number (CSS Values 4: calc(255 / 2)), for the hue
+ * an angle (deg, grad, rad, turn, or a math angle), or "none" (*percent
+ * 2: it matches either type and is 0, CSS Color 4 4.4). The percentage
+ * math forms (calc(50%)) are refused. */
+static int color_channel(const char *v, int n, int hue, int *milli, int *percent) {
+    *percent = 0;
+    if (value_is(v, n, "none")) { *milli = 0; *percent = 2; return 0; }
+    if (math_function(v, n)) {
+        if (math_number_milli(v, n, milli) == 0) return 0;
+        return hue ? math_angle_milli(v, n, milli) : -1;
+    }
+    if (hue && w_low(v[n - 1]) >= 'a' && w_low(v[n - 1]) <= 'z') return tf_angle_milli(v, n, milli);
+    return color_number(v, n, milli, percent);
 }
 
 /* rgb()/rgba()/hsl()/hsla(): three channels then an optional alpha,
- * separated by commas, or by spaces with "/ alpha". */
+ * separated by commas, or by spaces with "/ alpha". Lot 118: hwb() (spaces
+ * only), math channels, angle hues, none (spaces only), and the modern
+ * space form mixes numbers and percentages (rgb) and takes numbers for
+ * the saturation and lightness (hsl), CSS Color 4 5.1 and 7. */
 static int parse_color_function(const char *v, int n, uint32_t *out) {
-    int hsl, open, at, count = 0, slash = 0, commas = 0, value[4], percent[4], k, alpha = 255;
+    int kind, open, at, count = 0, slash = 0, commas = 0, value[4], percent[4], k, alpha = 255, none = 0;
     if (n > 5 && (w_ieq_n(v, 5, "rgba(") || w_ieq_n(v, 5, "hsla("))) open = 5;
-    else if (n > 4 && (w_ieq_n(v, 4, "rgb(") || w_ieq_n(v, 4, "hsl("))) open = 4;
+    else if (n > 4 && (w_ieq_n(v, 4, "rgb(") || w_ieq_n(v, 4, "hsl(") || w_ieq_n(v, 4, "hwb("))) open = 4;
     else return -1;
-    hsl = w_low(v[0]) == 'h';
+    kind = w_low(v[0]) == 'r' ? 0 : w_low(v[1]) == 's' ? 1 : 2;
     if (v[n - 1] != ')') return -1;
     at = open;
     while (at < n - 1) {
-        int start;
+        int start, depth = 0;
         while (at < n - 1 && w_space(v[at])) at++;
         if (at >= n - 1) break;
         if (v[at] == ',' || v[at] == '/') {
@@ -1078,22 +1135,33 @@ static int parse_color_function(const char *v, int n, uint32_t *out) {
         }
         if (count == 4) return -1;
         start = at;
-        while (at < n - 1 && !w_space(v[at]) && v[at] != ',' && v[at] != '/') at++;
-        if (color_number(v + start, at - start, &value[count], &percent[count])) return -1;
+        /* a math channel keeps its spaces, commas and slashes */
+        while (at < n - 1 && (depth || (!w_space(v[at]) && v[at] != ',' && v[at] != '/'))) {
+            if (v[at] == '(') depth++;
+            else if (v[at] == ')' && depth) depth--;
+            at++;
+        }
+        /* an unbalanced or stray parenthesis fails the channel's parse */
+        if (color_channel(v + start, at - start, kind && count == 0, &value[count], &percent[count])) return -1;
+        if (percent[count] == 2) none = 1;
         count++;
     }
     if (count < 3 || (commas && slash) || (commas && commas != count - 1) || (!commas && count == 4 && !slash))
         return -1;
-    if (count == 4) alpha = color_alpha(value[3], percent[3]);
-    if (hsl) {
-        if (percent[0] || !percent[1] || !percent[2]) return -1;
-        *out = with_alpha(hsl_rgb(value[0], value[1], value[2]), alpha);
+    if (commas && (none || kind == 2)) return -1;
+    if (count == 4) alpha = color_alpha(value[3], percent[3]);      /* none: 0 */
+    if (kind) {
+        if (percent[0] == 1) return -1;
+        /* the space form takes a number as the percentage (same scale) */
+        for (k = 1; k < 3; k++) if (commas && !percent[k]) return -1;
+        *out = with_alpha(kind == 1 ? hsl_rgb(value[0], value[1], value[2]) : hwb_rgb(value[0], value[1], value[2]),
+                          alpha);
         return 0;
     }
     *out = 0;
     for (k = 0; k < 3; k++) {
-        int c = percent[k] ? (value[k] * 255 + 50000) / 100000 : (value[k] + 500) / 1000;
-        if (percent[k] != percent[0]) return -1;
+        int c = percent[k] == 1 ? (value[k] * 255 + 50000) / 100000 : (value[k] + 500) / 1000;
+        if (commas && percent[k] != percent[0]) return -1;
         *out = (*out << 8) | (uint32_t)clamp_int(c, 0, 255);
     }
     *out = with_alpha(*out, alpha);
@@ -1141,16 +1209,31 @@ static int parse_color(const char* v, int n, uint32_t* out) {
  * and line-height are known). */
 static int u_font100 = WE_FONT_PX_DEFAULT * 100, u_root100 = WE_FONT_PX_DEFAULT * 100;
 static int u_lh100 = WE_LINE_H * 100, u_rlh100 = WE_LINE_H * 100, u_q = 4;
-enum { WE_U_EM, WE_U_REM, WE_U_EX, WE_U_CH, WE_U_CAP, WE_U_IC, WE_U_LH, WE_U_RLH, WE_U_COUNT };
-static const char *const unit_names[WE_U_COUNT] = { "em", "rem", "ex", "ch", "cap", "ic", "lh", "rlh" };
+/* Lot 118: viewport-percentage units (CSS Values 4 6.1.2). One viewport:
+ * the small, large and dynamic sizes are the same (no retractable UI), so
+ * sv*, lv* and dv* are the plain units. u_vw/u_vh are the viewport in px
+ * (we_style: the last layout viewport, else the @media size); vi and vb
+ * follow the root element's writing mode; u_vp_used records a use, so a
+ * layout on another viewport styles the document again. */
+static int u_vw = 640, u_vh = 480, u_vertical, u_vp_used;
+static int u_rel_used;   /* Lot 118: a font-relative or viewport unit was read (@property) */
+enum { WE_U_EM, WE_U_REM, WE_U_EX, WE_U_CH, WE_U_CAP, WE_U_IC, WE_U_LH, WE_U_RLH,
+       WE_U_VW, WE_U_VH, WE_U_VI, WE_U_VB, WE_U_VMIN, WE_U_VMAX, WE_U_COUNT };
+#define WE_U_VIEWPORT_NAMES 24
+static const char *const unit_names[WE_U_COUNT] = { "em", "rem", "ex", "ch", "cap", "ic", "lh", "rlh",
+                                                    "vw", "vh", "vi", "vb", "vmin", "vmax" };
+/* the prefixed viewport units: unit code WE_U_VW + k % 6 */
+static const char *const unit_vp_names[WE_U_VIEWPORT_NAMES - 6] = {
+    "svw", "svh", "svi", "svb", "svmin", "svmax", "lvw", "lvh", "lvi", "lvb", "lvmin", "lvmax",
+    "dvw", "dvh", "dvi", "dvb", "dvmin", "dvmax" };
 
 /* the unit at v[0..len) (whole suffix), -1 when it is not one of them */
 static int unit_code(const char *v, int len) {
     int k, j;
-    for (k = 0; k < WE_U_COUNT; k++) {
-        const char *u = unit_names[k];
+    for (k = 0; k < WE_U_COUNT + WE_U_VIEWPORT_NAMES - 6; k++) {
+        const char *u = k < WE_U_COUNT ? unit_names[k] : unit_vp_names[k - WE_U_COUNT];
         for (j = 0; u[j] && j < len && w_low(v[j]) == u[j]; j++) {}
-        if (!u[j] && j == len) return k;
+        if (!u[j] && j == len) return k < WE_U_COUNT ? k : WE_U_VW + (k - WE_U_COUNT) % 6;
     }
     return -1;
 }
@@ -1167,6 +1250,20 @@ static int unit_code_tail(const char *v, int len) {
 
 /* one unit in hundredths of a px in the current context */
 static int unit_base100(int code) {
+    u_rel_used = 1;
+    if (code >= WE_U_VW) {
+        int w = u_vertical ? u_vh : u_vw, h = u_vertical ? u_vw : u_vh;
+        u_vp_used = 1;
+        /* 1% of a size in px is that size in hundredths of a px */
+        switch (code) {
+        case WE_U_VW: return u_vw;
+        case WE_U_VH: return u_vh;
+        case WE_U_VI: return w;
+        case WE_U_VB: return h;
+        case WE_U_VMIN: return u_vw < u_vh ? u_vw : u_vh;
+        default: return u_vw > u_vh ? u_vw : u_vh;
+        }
+    }
     switch (code) {
     case WE_U_EM: case WE_U_IC: return u_font100;
     case WE_U_REM: return u_root100;
@@ -1199,7 +1296,8 @@ static int unit_len100(const char *v, int len, int *h100) {
     code = unit_code(v + i, len - i);
     if (code < 0) return -1;
     b = unit_base100(code);
-    /* whole * b <= 2000 * 40000; frac * b < 1000 * 40000 */
+    /* whole * b <= 2000 * 40000; frac * b < 1000 * 40000 (a viewport
+     * unit: b <= WE_LAYOUT_MAX) */
     b = whole * b + (frac * b + 500) / 1000;
     *h100 = neg ? -b : b;
     return 0;
@@ -1221,6 +1319,9 @@ static int u_ctx_set(const we_unit_ctx_t *c) {
     u_lh100 = c->lh100 > 0 ? c->lh100 : WE_LINE_H * 100;
     u_rlh100 = c->rlh100 > 0 ? c->rlh100 : WE_LINE_H * 100;
     u_q = we_font_q((f + 50) / 100);
+    u_vw = c->vw > 0 && c->vw <= WE_LAYOUT_MAX ? c->vw : 640;      /* Lot 118 */
+    u_vh = c->vh > 0 && c->vh <= WE_LAYOUT_MAX ? c->vh : 480;
+    u_vertical = c->vertical != 0;
     return 0;
 }
 
@@ -1249,10 +1350,14 @@ static int len_suffix_ok(const char *v, int len) {
 /* "12px", "12" (legacy: digits then anything), a font-relative length
  * (Lot 117: em of the element's font, rem, ex, ch, cap, ic, lh, rlh; was
  * em = 10 px), "50%" (pct set) */
+static int math_function(const char *v, int len);
+static int math_fixed_px(const char *v, int len, int *px);
 static int parse_len(const char* v, int n, int* px, int* pct) {
     int i = 0, val = 0, neg = 0;
     if (pct) *pct = 0;
     if (unit_len(v, n, px) == 0) return 0;
+    /* Lot 118: a math length without a percentage, in whole px */
+    if (math_function(v, n)) return math_fixed_px(v, n, px);
     if (i < n && v[i] == '-') { neg = 1; i++; }
     if (i >= n || !((v[i] >= '0' && v[i] <= '9') || v[i] == '.')) return w_ieq_n(v, n, "auto") ? 1 : -1;
     while (i < n && v[i] >= '0' && v[i] <= '9') {
@@ -1406,212 +1511,7 @@ static int bounded_uint(const char *v, int len, int max, int *out) {
     return 0;
 }
 
-static int math_refused;
-
-enum { M_NUMBER, M_PX, M_PERCENT, M_ADD, M_SUB, M_MUL, M_DIV, M_MIN, M_MAX, M_CLAMP };
-typedef struct {
-    const char *text;
-    int length, at, depth;
-    we_length_t *out;
-} we_math_parser_t;
-
-static int math_checked(int a, int b, int op, int *value) {
-    int result, aa = a < 0 ? -a : a, bb = b < 0 ? -b : b;
-    if (aa > WE_MATH_VALUE_MAX || bb > WE_MATH_VALUE_MAX) return -1;
-    if (op == M_MUL) {
-        if (bb && aa > WE_MATH_VALUE_MAX / bb) return -1;
-        result = a * b;
-    } else if (op == M_DIV) {
-        if (!b) return -1;
-        result = a / b;
-    } else if (op == M_ADD) result = a + b;
-    else result = a - b;
-    if (result < -WE_MATH_VALUE_MAX || result > WE_MATH_VALUE_MAX) return -1;
-    *value = result;
-    return 0;
-}
-
-static int math_eval(const we_length_t *expr, int basis, int *out) {
-    int values[WE_MATH_NODES_MAX], i;
-    if (!expr->count || expr->count > WE_MATH_NODES_MAX) return -2;
-    if (basis < 0 && expr->percent) return -1;
-    for (i = 0; i < expr->count; i++) {
-        const we_math_node_t *node = &expr->node[i];
-        int a, b;
-        if (node->op <= M_PERCENT) {
-            values[i] = node->op == M_PERCENT ? basis * node->value / 100 : node->value;
-            continue;
-        }
-        if (node->a >= i || node->b >= i) return -2;
-        a = values[node->a]; b = values[node->b];
-        if (node->op == M_MIN) values[i] = a < b ? a : b;
-        else if (node->op == M_MAX) values[i] = a > b ? a : b;
-        else if (node->op == M_CLAMP) {
-            int c;
-            if (node->c >= i) return -2;
-            c = values[node->c];
-            values[i] = b < c ? b : c;
-            if (values[i] < a) values[i] = a;
-        } else if (math_checked(a, b, node->op, &values[i])) return -2;
-    }
-    *out = values[expr->count - 1];
-    return 0;
-}
-
-static int math_used(const we_node_t *n, int slot, int basis, int fallback, int nonnegative) {
-    int result;
-    if (!n->length[slot].count) return fallback;
-    if (math_eval(&n->length[slot], basis, &result)) { math_refused = 1; return fallback; }
-    if (nonnegative && result < 0) return 0;
-    if (result > WE_LAYOUT_MAX) result = WE_LAYOUT_MAX;
-    if (result < -WE_LAYOUT_MAX) result = -WE_LAYOUT_MAX;
-    return result;
-}
-
-static int math_value(const we_node_t *n, int slot, int basis, int fallback) {
-    return math_used(n, slot, basis, fallback, 0);
-}
-
-static int math_nonnegative(const we_node_t *n, int slot, int basis, int fallback) {
-    return math_used(n, slot, basis, fallback, 1);
-}
-
-static void math_space(we_math_parser_t *p) {
-    while (p->at < p->length && w_space(p->text[p->at])) p->at++;
-}
-
-static int math_node(we_math_parser_t *p, int op, int a, int b, int c, int value, int dim) {
-    we_math_node_t *node;
-    int index = p->out->count;
-    if (index >= WE_MATH_NODES_MAX) return -1;
-    node = &p->out->node[index];
-    node->op = (uint8_t)op; node->a = (uint8_t)a; node->b = (uint8_t)b; node->c = (uint8_t)c;
-    node->value = (int16_t)value; node->dimension = (uint8_t)dim;
-    p->out->count++;
-    if (op == M_PERCENT) p->out->percent = 1;
-    return index;
-}
-
-static int math_sum(we_math_parser_t *p);
-
-static int math_atom(we_math_parser_t *p) {
-    int first, number = 0, sign = 1, op = M_NUMBER, result;
-    math_space(p);
-    if (p->at == p->length) return -1;
-    if (p->text[p->at] == '+' || p->text[p->at] == '-') {
-        sign = p->text[p->at++] == '-' ? -1 : 1;
-    }
-    first = p->at;
-    if (first < p->length && ((p->text[first] >= '0' && p->text[first] <= '9') || p->text[first] == '.')) {
-        int unit_end, h;
-        while (p->at < p->length && p->text[p->at] >= '0' && p->text[p->at] <= '9') p->at++;
-        if (p->at < p->length && p->text[p->at] == '.') {
-            p->at++;
-            while (p->at < p->length && p->text[p->at] >= '0' && p->text[p->at] <= '9') p->at++;
-        }
-        unit_end = p->at;
-        while (unit_end < p->length && w_low(p->text[unit_end]) >= 'a' && w_low(p->text[unit_end]) <= 'z') unit_end++;
-        /* Lot 117: a font-relative length (em of the element's font, rem,
-         * ex, ch, cap, ic, lh, rlh), decimals allowed, is px rounded at
-         * the element: the expression keeps px and percentages only */
-        if (unit_end > p->at && unit_code(p->text + p->at, unit_end - p->at) >= 0) {
-            if (unit_len100(p->text + first, unit_end - first, &h)) return -1;
-            h = (h + 50) / 100;
-            if (h > WE_MATH_LITERAL_MAX) return -1;
-            p->at = unit_end;
-            return math_node(p, M_PX, 0, 0, 0, h * sign, 1);
-        }
-        /* decimals: font-relative units only (bounded_uint refuses the point) */
-        if (bounded_uint(p->text + first, p->at - first, WE_MATH_LITERAL_MAX, &number)) return -1;
-        if (p->at < p->length && p->text[p->at] == '%') { op = M_PERCENT; p->at++; }
-        else if (p->at + 2 <= p->length && w_ieq_n(p->text + p->at, 2, "px")) { op = M_PX; p->at += 2; }
-        return math_node(p, op, 0, 0, 0, number * sign, op != M_NUMBER);
-    }
-    if (sign < 0 || first >= p->length || p->depth >= WE_MATH_DEPTH_MAX) return -1;
-    p->depth++;
-    if (p->text[p->at] == '(') {
-        p->at++; result = math_sum(p); math_space(p);
-        if (result < 0 || p->at == p->length || p->text[p->at++] != ')') return -1;
-    } else {
-        int name = p->at, kind, args[WE_MATH_ARGS_MAX], count = 0;
-        while (p->at < p->length && w_low(p->text[p->at]) >= 'a' && w_low(p->text[p->at]) <= 'z') p->at++;
-        kind = value_is(p->text + name, p->at - name, "calc") ? M_ADD :
-               value_is(p->text + name, p->at - name, "min") ? M_MIN :
-               value_is(p->text + name, p->at - name, "max") ? M_MAX :
-               value_is(p->text + name, p->at - name, "clamp") ? M_CLAMP : -1;
-        if (kind < 0 || p->at == p->length || p->text[p->at++] != '(') return -1;
-        for (;;) {
-            if (count == WE_MATH_ARGS_MAX) return -1;     /* Lot 116: was 4 */
-            args[count] = math_sum(p);
-            if (args[count] < 0) return -1;
-            if (count && p->out->node[args[count]].dimension != p->out->node[args[0]].dimension) return -1;
-            count++; math_space(p);
-            if (p->at == p->length) return -1;
-            if (p->text[p->at] != ',') break;
-            p->at++;
-        }
-        if (p->text[p->at++] != ')' || (kind == M_ADD && count != 1) || (kind == M_CLAMP && count != 3)) return -1;
-        result = args[0];
-        if (kind == M_CLAMP) result = math_node(p, kind, args[0], args[1], args[2], 0, p->out->node[args[0]].dimension);
-        else if (kind != M_ADD) {
-            int i;
-            for (i = 1; i < count; i++) {
-                result = math_node(p, kind, result, args[i], 0, 0, p->out->node[args[0]].dimension);
-                if (result < 0) return -1;
-            }
-        }
-    }
-    p->depth--;
-    return result;
-}
-
-static int math_product(we_math_parser_t *p) {
-    int left = math_atom(p);
-    if (left < 0) return -1;
-    for (;;) {
-        int op, right, ld, rd, saved = p->at;
-        math_space(p);
-        if (p->at == p->length || (p->text[p->at] != '*' && p->text[p->at] != '/')) { p->at = saved; break; }
-        op = p->text[p->at++] == '*' ? M_MUL : M_DIV;
-        right = math_atom(p);
-        if (right < 0) return -1;
-        ld = p->out->node[left].dimension; rd = p->out->node[right].dimension;
-        if ((op == M_MUL && ld && rd) || (op == M_DIV && rd)) return -1;
-        left = math_node(p, op, left, right, 0, 0, ld || rd);
-        if (left < 0) return -1;
-    }
-    return left;
-}
-
-static int math_sum(we_math_parser_t *p) {
-    int left = math_product(p);
-    if (left < 0) return -1;
-    for (;;) {
-        int op, right, saved = p->at;
-        math_space(p);
-        if (p->at == p->length || (p->text[p->at] != '+' && p->text[p->at] != '-')) { p->at = saved; break; }
-        /* Binary +/- require whitespace on each side; unary signs do not. */
-        if (p->at == saved || p->at + 1 == p->length || !w_space(p->text[p->at + 1])) return -1;
-        op = p->text[p->at++] == '+' ? M_ADD : M_SUB;
-        right = math_product(p);
-        if (right < 0 || p->out->node[left].dimension != p->out->node[right].dimension) return -1;
-        left = math_node(p, op, left, right, 0, 0, p->out->node[left].dimension);
-        if (left < 0) return -1;
-    }
-    return left;
-}
-
-static int parse_math(const char *v, int len, we_length_t *out) {
-    we_math_parser_t parser;
-    int root, result;
-    w_zero(out, sizeof(*out)); w_zero(&parser, sizeof(parser));
-    parser.text = v; parser.length = len; parser.out = out;
-    root = math_sum(&parser); math_space(&parser);
-    if (root < 0 || parser.at != len || root != out->count - 1 || !out->node[root].dimension) return -1;
-    /* A zero denominator and constant overflow are rejected before cascade. */
-    if (math_eval(out, 0, &result)) return -1;
-    return 0;
-}
+#include "webeng_math.inc"
 
 static int math_slot(const char *prop) {
     static const char *const names[WE_LENGTH_PROPS] = {
@@ -1621,10 +1521,6 @@ static int math_slot(const char *prop) {
     int i;
     for (i = 0; i < WE_LENGTH_PROPS; i++) if (w_eq(prop, names[i])) return i;
     return -1;
-}
-
-static int math_function(const char *v, int len) {
-    return w_ieq_n(v, len, "calc(") || w_ieq_n(v, len, "min(") || w_ieq_n(v, len, "max(") || w_ieq_n(v, len, "clamp(");
 }
 
 static void set_math(we_node_t *n, int slot, const we_length_t *expr) {
@@ -3161,10 +3057,7 @@ static int intrinsic_declaration(we_node_t *n, int slot, const char *v, int len)
             if (parse_math(v + first, end - first, &expression)) return -1;
         } else {
             if (parse_dimension(v + first, end - first, &number, &percent)) return -1;
-            expression.count = 1; expression.percent = (uint8_t)percent;
-            expression.node[0].op = percent ? M_PERCENT : M_PX;
-            expression.node[0].value = (int16_t)number;
-            expression.node[0].dimension = 1;
+            math_single(&expression, percent ? M_PERCENT : M_PX, number * 1000);
         }
         kind = WE_SIZE_FIT_LIMIT;
     }
@@ -3211,12 +3104,7 @@ static int inset_declaration(we_node_t *n, const char *prop, const char *v, int 
             if (percent) end--;
             else if (size >= 2 && value_is(token + size - 2, 2, "px")) end -= 2;
             if (bounded_signed(token, end, 2000, &values[k])) return -1;
-            if (percent) {
-                expression[k].count = expression[k].percent = 1;
-                expression[k].node[0].op = M_PERCENT;
-                expression[k].node[0].value = (int16_t)values[k];
-                expression[k].node[0].dimension = 1;
-            }
+            if (percent) math_single(&expression[k], M_PERCENT, values[k] * 1000);
         }
     }
     {
@@ -3429,10 +3317,15 @@ static void border_width_apply(we_node_t *n, int side, int px, int spec) {
 static int tf_args(const char *v, int len, int *start, int *length, int cap) {
     int at = 0, count = 0;
     while (at <= len) {
-        int first, end;
+        int first, end, depth = 0;
         while (at < len && w_space(v[at])) at++;
         first = at;
-        while (at < len && v[at] != ',') at++;
+        /* Lot 118: a comma inside a math function is its own */
+        while (at < len && (v[at] != ',' || depth)) {
+            if (v[at] == '(') depth++;
+            else if (v[at] == ')' && depth) depth--;
+            at++;
+        }
         end = at;
         while (end > first && w_space(v[end - 1])) end--;
         if (end == first || count == cap) return -1;
@@ -3444,6 +3337,12 @@ static int tf_args(const char *v, int len, int *start, int *length, int cap) {
 
 static int tf_length(const char *v, int len, int16_t *out, int *percent) {
     int px, pct, negative = len > 0 && v[0] == '-', digits = negative, unit;
+    /* Lot 118: a math length without a percentage, whole px */
+    if (math_function(v, len)) {
+        if (math_fixed_px(v, len, &px)) return -1;
+        *percent = 0; *out = (int16_t)px;
+        return 0;
+    }
     while (digits < len && ((v[digits] >= '0' && v[digits] <= '9') || v[digits] == '.')) digits++;
     unit = len - digits;
     if (digits == negative) return -1;
@@ -3458,9 +3357,10 @@ static int tf_length(const char *v, int len, int16_t *out, int *percent) {
 }
 
 static int tf_scale(const char *v, int len, int16_t *out) {
-    int milli, percent;
-    if (len > 3 && w_ieq_n(v + len - 3, 3, "deg")) return -1;
-    if (color_number(v, len, &milli, &percent)) return -1;
+    int milli, percent = 0;
+    if (math_function(v, len)) { if (math_number_milli(v, len, &milli)) return -1; }   /* Lot 118 */
+    else if (len > 3 && w_ieq_n(v + len - 3, 3, "deg")) return -1;
+    else if (color_number(v, len, &milli, &percent)) return -1;
     if (percent) milli /= 100;
     if (milli < -8000 || milli > 8000) return -1;
     *out = (int16_t)milli;
@@ -3473,6 +3373,7 @@ static int tf_angle_milli(const char *v, int len, int *out) {
     static const struct { const char *unit; int16_t num, den; } units[] = {
         {"turn", 360, 1}, {"grad", 9, 10}, {"rad", 573, 10}, {"deg", 1, 1}, {0, 0, 0}};
     int milli, percent, k, u = -1;
+    if (math_function(v, len)) return math_angle_milli(v, len, out);   /* Lot 118 */
     for (k = 0; units[k].unit && u < 0; k++) {
         int ul = w_len(units[k].unit);
         if (len > ul && w_ieq_n(v + len - ul, ul, units[k].unit)) { u = k; len -= ul; }
@@ -3506,6 +3407,8 @@ static int tf_angle_c(const char *v, int len, int *centi) {
     *centi = (milli >= 0 ? milli + 5 : milli - 5) / 10;
     return 0;
 }
+
+#include "webeng_prop.inc"     /* Lot 118 */
 
 /* A skew angle modulo 180deg in -80..80 (90deg has no tangent). */
 static int tf_skew_angle(const char *v, int len, int16_t *out) {
@@ -4580,11 +4483,12 @@ static int font_size100_in(const char *v, int vl, int *out100) {
     else if (value_is(v, vl, "larger")) h = (parent * 6 + 2) / 5;
     else if (math_function(v, vl)) {
         /* calc/min/max/clamp: px (font-relative leaves of the parent
-         * context) and percentages of the parent font, whole px */
+         * context) and percentages of the parent font (whole px); Lot 118:
+         * the result keeps its hundredths (truncated) */
         we_length_t e;
-        int px;
-        if (parse_math(v, vl, &e) || math_eval(&e, (parent + 50) / 100, &px)) return -1;
-        h = px > WE_FONT_PX_MAX ? WE_FONT_PX_MAX * 100 : px * 100;
+        int milli;
+        if (parse_math(v, vl, &e) || math_len_milli(&e, (parent + 50) / 100, &milli)) return -1;
+        h = milli > WE_FONT_PX_MAX * 1000 ? WE_FONT_PX_MAX * 100 : milli / 10;
     } else if (unit_len100(v, vl, &h) == 0) {
         /* em, rem, ex, ch, cap, ic, lh, rlh */
     } else if (vl > 2 && value_is(v + vl - 2, 2, "px")) {
@@ -4696,8 +4600,18 @@ static int lh_parse(we_node_t *n, const char *v, int vl) {
         int keep = u_lh100, keep_root = u_root100, keep_rlh = u_rlh100;
         u_lh100 = fs_parent_lh100; u_root100 = fs_root100; u_rlh100 = fs_rlh100;
         if (math_function(v, vl)) {
-            int px;
-            h = parse_math(v, vl, &e) || math_eval(&e, n->font_px ? n->font_px : WE_FONT_PX_DEFAULT, &px) ? -1 : px * 100;
+            int milli;
+            /* Lot 118: a number expression is a unitless factor; a length
+             * keeps hundredths of a px (truncated) */
+            if (math_number_milli(v, vl, &milli) == 0) {
+                u_lh100 = keep; u_root100 = keep_root; u_rlh100 = keep_rlh;
+                if (milli < 0) milli = 0;
+                if (milli > WE_LH_NUMBER_MAX * 1000) milli = WE_LH_NUMBER_MAX * 1000;
+                h = (milli + 5) / 10;
+                n->line_height = (int16_t)(h ? h : 1); n->lh_frac = 0; n->lh_unitless = 1;
+                return 0;
+            }
+            h = parse_math(v, vl, &e) || math_len_milli(&e, n->font_px ? n->font_px : WE_FONT_PX_DEFAULT, &milli) ? -1 : milli / 10;
         } else if (unit_len100(v, vl, &h)) h = -1;
         u_lh100 = keep; u_root100 = keep_root; u_rlh100 = keep_rlh;
         if (h < 0 || h > WE_LINE_H_MAX * 100) return -1;
@@ -4829,7 +4743,8 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             n->flex_reverse = (uint8_t)value_is(v, vl, "column-reverse");
         } else diag(d, "flex-direction refused", -1);
     } else if (w_eq(prop, "order")) {
-        if (bounded_signed(v, vl, WE_ORDER_MAX, &px) == 0) n->item_order = (int8_t)px;
+        if (bounded_signed(v, vl, WE_ORDER_MAX, &px) == 0 ||
+            math_integer(v, vl, -WE_ORDER_MAX, WE_ORDER_MAX, &px) == 0) n->item_order = (int8_t)px;   /* Lot 118 */
         else diag(d, "order refused", -1);
     } else if (w_eq(prop, "flex-wrap")) {
         if (value_is(v, vl, "nowrap")) n->flex_wrap = 0;
@@ -4837,10 +4752,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "wrap-reverse")) n->flex_wrap = 2;
         else diag(d, "flex-wrap refused", -1);
     } else if (w_eq(prop, "flex-grow")) {
-        if (bounded_uint(v, vl, 1000, &px) == 0) n->flex_grow = (int16_t)px;
+        if (bounded_uint(v, vl, 1000, &px) == 0 || math_integer(v, vl, 0, 1000, &px) == 0) n->flex_grow = (int16_t)px;
         else diag(d, "flex-grow refused", -1);
     } else if (w_eq(prop, "flex-shrink")) {
-        if (bounded_uint(v, vl, 1000, &px) == 0) n->flex_shrink = (int16_t)px;
+        if (bounded_uint(v, vl, 1000, &px) == 0 || math_integer(v, vl, 0, 1000, &px) == 0) n->flex_shrink = (int16_t)px;
         else diag(d, "flex-shrink refused", -1);
     } else if (w_eq(prop, "flex-basis")) {
         int end = vl, value;
@@ -5001,6 +4916,8 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else diag(d, "clear refused", -1);
     } else if (w_eq(prop, "opacity")) {
         if (parse_opacity(v, vl, &px) == 0) n->transparency = (uint8_t)(100 - px);
+        else if (math_function(v, vl) && math_number_milli(v, vl, &px) == 0)   /* Lot 118: clamps to 0..1 */
+            n->transparency = (uint8_t)(100 - (px < 0 ? 0 : px > 1000 ? 100 : px / 10));
         else diag(d, "opacity refused", -1);
     } else if (w_eq(prop, "text-decoration") || w_eq(prop, "text-decoration-line") || w_eq(prop, "text-decoration-style") ||
                w_eq(prop, "text-decoration-color") || w_eq(prop, "text-decoration-thickness")) {
@@ -5075,7 +4992,9 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if (parse_transform_origin(n, v, vl)) diag(d, "transform origin refused", -1);
     } else if (w_eq(prop, "z-index")) {
         if (value_is(v, vl, "auto")) { n->z_set = 0; n->z_index = 0; }
-        else if (bounded_signed(v, vl, WE_Z_MAX, &px) == 0) { n->z_index = (int8_t)px; n->z_set = 1; }
+        else if (bounded_signed(v, vl, WE_Z_MAX, &px) == 0 || math_integer(v, vl, -WE_Z_MAX, WE_Z_MAX, &px) == 0) {
+            n->z_index = (int8_t)px; n->z_set = 1;
+        }
         else diag(d, "z-index refused", -1);
     } else if (w_eq(prop, "line-height")) {
         if (lh_parse(n, v, vl)) diag(d, "line height refused", -1);
@@ -5653,6 +5572,7 @@ static void font_pass_run(we_doc_t *d, we_node_t *n, int match, int pseudo, int 
     d->ndiag = ndiag; d->diag_dropped = dropped; d->perf = perf;
     if (!pseudo && i > 0 && n->parent == 0 && !u_root_done) {
         u_root100 = u_font100; u_rlh100 = u_lh100; u_root_done = 1;
+        u_vertical = n->wmode != WE_WM_HORIZONTAL;   /* Lot 118: vi and vb */
     }
 }
 
@@ -5765,7 +5685,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->caption_bottom = p ? p->caption_bottom : 0;
         n->vshift_own = 0;
         n->vshift = p ? p->vshift : 0;
-        cssq_inherit_vars(p, n);
+        cssq_inherit_vars(d, p, n);
         if (n->is_text) { n->display = WE_DISP_INLINE; forms_text_style(d, n); return; }
         if (i == 0) { n->display = WE_DISP_BLOCK; return; }
         if (pseudo) {
@@ -5788,6 +5708,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         cascade_rules(d, match, n, pseudo, 1);
         mode_pass = 0;
         font_pass_run(d, n, match, pseudo, i);
+        prop_compute(d, n);     /* Lot 118: registered properties in px */
         /* lot 64: the UA list indent is padding-inline-start: the right in rtl */
         if (!pseudo && n->dir_rtl && n->wmode == WE_WM_HORIZONTAL && (w_eq(n->tag, "ul") || w_eq(n->tag, "ol")))
             n->padding[1] = n->padding[3], n->padding[3] = 0;
@@ -5954,7 +5875,12 @@ int we_style(we_doc_t* d) {
     d->source_pool = (uint16_t)d->pool_used;
     /* Lot 117: rem and rlh are the initial values until the root element */
     u_root100 = WE_FONT_PX_DEFAULT * 100; u_rlh100 = os_ui_line_h(we_font_q(WE_FONT_PX_DEFAULT)) * 100; u_root_done = 0;
+    /* Lot 118: the viewport units resolve against this size */
+    d->style_vw = d->viewport_w > 0 ? d->viewport_w : (int16_t)cssq_media_w(d);
+    d->style_vh = d->viewport_h > 0 ? d->viewport_h : (int16_t)cssq_media_h(d);
+    u_vw = d->style_vw; u_vh = d->style_vh; u_vertical = 0; u_vp_used = 0;
     for (i = 0; i < count; i++) style_node(d, &d->nodes[i], (int)i, (int)i, 0);
+    d->vp_used = (uint8_t)u_vp_used;
     generate_content(d, (int)count);
     forms_accent_apply(d);
     for (i = 0; i < d->nnodes; i++) {
@@ -13538,6 +13464,12 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     d->viewport_w = (int16_t)(viewport_w > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : viewport_w);
     d->viewport_h = (int16_t)viewport_h;
     d->scroll_y = 0;
+    /* Lot 118: lengths in viewport units were resolved by we_style against
+     * another size: style the document again for this one */
+    if (d->vp_used && (d->style_vw != d->viewport_w || d->style_vh != d->viewport_h)) {
+        if (d->vp_restyles < 255) d->vp_restyles++;
+        we_style(d);
+    }
     track_pool_doc = d;
     w_zero(static_set, sizeof(static_set));
     d->nitems = 0; math_refused = 0; wavy_decoration = 0; gradient_banded = 0; text_shadow_blur = 0; radius_stepped = 0; radius_square = 0; baseline_probe = 0; probe_level = probe_count = 0;

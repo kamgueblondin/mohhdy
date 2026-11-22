@@ -141,7 +141,7 @@ static void test_l109_flow_2(void) {
     flow("#p { overflow: auto; height: 250px } #o { overflow: auto; height: calc(39.125pc - 29%) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(-29% + 626px)", g_o);
     TEST_ASSERT_EQUAL(250, sh(0));
-    TEST_ASSERT_EQUAL(554, sh(1));
+    TEST_ASSERT_EQUAL(553, sh(1));
     flow("#p { overflow: auto; height: 300px } #o { overflow: auto; height: calc(2 * (41% - 39em)) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(82% - 1248px)", g_o);
     TEST_ASSERT_EQUAL(300, sh(0));

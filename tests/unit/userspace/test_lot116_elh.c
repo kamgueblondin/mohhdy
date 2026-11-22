@@ -153,8 +153,8 @@ static void test_l116_elh_1(void) {
     TEST_ASSERT_EQUAL(60, el("c")->h);
     tops(15, 30, 45);
     lay("<body style='margin:0'><div id=a style='line-height:calc(2)'><div id=b style=''><div id=c style='line-height:40'>a<br>b<br>c<br>d</div></div></div></body>");
-    fields("a", 0, 0, 0);
-    fields("b", 0, 0, 0);
+    fields("a", 200, 1, 0);
+    fields("b", 200, 1, 0);
     fields("c", 4000, 1, 0);
     TEST_ASSERT_EQUAL(1600, el("c")->h);
     tops(400, 800, 1200);
@@ -255,7 +255,7 @@ static void test_l116_elh_3(void) {
     TEST_ASSERT_EQUAL(4, el("c")->h);
     tops(1, 2, 3);
     lay("<body style='margin:0'><div id=a style='line-height:87.5%;line-height:calc(2)'><div id=b style='line-height:1;line-height:1.5'><div id=c style='font-size:18px'>a<br>b<br>c<br>d</div></div></div></body>");
-    fields("a", 14, 0, 8);
+    fields("a", 200, 1, 0);
     fields("b", 150, 1, 0);
     fields("c", 150, 1, 0);
     TEST_ASSERT_EQUAL(108, el("c")->h);
@@ -457,7 +457,7 @@ static void test_l116_elh_6(void) {
     tops(136, 272, 408);
     lay("<body style='margin:0'><div id=a style='line-height:18.555px'><div id=b style='line-height:calc(2)'><div id=c style='line-height:250%'>a<br>b<br>c<br>d</div></div></div></body>");
     fields("a", 18, 0, 56);
-    fields("b", 18, 0, 56);
+    fields("b", 200, 1, 0);
     fields("c", 40, 0, 0);
     TEST_ASSERT_EQUAL(160, el("c")->h);
     tops(40, 80, 120);
@@ -760,7 +760,7 @@ static void test_l116_elh_11(void) {
     tops(34, 68, 102);
     lay("<body style='margin:0'><div id=a style='font-size:13px'><div id=b style='font-size:10px;line-height:calc(2)'><div id=c style='font-size:13px;line-height:33.33px'>a<br>b<br>c<br>d</div></div></div></body>");
     fields("a", 0, 0, 0);
-    fields("b", 0, 0, 0);
+    fields("b", 200, 1, 0);
     fields("c", 33, 0, 33);
     TEST_ASSERT_EQUAL(133, el("c")->h);
     tops(33, 66, 99);
@@ -1371,8 +1371,8 @@ static void test_l116_elh_20(void) {
 
 static void test_l116_elh_21(void) {
     lay("<body style='margin:0'><div id=a style='font-size:24px;line-height:calc(2);line-height:1..5'><div id=b style='line-height:calc(2)'><div id=c style='line-height:1.5;line-height:1.5'>a<br>b<br>c<br>d</div></div></div></body>");
-    fields("a", 0, 0, 0);
-    fields("b", 0, 0, 0);
+    fields("a", 200, 1, 0);
+    fields("b", 200, 1, 0);
     fields("c", 150, 1, 0);
     TEST_ASSERT_EQUAL(144, el("c")->h);
     tops(36, 72, 108);

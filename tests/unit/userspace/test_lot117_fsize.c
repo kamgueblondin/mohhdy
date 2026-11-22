@@ -148,7 +148,7 @@ static void test_l117_fsize_1(void) {
 static void test_l117_fsize_2(void) {
     c.font100 = 1777; c.root100 = 2000; c.lh100 = 1300; c.rlh100 = 1300;
     TEST_ASSERT_EQUAL(0, we_font_size100("calc(1em + 2px)", 15, &c, &out));
-    TEST_ASSERT_EQUAL(2000, out);
+    TEST_ASSERT_EQUAL(1977, out);
     c.font100 = 400; c.root100 = 1600; c.lh100 = 3333; c.rlh100 = 2500;
     TEST_ASSERT_EQUAL(0, we_font_size100("2.528ex", 7, &c, &out));
     TEST_ASSERT_EQUAL(1264, out);
@@ -429,7 +429,7 @@ static void test_l117_fsize_7(void) {
     TEST_ASSERT_EQUAL(1555, out);
     c.font100 = 3000; c.root100 = 2000; c.lh100 = 2000; c.rlh100 = 1300;
     TEST_ASSERT_EQUAL(0, we_font_size100("max(10px, 0.75em)", 17, &c, &out));
-    TEST_ASSERT_EQUAL(2300, out);
+    TEST_ASSERT_EQUAL(2250, out);
 }
 
 static void test_l117_fsize_8(void) {
@@ -607,7 +607,7 @@ static void test_l117_fsize_11(void) {
     TEST_ASSERT_EQUAL(2400, out);
     c.font100 = 1350; c.root100 = 1600; c.lh100 = 2060; c.rlh100 = 2500;
     TEST_ASSERT_EQUAL(0, we_font_size100("calc(50% + 0.5em)", 17, &c, &out));
-    TEST_ASSERT_EQUAL(1400, out);
+    TEST_ASSERT_EQUAL(1375, out);
     c.font100 = 900; c.root100 = 1600; c.lh100 = 2060; c.rlh100 = 2500;
     TEST_ASSERT_EQUAL(0, we_font_size100("0.4em", 5, &c, &out));
     TEST_ASSERT_EQUAL(400, out);
@@ -616,7 +616,7 @@ static void test_l117_fsize_11(void) {
     TEST_ASSERT_EQUAL(1533, out);
     c.font100 = 900; c.root100 = 2000; c.lh100 = 2400; c.rlh100 = 1300;
     TEST_ASSERT_EQUAL(0, we_font_size100("clamp(10px, 1.5em, 30px)", 24, &c, &out));
-    TEST_ASSERT_EQUAL(1400, out);
+    TEST_ASSERT_EQUAL(1350, out);
     c.font100 = 2000; c.root100 = 1600; c.lh100 = 2400; c.rlh100 = 2500;
     TEST_ASSERT_EQUAL(0, we_font_size100("2ic", 3, &c, &out));
     TEST_ASSERT_EQUAL(4000, out);
@@ -994,7 +994,7 @@ static void test_l117_fsize_19(void) {
     TEST_ASSERT_EQUAL(-1, we_font_size100("0", 1, &c, &out));
     c.font100 = 900; c.root100 = 1600; c.lh100 = 2400; c.rlh100 = 2500;
     TEST_ASSERT_EQUAL(0, we_font_size100("clamp(10px, 1.5em, 30px)", 24, &c, &out));
-    TEST_ASSERT_EQUAL(1400, out);
+    TEST_ASSERT_EQUAL(1350, out);
     c.font100 = 2250; c.root100 = 3200; c.lh100 = 3333; c.rlh100 = 1300;
     TEST_ASSERT_EQUAL(-1, we_font_size100("0.2px", 5, &c, &out));
     c.font100 = 1600; c.root100 = 1600; c.lh100 = 3333; c.rlh100 = 2500;
@@ -1020,13 +1020,13 @@ static void test_l117_fsize_20(void) {
     TEST_ASSERT_EQUAL(2400, out);
     c.font100 = 1777; c.root100 = 1600; c.lh100 = 2400; c.rlh100 = 1300;
     TEST_ASSERT_EQUAL(0, we_font_size100("calc(1em + 2px)", 15, &c, &out));
-    TEST_ASSERT_EQUAL(2000, out);
+    TEST_ASSERT_EQUAL(1977, out);
     c.font100 = 1200; c.root100 = 1600; c.lh100 = 2400; c.rlh100 = 1000;
     TEST_ASSERT_EQUAL(0, we_font_size100("1.115cap", 8, &c, &out));
     TEST_ASSERT_EQUAL(781, out);
     c.font100 = 1350; c.root100 = 1600; c.lh100 = 1000; c.rlh100 = 1300;
     TEST_ASSERT_EQUAL(0, we_font_size100("max(10px, 0.75em)", 17, &c, &out));
-    TEST_ASSERT_EQUAL(1000, out);
+    TEST_ASSERT_EQUAL(1013, out);
     c.font100 = 3000; c.root100 = 3200; c.lh100 = 2000; c.rlh100 = 1000;
     TEST_ASSERT_EQUAL(0, we_font_size100("0.4em", 5, &c, &out));
     TEST_ASSERT_EQUAL(1200, out);
@@ -1831,7 +1831,7 @@ static void test_l117_fsize_32(void) {
     TEST_ASSERT_EQUAL(8, el("a")->font_px);
     TEST_ASSERT_EQUAL(1680, el("b")->font100);
     TEST_ASSERT_EQUAL(17, el("b")->font_px);
-    TEST_ASSERT_EQUAL(1900, el("c")->font100);
+    TEST_ASSERT_EQUAL(1880, el("c")->font100);
     TEST_ASSERT_EQUAL(19, el("c")->font_px);
     lay("<html style='font-size:0.09cap'><body style='margin:0'><div id=a style='font-size:241.10%;font-size:54px'><div id=b style='font-size:12px'><div id=c style='font-size:larger;font-size:20px'>x</div></div></div></body></html>");
     TEST_ASSERT_EQUAL(5400, el("a")->font100);
@@ -1932,7 +1932,7 @@ static void test_l117_fsize_33(void) {
     TEST_ASSERT_EQUAL(19, el("a")->font_px);
     TEST_ASSERT_EQUAL(1920, el("b")->font100);
     TEST_ASSERT_EQUAL(19, el("b")->font_px);
-    TEST_ASSERT_EQUAL(2100, el("c")->font100);
+    TEST_ASSERT_EQUAL(2120, el("c")->font100);
     TEST_ASSERT_EQUAL(21, el("c")->font_px);
     lay("<html style='font-size:90%;font-size:calc(1em + 2px)'><body style='margin:0'><div id=a style='font-size:1.5ch;font-size:44pt'><div id=b style=''><div id=c style='font-size:40.26px'>x</div></div></div></body></html>");
     TEST_ASSERT_EQUAL(5867, el("a")->font100);
@@ -2078,7 +2078,7 @@ static void test_l117_fsize_35(void) {
     TEST_ASSERT_EQUAL(51, el("a")->font_px);
     TEST_ASSERT_EQUAL(1778, el("b")->font100);
     TEST_ASSERT_EQUAL(18, el("b")->font_px);
-    TEST_ASSERT_EQUAL(1300, el("c")->font100);
+    TEST_ASSERT_EQUAL(1334, el("c")->font100);
     TEST_ASSERT_EQUAL(13, el("c")->font_px);
     lay("<html style='font-size:118%;font-size:2.150ic'><body style='margin:0'><div id=a style='font-size:263%;font-size:9pt'><div id=b style='font-size:267.7%'><div id=c style='font-size:48.8px'>x</div></div></div></body></html>");
     TEST_ASSERT_EQUAL(1200, el("a")->font100);
@@ -2193,7 +2193,7 @@ static void test_l117_fsize_36(void) {
     TEST_ASSERT_EQUAL(16, el("a")->font_px);
     TEST_ASSERT_EQUAL(1400, el("b")->font100);
     TEST_ASSERT_EQUAL(14, el("b")->font_px);
-    TEST_ASSERT_EQUAL(1100, el("c")->font100);
+    TEST_ASSERT_EQUAL(1050, el("c")->font100);
     TEST_ASSERT_EQUAL(11, el("c")->font_px);
     lay("<html style='font-size:10.5pt'><body style='margin:0'><div id=a style='font-size:15.33px'><div id=b style='font-size:5.98pt;font-size:0.167rlh'><div id=c style='font-size:0.2px;font-size:2.579em'>x</div></div></div></body></html>");
     TEST_ASSERT_EQUAL(1533, el("a")->font100);
@@ -2291,7 +2291,7 @@ static void test_l117_fsize_36(void) {
     TEST_ASSERT_EQUAL(35, el("a")->font_px);
     TEST_ASSERT_EQUAL(1840, el("b")->font100);
     TEST_ASSERT_EQUAL(18, el("b")->font_px);
-    TEST_ASSERT_EQUAL(2000, el("c")->font100);
+    TEST_ASSERT_EQUAL(2040, el("c")->font100);
     TEST_ASSERT_EQUAL(20, el("c")->font_px);
     lay("<html style='font-size:1.5ch;font-size:2.1lh'><body style='margin:0'><div id=a style='font-size:15.33px;font-size:medium'><div id=b style='font-size:3px;font-size:12'><div id=c style='font-size:0.246ex'>x</div></div></div></body></html>");
     TEST_ASSERT_EQUAL(1600, el("a")->font100);
@@ -2521,7 +2521,7 @@ static void test_l117_fsize_38(void) {
     TEST_ASSERT_EQUAL(21, el("a")->font_px);
     TEST_ASSERT_EQUAL(2144, el("b")->font100);
     TEST_ASSERT_EQUAL(21, el("b")->font_px);
-    TEST_ASSERT_EQUAL(2300, el("c")->font100);
+    TEST_ASSERT_EQUAL(2344, el("c")->font100);
     TEST_ASSERT_EQUAL(23, el("c")->font_px);
     lay("<html style='font-size:52.02pt;font-size:20px'><body style='margin:0'><div id=a style='font-size:calc(2)'><div id=b style='font-size:10.5pt'><div id=c style='font-size:1.9ch;font-size:0.545CH'>x</div></div></div></body></html>");
     TEST_ASSERT_EQUAL(2000, el("a")->font100);
@@ -2594,7 +2594,7 @@ static void test_l117_fsize_39(void) {
     TEST_ASSERT_EQUAL(34, el("a")->font_px);
     TEST_ASSERT_EQUAL(3412, el("b")->font100);
     TEST_ASSERT_EQUAL(34, el("b")->font_px);
-    TEST_ASSERT_EQUAL(3400, el("c")->font100);
+    TEST_ASSERT_EQUAL(3406, el("c")->font100);
     TEST_ASSERT_EQUAL(34, el("c")->font_px);
     lay("<html style=''><body style='margin:0'><div id=a style='font-size:calc(2)'><div id=b style='font-size:50.1pt'><div id=c style='font-size:224%;font-size:77.86%'>x</div></div></div></body></html>");
     TEST_ASSERT_EQUAL(1600, el("a")->font100);

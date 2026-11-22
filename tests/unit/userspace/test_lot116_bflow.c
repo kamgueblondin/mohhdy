@@ -386,7 +386,7 @@ static void test_l116_bflow_9(void) {
     flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: calc(min(calc(38% - 98px), 58%, calc(30% + 85px), 95px, calc(99% - 107px), calc(79% - 62px)) * -1); min-height: calc(2% - 17px) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(-38% + 98px), calc(-30% - 85px), -95px, calc(-99% + 107px));min-height:calc(2% - 17px)", g_o);
     TEST_ASSERT_EQUAL(240, sh(0));
-    TEST_ASSERT_EQUAL(7, sh(1));
+    TEST_ASSERT_EQUAL(6, sh(1));
     flow("#p { overflow: auto; height: 240px } #o { overflow: auto; height: calc(86% + calc(30% + 10px)); max-height: calc(calc(max(34%, calc(calc(30% + 19px) + calc(17% - 69px))) + calc(82% - 185px)) * 3); min-height: clamp(clamp(calc(calc(39% + 181px) + calc(74% - 63px)), 97px, 43%), calc(53% - 194px), 77px) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:calc(116% + 10px);max-height:max(calc(348% - 555px), calc(387% - 705px));min-height:clamp(clamp(calc(113% + 118px), 97px, 43%), calc(53% - 194px), 77px)", g_o);
     TEST_ASSERT_EQUAL(240, sh(0));

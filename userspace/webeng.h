@@ -67,7 +67,10 @@ int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px);
  * px, the font size (em, ic; ex, ch and cap from its 8x8 glyph scale),
  * the root font size (rem), the line height (lh) and the root line
  * height (rlh). */
-typedef struct { int font100, root100, lh100, rlh100; } we_unit_ctx_t;
+typedef struct { int font100, root100, lh100, rlh100; int vw, vh, vertical; } we_unit_ctx_t;
+/* Lot 118: vw/vh are the viewport in px for the viewport-percentage units
+ * (vw, vh, vi, vb, vmin, vmax and their sv/lv/dv forms; 0: 640 x 480),
+ * vertical a vertical root writing mode (vi is then vh). */
 /* "1.5em", "-2rem", ".25ch": hundredths of a px (three decimals read, the
  * whole part at most 2000); 0, or -1 for px, numbers and other units */
 int we_unit_len100(const char *v, int len, const we_unit_ctx_t *c, int *h100);
@@ -76,6 +79,17 @@ int we_unit_len100(const char *v, int len, const we_unit_ctx_t *c, int *h100);
  * calc/min/max/clamp of them): hundredths of a px within
  * WE_FONT_PX_MIN..WE_FONT_PX_MAX px, 0, or -1 when refused */
 int we_font_size100(const char *v, int vl, const we_unit_ctx_t *parent, int *out100);
+/* Lot 118: a math value (calc, min, max, clamp, round, mod, rem, abs,
+ * sign, pow, sqrt, hypot, log, exp, sin, cos, tan, asin, acos, atan,
+ * atan2; the constants e, pi, infinity, -infinity, NaN) in the context c
+ * (0: the defaults), percentages of basis px: *type is WE_MATH_NUMBER,
+ * WE_MATH_LENGTH or WE_MATH_ANGLE and *milli its used value in
+ * thousandths of a number, px or degree (NaN is 0, the infinities
+ * +-1e9); 0, or -1 when refused or past the range. */
+#define WE_MATH_NUMBER 0
+#define WE_MATH_LENGTH 1
+#define WE_MATH_ANGLE 2
+int we_math_milli(const char *v, int len, const we_unit_ctx_t *c, int basis, int *type, int *milli);
 #define WE_TEXT_BASELINE 9
 #define WE_TRACKS_MAX 8
 #define WE_GRID_ROWS_MAX WE_MAX_NODES
@@ -643,6 +657,15 @@ typedef struct {
     uint8_t layer;      /* lot 74: 0 unlayered, else cascade layer index + 1 */
 } we_rule_t;
 
+/* Lot 118: a registered custom property (@property): its name, its
+ * syntax text (the components of webeng_prop.inc; syntax is
+ * WE_PSYN_ANY for '*', else 0) and initial value in the pool, inherits */
+#define WE_PROPS_MAX 16
+typedef struct {
+    uint16_t name_off, init_off, init_len, syn_off;
+    uint8_t name_len, syntax, inherits, has_init, syn_len;
+} we_prop_t;
+
 typedef struct {
     uint32_t nodes, elements, text_nodes, scripts_skipped;
     uint32_t rules, decls_applied, unknown_props;
@@ -690,6 +713,14 @@ typedef struct {
      * percentage, kept whole and evaluated against the track base. */
     we_length_t track_pool[WE_TRACK_POOL_MAX];
     uint8_t ntrack_pool;
+    /* Lot 118: the viewport we_style resolved vw/vh/vi/vb/vmin/vmax
+     * against, and whether a style used one (we_layout_viewport styles the
+     * document again on another viewport) */
+    int16_t style_vw, style_vh;
+    uint8_t vp_used, vp_restyles;
+    /* Lot 118: @property registrations (webeng_prop.inc) */
+    we_prop_t props[WE_PROPS_MAX];
+    uint8_t nprops;
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 
