@@ -4,7 +4,7 @@
 # `apt-get update` take 12 minutes on main run 38249068719 and the production
 # job then hit timeout-minutes: 20 during make qemu-persistence.
 # Epoch is part of this file: bump it to invalidate a bad cache key.
-# epoch=1
+# epoch=2
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -54,8 +54,13 @@ EOF
 
 # The Azure mirror has failed apt-get update with exit 100 (Lot 86 CI).
 # The ARM job already retries against archive.ubuntu.com. Do the same here.
+# If a stale .apt-cache left packages half-installed (dpkg -i vs newer
+# libc6 on the runner), fix-broken before installing PKGS so apt-get can
+# recover instead of failing with unmet dependencies.
 apt_from_network() {
     sudo apt-get update
+    sudo apt-get install -y --no-install-recommends -f \
+        -o APT::Keep-Downloaded-Packages=true
     sudo apt-get install -y --no-install-recommends \
         -o APT::Keep-Downloaded-Packages=true \
         "${PKGS[@]}"
@@ -72,6 +77,8 @@ for attempt in 1 2; do
     fi
 done
 mkdir -p "$CACHE"
+# Drop stale debs so a new libc6 (or other) version is not mixed with old ones.
+rm -f "$CACHE"/*.deb
 archives=(/var/cache/apt/archives/*.deb)
 if [ "${#archives[@]}" -gt 0 ]; then
     cp -f "${archives[@]}" "$CACHE"/
