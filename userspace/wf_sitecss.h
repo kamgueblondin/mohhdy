@@ -266,7 +266,11 @@ enum {
     WF_SITE_OV_AUTO = 4,          /* overlay too (a legacy alias) */
     WF_SITE_OV_SCROLL = 5
 };
-#define WF_SITE_BOXEX 64            /* Lot 109: a box length the engine resolves (calc(N% + Mpx)) */
+/* Lot 116: the engine's line height bounds (webeng.h WE_LINE_H_MAX, px;
+ * WE_LH_NUMBER_MAX, a unitless number) */
+#define WF_SITE_LH_MAX 400
+#define WF_SITE_LH_NUM_MAX 40
+#define WF_SITE_BOXEX 128           /* Lot 109: a box length the engine resolves (calc(N% + Mpx)); Lot 116: 128 (was 64) */
 #define WF_SITE_HMAX 30000          /* Lot 105: the largest height passed on, px */
 #define WF_SITE_ALONGS 17           /* Lot 98: WF_CSSANIM_LONGS + WF_CSSTRANS_LONGS slots per element (Lot 102: 17) */
 #define WF_SITE_TLS 6               /* Lot 101: the timeline longhand slots (Lot 102: timeline-scope, slot 4; Lot 104: view-timeline-inset, 5) */
@@ -452,7 +456,7 @@ typedef struct {
     /* Lot 89: the value holds var() of a per-element property: the
      * declaration "dprop: draw" is read again for each element */
     uint8_t deferred;
-    char dprop[20];
+    char dprop[28];              /* Lot 116: 28 (was 20), scroll-padding-inline-start */
     char draw[WF_SITE_VAL];      /* Lot 90: 128 (Lot 89: 48) */
     uint8_t lidx;                 /* Lot 90: a pool kind's value, index + 1 in lpool */
     uint8_t starting;             /* Lot 97: a custom property of an @starting-style rule */
@@ -553,12 +557,13 @@ typedef struct {
     int lhv[WF_SITE_NODES];
     uint8_t lhk[WF_SITE_NODES];
     /* Lot 112: the root element's lh (as lh: + 1, 0 normal) for rlh; what
-     * the style attribute passes the engine (lhx: 0 nothing, 1 normal,
-     * else px 10..40) and whether the element's own or an ancestor's line
-     * height is not normal (lhe: the engine then has a px line height,
-     * which its children inherit) */
+     * the style attribute passes the engine (lhx: 0 nothing, 1 normal;
+     * Lot 116: 2 + px hundredths 0..40000 for a length, -1 - hundredths
+     * for a number, was px 10..40) and whether the element's own or an
+     * ancestor's line height is not normal (lhe: the engine then has a
+     * line height, which its children inherit) */
     int root_lh;
-    uint8_t lhx[WF_SITE_NODES];
+    int lhx[WF_SITE_NODES];
     uint8_t lhe[WF_SITE_NODES];
     int len_resolved, len_dropped;   /* lengths the reader resolved; out of bounds there */
     /* Lot 97 */

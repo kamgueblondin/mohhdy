@@ -42,6 +42,11 @@
 #define WE_VARS_MAX 12   /* lot 73: custom properties per element */
 #define WE_HINTS_MAX 8   /* lot 73: presentational attributes per element */
 #define WE_POOL 32768
+/* Lot 116: the longest attribute value read (a longer one is refused
+ * whole, "attribute exceeds limit"): 255 bytes, and 1279 for style (the
+ * reader writes box lengths with math expressions there, wf_html.c) */
+#define WE_ATTR_MAX 255
+#define WE_STYLE_ATTR_MAX 1279
 #define WE_TEXT_SOURCE_MAX 512
 #define WE_CSS_MAX 2048
 #define WE_MAX_DIAG 8
@@ -203,7 +208,11 @@ enum { WE_VALIGN_TOP = 0, WE_VALIGN_MIDDLE = 1, WE_VALIGN_BOTTOM = 2, WE_VALIGN_
 #define WE_BS_SOLID 3
 #define WE_BS_WAVY 11
 enum { WE_DECO_UNDER = 1, WE_DECO_OVER = 2, WE_DECO_THROUGH = 4 };
-#define WE_LINE_H_MAX 40
+/* Lot 116: a line height in px is kept up to WE_LINE_H_MAX px (Lot 56:
+ * 10..40), a unitless number up to WE_LH_NUMBER_MAX; the used line height
+ * is at least 1 px and at most WE_LINE_H_MAX px */
+#define WE_LINE_H_MAX 400
+#define WE_LH_NUMBER_MAX 40
 #define WE_INDENT_MAX 400
 #define WE_LAYOUT_MAX 16000
 /* One shared, non-reentrant image workspace in webeng.c. No heap.
@@ -230,8 +239,12 @@ enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
 enum { WE_SIZE_AUTO, WE_SIZE_MIN_CONTENT, WE_SIZE_MAX_CONTENT, WE_SIZE_FIT_CONTENT, WE_SIZE_FIT_LIMIT };
 enum { WE_WRAP_NORMAL, WE_WRAP_BREAK_WORD, WE_WRAP_ANYWHERE };
 
-#define WE_MATH_NODES_MAX 24
-#define WE_MATH_DEPTH_MAX 4
+/* Lot 116: 32 nodes, 8 functions deep and 8 arguments a function (Lot
+ * 82: 24, 4 and 4); a node packs its operator and dimension in one byte,
+ * so we_length_t keeps its size (194 bytes) */
+#define WE_MATH_NODES_MAX 32
+#define WE_MATH_DEPTH_MAX 8
+#define WE_MATH_ARGS_MAX 8
 #define WE_MATH_LITERAL_MAX 2000
 #define WE_MATH_VALUE_MAX 1000000
 #define WE_TRACK_POOL_MAX 64
@@ -243,7 +256,8 @@ enum { WE_LEN_WIDTH, WE_LEN_HEIGHT, WE_LEN_MIN_W, WE_LEN_MAX_W, WE_LEN_MIN_H, WE
        WE_LENGTH_PROPS };
 typedef struct {
     int16_t value;
-    uint8_t op, a, b, c, dimension;
+    uint8_t op : 7, dimension : 1;
+    uint8_t a, b, c;
 } we_math_node_t;
 typedef struct {
     we_math_node_t node[WE_MATH_NODES_MAX];
@@ -417,8 +431,14 @@ typedef struct {
     int16_t line_height;       /* 0 uses WE_LINE_H; glyphs stay at the top */
     /* Lot 69: computed font size in CSS px (16 = normal, 0 = unset) and the
      * parent size em and % resolve against; lh_unitless keeps a unitless
-     * line-height relative to the font (line_height = number * WE_LINE_H). */
+     * line-height relative to the font. Lot 116: line_height is whole px
+     * and lh_frac its hundredths (0..99) when lh_unitless is 0; a unitless
+     * number in hundredths when lh_unitless is 1 (used: number x font_px,
+     * CSS Inline 3 4.2; it inherits as the number); lh_unitless 2 is an em
+     * or percentage line height in hundredths of em until the element's
+     * cascade ends (then px of its own font, which children inherit). */
     uint8_t font_px, font_parent_px, lh_unitless;
+    uint8_t lh_frac;
     int16_t text_indent;       /* first line only, after float shortening */
     int8_t z_index;            /* absolute paint order, -8..8 */
     uint8_t z_set, clear_side, valign;

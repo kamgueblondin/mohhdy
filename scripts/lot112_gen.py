@@ -137,7 +137,8 @@ def lh_case(rng):
         if el == "html":
             rlh = out[el] - 1 if out[el] else None
     lhs = [out["html"], out["html"], out["body"], out["#o"], out["#i"]]
-    x = M.lh_engine(lhs, [-1, 0, 0, 2, 3])
+    order = ["html", "html", "body", "#o", "#i"]
+    x = M.lh_engine(lhs, [comp[e] for e in order], [fsz[e] for e in order], [-1, 0, 0, 2, 3])
     lh_o = out["#o"] - 1 if out["#o"] else None
     h = M.with_rlh(rlh, M11.box_len_lh, hgt, fsz["#o"], root, lh_o)
     hv = -1 if h is None else min(max(h, 0) // 1000, M5.HMAX)
@@ -265,7 +266,8 @@ def lf_case(rng):
         if el == "html":
             rlh = out[el] - 1 if out[el] else None
     # html 0, head 1, body 2, #a 3, #b 4, #c 5
-    x = M.lh_engine([out["html"], out["html"], out["body"], out["#a"], out["#b"], out["#c"]], [-1, 0, 0, 2, 2, 2])
+    order = ["html", "html", "body", "#a", "#b", "#c"]
+    x = M.lh_engine([out[e] for e in order], [comp[e] for e in order], [fsz[e] for e in order], [-1, 0, 0, 2, 2, 2])
     hs = [M.engine_lh(x[3 + k], fsz[el] // 1000) for k, el in enumerate(LF_P)]
     return css, hs
 
@@ -379,10 +381,10 @@ def write_dom():
         cases.append(["TEST_ASSERT_EQUAL_STRING(%s, mb(%s, %d, %d));" % (cstr(e), cstr(s), em * 1000, rem * 1000)])
     o = [HEADER % "Lot 112: comparable arguments of mixed min()/max() in wf_css_math_box"] + [
         '#include "../../framework/unity.h"', "#include <string.h>", "#include <stdio.h>", '#include "wf_cssmath.h"', "",
-        "static char g_o[160];", "",
+        "static char g_o[%d];" % (M11.BOXEX + 32), "",
         "/* \"r px out\" of wf_css_math_box at 640 x 480 */",
         "static const char *mb(const char *s, int em, int rem) {",
-        "    char out[64];",
+        "    char out[%d];" % M11.BOXEX,     # Lot 116: WF_SITE_BOXEX (was 64)
         "    int px = -7, r = wf_css_math_box(s, 640, 480, em, rem, &px, out, (int)sizeof(out));",
         "    snprintf(g_o, sizeof(g_o), \"%d %d %s\", r, px, out);",
         "    return g_o;",

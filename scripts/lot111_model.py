@@ -622,12 +622,14 @@ def html_len(slot, em, rem, basis):
 # min() is one min() of all the arguments; arguments that are all plain
 # sums of one part (px only or % only) are compared and the first least
 # (greatest) one is the value.
-NODES = 24          # WE_MATH_NODES_MAX
-FN_DEPTH = 4        # WE_MATH_DEPTH_MAX
-ARGS = 4            # arguments of one function the engine's math takes
+# Lot 116: the engine's bounds raised (were 24 nodes, 4 deep, 4 arguments;
+# the reader's pool 24 nodes and a 64-byte expression)
+NODES = 32          # WE_MATH_NODES_MAX
+FN_DEPTH = 8        # WE_MATH_DEPTH_MAX
+ARGS = 8            # WE_MATH_ARGS_MAX
 KIDS = 8            # arguments of one function the reader keeps
-POOL = 24           # tree nodes the reader builds for one value
-BOXEX = 64          # WF_SITE_BOXEX: the expression and its terminator
+POOL = 32           # tree nodes the reader builds for one value
+BOXEX = 128         # WF_SITE_BOXEX: the expression and its terminator
 
 
 class _Pool(Exception):

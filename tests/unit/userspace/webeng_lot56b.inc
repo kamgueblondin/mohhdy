@@ -332,9 +332,12 @@ static void test_l56_line_height_spaces_the_second_line(void) {
 }
 
 static void test_l56_line_height_unitless_is_a_multiple(void) {
+    /* Lot 116: a number times the font size (CSS Inline 3 4.2), kept in
+     * hundredths (Lot 56: times the 10 px normal line, 20) */
     lot52_render("<body style='margin:0'><div id=p style='line-height:2'>ab</div></body>", 320);
-    TEST_ASSERT_EQUAL(20, lot52_node("p")->line_height);
-    TEST_ASSERT_EQUAL(20, lot52_node("p")->h);
+    TEST_ASSERT_EQUAL(200, lot52_node("p")->line_height);
+    TEST_ASSERT_EQUAL(1, lot52_node("p")->lh_unitless);
+    TEST_ASSERT_EQUAL(32, lot52_node("p")->h);
 }
 
 static void test_l56_line_height_inherits(void) {
@@ -351,20 +354,35 @@ static void test_l56_line_height_normal_resets(void) {
 }
 
 static void test_l56_line_height_too_small_is_refused(void) {
+    /* Lot 116: 9px is a line height (Lot 56: refused below 10); a
+     * negative one is refused */
     lot52_render("<body style='margin:0'><div id=p style='line-height:20px;line-height:9px'>ab</div></body>", 320);
+    TEST_ASSERT_EQUAL(9, lot52_node("p")->line_height);
+    TEST_ASSERT_EQUAL(9, lot52_node("p")->h);
+    TEST_ASSERT_FALSE(lot52_has_diag("line height refused"));
+    lot52_render("<body style='margin:0'><div id=p style='line-height:20px;line-height:-9px'>ab</div></body>", 320);
     TEST_ASSERT_EQUAL(20, lot52_node("p")->line_height);
     TEST_ASSERT_EQUAL(20, lot52_node("p")->h);
     TEST_ASSERT_TRUE(lot52_has_diag("line height refused"));
 }
 
 static void test_l56_line_height_unitless_above_four_is_refused(void) {
+    /* Lot 116: 5 is a number line height, 5 x 16 px (Lot 56: refused
+     * above 4); above WE_LH_NUMBER_MAX (40) it is refused */
     lot52_render("<body style='margin:0'><div id=p style='line-height:2;line-height:5'>ab</div></body>", 320);
-    TEST_ASSERT_EQUAL(20, lot52_node("p")->h);
+    TEST_ASSERT_EQUAL(80, lot52_node("p")->h);
+    TEST_ASSERT_FALSE(lot52_has_diag("line height refused"));
+    lot52_render("<body style='margin:0'><div id=p style='line-height:2;line-height:41'>ab</div></body>", 320);
+    TEST_ASSERT_EQUAL(32, lot52_node("p")->h);
     TEST_ASSERT_TRUE(lot52_has_diag("line height refused"));
 }
 
 static void test_l56_line_height_above_the_cap_is_refused(void) {
+    /* Lot 116: the cap is WE_LINE_H_MAX, 400 px (Lot 56: 40) */
     lot52_render("<body style='margin:0'><div id=p style='line-height:20px;line-height:41px'>ab</div></body>", 320);
+    TEST_ASSERT_EQUAL(41, lot52_node("p")->h);
+    TEST_ASSERT_FALSE(lot52_has_diag("line height refused"));
+    lot52_render("<body style='margin:0'><div id=p style='line-height:20px;line-height:401px'>ab</div></body>", 320);
     TEST_ASSERT_EQUAL(20, lot52_node("p")->h);
     TEST_ASSERT_TRUE(lot52_has_diag("line height refused"));
 }

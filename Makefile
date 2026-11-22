@@ -1779,6 +1779,13 @@ qemu-lot114: $(OS_IMAGE) pack-initrd disk
 qemu-lot115: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot115.py
 
+# Lot 116: line-height as the engine reads it (a number inherited as a
+# number, px with hundredths, past 40 px), cap and rcap, a five-argument
+# max() height, var() unset on a height (tests/scripts/test_qemu_lot116.py)
+.PHONY: qemu-lot116
+qemu-lot116: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot116.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

@@ -41,7 +41,7 @@ static void test_l112_lflow_0(void) {
     reduce("#c { --v: 150%; line-height: 2 } body { line-height: revert-layer }");
     TEST_ASSERT_EQUAL_STRING("10 10 32", h3());
     reduce("@layer a { #a { line-height: 1.25 } } @layer a { #b { line-height: 25px } } #a { font-size: 12px; line-height: 1.5 } #b { font-size: 16px; line-height: 50px } #c { --v: 1.5; line-height: max(100%, 1rlh) }");
-    TEST_ASSERT_EQUAL_STRING("18 40 16", h3());
+    TEST_ASSERT_EQUAL_STRING("18 50 16", h3());
     reduce("@layer a { html { line-height: 1.25 } } @layer a { body { line-height: 25px } } #b { font-size: 16px; line-height: calc(1rlh + 5px) } body { line-height: 2rlh } #c { line-height: 150% } #a { line-height: min(3, 30px) }");
     TEST_ASSERT_EQUAL_STRING("40 25 24", h3());
     reduce("html { --v: auto; line-height: 1.25em } #a { font-size: 16px; --v: 150%; line-height: max(100%, 1rlh) } body { font-size: 12px; --v: calc(100% + 1px); line-height: calc(1 + 0.25) } #c { --v: 2rlh; line-height: 1.5 }");
@@ -53,9 +53,9 @@ static void test_l112_lflow_0(void) {
     reduce("@layer a { #c { line-height: revert-layer } } #b { font-size: 24px } body { font-size: 24px; --v: 1.5 } html { line-height: max(100%, 1rlh) }");
     TEST_ASSERT_EQUAL_STRING("16 16 16", h3());
     reduce("#a { line-height: 2rlh } #b { font-size: 20px } html { line-height: 35px } #c { --v: auto }");
-    TEST_ASSERT_EQUAL_STRING("40 35 35", h3());
+    TEST_ASSERT_EQUAL_STRING("70 35 35", h3());
     reduce("@layer a { #a { line-height: calc(1rlh + 5px) } } html { --v: 2rlh; line-height: calc(1rlh + 5px) } body { font-size: 32px; --v: 20px } #b { font-size: 12px; --v: calc(100% + 1px); line-height: min(3, 30px) } #c { line-height: 1.5 } #a { font-size: 16px }");
-    TEST_ASSERT_EQUAL_STRING("20 15 40", h3());
+    TEST_ASSERT_EQUAL_STRING("20 15 48", h3());
 }
 
 static void test_l112_lflow_1(void) {
@@ -74,7 +74,7 @@ static void test_l112_lflow_1(void) {
     reduce("body { font-size: 32px } #b { font-size: 16px } #a { --v: 20px } html { line-height: calc(100% + 4px) }");
     TEST_ASSERT_EQUAL_STRING("20 20 20", h3());
     reduce("@layer a { #a { line-height: 200% } } @layer a { #c { line-height: 25px } } #a { line-height: 20px } #b { --v: 150%; line-height: var(--v) } body { font-size: 32px } #c { line-height: revert }");
-    TEST_ASSERT_EQUAL_STRING("20 40 20", h3());
+    TEST_ASSERT_EQUAL_STRING("20 48 20", h3());
     reduce("@layer a { html { line-height: 3 } } @layer a { body { line-height: 25px } } #c { line-height: calc(1rlh + 5px) } html { line-height: 35px } #a { line-height: 1.25em } body { line-height: initial }");
     TEST_ASSERT_EQUAL_STRING("20 10 40", h3());
     reduce("@layer a { #a { line-height: revert-layer } } #c { font-size: 32px } #b { --v: calc(1 + 1) }");
@@ -106,7 +106,7 @@ static void test_l112_lflow_2(void) {
 
 static void test_l112_lflow_3(void) {
     reduce("@layer a { #a { line-height: 1.25 } } #c { --v: calc(100% + 1px); line-height: calc(100% + 4px) } #a { font-size: 20px; --v: 150% } #b { font-size: 32px; line-height: 2rlh } body { --v: calc(100% + 1px); line-height: 2rlh } html { line-height: 1.5 }");
-    TEST_ASSERT_EQUAL_STRING("25 40 20", h3());
+    TEST_ASSERT_EQUAL_STRING("25 48 20", h3());
     reduce("@layer a { #a { line-height: normal } } #a { line-height: 20px } body { line-height: calc(1rlh + 5px) } #c { line-height: max(100%, 1rlh) } html { line-height: revert-layer } #b { line-height: 2rlh }");
     TEST_ASSERT_EQUAL_STRING("20 20 16", h3());
     reduce("html { --v: calc(1 + 1); line-height: min(3, 30px) } body { font-size: 32px } #b { font-size: 32px; --v: calc(100% + 1px); line-height: revert-layer } #c { font-size: 32px; --v: 2rlh } #a { font-size: 24px }");
@@ -118,11 +118,11 @@ static void test_l112_lflow_3(void) {
     reduce("@layer a { #a { line-height: calc(1rlh + 5px) } } #a { font-size: 24px } #c { line-height: 2rlh } body { line-height: 1.5 } html { line-height: 1.25em }");
     TEST_ASSERT_EQUAL_STRING("25 24 40", h3());
     reduce("@layer a { html { line-height: normal } } #c { line-height: 0.5 } #a { font-size: 12px } body { font-size: 16px; --v: 1.5 } #b { line-height: 1.5 }");
-    TEST_ASSERT_EQUAL_STRING("10 24 10", h3());
+    TEST_ASSERT_EQUAL_STRING("10 24 8", h3());
     reduce("#b { line-height: max(100%, 1rlh) } body { line-height: 50px }");
-    TEST_ASSERT_EQUAL_STRING("40 16 40", h3());
+    TEST_ASSERT_EQUAL_STRING("50 16 50", h3());
     reduce("@layer a { html { line-height: revert-layer } } #c { font-size: 16px; line-height: 50px } #a { font-size: 16px; line-height: 2rlh } #b { --v: 1.5 } html { --v: calc(100% + 1px) }");
-    TEST_ASSERT_EQUAL_STRING("20 10 40", h3());
+    TEST_ASSERT_EQUAL_STRING("20 10 50", h3());
     reduce("#a { line-height: 35px } #c { --v: 20px; line-height: var(--v) } html { line-height: calc(1 + 0.25) }");
     TEST_ASSERT_EQUAL_STRING("35 20 20", h3());
 }
@@ -137,17 +137,17 @@ static void test_l112_lflow_4(void) {
     reduce("@layer a { html { line-height: 200% } } #a { --v: 20px; line-height: revert-layer } body { line-height: revert-layer } #c { --v: 2rlh }");
     TEST_ASSERT_EQUAL_STRING("32 32 32", h3());
     reduce("#b { line-height: 50px } #a { --v: calc(1 + 1) }");
-    TEST_ASSERT_EQUAL_STRING("10 40 10", h3());
+    TEST_ASSERT_EQUAL_STRING("10 50 10", h3());
     reduce("@layer a { #c { line-height: 1.25 } } #b { font-size: 20px; line-height: normal } #a { line-height: 2rlh } #c { font-size: 16px; line-height: revert-layer } html { line-height: initial }");
     TEST_ASSERT_EQUAL_STRING("20 13 20", h3());
     reduce("@layer a { body { line-height: revert-layer } } html { line-height: max(100%, 1rlh) } body { font-size: 24px } #a { font-size: 32px; --v: calc(100% + 1px); line-height: var(--u) }");
     TEST_ASSERT_EQUAL_STRING("16 16 16", h3());
     reduce("#a { font-size: 16px; line-height: 0.5 } html { --v: 1.5; line-height: initial } #b { line-height: revert-layer }");
-    TEST_ASSERT_EQUAL_STRING("10 10 10", h3());
+    TEST_ASSERT_EQUAL_STRING("8 10 10", h3());
     reduce("#c { font-size: 32px } #b { line-height: 2rlh } body { line-height: calc(1 + 0.25) } #a { line-height: revert-layer }");
     TEST_ASSERT_EQUAL_STRING("20 20 40", h3());
     reduce("#b { --v: 2rlh } body { line-height: 50px } #c { font-size: 20px; line-height: max(100%, 1rlh) } #a { font-size: 16px; --v: auto; line-height: 0.5 }");
-    TEST_ASSERT_EQUAL_STRING("10 40 20", h3());
+    TEST_ASSERT_EQUAL_STRING("8 50 20", h3());
 }
 
 static void test_l112_lflow_5(void) {
@@ -156,7 +156,7 @@ static void test_l112_lflow_5(void) {
     reduce("@layer a { body { line-height: 1.25 } } #a { line-height: revert-layer } #c { font-size: 12px; line-height: min(3, 30px) } body { font-size: 24px } html { line-height: var(--v) } #b { --v: 150% }");
     TEST_ASSERT_EQUAL_STRING("30 30 15", h3());
     reduce("@layer a { html { line-height: revert-layer } } #c { font-size: 12px; --v: 150% } body { font-size: 16px; line-height: 0.5 } #b { font-size: 32px; line-height: var(--v) }");
-    TEST_ASSERT_EQUAL_STRING("10 16 10", h3());
+    TEST_ASSERT_EQUAL_STRING("8 16 6", h3());
     reduce("#a { --v: 20px } html { --v: calc(100% + 1px); line-height: revert-layer } #b { font-size: 20px } body { font-size: 16px; --v: 1.5 } #c { line-height: min(3, 30px) }");
     TEST_ASSERT_EQUAL_STRING("10 13 10", h3());
     reduce("@layer a { #a { line-height: calc(1rlh + 5px) } } @layer a { #b { line-height: revert-layer } } #b { font-size: 24px; line-height: 1.25em } #a { font-size: 12px } body { line-height: 150% }");
@@ -164,13 +164,13 @@ static void test_l112_lflow_5(void) {
     reduce("@layer a { html { line-height: calc(1rlh + 5px) } } @layer a { #a { line-height: 1.25 } } #c { line-height: 20px } body { font-size: 16px } #a { line-height: min(3, 30px) }");
     TEST_ASSERT_EQUAL_STRING("20 15 20", h3());
     reduce("@layer a { #a { line-height: 1.25 } } #b { --v: 2rlh; line-height: var(--u) } body { line-height: var(--u) } #c { font-size: 24px; --v: auto; line-height: 2 } #a { font-size: 32px; line-height: calc(1rlh + 5px) }");
-    TEST_ASSERT_EQUAL_STRING("15 10 40", h3());
+    TEST_ASSERT_EQUAL_STRING("15 10 48", h3());
     reduce("#c { font-size: 12px; --v: calc(100% + 1px); line-height: normal } #b { font-size: 24px; line-height: normal } html { line-height: min(3, 30px) } #a { line-height: var(--u) } body { line-height: calc(1rlh + 5px) }");
     TEST_ASSERT_EQUAL_STRING("15 15 10", h3());
     reduce("@layer a { #b { line-height: 3 } } html { line-height: 1.5 } #a { line-height: 1.25em } body { line-height: calc(100% + 4px) } #c { font-size: 32px; --v: 20px }");
-    TEST_ASSERT_EQUAL_STRING("20 40 20", h3());
+    TEST_ASSERT_EQUAL_STRING("20 48 20", h3());
     reduce("@layer a { #a { line-height: 3 } } @layer a { #b { line-height: 25px } } body { font-size: 16px; --v: 150% } #c { font-size: 20px } #a { font-size: 24px; --v: 2rlh; line-height: 50px } html { line-height: calc(100% + 4px) }");
-    TEST_ASSERT_EQUAL_STRING("40 25 20", h3());
+    TEST_ASSERT_EQUAL_STRING("50 25 20", h3());
 }
 
 static void test_l112_lflow_6(void) {
@@ -181,17 +181,17 @@ static void test_l112_lflow_6(void) {
     reduce("#c { font-size: 16px } html { line-height: inherit } #a { font-size: 16px; --v: 20px; line-height: inherit } body { line-height: 2rlh } #b { font-size: 20px; line-height: calc(1rlh + 5px) }");
     TEST_ASSERT_EQUAL_STRING("20 15 20", h3());
     reduce("@layer a { html { line-height: 25px } } body { line-height: 2 } html { line-height: var(--u) } #c { --v: 150%; line-height: 35px } #b { font-size: 24px }");
-    TEST_ASSERT_EQUAL_STRING("32 40 35", h3());
+    TEST_ASSERT_EQUAL_STRING("32 48 35", h3());
     reduce("@layer a { html { line-height: 3 } } body { font-size: 16px; --v: 150% }");
-    TEST_ASSERT_EQUAL_STRING("40 40 40", h3());
+    TEST_ASSERT_EQUAL_STRING("48 48 48", h3());
     reduce("@layer a { #b { line-height: normal } } html { line-height: revert-layer } #b { line-height: calc(1rlh + 5px) } #c { font-size: 20px } #a { --v: calc(1 + 1) }");
     TEST_ASSERT_EQUAL_STRING("10 15 13", h3());
     reduce("@layer a { #a { line-height: 25px } } @layer a { #b { line-height: 200% } } body { font-size: 16px; line-height: var(--v) } #a { --v: 1.5; line-height: calc(1 + 0.25) } #c { --v: 1.5; line-height: min(3, 30px) } #b { line-height: 0.5 }");
-    TEST_ASSERT_EQUAL_STRING("20 10 10", h3());
+    TEST_ASSERT_EQUAL_STRING("20 8 10", h3());
     reduce("@layer a { html { line-height: 1.25 } } #b { font-size: 20px; line-height: inherit } #a { font-size: 20px; --v: 2rlh; line-height: calc(1 + 0.25) } #c { font-size: 16px; line-height: initial } html { line-height: var(--u) }");
     TEST_ASSERT_EQUAL_STRING("25 13 10", h3());
     reduce("#a { line-height: 0.5 } body { font-size: 16px } #b { line-height: 20px }");
-    TEST_ASSERT_EQUAL_STRING("10 20 10", h3());
+    TEST_ASSERT_EQUAL_STRING("8 20 10", h3());
     reduce("#a { --v: calc(100% + 1px); line-height: normal } body { font-size: 24px; line-height: 2rlh } #b { line-height: var(--v) } #c { font-size: 12px }");
     TEST_ASSERT_EQUAL_STRING("15 20 20", h3());
 }
@@ -221,7 +221,7 @@ static void test_l112_lflow_7(void) {
 
 static void test_l112_lflow_8(void) {
     reduce("@layer a { html { line-height: normal } } @layer a { body { line-height: revert-layer } } #c { font-size: 12px; line-height: max(100%, 1rlh) } #b { --v: 1.5; line-height: 35px } #a { font-size: 12px; line-height: 50px }");
-    TEST_ASSERT_EQUAL_STRING("40 35 12", h3());
+    TEST_ASSERT_EQUAL_STRING("50 35 12", h3());
     reduce("@layer a { body { line-height: 200% } } #a { line-height: var(--v) } #b { line-height: revert } body { line-height: normal }");
     TEST_ASSERT_EQUAL_STRING("10 10 10", h3());
     reduce("@layer a { #c { line-height: 25px } } #a { line-height: 35px } #c { line-height: calc(100% + 4px) } #b { font-size: 24px; --v: 20px }");
@@ -229,11 +229,11 @@ static void test_l112_lflow_8(void) {
     reduce("#a { line-height: 2rlh } body { --v: auto; line-height: var(--v) } #b { line-height: revert-layer }");
     TEST_ASSERT_EQUAL_STRING("20 10 10", h3());
     reduce("html { --v: 1.5 } #c { --v: auto } #a { --v: 1.5 } #b { font-size: 32px; line-height: 1.5 }");
-    TEST_ASSERT_EQUAL_STRING("10 40 10", h3());
+    TEST_ASSERT_EQUAL_STRING("10 48 10", h3());
     reduce("@layer a { html { line-height: 1.25 } } @layer a { #b { line-height: normal } } html { line-height: var(--v) } #a { line-height: 20px }");
     TEST_ASSERT_EQUAL_STRING("20 10 10", h3());
     reduce("#c { line-height: revert-layer } #b { font-size: 24px; line-height: 2 } body { font-size: 32px }");
-    TEST_ASSERT_EQUAL_STRING("20 40 20", h3());
+    TEST_ASSERT_EQUAL_STRING("20 48 20", h3());
     reduce("@layer a { #a { line-height: 1.25 } } @layer a { #c { line-height: calc(1rlh + 5px) } } #c { --v: calc(100% + 1px) } #b { font-size: 12px } #a { font-size: 24px } html { line-height: revert-layer }");
     TEST_ASSERT_EQUAL_STRING("30 10 15", h3());
     reduce("#c { line-height: 1.5 } body { font-size: 24px } html { line-height: initial } #a { --v: 20px } #b { font-size: 12px; line-height: calc(1 + 0.25) }");
@@ -248,11 +248,11 @@ static void test_l112_lflow_9(void) {
     reduce("body { line-height: 1.25em } #c { font-size: 16px } #b { font-size: 24px; line-height: 1.25em } #a { font-size: 32px } html { --v: calc(1 + 1) }");
     TEST_ASSERT_EQUAL_STRING("20 30 20", h3());
     reduce("#b { line-height: normal } #c { line-height: inherit } #a { line-height: calc(1 + 0.25) } body { font-size: 24px } html { line-height: 50px }");
-    TEST_ASSERT_EQUAL_STRING("30 15 40", h3());
+    TEST_ASSERT_EQUAL_STRING("30 15 50", h3());
     reduce("@layer a { html { line-height: revert-layer } } #c { line-height: 20px }");
     TEST_ASSERT_EQUAL_STRING("10 10 20", h3());
     reduce("@layer a { body { line-height: 200% } } #b { --v: calc(1 + 1) } #c { font-size: 32px; line-height: 2rlh } body { line-height: revert-layer } #a { font-size: 20px; --v: 150%; line-height: initial } html { line-height: 1.5 }");
-    TEST_ASSERT_EQUAL_STRING("13 32 40", h3());
+    TEST_ASSERT_EQUAL_STRING("13 32 48", h3());
     reduce("#b { line-height: inherit } #c { line-height: inherit } #a { --v: calc(100% + 1px); line-height: initial } body { line-height: 2 }");
     TEST_ASSERT_EQUAL_STRING("10 32 32", h3());
     reduce("@layer a { body { line-height: 25px } } html { line-height: calc(1rlh + 5px) } #a { line-height: var(--v) } body { line-height: initial } #b { font-size: 12px } #c { --v: 150%; line-height: calc(1rlh + 5px) }");
@@ -260,7 +260,7 @@ static void test_l112_lflow_9(void) {
     reduce("#b { font-size: 16px; line-height: calc(1 + 0.25) } #c { font-size: 32px; line-height: max(100%, 1rlh) } #a { font-size: 16px; line-height: var(--v) } html { line-height: normal } body { --v: auto }");
     TEST_ASSERT_EQUAL_STRING("10 20 32", h3());
     reduce("@layer a { #a { line-height: calc(1rlh + 5px) } } @layer a { #c { line-height: 1.25 } } body { font-size: 20px } html { line-height: inherit } #a { line-height: 50px }");
-    TEST_ASSERT_EQUAL_STRING("40 13 25", h3());
+    TEST_ASSERT_EQUAL_STRING("50 13 25", h3());
     reduce("@layer a { body { line-height: calc(1rlh + 5px) } } @layer a { #a { line-height: 200% } } @layer a { #b { line-height: calc(1rlh + 5px) } } #a { --v: 1.5; line-height: revert-layer } #b { --v: 20px } body { line-height: 150% } #c { font-size: 12px }");
     TEST_ASSERT_EQUAL_STRING("32 15 24", h3());
 }
