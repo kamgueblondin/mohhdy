@@ -1062,9 +1062,10 @@ static void test_l58_width_invalid_8(void) {
 }
 
 static void test_l58_width_invalid_9(void) {
-    /* Lot 118: was 20vw (read now); cqw has no container query to resolve */
+    /* Lot 118: was 20vw (read now); Lot 119: was 20cqw (read now); rex
+     * (CSS Values 5) is not a unit of the engine */
     lot52_render("<body style='margin:0'><div id=g style='width:200px'>"
-        "<div id=a style='height:10px;background:red;width:calc(40px + 10px);width:calc(20cqw + 2px);'>A</div>"
+        "<div id=a style='height:10px;background:red;width:calc(40px + 10px);width:calc(20rex + 2px);'>A</div>"
         "<div id=b style='height:5px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);

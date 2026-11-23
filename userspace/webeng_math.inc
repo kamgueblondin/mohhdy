@@ -637,7 +637,14 @@ static int math_constant(we_math_parser_t *p, const char *name, int n, int sign)
     else if (value_is(name, n, "e")) v = 2718;
     else if (value_is(name, n, "pi")) v = 3142;
     else if (value_is(name, n, "nan")) v = MV_NAN;
-    else return -1;
+    else {
+        /* Lot 119: the channel keywords of a relative color (r, g, b,
+         * alpha, h, s, l, w) are numbers while it is parsed */
+        int k;
+        for (k = 0; k < math_chan_n && !value_is(name, n, math_chan_names[k]); k++) {}
+        if (k == math_chan_n) return -1;
+        v = math_chan_vals[k];
+    }
     return math_node(p, M_NUMBER, 0, 0, 0, v, MT_NUMBER);
 }
 

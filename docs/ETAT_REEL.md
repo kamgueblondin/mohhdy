@@ -8,6 +8,14 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 119 (container queries in the engine: @container with names and size features, container-type, container-name, container, size and inline-size containment, the cqw/cqh/cqi/cqb/cqmin/cqmax units; relative colors rgb/hsl/hwb(from ...); base de44f7d, PR not opened)
+
+- ETAT_REEL: @container (userspace/webeng_cq.inc) evaluates width, height, inline-size, block-size, aspect-ratio and orientation (name: value, min-/max-, range forms, not/and/or) against the nearest ancestor query container with the name and type; we_layout_viewport styles and lays out again while the container sizes change (at most 3 more passes). container-type: size lays an auto height out as empty; size and inline-size make the intrinsic inline size that of an empty box.
+- ETAT_REEL: the cq* units read the nearest container per axis, else the viewport. rgb(), hsl() and hwb() take "from <color>" with the channel keywords as math numbers; an omitted alpha is the origin's.
+- Not covered (honest): style() and scroll-state() queries, vertical writing modes for container axes, currentcolor as an origin, lab/lch/oklab/oklch and color-mix in the engine, root html margins, calc-size, anchor, typed attr, margin collapsing.
+- we_doc_t 874684 bytes (was 872336, < 1 MiB), we_node_t 4688. Kernel and rights unchanged; engine API grows (we_unit_ctx_t cqw/cqh, container fields). US-031 partial, phase3_complete=false. QEMU page /web/lot119.html (`make qemu-lot119`, CI job lot119-engine-cq).
+- Detail and gaps: docs/lot119_plan.md.
+
 ## Lot 118 (CSS Values 4 math in the engine in thousandths: round, mod, rem, abs, sign, pow, sqrt, hypot, log, exp, trigonometry, constants, typed arithmetic, scientific notation; viewport units; math in numbers, angles, whole-px lengths, transforms and colors; hwb() and the modern color forms; @property; base 0f909e9, PR not opened)
 
 - ETAT_REEL: one fixed-point math core (userspace/webeng_math.inc) replaces the engine's whole-px evaluator: values in thousandths with infinities and NaN, the used px cut once at use, the CSS Values 4 functions and constants, numbers, lengths and angles typed as the spec says, 1e3 in math literals. vw, vh, vi, vb, vmin, vmax and the s/l/d aliases read the layout viewport (a restyle when it changes).

@@ -1800,6 +1800,13 @@ qemu-lot117: $(OS_IMAGE) pack-initrd disk
 qemu-lot118: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot118.py
 
+# Lot 119: container queries (@container, container-type, container-name,
+# container), the container units cqw/cqh/cqi/cqb/cqmin/cqmax and relative
+# colors, read with web-inspect (tests/scripts/test_qemu_lot119.py)
+.PHONY: qemu-lot119
+qemu-lot119: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot119.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

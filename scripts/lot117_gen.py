@@ -302,7 +302,7 @@ def um_leaf(rng):
     if k < 0.8:
         return "%d%%" % rng.randrange(0, 101)
     if k < 0.85:
-        return rng.choice(["1.5px", "2.5%", "1.5", "3cqw", "2zz", "2000em", "130em", "124em", ".5em", "1.e"])
+        return rng.choice(["1.5px", "2.5%", "1.5", "3rex", "2zz", "2000em", "130em", "124em", ".5em", "1.e"])
     return "%dpx" % rng.randrange(0, 40)
 
 
