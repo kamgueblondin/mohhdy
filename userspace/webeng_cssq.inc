@@ -271,6 +271,7 @@ static int cssq_feature(we_doc_t *d, const char *s, int n) {
 }
 
 static int cssq_cond(we_doc_t *d, const char *s, int n, int supports, int depth);
+static int cq_feature(const char *s, int n);   /* Lot 119 */
 static void apply_decl(we_doc_t *d, we_node_t *n, const char *p, int pl, const char *v, int vl);
 
 /* @supports (property: value) */
@@ -299,7 +300,7 @@ static we_rule_t g_cssq_rule[WE_SEL_LOGIC_DEPTH + 1];
 /* one parenthesised term "( ... )" or a function selector(...) */
 static int cssq_term(we_doc_t *d, const char *s, int n, int *at, int supports, int depth) {
     int i = *at, close, level = 0, a, b, sel = 0;
-    if (supports && n - i > 9 && w_ieq_n(s + i, n - i, "selector(")) { sel = 1; i += 8; }
+    if (supports == 1 && n - i > 9 && w_ieq_n(s + i, n - i, "selector(")) { sel = 1; i += 8; }
     if (i >= n || s[i] != '(') return -1;
     for (close = i; close < n; close++) {
         if (s[close] == '(') level++;
@@ -315,6 +316,8 @@ static int cssq_term(we_doc_t *d, const char *s, int n, int *at, int supports, i
     }
     if (s[a] == '(' || (b - a > 4 && w_ieq_n(s + a, b - a, "not") && (w_space(s[a + 3]) || s[a + 3] == '(')))
         return cssq_cond(d, s + a, b - a, supports, depth + 1);
+    /* Lot 119: supports 2 is an @container condition (webeng_cq.inc) */
+    if (supports == 2) return cq_feature(s + a, b - a);
     return supports ? cssq_supports_decl(d, s + a, b - a) : cssq_feature(d, s + a, b - a);
 }
 

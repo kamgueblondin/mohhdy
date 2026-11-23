@@ -130,7 +130,7 @@ static void test_l117_umath_1(void) {
     TEST_ASSERT_EQUAL(537, el("a")->w);
     TEST_ASSERT_EQUAL(26, el("a")->length[WE_LEN_WIDTH].count);
     TEST_ASSERT_FALSE(diag_has("math length refused"));
-    lay("<html style='font-size:20px'><body style='margin:0'><div id=g style='width:600px'><div id=a style='font-size:20px;line-height:1.25;height:10px;width:50px;width:max(max(clamp(3.292rem, 1.2rem, 31px), min(1ic, 0cap, 3.2em)), 3cqw - .113rlh + 4lh + 2.5% * 3)'>A</div></div></body></html>");
+    lay("<html style='font-size:20px'><body style='margin:0'><div id=g style='width:600px'><div id=a style='font-size:20px;line-height:1.25;height:10px;width:50px;width:max(max(clamp(3.292rem, 1.2rem, 31px), min(1ic, 0cap, 3.2em)), 3rex - .113rlh + 4lh + 2.5% * 3)'>A</div></div></body></html>");
     TEST_ASSERT_EQUAL(50, el("a")->w);
     TEST_ASSERT_EQUAL(0, el("a")->length[WE_LEN_WIDTH].count);
     TEST_ASSERT_TRUE(diag_has("math length refused"));
@@ -166,7 +166,7 @@ static void test_l117_umath_1(void) {
     TEST_ASSERT_EQUAL(11, el("a")->w);
     TEST_ASSERT_EQUAL(9, el("a")->length[WE_LEN_WIDTH].count);
     TEST_ASSERT_FALSE(diag_has("math length refused"));
-    lay("<html style='font-size:12.5px'><body style='margin:0'><div id=g style='width:600px'><div id=a style='font-size:22.5px;line-height:1.5;height:10px;width:50px;width:calc(clamp(5px, 7%, 1.8rem - 59px - 3cqw - 5px))'>A</div></div></body></html>");
+    lay("<html style='font-size:12.5px'><body style='margin:0'><div id=g style='width:600px'><div id=a style='font-size:22.5px;line-height:1.5;height:10px;width:50px;width:calc(clamp(5px, 7%, 1.8rem - 59px - 3rex - 5px))'>A</div></div></body></html>");
     TEST_ASSERT_EQUAL(50, el("a")->w);
     TEST_ASSERT_EQUAL(0, el("a")->length[WE_LEN_WIDTH].count);
     TEST_ASSERT_TRUE(diag_has("math length refused"));
@@ -867,7 +867,7 @@ static void test_l117_umath_12(void) {
     TEST_ASSERT_EQUAL(181, el("a")->w);
     TEST_ASSERT_EQUAL(9, el("a")->length[WE_LEN_WIDTH].count);
     TEST_ASSERT_FALSE(diag_has("math length refused"));
-    lay("<html style='font-size:12.5px'><body style='margin:0'><div id=g style='width:600px'><div id=a style='font-size:20px;line-height:normal;height:10px;width:50px;width:clamp(4ch + .5em + 3cqw + 1.85ch - min(35px, 3.81lh, 9%), min(5.66cap * 2, calc(60%), 84px / 2, min(152px)), clamp(max(5.86lh, 9px), 29px, clamp(166px, 88px, 27px)))'>A</div></div></body></html>");
+    lay("<html style='font-size:12.5px'><body style='margin:0'><div id=g style='width:600px'><div id=a style='font-size:20px;line-height:normal;height:10px;width:50px;width:clamp(4ch + .5em + 3rex + 1.85ch - min(35px, 3.81lh, 9%), min(5.66cap * 2, calc(60%), 84px / 2, min(152px)), clamp(max(5.86lh, 9px), 29px, clamp(166px, 88px, 27px)))'>A</div></div></body></html>");
     TEST_ASSERT_EQUAL(50, el("a")->w);
     TEST_ASSERT_EQUAL(0, el("a")->length[WE_LEN_WIDTH].count);
     TEST_ASSERT_TRUE(diag_has("math length refused"));
@@ -887,7 +887,7 @@ static void test_l117_umath_12(void) {
     TEST_ASSERT_EQUAL(0, el("a")->w);
     TEST_ASSERT_EQUAL(15, el("a")->length[WE_LEN_WIDTH].count);
     TEST_ASSERT_FALSE(diag_has("math length refused"));
-    lay("<html style='font-size:20px'><body style='margin:0'><div id=g style='width:600px'><div id=a style='font-size:20px;line-height:1.5;height:10px;width:50px;width:clamp(124em, 49% + 3ic - 27px - 45% + min(5cap, 5.250em, 119px), min(calc(3cqw), min(5.2ic, 2lh, 0.90em, 1rem), 29px, 0.53rem))'>A</div></div></body></html>");
+    lay("<html style='font-size:20px'><body style='margin:0'><div id=g style='width:600px'><div id=a style='font-size:20px;line-height:1.5;height:10px;width:50px;width:clamp(124em, 49% + 3ic - 27px - 45% + min(5cap, 5.250em, 119px), min(calc(3rex), min(5.2ic, 2lh, 0.90em, 1rem), 29px, 0.53rem))'>A</div></div></body></html>");
     TEST_ASSERT_EQUAL(50, el("a")->w);
     TEST_ASSERT_EQUAL(0, el("a")->length[WE_LEN_WIDTH].count);
     TEST_ASSERT_TRUE(diag_has("math length refused"));

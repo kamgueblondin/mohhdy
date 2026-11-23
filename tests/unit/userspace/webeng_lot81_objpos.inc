@@ -378,7 +378,8 @@ static void test_l81_obj_bad_7(void) {
 }
 
 static void test_l81_obj_bad_8(void) {
-    lot52_render("<body style='margin:0'><img id=a style='width:40px;height:40px;object-fit:none;object-position:left top;object-position:10cqw 0'></body>", 480);
+    /* Lot 119: was 10cqw (read now) */
+    lot52_render("<body style='margin:0'><img id=a style='width:40px;height:40px;object-fit:none;object-position:left top;object-position:10rex 0'></body>", 480);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->object_x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->object_y);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->object_dx);

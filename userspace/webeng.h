@@ -67,10 +67,13 @@ int we_parse_font_size(const char *v, int vl, int parent_px, int *out_px);
  * px, the font size (em, ic; ex, ch and cap from its 8x8 glyph scale),
  * the root font size (rem), the line height (lh) and the root line
  * height (rlh). */
-typedef struct { int font100, root100, lh100, rlh100; int vw, vh, vertical; } we_unit_ctx_t;
+typedef struct { int font100, root100, lh100, rlh100; int vw, vh, vertical; int cqw, cqh; } we_unit_ctx_t;
 /* Lot 118: vw/vh are the viewport in px for the viewport-percentage units
  * (vw, vh, vi, vb, vmin, vmax and their sv/lv/dv forms; 0: 640 x 480),
- * vertical a vertical root writing mode (vi is then vh). */
+ * vertical a vertical root writing mode (vi is then vh).
+ * Lot 119: cqw/cqh are the content box in px of the query container for
+ * the container units (cqw, cqh, cqi, cqb, cqmin, cqmax); 0: none, the
+ * units are then the viewport ones (CSS Conditional 5, 7). */
 /* "1.5em", "-2rem", ".25ch": hundredths of a px (three decimals read, the
  * whole part at most 2000); 0, or -1 for px, numbers and other units */
 int we_unit_len100(const char *v, int len, const we_unit_ctx_t *c, int *h100);
@@ -595,6 +598,13 @@ typedef struct {
     int16_t width_pct;             /* >0: percent of the containing block */
     /* layout box (border box, page pixels) */
     int16_t x, y, w, h;
+    /* Lot 119: container queries (webeng_cq.inc). cq_type is the
+     * container-type (WE_CQ_*), cq_name_off/len its container-name list in
+     * the pool; cq_w/cq_h the content box of the last layout, cq_known
+     * once a layout gave it (kept across we_style). */
+    uint8_t cq_type, cq_name_len, cq_known;
+    uint16_t cq_name_off;
+    int16_t cq_w, cq_h;
 } we_node_t;
 
 #define WE_SELECTOR_PARTS_MAX 4
@@ -655,6 +665,7 @@ typedef struct {
     uint16_t decl_off, decl_len;
     uint8_t pseudo_el;  /* lot 63: 0 element, else WE_PSEUDO_BEFORE/AFTER */
     uint8_t layer;      /* lot 74: 0 unlayered, else cascade layer index + 1 */
+    uint8_t cq;         /* Lot 119: 0, else the @container condition index + 1 */
 } we_rule_t;
 
 /* Lot 118: a registered custom property (@property): its name, its
@@ -665,6 +676,20 @@ typedef struct {
     uint16_t name_off, init_off, init_len, syn_off;
     uint8_t name_len, syntax, inherits, has_init, syn_len;
 } we_prop_t;
+
+/* Lot 119: an @container condition: the container name (none: 0) and
+ * the condition text in css[], the axes its features need (WE_CQ_AXIS_*)
+ * and the enclosing @container (-1: none) */
+#define WE_CQ_MAX 16
+#define WE_CQ_PASSES 3
+enum { WE_CQ_NORMAL, WE_CQ_INLINE, WE_CQ_SIZE };
+#define WE_CQ_AXIS_INLINE 1
+#define WE_CQ_AXIS_BLOCK 2
+typedef struct {
+    uint16_t name_off, cond_off, cond_len;
+    uint8_t name_len, axes;
+    int8_t parent;
+} we_cq_t;
 
 typedef struct {
     uint32_t nodes, elements, text_nodes, scripts_skipped;
@@ -721,6 +746,13 @@ typedef struct {
     /* Lot 118: @property registrations (webeng_prop.inc) */
     we_prop_t props[WE_PROPS_MAX];
     uint8_t nprops;
+    /* Lot 119: @container conditions; cq_used when a style evaluated one
+     * or read a container unit (we_layout_viewport then styles and lays
+     * the document out again while the container sizes change, at most
+     * WE_CQ_PASSES times), cq_restyles counts those passes */
+    we_cq_t cqs[WE_CQ_MAX];
+    uint8_t ncq, cq_used, cq_restyles;
+    uint32_t style_diag, style_dropped;   /* the diagnostics before the last we_style (its pass replaces them) */
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 

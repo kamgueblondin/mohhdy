@@ -1574,9 +1574,9 @@ static void test_l59_limits_atomic_width_3(void) {
 }
 
 static void test_l59_limits_atomic_width_4(void) {
-    /* Lot 118: was 1vw (read now) */
+    /* Lot 118: was 1vw (read now), Lot 119: was 1cqw (read now) */
     lot52_render("<body style='margin:0'><div id=p style='width:200px'><div id=a style='height:30px;width:fit-content("
-        "40px);width:fit-content(1cqw)'>AB CDEF</div><div id=b style='height:5px'></div></div></body>", 320);
+        "40px);width:fit-content(1rex)'>AB CDEF</div><div id=b style='height:5px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
     TEST_ASSERT_EQUAL(40, lot52_node("a")->w);
@@ -1747,9 +1747,9 @@ static void test_l59_limits_atomic_width_11(void) {
 }
 
 static void test_l59_limits_atomic_width_12(void) {
-    /* Lot 118: was 10vw (read now) */
+    /* Lot 118: was 10vw (read now), Lot 119: was 10cqw (read now) */
     lot52_render("<body style='margin:0'><div id=p style='width:200px'><div id=a style='height:30px;width:fit-content("
-        "40px);width:fit-content(10cqw)'>AB CDEF</div><div id=b style='height:5px'></div></div></body>", 320);
+        "40px);width:fit-content(10rex)'>AB CDEF</div><div id=b style='height:5px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
     TEST_ASSERT_EQUAL(40, lot52_node("a")->w);

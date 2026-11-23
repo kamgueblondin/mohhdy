@@ -7,6 +7,20 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 119 (22 November 2026, base de44f7d, PR not opened)
+
+US-031 partial, phase3_complete=false. The engine evaluates container
+queries: @container with names and the size features (width, height,
+inline-size, block-size, aspect-ratio, orientation) against the nearest
+query container, container-type, container-name and container, size and
+inline-size containment, and the cqw/cqh/cqi/cqb/cqmin/cqmax units; the
+layout styles the document again while container sizes change (at most
+three passes). rgb(), hsl() and hwb() read relative colors (from <color>
+with the channel keywords in math). A QEMU page (`make qemu-lot119`, CI
+job lot119-engine-cq) checks it with web-inspect. First gaps for Lot
+120: style() queries, vertical container axes, root html margins
+(docs/lot119_plan.md).
+
 ### Lot 118 (22 November 2026, base 0f909e9, PR not opened)
 
 US-031 partial, phase3_complete=false. The engine evaluates CSS Values 4

@@ -776,6 +776,11 @@ static int layer_order(we_doc_t *d, int parent, int rank) {
 
 #include "webeng_nest.inc"
 
+/* Lot 119: @container (webeng_cq.inc): the enclosing condition of the
+ * rules parse_css_range reads (index + 1, 0: none) */
+static int css_cq;
+static int cq_rule(we_doc_t *d, const char *s, int n, int parent);
+
 /* Lot 73: a range of the style text; @media, @supports and @layer
  * blocks are read in place when they apply (webeng_cssq.inc).
  * Lot 74: layer is the current cascade layer (-1: unlayered). */
@@ -821,6 +826,16 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth, int layer) {
                     if (lr == -1) { diag(d, "css layer table full", body_a); lr = layer; }
                     parse_css_range(d, body_a, body_b, depth + 1, lr);
                 }
+            } else if (depth < WE_CSS_NEST_MAX && cssq_is(s + name_a, name_b - name_a, "container")) {
+                /* Lot 119: the rules inside carry the condition (webeng_cq.inc) */
+                int q = cq_rule(d, s + pre, body_a - 1 - pre, css_cq - 1), outer = css_cq;
+                if (q == -2) diag(d, "container query table full", body_a);
+                else if (q < 0) diag(d, "container query refused", body_a);
+                else {
+                    css_cq = q + 1;
+                    parse_css_range(d, body_a, body_b, depth + 1, layer);
+                    css_cq = outer;
+                }
             } else if (cssq_is(s + name_a, name_b - name_a, "property")) {
                 prop_rule(d, s + pre, body_a - 1 - pre, s + body_a, body_b - body_a);   /* Lot 118 */
             } else if (cssq_is(s + name_a, name_b - name_a, "font-face")) {
@@ -862,6 +877,7 @@ static void parse_css_range(we_doc_t* d, int i, int n, int depth, int layer) {
                 r->decl_len = (uint16_t)(dec_b - dec_a);
                 r->order = (uint16_t)d->nrules;
                 r->layer = (uint8_t)(layer + 1);
+                r->cq = (uint8_t)css_cq;   /* Lot 119 */
                 d->nrules++;
             } else {
                 diag(d, "css selector unsupported", a);
@@ -1110,6 +1126,95 @@ static int color_channel(const char *v, int n, int hue, int *milli, int *percent
     return color_number(v, n, milli, percent);
 }
 
+/* Lot 119: relative colors (CSS Color 5, 4): rgb(from c r g b), hsl(from
+ * c h s l), hwb(from c h w b), each with an optional "/ alpha". The
+ * origin c is any color parse_color reads; its channels in the target
+ * space are the keywords (r, g, b 0..255; h in degrees; s, l, w, b
+ * 0..100; alpha 0..1), usable alone or in math (math_constant). The
+ * space syntax only; an omitted alpha is the origin's. */
+static const char *math_chan_names[4];
+static int math_chan_vals[4], math_chan_n;
+static int parse_color(const char* v, int n, uint32_t* out);
+
+/* rgb 0..255 to the hue in thousandths of a degree and saturation and
+ * lightness (hsl) or whiteness and blackness (hwb) in thousandths of 0..100 */
+static void rgb_hsl_milli(const int c[3], int *hue, int *sat, int *light) {
+    int hi = c[0], lo = c[0], k, d;
+    for (k = 1; k < 3; k++) { if (c[k] > hi) hi = c[k]; if (c[k] < lo) lo = c[k]; }
+    d = hi - lo;
+    *light = (hi + lo) * 100000 / 510;
+    *sat = d ? d * 100000 / (255 - (hi + lo > 255 ? hi + lo - 255 : 255 - hi - lo)) : 0;
+    if (!d) *hue = 0;
+    else if (hi == c[0]) { *hue = 60000 * (c[1] - c[2]) / d; if (*hue < 0) *hue += 360000; }
+    else if (hi == c[1]) *hue = 60000 * (c[2] - c[0]) / d + 120000;
+    else *hue = 60000 * (c[0] - c[1]) / d + 240000;
+}
+
+static int relative_color(const char *v, int n, int kind, int at, uint32_t *out) {
+    static const char *const names[3][4] = { { "r", "g", "b", "alpha" }, { "h", "s", "l", "alpha" }, { "h", "w", "b", "alpha" } };
+    int value[4], percent[4], count = 0, slash = 0, start, depth, k, rgb[3], ok = 0, chan[4], c[3], alpha;
+    uint32_t origin;
+    while (at < n - 1 && w_space(v[at])) at++;
+    start = at; depth = 0;
+    while (at < n - 1 && (depth || !w_space(v[at]))) {
+        if (v[at] == '(') depth++;
+        else if (v[at] == ')' && depth) depth--;
+        at++;
+    }
+    if (at == start || parse_color(v + start, at - start, &origin)) return -1;
+    for (k = 0; k < 3; k++) c[k] = (int)(origin >> (16 - 8 * k)) & 255;
+    alpha = 255 - (int)(origin >> WE_ALPHA_SHIFT);
+    if (kind == 0) for (k = 0; k < 3; k++) chan[k] = c[k] * 1000;
+    else {
+        rgb_hsl_milli(c, &chan[0], &chan[1], &chan[2]);
+        if (kind == 2) {
+            int hi = c[0], lo = c[0];
+            for (k = 1; k < 3; k++) { if (c[k] > hi) hi = c[k]; if (c[k] < lo) lo = c[k]; }
+            chan[1] = lo * 100000 / 255; chan[2] = (255 - hi) * 100000 / 255;
+        }
+    }
+    chan[3] = alpha * 1000 / 255;
+    for (k = 0; k < 4; k++) { math_chan_names[k] = names[kind][k]; math_chan_vals[k] = chan[k]; }
+    math_chan_n = 4;
+    while (at < n - 1) {
+        int keyword;
+        while (at < n - 1 && w_space(v[at])) at++;
+        if (at >= n - 1) break;
+        if (v[at] == '/') {
+            if (slash || count != 3) goto done;
+            slash = 1; at++;
+            continue;
+        }
+        if (count == 4) goto done;   /* a comma fails as a channel */
+        start = at; depth = 0;
+        while (at < n - 1 && (depth || (!w_space(v[at]) && v[at] != '/'))) {
+            if (v[at] == '(') depth++;
+            else if (v[at] == ')' && depth) depth--;
+            at++;
+        }
+        for (keyword = 0; keyword < 4 && !value_is(v + start, at - start, names[kind][keyword]); keyword++) {}
+        if (keyword < 4) { value[count] = chan[keyword]; percent[count] = 0; }
+        else if (color_channel(v + start, at - start, kind && count == 0, &value[count], &percent[count])) goto done;
+        count++;
+    }
+    if (count == 3 + slash) ok = 1;
+done:
+    /* the origin was read before: no relative color is parsed while the
+     * keywords are in scope */
+    math_chan_n = 0;
+    if (!ok) return -1;
+    if (count == 4) alpha = color_alpha(value[3], percent[3]);
+    if (kind) {
+        if (percent[0] == 1) return -1;
+        *out = with_alpha(kind == 1 ? hsl_rgb(value[0], value[1], value[2]) : hwb_rgb(value[0], value[1], value[2]), alpha);
+        return 0;
+    }
+    for (k = 0; k < 3; k++) rgb[k] = percent[k] == 1 ? (value[k] * 255 + 50000) / 100000 : (value[k] + 500) / 1000;
+    *out = with_alpha(((uint32_t)clamp_int(rgb[0], 0, 255) << 16) | ((uint32_t)clamp_int(rgb[1], 0, 255) << 8) |
+                      (uint32_t)clamp_int(rgb[2], 0, 255), alpha);
+    return 0;
+}
+
 /* rgb()/rgba()/hsl()/hsla(): three channels then an optional alpha,
  * separated by commas, or by spaces with "/ alpha". Lot 118: hwb() (spaces
  * only), math channels, angle hues, none (spaces only), and the modern
@@ -1123,6 +1228,8 @@ static int parse_color_function(const char *v, int n, uint32_t *out) {
     kind = w_low(v[0]) == 'r' ? 0 : w_low(v[1]) == 's' ? 1 : 2;
     if (v[n - 1] != ')') return -1;
     at = open;
+    while (at < n - 1 && w_space(v[at])) at++;
+    if (n - at > 5 && w_ieq_n(v + at, 4, "from") && w_space(v[at + 4])) return relative_color(v, n, kind, at + 5, out);   /* Lot 119 */
     while (at < n - 1) {
         int start, depth = 0;
         while (at < n - 1 && w_space(v[at])) at++;
@@ -1217,11 +1324,20 @@ static int u_lh100 = WE_LINE_H * 100, u_rlh100 = WE_LINE_H * 100, u_q = 4;
  * layout on another viewport styles the document again. */
 static int u_vw = 640, u_vh = 480, u_vertical, u_vp_used;
 static int u_rel_used;   /* Lot 118: a font-relative or viewport unit was read (@property) */
+/* Lot 119: container units (CSS Conditional 5, 7): u_cqw/u_cqh are the
+ * content box in px of the element's nearest ancestor query container
+ * for each axis (cq_units_set; -1: none or not laid out yet, the
+ * viewport units stand in);
+ * u_cq_used records a use, so the layout styles the document again once
+ * the container sizes are known */
+static int u_cqw = -1, u_cqh = -1, u_cq_used;
 enum { WE_U_EM, WE_U_REM, WE_U_EX, WE_U_CH, WE_U_CAP, WE_U_IC, WE_U_LH, WE_U_RLH,
-       WE_U_VW, WE_U_VH, WE_U_VI, WE_U_VB, WE_U_VMIN, WE_U_VMAX, WE_U_COUNT };
+       WE_U_VW, WE_U_VH, WE_U_VI, WE_U_VB, WE_U_VMIN, WE_U_VMAX,
+       WE_U_CQW, WE_U_CQH, WE_U_CQI, WE_U_CQB, WE_U_CQMIN, WE_U_CQMAX, WE_U_COUNT };
 #define WE_U_VIEWPORT_NAMES 24
 static const char *const unit_names[WE_U_COUNT] = { "em", "rem", "ex", "ch", "cap", "ic", "lh", "rlh",
-                                                    "vw", "vh", "vi", "vb", "vmin", "vmax" };
+                                                    "vw", "vh", "vi", "vb", "vmin", "vmax",
+                                                    "cqw", "cqh", "cqi", "cqb", "cqmin", "cqmax" };
 /* the prefixed viewport units: unit code WE_U_VW + k % 6 */
 static const char *const unit_vp_names[WE_U_VIEWPORT_NAMES - 6] = {
     "svw", "svh", "svi", "svb", "svmin", "svmax", "lvw", "lvh", "lvi", "lvb", "lvmin", "lvmax",
@@ -1251,6 +1367,19 @@ static int unit_code_tail(const char *v, int len) {
 /* one unit in hundredths of a px in the current context */
 static int unit_base100(int code) {
     u_rel_used = 1;
+    if (code >= WE_U_CQW) {
+        /* the container's size, else the viewport's (horizontal: the
+         * inline axis is the width) */
+        int w = u_cqw >= 0 ? u_cqw : u_vw, h = u_cqh >= 0 ? u_cqh : u_vh;
+        u_cq_used = 1;
+        if (u_cqw < 0 || u_cqh < 0) u_vp_used = 1;
+        switch (code) {
+        case WE_U_CQW: case WE_U_CQI: return w;
+        case WE_U_CQH: case WE_U_CQB: return h;
+        case WE_U_CQMIN: return w < h ? w : h;
+        default: return w > h ? w : h;
+        }
+    }
     if (code >= WE_U_VW) {
         int w = u_vertical ? u_vh : u_vw, h = u_vertical ? u_vw : u_vh;
         u_vp_used = 1;
@@ -1322,6 +1451,8 @@ static int u_ctx_set(const we_unit_ctx_t *c) {
     u_vw = c->vw > 0 && c->vw <= WE_LAYOUT_MAX ? c->vw : 640;      /* Lot 118 */
     u_vh = c->vh > 0 && c->vh <= WE_LAYOUT_MAX ? c->vh : 480;
     u_vertical = c->vertical != 0;
+    u_cqw = c->cqw > 0 && c->cqw <= WE_LAYOUT_MAX ? c->cqw : -1;   /* Lot 119 */
+    u_cqh = c->cqh > 0 && c->cqh <= WE_LAYOUT_MAX ? c->cqh : -1;
     return 0;
 }
 
@@ -3409,6 +3540,7 @@ static int tf_angle_c(const char *v, int len, int *centi) {
 }
 
 #include "webeng_prop.inc"     /* Lot 118 */
+#include "webeng_cq.inc"       /* Lot 119 */
 
 /* A skew angle modulo 180deg in -80..80 (90deg has no tangent). */
 static int tf_skew_angle(const char *v, int len, int16_t *out) {
@@ -4679,6 +4811,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         }
     }
     if (content_declaration(d, n, prop, v, vl)) return;
+    if (cq_declaration(d, n, prop, v, vl)) return;   /* Lot 119 */
     if (w_eq(prop, "aspect-ratio")) {
         int16_t a, b;
         uint8_t automatic;
@@ -5530,7 +5663,9 @@ static int rule_layer_key(const we_doc_t *d, uint32_t r, int important) {
 static void cascade_rules(we_doc_t *d, int idx, we_node_t *n, int pseudo, int important) {
     uint8_t used[WE_MAX_RULES];
     uint32_t k, r;
-    for (k = 0; k < d->nrules; k++) used[k] = (uint8_t)(d->rules[k].pseudo_el != pseudo || !match_rule(d, idx, &d->rules[k]));
+    for (k = 0; k < d->nrules; k++)
+        used[k] = (uint8_t)(d->rules[k].pseudo_el != pseudo || !match_rule(d, idx, &d->rules[k]) ||
+                            (d->rules[k].cq && !cq_match(d, idx, d->rules[k].cq - 1, pseudo)));   /* Lot 119 */
     for (k = 0; k < d->nrules; k++) {
         int best = -1;
         for (r = 0; r < d->nrules; r++) {
@@ -5643,6 +5778,8 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->tshadow_count = p ? p->tshadow_count : 0;
         if (p) { int k; for (k = 0; k < WE_SHADOWS_MAX; k++) n->tshadow[k] = p->tshadow[k]; }
         n->z_index = 0;
+        n->cq_type = 0; n->cq_name_len = 0; n->cq_name_off = 0;   /* Lot 119 */
+        cq_units_set(d, n);
         n->line_height = p ? p->line_height : 0;
         n->lh_unitless = p ? p->lh_unitless : 0;
         n->lh_frac = p ? p->lh_frac : 0;
@@ -5870,6 +6007,7 @@ int we_style(we_doc_t* d) {
     if (!d || d->nnodes == 0) return -1;
     if (!d->css_parsed) { parse_css(d); d->css_parsed = 1; }
     track_pool_doc = d; d->ntrack_pool = 0;
+    d->style_diag = d->ndiag; d->style_dropped = d->diag_dropped;   /* Lot 119 */
     if (d->source_nodes) drop_generated(d);
     count = d->source_nodes = (uint16_t)d->nnodes;
     d->source_pool = (uint16_t)d->pool_used;
@@ -5879,9 +6017,11 @@ int we_style(we_doc_t* d) {
     d->style_vw = d->viewport_w > 0 ? d->viewport_w : (int16_t)cssq_media_w(d);
     d->style_vh = d->viewport_h > 0 ? d->viewport_h : (int16_t)cssq_media_h(d);
     u_vw = d->style_vw; u_vh = d->style_vh; u_vertical = 0; u_vp_used = 0;
+    d->cq_used = 0; u_cq_used = 0;   /* Lot 119 */
     for (i = 0; i < count; i++) style_node(d, &d->nodes[i], (int)i, (int)i, 0);
     d->vp_used = (uint8_t)u_vp_used;
     generate_content(d, (int)count);
+    if (u_cq_used) d->cq_used = 1;
     forms_accent_apply(d);
     for (i = 0; i < d->nnodes; i++) {
         we_node_t* n = &d->nodes[i];
@@ -7124,6 +7264,8 @@ static void intrinsic_sizes(we_doc_t *d) {
         }
         n->min_content = (int16_t)limit_coord(n->nowrap ? flow.maximum : flow.minimum);
         n->max_content = (int16_t)limit_coord(flow.maximum);
+        /* Lot 119: inline-size containment: the intrinsic size of an empty box */
+        if (n->cq_type != WE_CQ_NORMAL) n->min_content = n->max_content = 0;
         /* Lot 81: with a fixed height and an auto width, aspect-ratio gives the
          * content width (shrink-to-fit boxes, flex and grid contributions). */
         if (n->aspect_num && n->aspect_den > 0 && !w_eq(n->tag, "img") && n->height >= 0 && !n->height_percent &&
@@ -9473,6 +9615,8 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
         content_h = layout_content(d, idx, content_x, top, content_w, depth);
         if (n->line_clamp) content_h = line_clamp_apply(d, idx, clamp_first, top, content_x + content_w, content_h);
     }
+    /* Lot 119: size containment: the height of an empty box */
+    if (resolved_height[idx] < 0 && n->cq_type == WE_CQ_SIZE) content_h = 0;
     if (resolved_height[idx] >= 0) content_h = resolved_height[idx];
     else if (n->aspect_num && !w_eq(n->tag, "img")) {
         int ratio = ratio_height(n, bw - node_border_extra(n));
@@ -13457,7 +13601,24 @@ int we_layout(we_doc_t* d, int viewport_w) {
     return we_layout_viewport(d, viewport_w, WE_VIEWPORT_H_DEFAULT);
 }
 
+static int layout_once(we_doc_t* d, int viewport_w, int viewport_h);
+
+/* Lot 119: while the container sizes a style read change, style and lay
+ * the document out again (at most WE_CQ_PASSES more times) */
 int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
+    int rc = layout_once(d, viewport_w, viewport_h), pass;
+    for (pass = 0; rc == 0 && d->cq_used && cq_record(d); pass++) {
+        if (pass == WE_CQ_PASSES) { diag(d, "container query unsettled", -1); break; }
+        if (d->cq_restyles < 255) d->cq_restyles++;
+        /* the pass's style and layout diagnostics replace the last ones */
+        d->ndiag = d->style_diag; d->diag_dropped = d->style_dropped;
+        we_style(d);
+        rc = layout_once(d, viewport_w, viewport_h);
+    }
+    return rc;
+}
+
+static int layout_once(we_doc_t* d, int viewport_w, int viewport_h) {
     int h;
     if (!d || d->nnodes == 0 || viewport_w < 64 || viewport_h < 1) return -1;
     if (viewport_h > WE_LAYOUT_MAX) viewport_h = WE_LAYOUT_MAX;

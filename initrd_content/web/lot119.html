@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><title>Lot 119 container queries, container units, relative colors</title>
+<style>
+body { margin: 0 }
+#a119 { container: card / inline-size; width: 400px }
+#b119 { width: 50cqw; height: 10px; background: rgb(from #102030 b g r) }
+#c119 { height: 4px }
+@container card (min-width: 300px) {
+  #c119 { width: 25cqi; background: hsl(from red calc(h + 120) s l) }
+}
+#d119 { height: 2px; color: rgb(from #ff8000 g r b) }
+@container (max-width: 300px) { #d119 { background: red } }
+#e119 { container-type: size; width: 300px; height: 60px; padding: 5px }
+@container (orientation: landscape) and (height: 60px) {
+  #f119 { width: 10cqw; height: 10cqmin; background: rgb(from rgb(0 0 255 / 0.5) r g b / 1) }
+}
+#g119 { float: left; container-type: inline-size; padding: 0 5px; height: 8px }
+@container none (width > 1px) { #g119 { background: red } }
+</style></head>
+<body>
+<div id="a119"><div id="b119"></div><div id="c119"></div><div id="d119"></div></div>
+<div id="e119"><div id="f119"></div></div>
+<div id="g119">Hello world</div>
+</body>
+</html>

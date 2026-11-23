@@ -443,7 +443,7 @@ static void test_l118_math_api(void) {
     TEST_ASSERT_EQUAL(0, we_math_milli("calc(1dvmax)", 12, &c, 0, &type, &milli)); TEST_ASSERT_EQUAL(10000, milli);
     TEST_ASSERT_EQUAL(0, we_math_milli("calc(1svmin)", 12, &c, 0, &type, &milli)); TEST_ASSERT_EQUAL(5000, milli);
     TEST_ASSERT_EQUAL(-1, we_math_milli("calc(1xvw)", 10, &c, 0, &type, &milli));
-    TEST_ASSERT_EQUAL(-1, we_math_milli("calc(1cqw)", 10, &c, 0, &type, &milli));
+    TEST_ASSERT_EQUAL(-1, we_math_milli("calc(1rex)", 10, &c, 0, &type, &milli));   /* Lot 119: was 1cqw (read now) */
     /* a vertical root: vi is the height, vb the width */
     c.vertical = 1;
     TEST_ASSERT_EQUAL(0, we_math_milli("calc(1vi)", 9, &c, 0, &type, &milli)); TEST_ASSERT_EQUAL(5000, milli);
