@@ -1025,12 +1025,13 @@ static uint32_t with_alpha(uint32_t rgb, int alpha) {
 
 /* One colour argument: an integer or decimal number with an optional %
  * (CSS Color 4 legacy and space syntax). Values are returned in 1/1000
- * units, the percent flag tells which form was used. */
+ * units, the percent flag tells which form was used. Lot 120: no unit
+ * (a "deg" was read as a number on every channel; an angle is the hue's,
+ * read by tf_angle_milli). */
 static int color_number(const char *v, int n, int *milli, int *percent) {
     int at = 0, whole = 0, frac = 0, scale = 100, digits = 0, negative = 0;
     *percent = n > 0 && v[n - 1] == '%';
     if (*percent) n--;
-    if (n > 3 && w_ieq_n(v + n - 3, 3, "deg")) n -= 3;
     if (at < n && (v[at] == '-' || v[at] == '+')) { negative = v[at] == '-'; at++; }
     while (at < n && v[at] >= '0' && v[at] <= '9') { if (whole < 100000) whole = whole * 10 + v[at] - '0'; at++; digits++; }
     if (at < n && v[at] == '.') {
@@ -3490,7 +3491,6 @@ static int tf_length(const char *v, int len, int16_t *out, int *percent) {
 static int tf_scale(const char *v, int len, int16_t *out) {
     int milli, percent = 0;
     if (math_function(v, len)) { if (math_number_milli(v, len, &milli)) return -1; }   /* Lot 118 */
-    else if (len > 3 && w_ieq_n(v + len - 3, 3, "deg")) return -1;
     else if (color_number(v, len, &milli, &percent)) return -1;
     if (percent) milli /= 100;
     if (milli < -8000 || milli > 8000) return -1;
@@ -9560,8 +9560,9 @@ static int layout_block(we_doc_t* d, int idx, int x, int y, int cw, int depth) {
     /* reserve the background item now so it paints under the children;
      * lot 62: outer shadows go under it, inset shadows over it */
     shadow_slot[0] = shadow_reserve(d, idx, 0, &shadow_slots[0]);
-    slot = n->has_bg ? (int)d->nitems : -1;
-    if (n->has_bg && !emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, n->bg)) slot = -1;
+    /* Lot 120: the canvas paints the color propagated from this element */
+    slot = n->has_bg && idx != d->canvas_from ? (int)d->nitems : -1;
+    if (slot >= 0 && !emit(d, idx, OS_FB_WEB_RECT, 0, 0, 0, 0, n->bg)) slot = -1;
     /* lot 62: a rounded background takes up to WE_RADIUS_SLICES slots */
     radius_slots = 0;
     if (slot >= 0 && (n->rad_x[0] | n->rad_x[1] | n->rad_x[2] | n->rad_x[3])) {
@@ -9850,6 +9851,10 @@ static void place_absolutes(we_doc_t *d, int cb, int pad_x, int pad_y, int pad_w
     int item_start = (int)d->nitems;
     uint32_t i;
     if (want < -1 || depth > WE_DEPTH_MAX) return;
+    /* Lot 120: without a positioned ancestor the containing block is the
+     * initial one: the viewport at the canvas origin (CSS 2 10.1), not the
+     * document box */
+    if (want == -1) pad_h = d->viewport_h;   /* the document box is already at 0 0, viewport_w wide */
     if (pad_w < 0) pad_w = 0;
     if (pad_h < 0) pad_h = 0;
     if (pad_w > WE_LAYOUT_MAX) pad_w = WE_LAYOUT_MAX;
@@ -13618,8 +13623,33 @@ int we_layout_viewport(we_doc_t* d, int viewport_w, int viewport_h) {
     return rc;
 }
 
+/* Lot 120: the root element: an html element child of the document, 0
+ * for a fragment (its elements keep the document as their block) */
+static int root_element(const we_doc_t *d) {
+    int c;
+    for (c = d->nodes[0].first; c >= 0; c = d->nodes[c].next)
+        if (w_eq(d->nodes[c].tag, "html")) return c;     /* a text node has no tag */
+    return 0;
+}
+
+/* Lot 120: the element whose background color paints the canvas (CSS
+ * Backgrounds 3, 2.11.2): the root when it has a background, else, when
+ * the root has none at all (no color, gradient or image), its body
+ * child; 0 when that one has no color or a box is not rendered */
+static int canvas_source(const we_doc_t *d, int root) {
+    const we_node_t *r = &d->nodes[root];
+    int c;
+    if (!root || r->display == WE_DISP_NONE) return 0;
+    /* more image layers (bgi_layers) come with a first one (bgi_len) */
+    if (r->has_bg || r->grad_dir || r->bgi_len) return r->has_bg ? root : 0;
+    for (c = r->first; c >= 0; c = d->nodes[c].next)
+        if (w_eq(d->nodes[c].tag, "body"))
+            return d->nodes[c].has_bg && d->nodes[c].display != WE_DISP_NONE ? c : 0;
+    return 0;
+}
+
 static int layout_once(we_doc_t* d, int viewport_w, int viewport_h) {
-    int h;
+    int h, canvas_slot;
     if (!d || d->nnodes == 0 || viewport_w < 64 || viewport_h < 1) return -1;
     if (viewport_h > WE_LAYOUT_MAX) viewport_h = WE_LAYOUT_MAX;
     d->viewport_w = (int16_t)(viewport_w > WE_LAYOUT_MAX ? WE_LAYOUT_MAX : viewport_w);
@@ -13674,7 +13704,20 @@ static int layout_once(we_doc_t* d, int viewport_w, int viewport_h) {
           int t = root->spacing_value[bit], v = t < 0 ? -((-t * viewport_w) / 1000) : (t * viewport_w) / 1000;
           if (bit < 4) root->margin[bit] = (int16_t)v; else root->padding[bit - 4] = (int16_t)v;
       } }
+    /* Lot 120: the root box: percentage heights of the html element resolve
+     * against the initial containing block (the viewport height), and the
+     * canvas takes its background color (else that of its body) */
+    d->root_html = (int16_t)root_element(d);
+    d->canvas_from = (int16_t)canvas_source(d, d->root_html);
+    d->canvas_bg = d->canvas_from ? d->nodes[d->canvas_from].bg : 0;
+    containing_height[d->root_html] = (int16_t)viewport_h;   /* a fragment's document node has no percentage */
+    canvas_slot = d->canvas_from && emit(d, 0, OS_FB_WEB_RECT, 0, 0, 0, 0, d->canvas_bg) ? (int)d->nitems - 1 : -1;
     h = layout_block(d, 0, 0, 0, viewport_w, 0);
+    if (canvas_slot >= 0) {
+        /* the whole canvas: the viewport, or the page when it is taller */
+        d->items[canvas_slot].w = (uint16_t)viewport_w;
+        d->items[canvas_slot].h = (uint16_t)(h > viewport_h ? h : viewport_h);
+    }
     vertical_styles(d, 0);
     drop_reserved(d);
     ellipsis_items(d);
@@ -13803,6 +13846,8 @@ void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx) {
     /* Lot 117: the font size and the used line height, hundredths of a px */
     out_num(out, ctx, " font100 ", node_font100(n));
     out_num(out, ctx, " lh100 ", lh100_of(n));
+    /* Lot 120: the element whose background color paints the canvas */
+    if (node && node == d->canvas_from) out_hex(out, ctx, " canvas ", d->canvas_bg);
     out(ctx, "\n");
 }
 

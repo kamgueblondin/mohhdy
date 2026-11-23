@@ -753,6 +753,13 @@ typedef struct {
     we_cq_t cqs[WE_CQ_MAX];
     uint8_t ncq, cq_used, cq_restyles;
     uint32_t style_diag, style_dropped;   /* the diagnostics before the last we_style (its pass replaces them) */
+    /* Lot 120: the root box and the initial containing block of the last
+     * layout: root_html the html element (a child of the document; 0 when the
+     * document has none: a fragment), canvas_from the element whose
+     * background color paints the canvas (root, else its body; 0 none),
+     * canvas_bg that color, painted by the first item */
+    int16_t root_html, canvas_from;
+    uint32_t canvas_bg;
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 

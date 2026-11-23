@@ -19,7 +19,16 @@
  *   WE_CQ_PASSES times). size containment lays the container's height
  *   out as if it were empty; both types make its intrinsic inline size
  *   that of an empty box (CSS Contain 2, 3.1 and 3.2).
- * - The horizontal writing mode: the inline axis is the width. */
+ * - The horizontal writing mode: the inline axis is the width.
+ * - Lot 120: style queries (CSS Conditional 5, 7.2): style(--x: v),
+ *   style(--x) and their not / and / or forms inside style() or around
+ *   it, with or without a name, alone or with size features. Every
+ *   element is a style container: a style feature alone reads the
+ *   nearest ancestor (or the named one) and no size, the computed custom
+ *   properties of that container (inherited ones too) compared as text
+ *   with each run of white space as one space; var() in v is the
+ *   container's, initial the unset or registered initial value. Standard
+ *   properties (style(color: red)) refuse the rule. */
 
 static int vertical_extra(const we_node_t *n);
 
@@ -138,6 +147,61 @@ static int cq_feature(const char *s, int n) {
     return -1;
 }
 
+/* Lot 120: container style queries (CSS Conditional 5, 7.2). The style
+ * container of the feature being evaluated; while cq_rule checks the
+ * syntax, the document node (its result is not used) */
+static int cq_style_node;
+static char cq_style_buf[WE_VAR_VALUE_MAX];
+
+/* two values equal once trimmed, each run of white space as one space;
+ * x, a stored value (custom property or registered initial value), is
+ * trimmed: y may not be (a var() substituted with an empty value) */
+static int cq_same(const char *x, int xl, const char *y, int yl) {
+    int i = 0, j = 0;
+    while (yl > 0 && w_space(y[yl - 1])) yl--;
+    while (j < yl && w_space(y[j])) j++;
+    while (i < xl && j < yl) {
+        if (w_space(x[i]) && w_space(y[j])) {
+            /* inside both trimmed values: each run ends before the end */
+            while (w_space(x[i])) i++;
+            while (w_space(y[j])) j++;
+            continue;
+        }
+        if (x[i++] != y[j++]) return 0;
+    }
+    return i == xl && j == yl;
+}
+
+/* one style feature: --name (true when its computed value is not the
+ * initial one) or --name: value (the computed value is value, var()
+ * of the container substituted; initial: the property has its initial
+ * value). Only custom properties: 1, 0, -1 bad */
+static int cq_style_feature(we_doc_t *d, const char *s, int n) {
+    int colon = 0, a = 0, b, va, vb, k, r, init_len = 0, used = 0;
+    const char *have = 0, *init = 0;
+    int have_len = 0;
+    const we_node_t *c;
+    while (colon < n && s[colon] != ':') colon++;
+    b = colon;
+    if (!cssq_trim(s, &a, &b) || b - a < 3 || s[a] != '-' || s[a + 1] != '-') return -1;
+    for (k = a + 2; k < b; k++) if (!w_namec(s[k])) return -1;
+    va = colon + 1; vb = n;
+    if (colon < n && !cssq_trim(s, &va, &vb)) return -1;
+    c = &d->nodes[cq_style_node];
+    k = cssq_var_find(d, c, s + a, b - a);
+    r = d->nprops ? prop_find(d, s + a, b - a) : -1;
+    if (r >= 0 && d->props[r].has_init) { init = d->pool + d->props[r].init_off; init_len = d->props[r].init_len; }
+    if (k >= 0) { have = d->pool + c->var_off[k]; have_len = c->var_len[k]; }
+    else { have = init; have_len = init_len; }
+    if (colon == n) return k >= 0 && !(init && cq_same(have, have_len, init, init_len));
+    if (cssq_is(s + va, vb - va, "initial")) return k < 0 || (init && cq_same(have, have_len, init, init_len));
+    if (cssq_has_var(s + va, vb - va)) {
+        if (cssq_expand(d, c, s + va, vb - va, cq_style_buf, (int)sizeof(cq_style_buf), &used, 0)) return 0;
+        return cq_same(have, have_len, cq_style_buf, used);
+    }
+    return cq_same(have, have_len, s + va, vb - va);
+}
+
 /* a container name: an identifier other than the CSS-wide keywords, none,
  * and, or, not (case-insensitive) */
 static int cq_name_ok(const char *v, int n) {
@@ -157,15 +221,16 @@ static int cq_rule(we_doc_t *d, const char *s, int n, int parent) {
     if (a < b && s[a] != '(') {
         int i = a;
         while (i < b && w_namec(s[i])) i++;
-        /* "not (...)" is a condition, not a name */
-        if (!(i - a == 3 && w_ieq_n(s + a, 3, "not"))) {
+        /* "not (...)" is a condition, not a name; Lot 120: so is a
+         * function (style(...)) */
+        if (!(i - a == 3 && w_ieq_n(s + a, 3, "not")) && !(i < b && s[i] == '(')) {
             if (!cq_name_ok(s + a, i - a)) return -1;
             name_a = a; name_b = i;
             a = i;
             cssq_trim(s, &a, &b);
         }
     }
-    cq_axes = 0; cq_have_w = cq_have_h = 0; cq_font100 = WE_FONT_PX_DEFAULT * 100;
+    cq_axes = 0; cq_have_w = cq_have_h = 0; cq_font100 = WE_FONT_PX_DEFAULT * 100; cq_style_node = 0;
     r = a < b ? cssq_cond(d, s + a, b - a, 2, 0) : (name_b > name_a ? 0 : -1);
     if (r < 0) return -1;
     if (d->ncq >= WE_CQ_MAX) return -2;
@@ -215,10 +280,12 @@ static int cq_match(we_doc_t *d, int idx, int k, int pseudo) {
         int c = cq_container(d, idx, q, pseudo), r;
         if (c < 0) return 0;
         if (!q->cond_len) continue;          /* a name alone: no size read */
-        if (!d->nodes[c].cq_known) return 0;
+        /* Lot 120: style features alone read no size */
+        if (q->axes && !d->nodes[c].cq_known) return 0;
         cq_have_w = d->nodes[c].cq_w * 100; cq_have_h = d->nodes[c].cq_h * 100;
         cq_font100 = d->nodes[c].font100 ? d->nodes[c].font100 : WE_FONT_PX_DEFAULT * 100;
         cq_axes = 0;
+        cq_style_node = c;
         r = cssq_cond(d, d->css + q->cond_off, q->cond_len, 2, 0);
         if (r != 1) return 0;
     }
