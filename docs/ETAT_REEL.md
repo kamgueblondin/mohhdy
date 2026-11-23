@@ -8,6 +8,14 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 118 (CSS Values 4 math in the engine in thousandths: round, mod, rem, abs, sign, pow, sqrt, hypot, log, exp, trigonometry, constants, typed arithmetic, scientific notation; viewport units; math in numbers, angles, whole-px lengths, transforms and colors; hwb() and the modern color forms; @property; base 0f909e9, PR not opened)
+
+- ETAT_REEL: one fixed-point math core (userspace/webeng_math.inc) replaces the engine's whole-px evaluator: values in thousandths with infinities and NaN, the used px cut once at use, the CSS Values 4 functions and constants, numbers, lengths and angles typed as the spec says, 1e3 in math literals. vw, vh, vi, vb, vmin, vmax and the s/l/d aliases read the layout viewport (a restyle when it changes).
+- ETAT_REEL: order, z-index, flex-grow/shrink, opacity, line-height, font-size, rotate/skew/scale/translate/transform-origin, every whole-px length and the rgb()/hsl() channels read math; hwb(), none and the modern space forms of rgb()/hsl(); @property (userspace/webeng_prop.inc) registers syntaxes with |, + and #, inherits, initial values, and computes lengths, numbers, angles and times.
+- Not covered (honest): container queries and cq* units, calc-size, anchor, typed attr, relative colors and color-mix in the engine, percentage math in color channels, unset of custom properties as inherit, @property image/url/transform types and animation.
+- we_doc_t 872336 bytes (was 872104, < 1 MiB), we_node_t 4676. Kernel and rights unchanged; engine API grows (we_math_milli, we_unit_ctx_t vw/vh/vertical). US-031 partial, phase3_complete=false. QEMU page /web/lot118.html (`make qemu-lot118`, CI job lot118-engine-math).
+- Detail and gaps: docs/lot118_plan.md.
+
 ## Lot 117 (font-relative lengths in the engine: em of the element's own font, rem, ex, ch, cap, ic, lh, rlh in every engine length, its math, font-size and line-height; font sizes in hundredths; line-height math; the clamp's carried sum; base 6aeb9b5, PR not opened)
 
 - ETAT_REEL: the engine (webeng.c) reads em as the element's own font size wherever it reads a length (was 10 px), whatever the order of the declarations: font-size, then line-height, are cascaded first (a quiet font pass). rem and rlh are of the root element (their initial 16 px and 10 px in the root's own font-size and line-height), ex, ch and cap the 8x8 glyph rows and columns at the element's scale, ic 1em, lh its used line height (the parent's in line-height). Decimals read to three places; hundredths rounded half away from zero to px.

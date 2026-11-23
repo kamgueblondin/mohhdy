@@ -1026,9 +1026,10 @@ static void test_l59_insets_atomic_10(void) {
 }
 
 static void test_l59_insets_atomic_11(void) {
+    /* Lot 117: was 1em, Lot 118: was 1vw (read now) */
     lot52_render("<body style='margin:0'><div id=p style='width:100px;height:80px;'><div style='height:20px'></div><di"
         "v id=a style='position:relative;width:20px;height:10px;margin-left:30px;right:10px;bottom:10px;inset"
-        ":1vw'><span>A</span></div><div id=b style='height:5px'></div></div></body>", 320);
+        ":1cqw'><span>A</span></div><div id=b style='height:5px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(20, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(10, lot52_node("a")->y);
     TEST_ASSERT_EQUAL(20, lot52_node("a")->w);

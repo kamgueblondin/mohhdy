@@ -1793,6 +1793,13 @@ qemu-lot116: $(OS_IMAGE) pack-initrd disk
 qemu-lot117: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot117.py
 
+# Lot 118: CSS Values 4 math in thousandths (the functions, constants,
+# scientific notation), viewport units, math in numbers, angles and colors,
+# hwb(), @property, read with web-inspect (tests/scripts/test_qemu_lot118.py)
+.PHONY: qemu-lot118
+qemu-lot118: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot118.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

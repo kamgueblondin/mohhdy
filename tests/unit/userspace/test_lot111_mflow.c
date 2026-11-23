@@ -59,7 +59,7 @@ static void test_l111_mflow_0(void) {
     flow("#p { overflow: auto; height: 320px } #o { overflow: auto; height: max(calc(max(58rem, calc((47% + 29lh) / 5), 0%) - calc(81% - 164px)), 26.125ex) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:max(calc(-81% + 1092px), calc(-72% + 222px), 131px)", g_o);
     TEST_ASSERT_EQUAL(320, sh(0));
-    TEST_ASSERT_EQUAL(833, sh(1));
+    TEST_ASSERT_EQUAL(832, sh(1));
     flow("#p { overflow: auto; height: 400px } #o { overflow: auto; height: min(96%, max(calc(3% + 42px), calc(30% - 187px), calc(73% - 80px))) }");
     TEST_ASSERT_EQUAL_STRING("overflow-y:auto;height:min(96%, max(calc(3% + 42px), calc(73% - 80px)))", g_o);
     TEST_ASSERT_EQUAL(400, sh(0));

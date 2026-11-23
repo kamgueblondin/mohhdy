@@ -1672,9 +1672,10 @@ static void test_l83_spct_gpl_ca_5ps7_60_140(void) {
 
 static void test_l83_spct_gml_ca_5ps7_100_50(void) {
     lot52_render("<body style='margin:0'><div style='display:grid;width:150px;grid-template-columns:100px 50px'><div style='height:5px'></div><div id=a style='margin-left:calc(5% - 7px);height:5px'></div></div></body>", 480);
-    TEST_ASSERT_EQUAL(95, lot52_node("a")->x);
+    /* Lot 118: 2.5px - 7px is -4.5px, cut once to -4 (was 2 - 7) */
+    TEST_ASSERT_EQUAL(96, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->y);
-    TEST_ASSERT_EQUAL(55, lot52_node("a")->w);
+    TEST_ASSERT_EQUAL(54, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(5, lot52_node("a")->h);
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }

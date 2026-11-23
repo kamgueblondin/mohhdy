@@ -632,6 +632,11 @@ static int cssq_match_state(const we_doc_t *d, const we_node_t *n, int state) {
 }
 
 /* ---------- custom properties ---------- */
+/* Lot 118: @property registrations (webeng_prop.inc) */
+static void prop_rule(we_doc_t *d, const char *pre, int pl, const char *body, int bl);
+static int prop_find(const we_doc_t *d, const char *name, int len);
+static int prop_check(const we_doc_t *d, const char *name, int len, const char *v, int vl);
+static void prop_compute(we_doc_t *d, we_node_t *n);
 
 static int cssq_pool_ref(we_doc_t *d, const char *s, int n, uint16_t *off) {
     if (s >= d->pool && s + n <= d->pool + d->pool_used) { *off = (uint16_t)(s - d->pool); return 0; }
@@ -680,6 +685,11 @@ static int cssq_expand(const we_doc_t *d, const we_node_t *n, const char *v, int
                 int j;
                 if (*used + n->var_len[k] > cap) return -1;
                 for (j = 0; j < n->var_len[k]; j++) out[(*used)++] = d->pool[n->var_off[k] + j];
+            } else if ((k = prop_find(d, v + na, nb - na)) >= 0 && d->props[k].has_init) {
+                /* Lot 118: a registered property without a value has its initial one */
+                int j;
+                if (*used + d->props[k].init_len > cap) return -1;
+                for (j = 0; j < d->props[k].init_len; j++) out[(*used)++] = d->pool[d->props[k].init_off + j];
             } else if (comma >= 0) {
                 int fa = comma + 1, fb = end;
                 cssq_trim(v, &fa, &fb);
@@ -738,6 +748,16 @@ static void cssq_set_var(we_doc_t *d, we_node_t *n, const char *p, int pl, const
         if (pool_put(d, cssq_def_buf, used, &off)) { diag(d, "css variable refused", -1); return; }
         vl = used;
     } else if (cssq_pool_ref(d, v, vl, &off)) { diag(d, "css variable refused", -1); return; }
+    /* Lot 118: a registered property's value that does not parse with its
+     * syntax is invalid at computed-value time: the property is unset */
+    if (d->nprops && prop_check(d, p, pl, d->pool + off, vl)) {
+        int r = prop_find(d, p, pl);
+        const we_node_t *parent = n->parent >= 0 ? &d->nodes[n->parent] : 0;
+        int pk = parent && d->props[r].inherits ? cssq_var_find(d, parent, p, pl) : -1;
+        diag(d, "css property syntax refused", -1);
+        if (pk < 0) { if (k >= 0) cssq_var_drop(n, k); return; }
+        off = parent->var_off[pk]; vl = parent->var_len[pk];
+    }
     if (k < 0) {
         if (n->nvars >= WE_VARS_MAX) { diag(d, "css variables full", -1); return; }
         if (cssq_pool_ref(d, p, pl, &name_off)) { diag(d, "css variable refused", -1); return; }
@@ -749,12 +769,16 @@ static void cssq_set_var(we_doc_t *d, we_node_t *n, const char *p, int pl, const
     n->var_len[k] = (uint16_t)vl;
 }
 
-static void cssq_inherit_vars(const we_node_t *p, we_node_t *n) {
-    int k;
-    n->nvars = p ? p->nvars : 0;
-    for (k = 0; k < n->nvars; k++) {
-        n->var_name_off[k] = p->var_name_off[k]; n->var_name_len[k] = p->var_name_len[k];
-        n->var_off[k] = p->var_off[k]; n->var_len[k] = p->var_len[k];
+/* Lot 118: a registered property with inherits: false is not inherited */
+static void cssq_inherit_vars(const we_doc_t *d, const we_node_t *p, we_node_t *n) {
+    int k, r;
+    n->nvars = 0;
+    for (k = 0; p && k < p->nvars; k++) {
+        r = d->nprops ? prop_find(d, d->pool + p->var_name_off[k], p->var_name_len[k]) : -1;
+        if (r >= 0 && !d->props[r].inherits) continue;
+        n->var_name_off[n->nvars] = p->var_name_off[k]; n->var_name_len[n->nvars] = p->var_name_len[k];
+        n->var_off[n->nvars] = p->var_off[k]; n->var_len[n->nvars] = p->var_len[k];
+        n->nvars++;
     }
 }
 

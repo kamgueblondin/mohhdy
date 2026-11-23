@@ -109,7 +109,7 @@ static void test_l117_props_1(void) {
     lay("<html style='font-size:larger'><body style='margin:0'><div id=p style='line-height:3ch'><div id=e style='flex-basis:3.6rlh;flex-basis:2.1rlh;font-size:larger'>xx yy</div></div></body></html>");
     TEST_ASSERT_EQUAL(27, el("e")->flex_basis);
     lay("<html style='font-size:0.8rlh;line-height:calc(120% - 2px)'><body style='margin:0'><div id=p style=''><div id=e style='border-width:2.31rlh'>xx yy</div></div></body></html>");
-    TEST_ASSERT_EQUAL(16, el("e")->border);
+    TEST_ASSERT_EQUAL(18, el("e")->border);
     lay("<html style=''><body style='margin:0'><div id=p style='line-height:calc(1em + 4px)'><div id=e style='font-size:smaller;line-height:min(2lh, 30px);column-width:3.59lh'>xx yy</div></div></body></html>");
     TEST_ASSERT_EQUAL(108, el("e")->col_width);
     lay("<html style='font-size:87.5%'><body style='margin:0'><div id=p style=''><div id=e style='max-width:3.02rem'>xx yy</div></div></body></html>");
@@ -231,7 +231,7 @@ static void test_l117_props_5(void) {
     lay("<html style='font-size:1ic;line-height:13.25px'><body style='margin:0'><div id=p style='font-size:17.777px'><div id=e style='font-size:0.8rlh;border-width:.25rem;border-width:3.3rem'>xx yy</div></div></body></html>");
     TEST_ASSERT_EQUAL(53, el("e")->border);
     lay("<html style='font-size:15.33px;line-height:normal'><body style='margin:0'><div id=p style='font-size:calc(1em + 2px);line-height:min(2lh, 30px)'><div id=e style='font-size:1.25em;line-height:1.5ic;tab-size:.8ch;tab-size:1.6CAP'>xx yy</div></div></body></html>");
-    TEST_ASSERT_EQUAL(14, el("e")->tab_px);
+    TEST_ASSERT_EQUAL(18, el("e")->tab_px);
     lay("<html style='font-size:2ex;line-height:0.8'><body style='margin:0'><div id=p style='line-height:13.25px'><div id=e style='font-size:0.9rem;line-height:1.5;letter-spacing:-0.161rlh;letter-spacing:2.395ch'>xx yy</div></div></body></html>");
     TEST_ASSERT_EQUAL(-1, el("e")->letter_spacing);
     lay("<html style='font-size:15.33px;line-height:2'><body style='margin:0'><div id=p style='font-size:10.5pt;line-height:87.5%'><div id=e style='text-underline-offset:2.02ch;text-underline-offset:1.615em;font-size:87.5%'>xx yy</div></div></body></html>");
@@ -299,7 +299,7 @@ static void test_l117_props_7(void) {
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:max(10px, 0.75em)'><div id=e style='font-size:calc(1em + 2px);line-height:normal;padding-block:3.2cap'>xx yy</div></div></body></html>");
     TEST_ASSERT_EQUAL(22, el("e")->padding[0]);
     lay("<html style='font-size:0.8rlh'><body style='margin:0'><div id=p style='font-size:22.5px;line-height:15px'><div id=e style='line-height:calc(1em + 4px);padding-block:3.218lh'>xx yy</div></div></body></html>");
-    TEST_ASSERT_EQUAL(87, el("e")->padding[0]);
+    TEST_ASSERT_EQUAL(85, el("e")->padding[0]);
     lay("<html style='font-size:10.5pt;line-height:20.6px'><body style='margin:0'><div id=p style=''><div id=e style='word-spacing:1.5ch;word-spacing:2.65em;font-size:0.9rem'>xx yy</div></div></body></html>");
     TEST_ASSERT_EQUAL(12, el("e")->word_spacing);
     lay("<html style='font-size:max(10px, 0.75em)'><body style='margin:0'><div id=p style='font-size:0.8rlh;line-height:min(2lh, 30px)'><div id=e style='margin-inline:2.5ic;font-size:20px'>xx yy</div></div></body></html>");
@@ -581,7 +581,7 @@ static void test_l117_props_15(void) {
     lay("<html style='font-size:150%;line-height:20.6px'><body style='margin:0'><div id=p style='font-size:10.5pt'><div id=e style='font-size:13.5px;line-height:1.5lh;word-spacing:1ic'>xx yy</div></div></body></html>");
     TEST_ASSERT_EQUAL(14, el("e")->word_spacing);
     lay("<html style='font-size:2ex;line-height:min(2lh, 30px)'><body style='margin:0'><div id=p style='font-size:large'><div id=e style='font-size:max(10px, 0.75em);flex-basis:2.10em'>xx yy</div></div></body></html>");
-    TEST_ASSERT_EQUAL(29, el("e")->flex_basis);
+    TEST_ASSERT_EQUAL(28, el("e")->flex_basis);
     lay("<html style='line-height:1.2rem'><body style='margin:0'><div id=p style='line-height:min(2lh, 30px)'><div id=e style='font-size:12pt;line-height:2.5cap;letter-spacing:2.59rem;letter-spacing:.5em'>xx yy</div></div></body></html>");
     TEST_ASSERT_EQUAL(8, el("e")->letter_spacing);
     lay("<html style='font-size:12pt'><body style='margin:0'><div id=p style='font-size:2ex;line-height:2'><div id=e style='font-size:13.5px;tab-size:2.57rlh;tab-size:3.10ic;line-height:1lh'>xx yy</div></div></body></html>");
@@ -1073,7 +1073,7 @@ static void test_l117_props_29(void) {
     lay("<html style='font-size:30px;line-height:15px'><body style='margin:0'><div id=p style='font-size:1.5ch;line-height:clamp(10px, 1.5em, 40px)'><div id=e style='line-height:1.2rem;tab-size:0lh'>xx yy</div></div></body></html>");
     TEST_ASSERT_EQUAL(0, el("e")->tab_px);
     lay("<html style=''><body style='margin:0'><div id=p style='font-size:small;line-height:15px'><div id=e style='line-height:clamp(10px, 1.5em, 40px);max-width:4cap;max-width:3lh'>xx yy</div></div></body></html>");
-    TEST_ASSERT_EQUAL(60, el("e")->w);
+    TEST_ASSERT_EQUAL(59, el("e")->w);
     lay("<html style='font-size:9.75px'><body style='margin:0'><div id=p style='line-height:3ch'><div id=e style='line-height:clamp(10px, 1.5em, 40px);padding-block:0ch'>xx yy</div></div></body></html>");
     TEST_ASSERT_EQUAL(0, el("e")->padding[0]);
     lay("<html style='font-size:3cap'><body style='margin:0'><div id=p style='font-size:0.8rlh;line-height:normal'><div id=e style='max-width:2.79cap;font-size:15.33px'>xx yy</div></div></body></html>");

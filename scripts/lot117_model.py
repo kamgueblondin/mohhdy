@@ -169,17 +169,35 @@ def math_parse(s, ctx):
     return root
 
 
+# Lot 118: the engine's math is that of scripts/lot118_model.py (values in
+# thousandths, unit leaves in hundredths of a px, the used px truncated
+# once, the CSS Values 4 functions); _UParse above is the Lot 117 reading,
+# kept for the record. A context of this model is read with the 640 x 480
+# viewport of lay().
+def ctx118(ctx):
+    import lot118_model as M118
+    return M118.Ctx(ctx.font100, ctx.root100, ctx.lh100, ctx.rlh100)
+
+
 def math_px(s, ctx, basis):
-    """the value at this percentage basis, None when refused"""
-    try:
-        return L116.ev(math_parse(s, ctx), basis)
-    except Refused:
-        return None
+    """the value at this percentage basis (whole px, truncated), None when refused"""
+    import lot118_model as M118
+    return M118.length_px(s, ctx118(ctx), basis)
+
+
+def math_milli(s, ctx, basis):
+    import lot118_model as M118
+    return M118.length_milli(s, ctx118(ctx), basis)
+
+
+def math_number(s, ctx):
+    import lot118_model as M118
+    return M118.number_milli(s, ctx118(ctx))
 
 
 def is_math(v):
-    lv = v.lower()
-    return any(lv.startswith(f + "(") for f in ("calc", "min", "max", "clamp"))
+    import lot118_model as M118
+    return M118.is_math(v)
 
 
 # ------------------------------------------------------------ font-size
@@ -202,10 +220,10 @@ def font_size100(v, parent):
     elif lv == "larger":
         h = (p * 6 + 2) // 5
     elif is_math(v):
-        px = math_px(v, parent, font_px(p))
-        if px is None or px <= 0:
+        m = math_milli(v, parent, font_px(p))     # Lot 118: hundredths kept (cut)
+        if m is None:
             return None
-        h = min(px, FONT_MAX) * 100
+        h = FONT_MAX * 100 if m > FONT_MAX * 1000 else (m // 10 if m >= 0 else -((-m) // 10))
     elif split_unit(v) is not None:
         h = unit100(v, parent)
     elif lv.endswith("px") or lv.endswith("pt"):
@@ -257,8 +275,12 @@ def lh_parse(v, ctx, parent_lh100):
     if is_math(v) or _unit_tail(v) not in (None, "em"):
         c = ctx.but(lh100=parent_lh100)
         if is_math(v):
-            px = math_px(v, c, font_px(ctx.font100))
-            h = None if px is None else px * 100
+            n = math_number(v, c)     # Lot 118: a number expression is a unitless factor
+            if n is not None:
+                n = max(0, min(n, LH_NUM_MAX * 1000))
+                return ("num", (n + 5) // 10 or 1)
+            m = math_milli(v, c, font_px(ctx.font100))
+            h = None if m is None else (m // 10 if m >= 0 else -((-m) // 10))
         else:
             h = unit100(v, c)
         if h is None or h < 0 or h > LH_MAX * 100:

@@ -386,20 +386,21 @@ static void test_l117_api(void) {
     TEST_ASSERT_EQUAL(30, el("a")->margin[3]);
 }
 
-/* math leaves: decimals only with a font-relative unit */
+/* math leaves: decimals only with a font-relative unit (Lot 118: px and
+ * numbers take decimals too) */
 static void test_l117_math_leaves(void) {
     lays("<body style='margin:0'><div style='width:600px;font-size:20px'><div id=a style='width:calc(2.5em + 10px)'>a</div>"
          "<div id=b style='width:50px;width:calc(1.5px + 2px)'>b</div><div id=c style='width:50px;width:calc(1.5 * 10px)'>c</div>"
          "<div id=d style='width:min(10em, 50%)'>d</div><div id=e style='width:calc(.5em + 1rem)'>e</div>"
          "<div id=f style='width:50px;width:calc(101em)'>f</div><div id=g style='width:calc(100em)'>g</div></div></body>");
     TEST_ASSERT_EQUAL(60, el("a")->w);
-    TEST_ASSERT_EQUAL(50, el("b")->w);
-    TEST_ASSERT_EQUAL(50, el("c")->w);
+    TEST_ASSERT_EQUAL(3, el("b")->w);               /* Lot 118: 3.5px (was refused: 50) */
+    TEST_ASSERT_EQUAL(15, el("c")->w);              /* Lot 118: 15px (was refused: 50) */
     TEST_ASSERT_EQUAL(200, el("d")->w);
     TEST_ASSERT_EQUAL(26, el("e")->w);
     TEST_ASSERT_EQUAL(50, el("f")->w);              /* 2020 px: past the 2000 literal */
     TEST_ASSERT_EQUAL(2000, el("g")->w);
-    TEST_ASSERT_EQUAL(3, diag_count("math length refused"));
+    TEST_ASSERT_EQUAL(1, diag_count("math length refused"));    /* Lot 118: was 3 */
 }
 
 /* ::before boxes have the font pass too */
