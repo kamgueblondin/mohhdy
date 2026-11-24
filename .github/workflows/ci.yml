@@ -1313,7 +1313,7 @@ jobs:
 
   # Lot 122: one boot of make qemu-lot122
   lot122-engine-rows:
-    name: QEMU row flex items: content bases, default shrink and automatic minimum in the engine (Lot 122)
+    name: QEMU row flex items with content bases, default shrink and automatic minimum in the engine (Lot 122)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
