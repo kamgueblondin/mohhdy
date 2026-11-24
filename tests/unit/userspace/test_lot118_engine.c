@@ -904,7 +904,7 @@ static void test_l118_colors(void) {
         { "rgb(1) 0 (0)", 0x010203u },
         { "rgb(calc(1)) 0 0)", 0x010203u },
         { "rgb(0 0 calc((1))", 0x010203u },
-        { "rgb(0deg 0 0)", 0x000000u },
+        { "rgb(0deg 0 0)", 0x010203u },                 /* Lot 120: an angle on the hue only */
         { "hsl(0.5turn 100 50)", 0x00ffffu },           /* numbers as percentages */
         { "hsl(180deg, 100%, 50%)", 0x00ffffu },
         { "hsl(120, 50, 50)", 0x010203u },

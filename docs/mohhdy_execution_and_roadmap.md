@@ -7,6 +7,20 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 120 (23 November 2026, base bf47b2a, PR not opened)
+
+US-031 partial, phase3_complete=false. The engine lays the root box out
+in the initial containing block: html percentage heights resolve against
+the viewport height, absolute boxes without a positioned ancestor are
+placed in the viewport, and the root's background color (else its
+body's) paints the canvas. @container reads style queries (style(--x:
+v), style(--x), not/and/or, names, mixed with size features) on the
+container's custom properties. Angle units are read on the hue channel
+only (rgb(10deg 20 30) is refused). A QEMU page (`make qemu-lot120`, CI
+job lot120-engine-root) checks it with web-inspect. First gaps for Lot
+121: background images on the canvas, overflow propagation to the
+viewport, flex growth in a definite column (docs/lot120_plan.md).
+
 ### Lot 119 (22 November 2026, base de44f7d, PR not opened)
 
 US-031 partial, phase3_complete=false. The engine evaluates container

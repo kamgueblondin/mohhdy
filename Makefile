@@ -1807,6 +1807,14 @@ qemu-lot118: $(OS_IMAGE) pack-initrd disk
 qemu-lot119: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot119.py
 
+# Lot 120: the root box and the initial containing block (percentage
+# heights of html, absolute boxes, the canvas background), container style
+# queries and the hue-only angles, read with web-inspect
+# (tests/scripts/test_qemu_lot120.py)
+.PHONY: qemu-lot120
+qemu-lot120: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot120.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py
