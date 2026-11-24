@@ -214,8 +214,8 @@ static void test_l55_intrinsic_auto_basis_uses_declared_width(void) {
 
 static void test_l55_intrinsic_auto_basis_scaled_shrink(void) {
     lot52_render("<body style='margin:0'><div style='display:flex;width:96px'>"
-        "<div id=a style='flex-basis:auto'>abcdefgh</div>"
-        "<div id=b style='flex-basis:auto'>abcdefghijklmnop</div></div></body>", 320);
+        "<div id=a style='flex-basis:auto;min-width:0'>abcdefgh</div>"
+        "<div id=b style='flex-basis:auto;min-width:0'>abcdefghijklmnop</div></div></body>", 320);
     TEST_ASSERT_EQUAL(32, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(64, lot52_node("b")->w);
     TEST_ASSERT_EQUAL(32, lot52_node("b")->x);

@@ -861,8 +861,8 @@ static void test_l52_grow_rounding_is_deterministic(void) {
 static void test_l52_negative_free_space_does_not_shrink(void) {
     const char *html =
         "<body style='margin:0'><div style='display:flex;width:100px;gap:4px'>"
-        "<div id=a style='width:70px;height:10px;flex-grow:0'></div>"
-        "<div id=b style='width:70px;height:10px;flex-grow:1'></div></div></body>";
+        "<div id=a style='width:70px;height:10px;flex-grow:0;flex-shrink:0'></div>"
+        "<div id=b style='width:70px;height:10px;flex-grow:1;flex-shrink:0'></div></div></body>";
     lot52_render(html, 120);
     TEST_ASSERT_EQUAL(70, lot52_node("a")->w);
     TEST_ASSERT_EQUAL(70, lot52_node("b")->w);
@@ -905,7 +905,7 @@ static void test_l52_wrap_uses_tallest_line_item(void) {
 static void test_l52_wrap_oversized_first_item_terminates(void) {
     const char *html =
         "<body style='margin:0'><div id=r style='display:flex;flex-wrap:wrap;width:100px;gap:4px'>"
-        "<div id=a style='width:150px;height:10px'></div>"
+        "<div id=a style='width:150px;height:10px;flex-shrink:0'></div>"
         "<div id=b style='width:20px;height:10px'></div></div></body>";
     lot52_render(html, 120);
     TEST_ASSERT_EQUAL(150, lot52_node("a")->w);

@@ -8,6 +8,15 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 122 (row flex items in the engine: auto bases from the content width, default flex-shrink 1, the automatic minimum size of row items; base a1c5f9c, PR not opened)
+
+- ETAT_REEL: a row on the flex algorithm (any item with a flex property, wrap, or a modern alignment) gives an item with an auto basis its max-content width: flex-grow: 1 items start from their content and share what is left, and an auto item next to a flex-basis item keeps its content width (it was laid out 0 wide).
+- ETAT_REEL: every item of such a row shrinks by the default factor 1 when the line overflows (the Lot 52 rule "no shrink without flex-basis or flex-shrink" is gone). A row item with min-width auto that is not a scroll container keeps at least its min-content width (capped by its definite width and max-width, padding, borders and margins included): unbreakable words no longer shrink to nothing, a flex: 1 1 0 grower held there is frozen and the others share the rest ("flex minimum prevents fit" when the line still overflows).
+- ETAT_REEL: rows measured inside another box (a column item, a float) take the same sizes. Plain rows (no flex property, no modern alignment) keep their equal slots.
+- Not covered (honest): plain rows keep equal slots and do not shrink; fractional flex factors; flex: inherit, unset, revert; aspect-ratio items' transferred minimum; osui_runtime web-theme keeps the US-041 resolver; calc-size, anchor, typed attr, margin collapsing.
+- we_doc_t 874692 bytes and we_node_t 4688 (unchanged). Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false. QEMU page /web/lot122.html (`make qemu-lot122`, CI job lot122-engine-rows).
+- Detail and gaps: docs/lot122_plan.md.
+
 ## Lot 121 (flex items in the engine: the flex shorthand and flex-flow, the automatic minimum size of column items, columns always on the flex algorithm, min-height auto and max-height none; the guest pipeline hands the style sheet's custom properties to the engine; base 8056dbe, PR not opened)
 
 - ETAT_REEL: flex (none, auto, initial, <grow> [<shrink>] || <basis>, integer factors) and flex-flow are read (they were unknown properties, flex: 1 did nothing). A refused value sets nothing ("flex refused", "flex-flow refused").
