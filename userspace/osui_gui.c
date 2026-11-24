@@ -160,7 +160,8 @@ static void web_num(char *d, int max, const char *label, int v) {
 /* Lot 6: page pipeline. US-042 <template> components are expanded in the
  * HTML, then the engine parses; the collected CSS goes through US-040
  * @media flattening for the viewport and US-041 var() resolution before the
- * cascade. Counters are kept for the status line. */
+ * cascade (Lot 121: var() is left to the engine). Counters are kept for the
+ * status line. */
 static int g_web_components, g_web_media_kept, g_web_media_dropped, g_web_vars, g_web_vars_unresolved;
 static char g_web_tmp[OSUI_WEB_SRC_MAX];
 static char g_web_san[OSUI_WEB_SRC_MAX];
@@ -237,11 +238,13 @@ static int osui_web_pipeline(const char *src, int n) {
         vp.width = g_web_vw; vp.height = OSUI_WEB_VIEWPORT_H; vp.dark = 0;
         m = webrt_css_flatten_media(g_web.css, &vp, css1, WE_CSS_MAX, &kept, &dropped);
         if (m >= 0) {
-            m = webrt_css_resolve_vars(css1, css2, WE_CSS_MAX, &vdef, &unres);
-            if (m >= 0) {
-                for (k = 0; k < m && k < WE_CSS_MAX - 1; k++) g_web.css[k] = css2[k];
-                g_web.css_len = (uint32_t)k;
-            }
+            /* Lot 121: the engine resolves var() itself (Lot 73: inherited
+             * custom properties, fallbacks, @property; style() queries read
+             * them), so it gets the sheet with its --x declarations. The
+             * US-041 pass only counts them for the status line. */
+            (void)webrt_css_resolve_vars(css1, css2, WE_CSS_MAX, &vdef, &unres);
+            for (k = 0; k < m && k < WE_CSS_MAX - 1; k++) g_web.css[k] = css1[k];
+            g_web.css_len = (uint32_t)k;
         }
         g_web_media_kept = kept; g_web_media_dropped = dropped;
         g_web_vars = vdef; g_web_vars_unresolved = unres;

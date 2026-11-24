@@ -1311,6 +1311,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 121: one boot of make qemu-lot121
+  lot121-engine-flex:
+    name: QEMU flex shorthand, automatic minimum of column flex items and sheet custom properties in the engine (Lot 121)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 121 boot
+        run: make qemu-lot121
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot121-engine-flex-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 120: one boot of make qemu-lot120
   lot120-engine-root:
     name: QEMU root box, initial containing block, canvas background and container style queries in the engine (Lot 120)

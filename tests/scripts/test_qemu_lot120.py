@@ -20,9 +20,9 @@ is 50% x 25% of the viewport, 320 x 120. #d120 gets the rules of
 style((--theme: dark) and (--size: 2)), 50 px, and not the red of
 style(--theme: light). #f120 keeps color #0000ff: rgb(10deg 20 30) is
 refused (Lot 119 read it as #0a141e) while hsl(240deg 100% 50%) is
-#0000ff. #c120 sets --theme and --size in its style attribute: the guest
-pipeline resolves the custom properties of the style sheet before the
-engine (webrt_css_resolve_vars, Lot 7). web-console reports "container query refused" (style(color: red))
+#0000ff. #c120 sets --theme and --size in the style sheet (Lot 121: the
+guest pipeline hands them to the engine; Lot 120 had them in the style
+attribute). web-console reports "container query refused" (style(color: red))
 and "color refused", diag 2.
 """
 from __future__ import print_function

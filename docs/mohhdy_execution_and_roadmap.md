@@ -7,6 +7,17 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 121 (24 November 2026, base 8056dbe, PR not opened)
+
+US-031 partial, phase3_complete=false. The engine reads the flex
+shorthand and flex-flow, gives column flex items their automatic minimum
+size (content height) and lays every column container out with the flex
+algorithm (definite and percentage heights, auto bases from content,
+default shrink), and accepts min-height auto and max-height none. The
+guest page pipeline hands the style sheet's custom properties to the
+engine. QEMU page /web/lot121.html (`make qemu-lot121`, CI job
+lot121-engine-flex), host tests test_lot121_engine.c, docs/lot121_plan.md.
+
 ### Lot 120 (23 November 2026, base bf47b2a, PR not opened)
 
 US-031 partial, phase3_complete=false. The engine lays the root box out

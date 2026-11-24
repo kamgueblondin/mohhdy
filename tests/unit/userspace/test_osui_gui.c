@@ -467,6 +467,37 @@ static void test_gui_web_pane_pipeline(void) {
 }
 
 
+/* Lot 121: the page pipeline hands the style sheet's custom properties to
+ * the engine: each element reads its own --c (the US-041 pass kept one
+ * global value, the last), and a container style query sees a sheet --t.
+ * The status line still counts the sheet's custom properties. */
+we_doc_t *osui_gui_web_doc(void);
+static void test_gui_web_sheet_custom_properties(void) {
+    we_doc_t *doc;
+    int a, b, q;
+    setup();
+    osui_gui_set_ide_ops(fake_load, fake_save, fake_exec);
+    strcpy(g_fake_file,
+           "<style>.a{--c:#ff0000} .b{--c:#0000ff} .a,.b{background:var(--c);height:10px}"
+           " #p{--t:dark} @container style(--t: dark){#q{background:#00ff00}}</style>"
+           "<div class=a id=a></div><div class=b id=b></div><div id=p><div id=q style='height:10px'></div></div>");
+    g_fake_len = (int)strlen(g_fake_file);
+    feed_str("web t.html");
+    osui_gui_feed_key('\n', g_out, (int)sizeof(g_out));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, "osui web render file=t.html"));
+    TEST_ASSERT_NOT_NULL(strstr(g_out, " vars 2"));
+    doc = osui_gui_web_doc();
+    a = we_find_id(doc, "a"); b = we_find_id(doc, "b"); q = we_find_id(doc, "q");
+    TEST_ASSERT_TRUE(a >= 0 && b >= 0 && q >= 0);
+    TEST_ASSERT_EQUAL(1, doc->nodes[a].has_bg);
+    TEST_ASSERT_EQUAL((int)0xFF0000U, (int)(doc->nodes[a].bg & 0xFFFFFFU));
+    TEST_ASSERT_EQUAL((int)0x0000FFU, (int)(doc->nodes[b].bg & 0xFFFFFFU));
+    TEST_ASSERT_EQUAL(1, doc->nodes[q].has_bg);
+    TEST_ASSERT_EQUAL((int)0x00FF00U, (int)(doc->nodes[q].bg & 0xFFFFFFU));
+    osui_gui_feed_key(OS_VGA_KEY_ESC, g_out, (int)sizeof(g_out));
+    osui_gui_set_ide_ops(0, 0, 0);
+}
+
 /* Lot 72: a local UTF-8 page with Greek and Cyrillic: the source becomes
  * display bytes run by run (page reset at every tag), the engine gives
  * TEXT items with their page in pad, and the scene keeps the page bytes
@@ -2368,6 +2399,7 @@ int main(void) {
     RUN_TEST(test_gui_media_rendering);
     RUN_TEST(test_gui_pm_ide_fullscreen);
     RUN_TEST(test_gui_web_pane_pipeline);
+    RUN_TEST(test_gui_web_sheet_custom_properties);
     RUN_TEST(test_gui_web_glyph_pages);
     RUN_TEST(test_gui_web_pipeline_sanitized);
     RUN_TEST(test_gui_mobile_pane);
