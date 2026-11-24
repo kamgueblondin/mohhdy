@@ -1311,6 +1311,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 123: one boot of make qemu-lot123
+  lot123-engine-plain-rows:
+    name: QEMU plain flex rows on the flex algorithm with default stretch in the engine (Lot 123)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 123 boot
+        run: make qemu-lot123
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot123-engine-plain-rows-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 122: one boot of make qemu-lot122
   lot122-engine-rows:
     name: QEMU row flex items with content bases, default shrink and automatic minimum in the engine (Lot 122)

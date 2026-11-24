@@ -198,10 +198,12 @@ static void test_l52_flex_all_zero_leaves_free_space(void) {
     TEST_ASSERT_EQUAL(1, g_doc.perf.flex_lines);
 }
 
+/* Lot 123: plain rows have no equal slots any more; width: 100% keeps the
+ * full-width item of the two refusal tests below */
 static void test_l52_flex_fractional_grow_refused(void) {
     const char *html =
         "<body style='margin:0'><div style='display:flex'>"
-        "<div id=a style='height:10px;flex-grow:0.5'></div></div></body>";
+        "<div id=a style='height:10px;width:100%;flex-grow:0.5'></div></div></body>";
     lot52_render(html, 320);
     TEST_ASSERT_EQUAL(-1, lot52_node("a")->flex_grow);
     TEST_ASSERT_TRUE(lot52_has_diag("flex-grow refused"));
@@ -211,7 +213,7 @@ static void test_l52_flex_fractional_grow_refused(void) {
 static void test_l52_flex_grow_overflow_refused(void) {
     const char *html =
         "<body style='margin:0'><div style='display:flex'>"
-        "<div id=a style='height:10px;flex-grow:999999999999999'></div></div></body>";
+        "<div id=a style='height:10px;width:100%;flex-grow:999999999999999'></div></div></body>";
     lot52_render(html, 320);
     TEST_ASSERT_EQUAL(-1, lot52_node("a")->flex_grow);
     TEST_ASSERT_TRUE(lot52_has_diag("flex-grow refused"));
@@ -613,12 +615,13 @@ static void test_l52_decimal_list_marker(void) {
     TEST_ASSERT_EQUAL(24, find_text("second")->x);
 }
 
+/* Lot 123: the legacy equal columns are gone; flex: 1 1 0 gives the same slots */
 static void test_l52_legacy_auto_equal_columns(void) {
     const char *html =
         "<body style='margin:0'><div id=r style='display:flex;gap:6px'>"
-        "<div id=a style='height:10px'>A</div>"
-        "<div id=b style='height:20px'>B</div>"
-        "<div id=c style='height:15px'>C</div></div></body>";
+        "<div id=a style='height:10px;flex:1 1 0'>A</div>"
+        "<div id=b style='height:20px;flex:1 1 0'>B</div>"
+        "<div id=c style='height:15px;flex:1 1 0'>C</div></div></body>";
     const we_node_t *a, *b, *c;
     lot52_render(html, 120);
     a = lot52_node("a");
@@ -871,11 +874,12 @@ static void test_l52_negative_free_space_does_not_shrink(void) {
     TEST_ASSERT_EQUAL(1, g_doc.perf.flex_lines);
 }
 
+/* Lot 123: the inner items say flex: 1 1 0 (plain rows have no equal slots) */
 static void test_l52_nested_flex_keeps_outer_workspace(void) {
     const char *html =
         "<body style='margin:0'><div style='display:flex;width:120px'>"
         "<div id=inner style='display:flex;width:40px;flex-grow:0'>"
-        "<div id=a style='height:10px'></div><div id=b style='height:10px'></div></div>"
+        "<div id=a style='height:10px;flex:1 1 0'></div><div id=b style='height:10px;flex:1 1 0'></div></div>"
         "<div id=c style='height:20px;flex-grow:1'></div></div></body>";
     lot52_render(html, 160);
     TEST_ASSERT_EQUAL(40, lot52_node("inner")->w);

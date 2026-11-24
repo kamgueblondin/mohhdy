@@ -168,8 +168,10 @@ static void test_l64_vertical_flex_and_nesting(void) {
      * intrinsic estimate is the max-content cut in inline sizes (64 px at 16: 4 lines).
      * Lot 121: the flex shorthand is read now; these items never had flex:none
      * applied (it was an unknown property), so it is dropped to keep the path
-     * this test was written for (with flex:none the item takes the 40 px estimate). */
-    lot52_render(L64_BODY "<div style='display:flex;width:100px'><div id=v style='writing-mode:vertical-rl;height:16px'>ab cd ef</div>"
+     * this test was written for (with flex:none the item takes the 40 px estimate).
+     * Lot 123: plain rows take the flex algorithm too, whose auto basis is that
+     * estimate; width: 30px keeps the laid-out size the test pins. */
+    lot52_render(L64_BODY "<div style='display:flex;width:100px'><div id=v style='writing-mode:vertical-rl;height:16px;width:30px'>ab cd ef</div>"
                  "<div id=n>z</div></div></body>", 320);
     l64_box("v", 0, 0, 30, 16);
     l64_glyph('a', 21, 0);

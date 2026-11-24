@@ -56,8 +56,8 @@ static void test_l64_column_cases(void) {
     lot52_render(L64_BODY "<div id=w style='column-count:4;width:20px;column-gap:0'><div>a</div><div>b</div><div>c</div><div>d</div></div></body>", 320);
     l61_text_at("c", 10, 1);                                  /* 4 columns of 5 px: 2 of 10 */
     l61_text_at("d", 10, 11);
-    lot52_render(L64_BODY "<div style='display:flex;column-count:2;width:40px'><div>a</div><div>b</div></div></body>", 320);
-    l61_text_at("b", 20, 1);                                  /* flex items, no columns */
+    lot52_render(L64_BODY "<div style='display:flex;column-count:2;width:40px'><div style='flex:1 1 0'>a</div><div style='flex:1 1 0'>b</div></div></body>", 320);
+    l61_text_at("b", 20, 1);                                  /* flex items, no columns (Lot 123: flex 1 1 0 slots) */
     lot52_render(L64_BODY "<div style='column-count:2;width:40px;height:10px'><div>a</div><div>b</div><div>c</div><div>d</div></div></body>", 320);
     TEST_ASSERT_EQUAL(1, l61_diag_count("columns overflow"));  /* capped at the height */
     l61_text_at("b", 24, 1);

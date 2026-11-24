@@ -96,6 +96,8 @@ static void test_l63_gen_none_and_display(void) {
     TEST_ASSERT_EQUAL(find_text("t")->y + 10, find_text("s")->y);
 }
 
+/* Lot 123: the three flex items say flex: 1 1 0 in 318 px (plain rows have no
+ * equal slots any more; 318 keeps the 106 px thirds) */
 static void test_l63_gen_clearfix_and_flex(void) {
     lot52_render(L63_STYLE(".c::before{content:'';display:block;clear:both;height:4px}.c::after{content:'z';display:block;clear:both}")
                  "<div class=c id=a>q<div style='float:left;width:20px;height:30px;background:#ff0000'></div>w</div></body>", 320);
@@ -105,7 +107,7 @@ static void test_l63_gen_clearfix_and_flex(void) {
     lot52_render(L63_STYLE(".c::after{content:'z';display:block}")
                  "<div class=c id=a><div style='float:left;width:20px;height:30px;background:#ff0000'></div>w</div></body>", 320);
     TEST_ASSERT_EQUAL(20, l63_tx("z"));                   /* without clear it flows beside the float */
-    lot52_render(L63_STYLE("#f{display:flex}#f::before{content:'L'}#f::after{content:'R'}")
+    lot52_render(L63_STYLE("#f{display:flex;width:318px}#f::before{content:'L';flex:1 1 0}#f::after{content:'R';flex:1 1 0}#f span{flex:1 1 0}")
                  "<div id=f><span>m</span></div></body>", 320);
     TEST_ASSERT_EQUAL(0, l63_tx("L"));                    /* flex items like the span between them */
     TEST_ASSERT_EQUAL(106, l63_tx("m"));
