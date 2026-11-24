@@ -1823,6 +1823,12 @@ qemu-lot120: $(OS_IMAGE) pack-initrd disk
 qemu-lot121: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot121.py
 
+# Lot 122: row flex items (content bases, default shrink, automatic minimum
+# of row items), read with web-inspect (tests/scripts/test_qemu_lot122.py)
+.PHONY: qemu-lot122
+qemu-lot122: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot122.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

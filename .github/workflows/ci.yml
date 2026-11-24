@@ -1311,6 +1311,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 122: one boot of make qemu-lot122
+  lot122-engine-rows:
+    name: QEMU row flex items: content bases, default shrink and automatic minimum in the engine (Lot 122)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 122 boot
+        run: make qemu-lot122
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot122-engine-rows-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 121: one boot of make qemu-lot121
   lot121-engine-flex:
     name: QEMU flex shorthand, automatic minimum of column flex items and sheet custom properties in the engine (Lot 121)

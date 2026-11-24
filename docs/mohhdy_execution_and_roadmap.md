@@ -7,6 +7,16 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 122 (24 November 2026, base a1c5f9c, PR not opened)
+
+US-031 partial, phase3_complete=false. Rows on the flex algorithm give
+auto bases their max-content width (an auto item was laid out 0 wide
+next to a flex-basis item), shrink every item by the default factor 1,
+and keep row items with min-width auto at their min-content width
+(automatic minimum size). Plain rows keep their equal slots. QEMU page
+/web/lot122.html (`make qemu-lot122`, CI job lot122-engine-rows), host
+tests test_lot122_engine.c, docs/lot122_plan.md.
+
 ### Lot 121 (24 November 2026, base 8056dbe, PR not opened)
 
 US-031 partial, phase3_complete=false. The engine reads the flex

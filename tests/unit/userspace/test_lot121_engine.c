@@ -241,8 +241,8 @@ static void test_l121_auto_minimum(void) {
     lays("<div style='display:flex;flex-direction:column;height:15px'><div id=a>t</div><div id=b>u</div></div>");
     BOX("a", 0, 0, 640, 10); BOX("b", 0, 10, 640, 10);
     EQ_MSG(1, diag_count("flex minimum prevents fit"), "overflow diag");
-    /* rows keep no automatic minimum (not in this lot) */
-    lays("<div style='display:flex;width:100px'><div id=a style='flex-grow:1;flex-basis:0'>aaaaaaaaaaaaaaaaaaaa</div><div id=b style='flex-grow:1;flex-basis:0'>b</div></div>");
+    /* rows: min-width 0 turns the automatic minimum off (Lot 122 gives rows one) */
+    lays("<div style='display:flex;width:100px'><div id=a style='flex-grow:1;flex-basis:0;min-width:0'>aaaaaaaaaaaaaaaaaaaa</div><div id=b style='flex-grow:1;flex-basis:0;min-width:0'>b</div></div>");
     BOX("a", 0, 0, 50, 10); BOX("b", 50, 0, 50, 10);
     /* a row with flex bases keeps the sizing path */
     lays("<div style='display:flex'><div id=a style='flex-basis:50px'>x</div><div id=b style='flex-basis:60px'>y</div></div>");
