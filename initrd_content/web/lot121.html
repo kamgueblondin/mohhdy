@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html id="r121">
+<head><title>Lot 121 flex shorthand, automatic minimum, sheet custom properties</title>
+<style>
+html { height: 100% }
+body { margin: 0; height: 100%; display: flex; flex-flow: column }
+#h121 { flex: none; height: 20px; background: #000080 }
+#m121 { flex: 1; min-height: auto }
+#z121 { flex: 0 0 30px; background: #800000 }
+#c121 { display: flex; flex-direction: column; height: 100px }
+#a121 { flex: 1; background: #008000 }
+#b121 { flex: 1; background: #808000 }
+#d121 { display: flex; flex-direction: column }
+#e121, #f121 { flex: 1 1 0 }
+.p121 { --w121: 120px }
+.p121.n121 { --w121: 60px }
+.q121 { width: var(--w121); height: 10px; background: #000000 }
+#x121 { flex: 1 10px 2 }
+</style></head>
+<body id="y121">
+<div id="h121"></div>
+<div id="m121">
+<div id="c121"><div id="a121"><div style="height: 60px"></div></div><div id="b121">b</div></div>
+<div id="d121"><div id="e121">e</div><div id="f121">f</div></div>
+<div class="p121"><div id="q121" class="q121"></div></div>
+<div class="p121 n121"><div id="s121" class="q121"></div></div>
+<div id="x121"></div>
+</div>
+<div id="z121"></div>
+</body>
+</html>

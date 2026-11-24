@@ -3153,6 +3153,7 @@ static int legacy_length_valid(int slot, const char *v, int len) {
     }
     if (slot == WE_LEN_BASIS && (value_is(v, len, "auto") || value_is(v, len, "content"))) return 1;
     if (slot == WE_LEN_HEIGHT && value_is(v, len, "auto")) return 1;
+    if ((slot == WE_LEN_MIN_H && value_is(v, len, "auto")) || (slot == WE_LEN_MAX_H && value_is(v, len, "none"))) return 1;   /* Lot 121 */
     if (slot == WE_LEN_HEIGHT || slot == WE_LEN_MIN_H || slot == WE_LEN_MAX_H) return parse_height(v, len, &a, &b) == 0;
     if (slot >= WE_LEN_LEFT && slot <= WE_LEN_BOTTOM) return parse_len(v, len, &a, 0) == 0;
     return parse_dimension(v, len, &a, &b) == 0 && (slot < WE_LEN_ROW_GAP || !b);
@@ -4774,6 +4775,69 @@ static int mode_pass;   /* lot 64: 1 while only writing-mode/direction apply */
  * applies them again to the same values (font-size against the parent,
  * lh in line-height against the parent's line height). */
 static int font_pass;
+static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl);
+
+/* Lot 121: a flex factor, an integer 0..1000 as flex-grow and flex-shrink read */
+static int flex_factor(const char *v, int len, int *out) {
+    return bounded_uint(v, len, 1000, out) == 0 || math_integer(v, len, 0, 1000, out) == 0 ? 0 : -1;
+}
+
+/* Lot 121: the flex shorthand (CSS Flexbox 7.1.1): none (0 0 auto),
+ * initial (0 1 auto), or <grow> [<shrink>] || <basis> with the two factors
+ * next to each other (auto, 1 1 auto, is this form with an auto basis);
+ * omitted factors are 1, an omitted basis is 0. A unitless 0 is a factor until two factors are read. The basis goes
+ * through the flex-basis declaration; nothing is set when a part is refused
+ * (the longhand's own diagnostic is taken back). */
+static int flex_shorthand(we_doc_t *d, we_node_t *n, const char *v, int vl) {
+    int a[4], l[4], c = tokens(v, vl, a, l), k, nums = 0, factor[2] = { 1, 1 }, basis = -1, value;
+    uint32_t ndiag = d->ndiag, dropped = d->diag_dropped;
+    const char *bv = "0";
+    int bl = 1;
+    if (c == 1 && value_is(v, vl, "none")) { factor[0] = 0; factor[1] = 0; bv = "auto"; bl = 4; }
+    else if (c == 1 && value_is(v, vl, "initial")) { factor[0] = 0; bv = "auto"; bl = 4; }
+    else {
+        /* an empty value never gets here; a fourth part is refused below
+         * (two factors and one basis at most) */
+        for (k = 0; k < c; k++) {
+            int raw;
+            if (nums < 2 && flex_factor(v + a[k], l[k], &value) == 0) {
+                if (nums == 1 && basis == k - 1) return -1;   /* grow <basis> shrink */
+                factor[nums++] = value;
+            } else if (basis >= 0 || (bounded_uint(v + a[k], l[k], WE_LAYOUT_MAX, &raw) == 0 && raw)) return -1;   /* a unitless basis is 0 only */
+            else basis = k;
+        }
+        if (basis >= 0) { bv = v + a[basis]; bl = l[basis]; }
+    }
+    apply_decl(d, n, "flex-basis", 10, bv, bl);
+    d->perf.decls_applied--;
+    if (d->ndiag != ndiag || d->diag_dropped != dropped) {
+        d->ndiag = ndiag; d->diag_dropped = dropped;
+        return -1;
+    }
+    n->flex_grow = (int16_t)factor[0];
+    n->flex_shrink = (int16_t)factor[1];
+    return 0;
+}
+
+/* Lot 121: flex-flow: <flex-direction> || <flex-wrap>; an omitted part is
+ * its initial value (row, nowrap). */
+static int flex_flow(we_node_t *n, const char *v, int vl) {
+    static const char *const dirs[4] = { "row", "row-reverse", "column", "column-reverse" };
+    static const char *const wraps[3] = { "nowrap", "wrap", "wrap-reverse" };
+    int a[4], l[4], c = tokens(v, vl, a, l), k, j, dir = 0, wrap = 0;
+    /* never empty here; a third part repeats a kind and is refused below */
+    for (k = 0; k < c; k++) {
+        int hit = 0;
+        for (j = 0; j < 4; j++) if (value_is(v + a[k], l[k], dirs[j])) { if (dir) return -1; dir = j + 1; hit = 1; }
+        for (j = 0; j < 3; j++) if (value_is(v + a[k], l[k], wraps[j])) { if (wrap) return -1; wrap = j + 1; hit = 1; }
+        if (!hit) return -1;
+    }
+    n->flex_dir = (uint8_t)(dir > 2);
+    n->flex_reverse = (uint8_t)(dir == 2 || dir == 4);
+    n->flex_wrap = (uint8_t)(wrap ? wrap - 1 : 0);
+    return 0;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[40];
     int px, pct, k;
@@ -4884,6 +4948,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else if (value_is(v, vl, "wrap")) n->flex_wrap = 1;
         else if (value_is(v, vl, "wrap-reverse")) n->flex_wrap = 2;
         else diag(d, "flex-wrap refused", -1);
+    } else if (w_eq(prop, "flex")) {
+        if (flex_shorthand(d, n, v, vl)) diag(d, "flex refused", -1);
+    } else if (w_eq(prop, "flex-flow")) {
+        if (flex_flow(n, v, vl)) diag(d, "flex-flow refused", -1);
     } else if (w_eq(prop, "flex-grow")) {
         if (bounded_uint(v, vl, 1000, &px) == 0 || math_integer(v, vl, 0, 1000, &px) == 0) n->flex_grow = (int16_t)px;
         else diag(d, "flex-grow refused", -1);
@@ -5503,7 +5571,12 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         }
     } else if (w_eq(prop, "min-height") || w_eq(prop, "max-height")) {
         int number, percent;
-        if (parse_height(v, vl, &number, &percent)) diag(d, "height limit refused", -1);
+        /* Lot 121: min-height auto (the automatic minimum of a flex item) and
+         * max-height none are the unset values */
+        if (value_is(v, vl, w_eq(prop, "min-height") ? "auto" : "none")) {
+            if (w_eq(prop, "min-height")) { n->min_height = -1; n->min_height_percent = 0; }
+            else { n->max_height = -1; n->max_height_percent = 0; }
+        } else if (parse_height(v, vl, &number, &percent)) diag(d, "height limit refused", -1);
         else if (w_eq(prop, "min-height")) {
             n->min_height = percent ? -1 : (int16_t)number;
             n->min_height_pct = (int16_t)number;
@@ -9919,6 +9992,12 @@ typedef struct {
     int size[WE_MAX_NODES];
     uint32_t shrink_weight[WE_MAX_NODES];
 } we_track_work_t;
+/* Lot 121: until the cross pass of its line (which writes cross[] and
+ * baseline[]), a flex item keeps there its outer flex base size (-1 once
+ * frozen at its minimum) and its outer automatic minimum: the layout
+ * workspace has no room for two more arrays per depth. */
+#define FLEX_BASE(w, k) ((w)->cross[k])
+#define FLEX_FLOOR(w, k) ((w)->baseline[k])
 static we_track_work_t track_work[WE_DEPTH_MAX + 1];
 
 static int collect_items(we_doc_t *d, int idx, we_track_work_t *work) {
@@ -10850,13 +10929,13 @@ static void grow_line(we_doc_t *d, we_track_work_t *work, int first, int end, in
         int k, weight = 0, given = 0;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
-            if (n->flex_grow > 0 && work->size[k] < grow_limit(n, containing, vertical)) weight += n->flex_grow;
+            if (n->flex_grow > 0 && FLEX_BASE(work, k) >= 0 && work->size[k] < grow_limit(n, containing, vertical)) weight += n->flex_grow;
         }
         if (!weight) break;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
             int room = grow_limit(n, containing, vertical) - work->size[k], take;
-            if (n->flex_grow <= 0 || room <= 0) continue;
+            if (n->flex_grow <= 0 || FLEX_BASE(work, k) < 0 || room <= 0) continue;
             take = free * n->flex_grow / weight;
             if (take > room) take = room;
             work->size[k] += take;
@@ -10866,7 +10945,7 @@ static void grow_line(we_doc_t *d, we_track_work_t *work, int first, int end, in
         if (!given) {
             for (k = first; k < end && free; k++) {
                 const we_node_t *n = &d->nodes[work->node[k]];
-                if (n->flex_grow > 0 && work->size[k] < grow_limit(n, containing, vertical)) {
+                if (n->flex_grow > 0 && FLEX_BASE(work, k) >= 0 && work->size[k] < grow_limit(n, containing, vertical)) {
                     work->size[k]++;
                     free--;
                 }
@@ -10900,6 +10979,31 @@ static int shrink_floor(const we_node_t *n, int containing, int vertical) {
     return minimum > 0 ? minimum : 0;
 }
 
+/* Lot 121: the automatic minimum when there is one, else the specified one.
+ * An automatic minimum exists only with min-height auto, where the specified
+ * minimum is the padding and border it already includes. */
+static int line_floor(const we_track_work_t *work, int k, const we_node_t *n, int containing, int vertical) {
+    return FLEX_FLOOR(work, k) ? FLEX_FLOOR(work, k) : shrink_floor(n, containing, vertical);
+}
+
+/* Lot 121: grow from the flex base sizes; a grower that ends below its
+ * automatic minimum is frozen there and the line is grown again (CSS
+ * Flexbox 9.7.4). Without such minimums this is one grow_line. */
+static void grow_floors(we_doc_t *d, we_track_work_t *work, int first, int end, int main, int gap, int vertical) {
+    int pass, k;
+    for (pass = 0; pass <= end - first; pass++) {
+        int used = (end - first - 1) * gap, again = 0;
+        for (k = first; k < end; k++) {
+            if (d->nodes[work->node[k]].flex_grow > 0 && FLEX_BASE(work, k) >= 0) work->size[k] = FLEX_BASE(work, k);
+            used += work->size[k];
+        }
+        if (main > used) grow_line(d, work, first, end, main - used, main, vertical);
+        for (k = first; k < end; k++)
+            if (work->size[k] < FLEX_FLOOR(work, k)) { work->size[k] = FLEX_FLOOR(work, k); FLEX_BASE(work, k) = -1; again = 1; }
+        if (!again) return;
+    }
+}
+
 /* Freeze an item at its minimum, then redistribute the remaining deficit
  * using the original scaled bases. At most one pass per node plus rounding. */
 static void shrink_line(we_doc_t *d, we_track_work_t *work, int first, int end,
@@ -10910,12 +11014,12 @@ static void shrink_line(we_doc_t *d, we_track_work_t *work, int first, int end,
         int k, taken = 0;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
-            if (work->size[k] > shrink_floor(n, containing, vertical)) weight += work->shrink_weight[k];
+            if (work->size[k] > line_floor(work, k, n, containing, vertical)) weight += work->shrink_weight[k];
         }
         if (!weight) break;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
-            int room = work->size[k] - shrink_floor(n, containing, vertical), take;
+            int room = work->size[k] - line_floor(work, k, n, containing, vertical), take;
             if (room <= 0 || !work->shrink_weight[k]) continue;
             take = (int)flex_share((uint32_t)deficit, work->shrink_weight[k], weight);
             if (take > room) take = room;
@@ -10926,7 +11030,7 @@ static void shrink_line(we_doc_t *d, we_track_work_t *work, int first, int end,
         if (!taken) {
             for (k = first; k < end && deficit; k++) {
                 const we_node_t *n = &d->nodes[work->node[k]];
-                if (work->shrink_weight[k] && work->size[k] > shrink_floor(n, containing, vertical)) {
+                if (work->shrink_weight[k] && work->size[k] > line_floor(work, k, n, containing, vertical)) {
                     work->size[k]--;
                     deficit--;
                 }
@@ -11043,6 +11147,22 @@ static int item_baseline(const we_doc_t *d, int c, int last) {
     return limit_coord(d->nodes[c].y + d->nodes[c].h);
 }
 
+/* Lot 121: automatic minimum size of a column flex item (CSS Flexbox 4.5):
+ * with min-height auto and no scroll container, its content height (the
+ * measurement already applies max-height), at most its definite height.
+ * Outer size; 0 otherwise. */
+static int flex_auto_floor(we_doc_t *d, int c, int cw, int depth) {
+    const we_node_t *n = &d->nodes[c];
+    int content, fixed;
+    if (n->min_height >= 0 || n->min_height_percent || n->overflow_hidden) return 0;   /* a math min-height sets min_height too */
+    measure_content[c] = 1;
+    content = measure_area_height(d, c, cw, depth + 1) - flex_extra(n, 1);
+    measure_content[c] = 0;
+    fixed = definite_height(d, c, 0);
+    if (fixed >= 0 && fixed < content) content = fixed;
+    return (content > 0 ? content : 0) + flex_extra(n, 1);
+}
+
 static void prepare_flex(we_doc_t *d, int idx, int cw,
                               int depth, int count, int sizing, int modern) {
     we_node_t *n = &d->nodes[idx];
@@ -11080,12 +11200,11 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
         else if (vertical) {
             int fixed = child->basis_content ? -1 : definite_height(d, work->node[k], 0);
             if (fixed >= 0) basis = fixed;
-            else if (intrinsic || modern || child->flex_shrink >= 0) {
+            else {   /* Lot 121: an auto basis is the content height, also for plain growers */
                 measure_content[work->node[k]] = child->basis_content;
                 basis = measure_area_height(d, work->node[k], cw, depth + 1) - flex_extra(child, 1);
                 measure_content[work->node[k]] = 0;
             }
-            else basis = 0;
         } else if (child->basis_content) basis = child->max_content;
         else basis = specified_width(child, cw, intrinsic || modern ? child->max_content : wrap ? WE_CHAR_W : 0);
         basis = content_value(basis, 0, 0);
@@ -11093,6 +11212,9 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
                          constrained_width(child, basis, cw)) + flex_extra(child, vertical);
         if (work->size[k] < 0) work->size[k] = 0;
         work->shrink_weight[k] = (uint32_t)basis * (uint32_t)factor;
+        FLEX_BASE(work, k) = work->size[k];
+        FLEX_FLOOR(work, k) = vertical ? flex_auto_floor(d, work->node[k], cw, depth) : 0;
+        if (work->size[k] < FLEX_FLOOR(work, k)) work->size[k] = FLEX_FLOOR(work, k);   /* hypothetical size */
     }
     k = 0;
     while (k < count) {
@@ -11108,7 +11230,7 @@ static void prepare_flex(we_doc_t *d, int idx, int cw,
         line->end = k;
         if (main >= 0) {
             if (used > main && (sizing || modern)) shrink_line(d, work, line->first, k, used - main, main, vertical);
-            else if (main > used) grow_line(d, work, line->first, k, main - used, main, vertical);
+            else if (main > used) grow_floors(d, work, line->first, k, main, gap, vertical);
         }
         line->used = (k - line->first - 1) * gap;
         line->cross = 0;
@@ -11161,7 +11283,10 @@ static void flex_modes(const we_doc_t *d, int idx, const we_track_work_t *work,
                        int count, int *sizing, int *modern) {
     const we_node_t *n = &d->nodes[idx];
     int k;
-    *sizing = n->flex_dir && (n->min_height >= 0 || n->max_height >= 0 || n->min_height_percent || n->max_height_percent);
+    /* Lot 121: a column always takes the flex algorithm (bases, grow, shrink
+     * by the default factor 1, automatic minimums); the old stacking path
+     * ignored percent and definite heights and auto bases. */
+    *sizing = n->flex_dir != 0;
     *modern = n->justify_content || n->align_items || n->align_content || n->row_gap >= 0 || n->col_gap >= 0 || n->flex_reverse || n->flex_wrap == 2;
     for (k = 0; k < count; k++) {
         const we_node_t *child = &d->nodes[work->node[k]];
@@ -11170,8 +11295,7 @@ static void flex_modes(const we_doc_t *d, int idx, const we_track_work_t *work,
             child->min_width_kind || child->max_width_kind || child->basis_kind) *modern = 1;
         if (child->align_self || child->basis_content || child->border_box || child->aspect_num || child->height_percent ||
             child->min_height_percent || child->max_height_percent || child->width_kind) *modern = 1;
-        if (child->basis_set || child->flex_shrink >= 0 ||
-            (n->flex_dir && (child->min_height >= 0 || child->max_height >= 0))) *sizing = 1;
+        if (child->basis_set || child->flex_shrink >= 0) *sizing = 1;
     }
 }
 
@@ -11179,17 +11303,16 @@ static int measure_flex(we_doc_t *d, int idx, int width, int depth) {
     const we_node_t *n = &d->nodes[idx];
     we_track_work_t *work = &track_work[depth];
     int count = collect_items(d, idx, work), sizing, modern, k, grow = 0;
-    int height = 0, gap = axis_gap(n, n->flex_dir != 0);
+    int height = 0, gap = axis_gap(n, 0);
     if (!count) return 0;
     flex_modes(d, idx, work, count, &sizing, &modern);
     for (k = 0; k < count; k++) if (d->nodes[work->node[k]].flex_grow >= 0) grow = 1;
-    if (!sizing && !modern && (n->flex_dir || (!grow && !n->flex_wrap))) {
-        int each = n->flex_dir ? width : (width - (count - 1) * gap) / count;
+    if (!sizing && !modern && !grow && !n->flex_wrap) {
+        int each = (width - (count - 1) * gap) / count;
         if (each < WE_CHAR_W) each = WE_CHAR_W;
         for (k = 0; k < count; k++) {
             int value = measure_height(d, work->node[k], each, depth + 1);
-            if (n->flex_dir) height = limit_coord(height + value + (k ? gap : 0));
-            else if (value > height) height = value;
+            if (value > height) height = value;
         }
         return height;
     }
@@ -11328,66 +11451,14 @@ static void export_items(we_doc_t *d, int idx, const we_track_work_t *work, int 
 static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth) {
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *work = &track_work[depth];
-    int count, k, gap = axis_gap(n, 0), y = cy, explicit_grow = 0, sizing = 0;
+    int count, k, gap = axis_gap(n, 0), explicit_grow = 0, sizing = 0;
     int modern = n->justify_content || n->align_items || n->align_content || n->row_gap >= 0 || n->col_gap >= 0;
     if (depth > WE_DEPTH_MAX) return 0;
     if (n->display == WE_DISP_GRID) return layout_grid(d, idx, cx, cy, cwidth, depth);
     count = collect_items(d, idx, work);
     if (!count) return 0;
     flex_modes(d, idx, work, count, &sizing, &modern);
-    if (modern || (n->flex_dir && sizing)) return layout_flex_tracks(d, idx, cx, cy, cwidth, depth, count, sizing, modern);
-    if (n->flex_dir) {
-        /* The original column path remains the vertical stacking model.
-         * Grow distributes definite-height free space on its main axis. */
-        if (n->flex_wrap && n->height >= 0) {
-            int col_start = 0, col_y = cy, col_x = cx, col_w = 0, extent = 0;
-            for (k = 0; k < count; k++) {
-                const we_node_t *child = &d->nodes[work->node[k]];
-                int h = child->height >= 0 ? child->height + child->margin[0] + child->margin[2] +
-                        child->padding[0] + child->padding[2] + 2 * child->border : WE_LINE_H;
-                int width = preferred_outer(child, cwidth, WE_CHAR_W), actual;
-                if (k > col_start && col_y - cy + h > n->height) {
-                    col_x += col_w + gap;
-                    col_y = cy;
-                    col_w = 0;
-                    col_start = k;
-                    d->perf.flex_lines++;
-                }
-                if (col_x + width > cx + cwidth) {
-                    diag(d, "column wrap width exceeded", work->node[k]);
-                    break;
-                }
-                actual = layout_assigned(d, work->node[k], col_x, col_y, width, depth + 1);
-                if (width > col_w) col_w = width;
-                if (col_y - cy + actual > extent) extent = col_y - cy + actual;
-                col_y += actual + gap;
-            }
-            if (k) d->perf.flex_lines++;
-            export_items(d, idx, work, k);
-            return extent;
-        }
-        if (n->flex_wrap) diag(d, "column wrap requires height", idx);
-        int used = (count - 1) * gap, weight = 0, free;
-        for (k = 0; k < count; k++) {
-            we_node_t *child = &d->nodes[work->node[k]];
-            used += child->height >= 0 ? child->height + child->margin[0] + child->margin[2] +
-                    child->padding[0] + child->padding[2] + 2 * child->border : 0;
-            if (child->flex_grow > 0) weight += child->flex_grow;
-        }
-        free = n->height > used ? n->height - used : 0;
-        for (k = 0; k < count; k++) {
-            we_node_t *child = &d->nodes[work->node[k]];
-            int16_t saved = child->height;
-            if (free && weight && child->flex_grow > 0)
-                child->height = (int16_t)((saved >= 0 ? saved : 0) + free * child->flex_grow / weight);
-            y += layout_block(d, work->node[k], cx, y, cwidth, depth + 1);
-            child->height = saved;
-            if (k + 1 < count) y += gap;
-        }
-        d->perf.flex_lines++;
-        export_items(d, idx, work, count);
-        return y - cy;
-    }
+    if (modern) return layout_flex_tracks(d, idx, cx, cy, cwidth, depth, count, sizing, modern);   /* a column has sizing set */
     for (k = 0; k < count; k++) if (d->nodes[work->node[k]].flex_grow >= 0) explicit_grow = 1;
     if (!explicit_grow && !n->flex_wrap && !sizing) {
         int available = cwidth - (count - 1) * gap;

@@ -1815,6 +1815,14 @@ qemu-lot119: $(OS_IMAGE) pack-initrd disk
 qemu-lot120: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot120.py
 
+# Lot 121: flex items (the flex shorthand, flex-flow, the automatic minimum
+# of column items, columns on the flex algorithm) and the style sheet's
+# custom properties handed to the engine, read with web-inspect
+# (tests/scripts/test_qemu_lot121.py)
+.PHONY: qemu-lot121
+qemu-lot121: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot121.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

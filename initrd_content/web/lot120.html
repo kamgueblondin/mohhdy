@@ -6,7 +6,7 @@ html { height: 50%; padding: 4px; border: 2px solid #000080 }
 body { margin: 0; height: 100%; background: #e0f0ff }
 #a120 { position: absolute; bottom: 0; right: 0; width: 20px; height: 10px; background: #800000 }
 #b120 { position: absolute; top: 0; left: 0; width: 50%; height: 25% }
-#c120 { container-name: theme }
+#c120 { container-name: theme; --theme: dark; --size: 2 }
 #d120 { height: 10px }
 @container theme style(--theme: dark) { #d120 { width: 100px; background: rgb(0 128 0) } }
 #e120 { height: 10px }
@@ -16,9 +16,7 @@ body { margin: 0; height: 100%; background: #e0f0ff }
 @container style(color: red) { #f120 { background: red } }
 </style></head>
 <body id="y120">
-<!-- the guest pipeline resolves the sheet's custom properties before the
-     engine (webrt_css_resolve_vars): the container's are in its style -->
-<div id="c120" style="--theme: dark; --size: 2"><div id="d120"></div><div id="e120"></div></div>
+<div id="c120"><div id="d120"></div><div id="e120"></div></div>
 <div id="f120"></div>
 <div id="a120"></div>
 <div id="b120"></div>
