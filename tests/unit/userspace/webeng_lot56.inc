@@ -3,8 +3,10 @@
 
 static void test_l56_row_reverse_justify_matrix(void) {
     static const struct { const char *mode; int a, b, c; } cases[] = {
-        {"start", 100, 80, 60}, {"flex-start", 100, 80, 60},
-        {"end", 40, 20, 0}, {"flex-end", 40, 20, 0},
+        /* Lot 125: converted. start / end follow the writing mode (left /
+         * right), flex-start / flex-end follow the reversed main axis. */
+        {"start", 40, 20, 0}, {"flex-start", 100, 80, 60},
+        {"end", 100, 80, 60}, {"flex-end", 40, 20, 0},
         {"center", 70, 50, 30},
         {"space-between", 100, 50, 0},
         {"space-around", 90, 50, 10},
@@ -32,7 +34,10 @@ static void test_l56_row_reverse_justify_matrix(void) {
 
 static void test_l56_column_reverse_justify_matrix(void) {
     static const struct { const char *mode; int a, b, c; } cases[] = {
-        {"start", 100, 80, 60}, {"end", 40, 20, 0}, {"center", 70, 50, 30},
+        /* Lot 125: converted. start / end follow the writing mode (top /
+         * bottom), flex-start / flex-end follow the reversed main axis. */
+        {"start", 40, 20, 0}, {"end", 100, 80, 60},
+        {"flex-start", 100, 80, 60}, {"flex-end", 40, 20, 0}, {"center", 70, 50, 30},
         {"space-between", 100, 50, 0}, {"space-around", 90, 50, 10}, {"space-evenly", 85, 50, 15}
     };
     unsigned i;

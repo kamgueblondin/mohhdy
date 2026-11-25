@@ -1684,8 +1684,11 @@ static void set_math(we_node_t *n, int slot, const we_length_t *expr) {
 }
 
 static int parse_pack(const char *v, int len, int distribution, int stretch) {
-    if (value_is(v, len, "start") || value_is(v, len, "flex-start")) return WE_PACK_START;
-    if (value_is(v, len, "end") || value_is(v, len, "flex-end")) return WE_PACK_END;
+    if (value_is(v, len, "start")) return WE_PACK_START;
+    if (value_is(v, len, "end")) return WE_PACK_END;
+    /* Lot 125: kept apart from start / end (reverse directions, wrap-reverse) */
+    if (value_is(v, len, "flex-start")) return WE_PACK_FLEX_START;
+    if (value_is(v, len, "flex-end")) return WE_PACK_FLEX_END;
     if (value_is(v, len, "center")) return WE_PACK_CENTER;
     if (stretch && value_is(v, len, "stretch")) return WE_PACK_STRETCH;
     if (distribution && value_is(v, len, "space-between")) return WE_PACK_BETWEEN;
@@ -10314,6 +10317,7 @@ static void fit_auto_columns(const we_node_t *n, int cols, int width, int gap,
 static int grid_item_width(const we_node_t *n, const we_node_t *child, int width, int ci) {
     int align = child->justify_self ? child->justify_self : n->justify_items;
     int intrinsic = (align == WE_PACK_END || align == WE_PACK_CENTER || align == WE_PACK_START ||
+                     align == WE_PACK_FLEX_START || align == WE_PACK_FLEX_END ||   /* Lot 125: as start / end in a grid */
                     (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT))) && !subgrid_on(ci, 0);
     return preferred_outer(child, width, intrinsic ? child->max_content : width - node_border_extra(child) - child->margin[1] - child->margin[3]);
 }
@@ -10769,17 +10773,22 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
     position = cy; seen = 0;
     {
         int receivers = 0, remaining = fixed_height > used_height ? fixed_height - used_height : 0;
+        /* Lot 125: align-content normal (unset) behaves as stretch in a grid
+         * container too (CSS Box Alignment 5.1): with a definite height (its
+         * own, or the one a flex line stretches it to) the auto rows share
+         * what is left. Masonry grids do not come here (their own pass). */
+        int stretch_rows = n->align_content == WE_PACK_STRETCH || n->align_content == WE_PACK_UNSET;
         for (k = 0; k < rows; k++)
             if (grid_spec(n, 1, k) == WE_TRACK_AUTO) receivers++;
         for (k = 0; k < rows; k++) {
             int extra = 0;
-            if (n->align_content == WE_PACK_STRETCH && receivers && grid_spec(n, 1, k) == WE_TRACK_AUTO) {
+            if (stretch_rows && receivers && grid_spec(n, 1, k) == WE_TRACK_AUTO) {
                 extra = remaining / receivers + (remaining % receivers != 0);
                 remaining -= extra;
                 receivers--;
             }
             if (seen && !(k < WE_TRACKS_MAX && work->collapsed[1][k])) position += gy;
-            work->row_y[k] = limit_coord(position + (n->align_content == WE_PACK_STRETCH ? 0 :
+            work->row_y[k] = limit_coord(position + (stretch_rows ? 0 :
                 pack_distance(n->align_content, fixed_height - used_height, k, rows)));
             work->height[k] += extra;
             position += work->height[k];
@@ -11050,12 +11059,22 @@ static void shrink_line(we_doc_t *d, we_track_work_t *work, int first, int end,
 
 static int pack_distance(int mode, int free, int index, int count) {
     if (free <= 0 || count < 1) return 0;
-    if (mode == WE_PACK_END) return free;
+    if (mode == WE_PACK_END || mode == WE_PACK_FLEX_END) return free;   /* Lot 125: one physical end here */
     if (mode == WE_PACK_CENTER) return free / 2;
     if (mode == WE_PACK_BETWEEN) return count > 1 ? free * index / (count - 1) : 0;
     if (mode == WE_PACK_AROUND) return free * (2 * index + 1) / (2 * count);
     if (mode == WE_PACK_EVENLY) return free * (index + 1) / (count + 1);
     return 0;
+}
+
+/* Lot 125: true alignment, the default when no safe keyword is given (CSS
+ * Box Alignment 4.4): a flex item or line content larger than its space
+ * overflows both sides (center, the extra pixel at the end) or the start
+ * side (end); start and the distributed values stay at the start. */
+static int true_distance(int mode, int free, int index, int count) {
+    if (free >= 0) return pack_distance(mode, free, index, count);
+    if (mode == WE_PACK_CENTER) return free / 2;
+    return mode == WE_PACK_END || mode == WE_PACK_FLEX_END ? free : 0;
 }
 
 static int measure_area_height(we_doc_t *d, int idx, int outer, int depth) {
@@ -11260,7 +11279,7 @@ static void prepare_flex(we_doc_t *d, int idx, int cw, int depth, int count) {
             int align = child->align_self ? child->align_self : n->align_items;
             line->used += work->size[j];
             if (vertical) {
-                int fallback = wrap ? WE_CHAR_W : align == WE_PACK_END || align == WE_PACK_CENTER ||
+                int fallback = wrap ? WE_CHAR_W : align == WE_PACK_END || align == WE_PACK_FLEX_END || align == WE_PACK_CENTER ||
                     align == WE_PACK_BASELINE || align == WE_PACK_LAST_BASELINE ||
                     (child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ? child->max_content : cw - flex_extra(child, 0);
                 work->cross[j] = preferred_outer(child, cw, fallback);
@@ -11314,7 +11333,7 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *work = &track_work[depth];
     int vertical = n->flex_dir != 0, main, cross_available, gap, cross_gap, lines, cross_total;
-    int k, extent = 0, wrap, stretch_lines;
+    int k, extent = 0, wrap, stretch_lines, justify, pack_lines;
     int group_first = WE_NO_BASELINE, group_last = WE_NO_BASELINE;
     int item_first = WE_NO_BASELINE, item_last = WE_NO_BASELINE;
     prepare_flex(d, idx, cw, depth, count);
@@ -11329,13 +11348,22 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
      * container (CSS Box Alignment 5.1, Flexbox 9.4 step 15): the free cross
      * space goes to the lines of a wrapping row or column */
     stretch_lines = n->align_content == WE_PACK_STRETCH || n->align_content == WE_PACK_UNSET;
+    /* Lot 125: start / end follow the writing mode, not the flex axes: a
+     * reversed main axis (mirrored below) and wrap-reverse lines (mirrored
+     * in the loop) take the other end before the mirror */
+    justify = n->justify_content;
+    if (n->flex_reverse && justify == WE_PACK_START) justify = WE_PACK_END;
+    else if (n->flex_reverse && justify == WE_PACK_END) justify = WE_PACK_START;
+    pack_lines = n->align_content;
+    if (n->flex_wrap == 2 && pack_lines == WE_PACK_START) pack_lines = WE_PACK_END;
+    else if (n->flex_wrap == 2 && pack_lines == WE_PACK_END) pack_lines = WE_PACK_START;
     for (k = 0; k < lines; k++) {
         we_flex_line_t *line = &work->lines[k];
         int cross_free = cross_available > cross_total ? cross_available - cross_total : 0;
         int main_free = main > line->used ? main - line->used : 0;
         int extra = stretch_lines ? cross_free * (k + 1) / lines - cross_free * k / lines : 0;
         int cross_start = extent + (stretch_lines ? cross_free * k / lines :
-            pack_distance(n->align_content, cross_free, k, lines));
+            pack_distance(pack_lines, cross_free, k, lines));
         int j, line_cross = line->cross + extra;
         int line_autos = 0, auto_share = 0, auto_rem = 0;
         if (n->flex_wrap == 2) {
@@ -11387,12 +11415,13 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
             } else if (!vertical && align == WE_PACK_BASELINE) off = line->ascent - work->baseline[j];
             else if (!vertical && align == WE_PACK_LAST_BASELINE) off = line_cross - line->ldescent - work->baseline[j];
             else if (align == WE_PACK_LAST_BASELINE) off = line_cross > cross ? line_cross - cross : 0;
-            else off = pack_distance(align, line_cross - cross, 0, 1);
+            else off = true_distance(align, line_cross - cross, 0, 1);
             /* Lot 124: wrap-reverse swaps cross-start and cross-end (CSS
              * Flexbox 5.2) for the items in their line as for the lines; a
-             * row baseline group sits against the far edge instead (8.3) */
+             * row baseline group sits against the far edge instead (8.3).
+             * Lot 125: start and end follow the writing mode: not swapped. */
             if (n->flex_wrap == 2 && !cross_auto) {
-                if (stretch || align == WE_PACK_START || align == WE_PACK_END) off = line_cross - cross - off;
+                if (stretch || align == WE_PACK_FLEX_START || align == WE_PACK_FLEX_END) off = line_cross - cross - off;
                 else if (!vertical && align == WE_PACK_BASELINE) off += line_cross - line->ascent - line->descent;
                 else if (!vertical && align == WE_PACK_LAST_BASELINE) off -= line_cross - line->lascent - line->ldescent;
             }
@@ -11408,7 +11437,8 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
                     uint8_t bits = child->margin_auto;
                     int before = 0;
                     if (bits & before_bit) { before = auto_share; if (rem_left) { before++; rem_left--; } }
-                    main_start = cursor + before + pack_distance(n->justify_content, main_free, j - line->first, line->end - line->first);
+                    main_start = cursor + before + true_distance(justify, main >= 0 && main < line->used ? main - line->used : main_free,
+                                                                 j - line->first, line->end - line->first);
                 }
             }
             if (n->flex_reverse) {

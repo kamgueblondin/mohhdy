@@ -1841,6 +1841,13 @@ qemu-lot123: $(OS_IMAGE) pack-initrd disk
 qemu-lot124: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot124.py
 
+# Lot 125: true alignment of overflowing flex items and lines, start / end
+# apart from flex-start / flex-end, stretched grid rows, read with
+# web-inspect (tests/scripts/test_qemu_lot125.py)
+.PHONY: qemu-lot125
+qemu-lot125: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot125.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

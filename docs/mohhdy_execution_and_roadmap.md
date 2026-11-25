@@ -7,6 +7,17 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 125 (25 November 2026, base 62de290, PR not opened)
+
+US-031 partial, phase3_complete=false. Flex items larger than their line
+and overflowing lines take true alignment (center overflows both sides,
+end the start side), start / end follow the writing mode apart from
+flex-start / flex-end (row-reverse, column-reverse, wrap-reverse), and
+grid align-content normal stretches the auto rows, so a grid stretched as
+a flex item gives its children's percentages the stretched row. QEMU page
+/web/lot125.html (`make qemu-lot125`, CI job lot125-engine-true-alignment),
+host tests test_lot125_engine.c, docs/lot125_plan.md.
+
 ### Lot 124 (25 November 2026, base af6e831, PR not opened)
 
 US-031 partial, phase3_complete=false. align-content normal stretches

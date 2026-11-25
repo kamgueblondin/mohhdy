@@ -627,7 +627,7 @@ int main(void) {
     RUN_TEST(test_l55_flex_justify_with_fixed_gap);
     RUN_TEST(test_l55_flex_grow_exhausts_before_justify);
     RUN_TEST(test_l55_flex_capped_grow_leaves_packed_space);
-    RUN_TEST(test_l55_flex_overflow_alignment_is_safe);
+    RUN_TEST(test_l55_flex_overflow_alignment_is_true);
     RUN_TEST(test_l55_flex_row_cross_alignment_matrix);
     RUN_TEST(test_l55_flex_column_cross_alignment_matrix);
     RUN_TEST(test_l55_flex_row_stretch_auto_only);
