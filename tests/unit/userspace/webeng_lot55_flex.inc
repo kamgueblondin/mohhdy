@@ -258,7 +258,8 @@ static void test_l55_flex_axis_gaps_row_wrap(void) {
 }
 
 static void test_l55_flex_axis_gaps_column_wrap(void) {
-    lot52_render("<body style='margin:0'><div style='display:flex;flex-direction:column;flex-wrap:wrap;width:100px;height:50px;row-gap:5px;column-gap:9px'>"
+    /* Lot 124: align-content: flex-start keeps the packed lines (normal now stretches them) */
+    lot52_render("<body style='margin:0'><div style='display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;width:100px;height:50px;row-gap:5px;column-gap:9px'>"
         "<div id=a style='width:30px;flex-basis:20px'></div>"
         "<div id=b style='width:30px;flex-basis:20px'></div>"
         "<div id=c style='width:40px;flex-basis:20px'></div></div></body>", 320);

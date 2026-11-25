@@ -56,7 +56,8 @@ static void test_l54_column_minimum_overflow_diagnostic(void) {
 }
 
 static void test_l54_column_wrap_basis_and_grow(void) {
-    lot52_render("<body style='margin:0'><div style='display:flex;flex-direction:column;flex-wrap:wrap;width:100px;height:100px;gap:5px'>"
+    /* Lot 124: align-content: flex-start keeps the packed lines (normal now stretches them) */
+    lot52_render("<body style='margin:0'><div style='display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;width:100px;height:100px;gap:5px'>"
         "<div id=a style='width:30px;flex-basis:60px;flex-grow:1'></div>"
         "<div id=b style='width:40px;flex-basis:60px;flex-grow:1'></div></div></body>", 200);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
@@ -71,7 +72,8 @@ static void test_l54_column_wrap_basis_and_grow(void) {
 }
 
 static void test_l54_column_wrap_percent_cross_size_once(void) {
-    lot52_render("<body style='margin:0'><div style='display:flex;flex-direction:column;flex-wrap:wrap;width:100px;height:50px;gap:4px'>"
+    /* Lot 124: align-content: flex-start keeps the packed lines (normal now stretches them) */
+    lot52_render("<body style='margin:0'><div style='display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;width:100px;height:50px;gap:4px'>"
         "<div id=a style='width:40%;flex-basis:80px'></div>"
         "<div id=b style='width:40%;flex-basis:80px'></div></div></body>", 200);
     TEST_ASSERT_EQUAL(40, lot52_node("a")->w);

@@ -8,6 +8,15 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 124 (align-content normal stretches flex lines, wrap-reverse items placed from the far edge of their line, normal on place-items and place-content; base af6e831, PR not opened)
+
+- ETAT_REEL: align-content normal (unset) behaves as stretch in a flex container (CSS Box Alignment 5.1, Flexbox 9.4 step 15): the free cross space of a wrapping row with a definite height, or of a wrapping column, goes to its lines, and stretched items follow them (two 60 px items in a 100 x 100 wrapping row are 50 high; they were 10 high at the top). An explicit align-content keeps its packing; grid keeps its normal.
+- ETAT_REEL: wrap-reverse swaps cross-start and cross-end for the items in their line as for the lines: flex-start, flex-end and stretch with a definite size are mirrored, a row baseline group sits at the bottom of its line; center and auto margins do not move.
+- ETAT_REEL: a stretched item's height was already definite for its children's percentages (layout forces it); pinned by the Lot 124 tests. place-items and place-content accept normal; place-self still refuses it.
+- Not covered (honest): a grid container stretched as a flex item keeps its auto rows at their content; align-self: center is not centered in overflow; start and flex-start are one value; column baselines in wrap-reverse keep their fallback; fractional flex factors; flex: inherit, unset, revert; aspect-ratio items' transferred minimum; osui_runtime web-theme keeps the US-041 resolver; calc-size, anchor, typed attr, margin collapsing.
+- we_doc_t 874692 bytes and we_node_t 4688 (unchanged). Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false. QEMU page /web/lot124.html (`make qemu-lot124`, CI job lot124-engine-flex-lines).
+- Detail and gaps: docs/lot124_plan.md.
+
 ## Lot 123 (plain flex rows on the flex algorithm, flex items stretched by default, a single line as large as a definite container, normal on the container alignment properties; base 2f6c517, PR not opened)
 
 - ETAT_REEL: every flex container takes the flex algorithm. Plain rows (no flex property, no modern alignment, no wrap) lost their equal slots: items start from their max-content width, shrink by the default factor 1 when the row overflows (a 150 px item in a 100 px row is 100 wide) and stop at their automatic minimum ("flex minimum prevents fit"). Empty items are 0 wide. Rows measured inside a column item or a float take the same sizes.
