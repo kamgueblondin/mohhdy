@@ -117,13 +117,17 @@ static void test_l55_flex_capped_grow_leaves_packed_space(void) {
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
-static void test_l55_flex_overflow_alignment_is_safe(void) {
+/* Lot 125: converted. Without a safe keyword the alignment is true (CSS Box
+ * Alignment 4.4): justify-content end overflows toward the start, the line
+ * still ends on the container's end edge. */
+static void test_l55_flex_overflow_alignment_is_true(void) {
     lot52_render("<body style='margin:0'><div style='display:flex;width:100px;justify-content:end'>"
         "<div id=a style='flex-basis:80px;flex-shrink:0;height:10px'></div>"
         "<div id=b style='flex-basis:80px;flex-shrink:0;height:10px'></div></div></body>", 320);
-    TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
+    TEST_ASSERT_EQUAL(-60, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(80, lot52_node("a")->w);
-    TEST_ASSERT_EQUAL(80, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(20, lot52_node("b")->x);
+    TEST_ASSERT_EQUAL(100, lot52_node("b")->x + lot52_node("b")->w);
     TEST_ASSERT_EQUAL(80, lot52_node("b")->w);
     TEST_ASSERT_TRUE(lot52_has_diag("flex minimum prevents fit"));
 }

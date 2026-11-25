@@ -8,6 +8,15 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 125 (true alignment of overflowing flex items and lines, start and end apart from flex-start and flex-end, stretched grid rows; base 62de290, PR not opened)
+
+- ETAT_REEL: without a safe keyword the alignment is true (CSS Box Alignment 4.4): a flex item larger than its line overflows both sides under center (a 60 px item in a 40 px line is at y -10; it was at 0) and the start side under end / flex-end; justify-content center or end on an overflowing line does the same on the main axis. Auto margins, start and the distributed values stay at the start.
+- ETAT_REEL: start / end follow the writing mode, flex-start / flex-end follow the flex axes: they differ in row-reverse and column-reverse (justify-content) and in wrap-reverse (align-content lines, align-self items). In a grid flex-start / flex-end behave as start / end.
+- ETAT_REEL: grid align-content normal behaves as stretch: the auto rows of a grid with a definite height share what is left, so a grid stretched as a flex item stretches its row and a height: 50% child of a grid stretched to 40 is 20 (it was 10). Masonry grids keep their own pass.
+- Not covered (honest): align-content and grid alignment keep the safe clamp in overflow; safe / unsafe keywords; the distributed values' fallbacks; grid items are not stretched by default; a column flex item under start takes the full width; column baselines in wrap-reverse; fractional flex factors; flex: inherit, unset, revert; aspect-ratio items' transferred minimum; osui_runtime web-theme keeps the US-041 resolver; calc-size, anchor, typed attr, margin collapsing.
+- we_doc_t 874692 bytes and we_node_t 4688 (unchanged; webeng.h gains two alignment enum values). Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false. QEMU page /web/lot125.html (`make qemu-lot125`, CI job lot125-engine-true-alignment).
+- Detail and gaps: docs/lot125_plan.md.
+
 ## Lot 124 (align-content normal stretches flex lines, wrap-reverse items placed from the far edge of their line, normal on place-items and place-content; base af6e831, PR not opened)
 
 - ETAT_REEL: align-content normal (unset) behaves as stretch in a flex container (CSS Box Alignment 5.1, Flexbox 9.4 step 15): the free cross space of a wrapping row with a definite height, or of a wrapping column, goes to its lines, and stretched items follow them (two 60 px items in a 100 x 100 wrapping row are 50 high; they were 10 high at the top). An explicit align-content keeps its packing; grid keeps its normal.
