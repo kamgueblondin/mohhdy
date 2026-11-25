@@ -31,8 +31,10 @@ static void test_l61_subgrid_successive_layouts_are_stable(void) {
     }
 }
 
+/* Lot 126: converted (markup only, align-items: start keeps the items at
+ * their content height now that grid items stretch by default) */
 static void test_l61_subgrid_rows_feed_parent_rows(void) {
-    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:200px;grid-template-columns:60px 60px;grid-template-rows:auto auto;row-gap:4px'>"
+    lot52_render("<body style='margin:0'><div id=p style='display:grid;width:200px;grid-template-columns:60px 60px;grid-template-rows:auto auto;row-gap:4px;align-items:start'>"
         "<div id=s style='display:grid;grid-row:1 / 3;grid-template-rows:subgrid'><div id=a>A</div><div id=b style='height:30px'>B</div></div>"
         "<div id=q>Q</div><div id=r style='grid-column:2;grid-row:2'>R</div></div></body>", 320);
     l61_box("s", 0, 0, 60, 44);
@@ -44,9 +46,10 @@ static void test_l61_subgrid_rows_feed_parent_rows(void) {
     TEST_ASSERT_EQUAL(0, g_doc.ndiag);
 }
 
+/* Lot 126: converted (markup only, align-items: start on the subgrid) */
 static void test_l61_subgrid_both_axes_with_names(void) {
     lot52_render("<body style='margin:0'><div id=p style='display:grid;width:200px;grid-template-columns:[l] 50px [m] 50px [r];grid-template-rows:[t] 20px [u] auto [v];gap:6px'>"
-        "<div id=s style='display:grid;grid-column:1 / 3;grid-row:1 / 3;grid-template-columns:subgrid;grid-template-rows:subgrid'>"
+        "<div id=s style='display:grid;grid-column:1 / 3;grid-row:1 / 3;grid-template-columns:subgrid;grid-template-rows:subgrid;align-items:start'>"
         "<div id=a style='grid-column:m;grid-row:u;height:25px;background:#00ff00'>A</div><div id=b style='background:#0000ff'>B</div></div></div></body>", 320);
     l61_box("s", 0, 0, 106, 51);
     l61_box("a", 56, 26, 50, 25);

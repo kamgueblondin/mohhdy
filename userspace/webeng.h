@@ -269,6 +269,11 @@ enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
        /* Lot 125: flex-start / flex-end follow the flex axes; start / end
         * (WE_PACK_START / WE_PACK_END) follow the writing mode */
        WE_PACK_FLEX_START, WE_PACK_FLEX_END };
+/* Lot 126: overflow position of an alignment property (CSS Box Alignment
+ * 4.4), two bits per property in we_node_t.align_overflow, at the shift
+ * 2 * WE_OVF_<property> */
+enum { WE_OVF_NONE, WE_OVF_SAFE, WE_OVF_UNSAFE };
+enum { WE_OVF_JC, WE_OVF_AC, WE_OVF_AI, WE_OVF_AS, WE_OVF_JI, WE_OVF_JS };
 enum { WE_SIZE_AUTO, WE_SIZE_MIN_CONTENT, WE_SIZE_MAX_CONTENT, WE_SIZE_FIT_CONTENT, WE_SIZE_FIT_LIMIT };
 enum { WE_WRAP_NORMAL, WE_WRAP_BREAK_WORD, WE_WRAP_ANYWHERE };
 
@@ -379,6 +384,7 @@ typedef struct {
     uint8_t col_avoid_inside, orphans, widows;
     uint8_t justify_content, align_items, align_self, align_content;
     uint8_t justify_items, justify_self;
+    uint16_t align_overflow;    /* lot 126: safe / unsafe per alignment property (WE_OVF_*) */
     uint8_t width_kind, basis_content, border_box;
     uint8_t min_width_kind, max_width_kind, basis_kind, break_all;
     uint8_t nowrap, break_word, visibility, overflow_hidden;

@@ -8,6 +8,15 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 126 (safe and unsafe alignment, true alignment of flex lines and grid tracks, grid items stretched by default; base 3179618, PR not opened)
+
+- ETAT_REEL: safe and unsafe are parsed before a position (start, end, flex-start, flex-end, center) on align-items, align-self, align-content, justify-content, justify-items, justify-self and place-*: safe puts an overflowing subject at the start (an item 60 high in a 40 px line under align-items: safe center stays at y 0), unsafe aligns it truly; with neither keyword flex items and lines keep the Lot 125 true alignment and grid items keep the start.
+- ETAT_REEL: the overflowing lines of a multi-line flex container with a definite cross size, and overflowing grid tracks (justify-content on columns, align-content on rows of a definite height), align truly: two 20 px lines in a 20 px container under align-content: center are at -10 and 10 (were 0 and 20); wrap-reverse lines overflow from the bottom edge toward the top.
+- ETAT_REEL: grid items are stretched by default (align-self normal): a one-line item in a 20 px row is 20 high (was 10); replaced elements and items with an aspect ratio keep the start.
+- Not covered (honest): the overflow default of grid items stays at the start; left / right, self-start / self-end, legacy keywords; distributed fallbacks; column flex items under start take the full width; column baselines in wrap-reverse; fractional flex factors; flex: inherit, unset, revert; aspect-ratio transferred minimum; osui_runtime web-theme keeps the US-041 resolver; calc-size, anchor, typed attr, margin collapsing.
+- we_node_t 4692 bytes (+4, new align_overflow) and we_doc_t 875332 (under 1 MiB). Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false. QEMU page /web/lot126.html (`make qemu-lot126`, CI job lot126-engine-safe-alignment); lot52, lot62 and lot82 pages converted by markup (align-items: start).
+- Detail and gaps: docs/lot126_plan.md.
+
 ## Lot 125 (true alignment of overflowing flex items and lines, start and end apart from flex-start and flex-end, stretched grid rows; base 62de290, PR not opened)
 
 - ETAT_REEL: without a safe keyword the alignment is true (CSS Box Alignment 4.4): a flex item larger than its line overflows both sides under center (a 60 px item in a 40 px line is at y -10; it was at 0) and the start side under end / flex-end; justify-content center or end on an overflowing line does the same on the main axis. Auto margins, start and the distributed values stay at the start.

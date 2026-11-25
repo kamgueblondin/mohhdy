@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html id="p126">
+<head><title>Lot 126 safe and unsafe alignment, true alignment of flex lines and grid tracks, grid items stretched</title>
+<style>
+body { margin: 0 }
+#c126 { display: flex; width: 100px; height: 40px; margin-top: 20px; align-items: safe center }
+#a126, #b126 { width: 20px; height: 60px }
+#b126 { align-self: unsafe end }
+#j126 { display: flex; width: 100px; margin-top: 20px; margin-left: 40px; justify-content: safe center }
+#h126, #i126 { flex: 0 0 80px; height: 10px }
+#w126 { display: flex; flex-wrap: wrap; width: 50px; height: 20px; margin-top: 20px; align-content: center }
+#d126, #e126 { width: 30px; height: 20px }
+#g126 { display: grid; width: 100px; margin-top: 20px; margin-left: 40px; grid-template-columns: 80px 80px; justify-content: center }
+#s126 { display: grid; width: 60px; grid-template-columns: 30px 30px }
+#gs126 { display: grid; width: 100px; margin-top: 20px; margin-left: 40px; grid-template-columns: 80px 80px; justify-content: safe center }
+#gi126 { display: grid; width: 50px; margin-top: 10px; margin-left: 40px; grid-template-columns: 50px }
+#r126 { width: 70px; justify-self: unsafe center }
+</style></head>
+<body id="q126">
+<div id="c126"><div id="a126"></div><div id="b126"></div></div>
+<div id="j126"><div id="h126"></div><div id="i126"></div></div>
+<div id="w126"><div id="d126"></div><div id="e126"></div></div>
+<div id="g126"><div id="f126">f</div><div id="k126">k</div></div>
+<div id="s126"><div id="m126">m</div><div id="n126">n<br>n</div></div>
+<div id="gs126"><div id="u126">u</div><div id="v126">v</div></div>
+<div id="gi126"><div id="r126">r</div></div>
+</body>
+</html>

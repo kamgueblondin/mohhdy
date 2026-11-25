@@ -97,9 +97,12 @@ static void test_l124_wrap_reverse(void) {
     /* auto margins are physical: not mirrored */
     lays("<div style='display:flex;flex-wrap:wrap-reverse;width:40px;height:30px'><div id=a style='width:20px;height:10px;margin-top:auto'></div><div id=b style='width:20px;height:10px;margin-bottom:auto'></div></div>");
     BOX("a", 0, 20, 20, 10); BOX("b", 20, 0, 20, 10);
-    /* an item taller than its line overflows toward the top */
+    /* an item taller than its line overflows toward the top. Lot 126:
+     * changed, the 40 px line overflows the 30 px container from its
+     * cross-start (the bottom edge) toward the top: true alignment of the
+     * lines (was y 0 and 30, the line kept inside at the top) */
     lays("<div style='display:flex;flex-wrap:wrap-reverse;width:40px;height:30px;align-items:flex-start'><div id=a style='width:20px;height:40px'></div><div id=b style='width:20px;height:10px'></div></div>");
-    BOX("a", 0, 0, 20, 40); BOX("b", 20, 30, 20, 10);
+    BOX("a", 0, -10, 20, 40); BOX("b", 20, 20, 20, 10);
     /* a baseline group sits at the bottom of the line, a last-baseline group at its top */
     lays("<div style='display:flex;flex-wrap:wrap-reverse;width:60px;height:30px;align-items:baseline'><div id=a style='width:20px'>a</div><div id=b style='width:20px;font-size:20px'>b</div><div id=c style='width:20px;height:5px;align-self:flex-start'></div></div>");
     BOX("a", 0, 17, 20, 10); BOX("b", 20, 17, 20, 13); BOX("c", 40, 25, 20, 5);

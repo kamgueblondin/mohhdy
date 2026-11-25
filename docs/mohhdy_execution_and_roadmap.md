@@ -7,6 +7,16 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 126 (26 November 2026, base 3179618, PR not opened)
+
+US-031 partial, phase3_complete=false. safe and unsafe are parsed on the
+alignment properties (safe starts an overflowing subject, unsafe aligns
+it truly), overflowing flex lines and grid tracks align truly by default,
+and grid items stretch by default (not replaced, no aspect ratio). QEMU
+page /web/lot126.html (`make qemu-lot126`, CI job
+lot126-engine-safe-alignment), host tests test_lot126_engine.c,
+docs/lot126_plan.md; pages lot52, lot62, lot82 converted by markup.
+
 ### Lot 125 (25 November 2026, base 62de290, PR not opened)
 
 US-031 partial, phase3_complete=false. Flex items larger than their line

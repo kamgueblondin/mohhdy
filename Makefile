@@ -1848,6 +1848,13 @@ qemu-lot124: $(OS_IMAGE) pack-initrd disk
 qemu-lot125: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot125.py
 
+# Lot 126: safe / unsafe alignment, true alignment of flex lines and grid
+# tracks, grid items stretched by default, read with web-inspect
+# (tests/scripts/test_qemu_lot126.py)
+.PHONY: qemu-lot126
+qemu-lot126: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot126.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py
