@@ -7,6 +7,16 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 124 (25 November 2026, base af6e831, PR not opened)
+
+US-031 partial, phase3_complete=false. align-content normal stretches
+the lines of wrapping flex containers (a row with a definite height, a
+column), wrap-reverse places the items of a line from its far edge, and
+place-items / place-content accept normal. A stretched item's height was
+already definite for its children's percentages (pinned). QEMU page
+/web/lot124.html (`make qemu-lot124`, CI job lot124-engine-flex-lines),
+host tests test_lot124_engine.c, docs/lot124_plan.md.
+
 ### Lot 123 (24 November 2026, base 2f6c517, PR not opened)
 
 US-031 partial, phase3_complete=false. Every flex row takes the flex

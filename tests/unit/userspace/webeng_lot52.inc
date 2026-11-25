@@ -673,8 +673,9 @@ static void test_l52_column_grow_keeps_zero_fixed(void) {
 }
 
 static void test_l52_column_wrap_moves_next_column(void) {
+    /* Lot 124: align-content: flex-start keeps the packed lines (normal now stretches them) */
     const char *html =
-        "<body style='margin:0'><div id=r style='display:flex;flex-direction:column;flex-wrap:wrap;width:100px;height:50px;gap:5px'>"
+        "<body style='margin:0'><div id=r style='display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;width:100px;height:50px;gap:5px'>"
         "<div id=a style='width:30px;height:20px'></div>"
         "<div id=b style='width:30px;height:20px'></div>"
         "<div id=c style='width:40px;height:20px'></div></div></body>";

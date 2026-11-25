@@ -103,8 +103,10 @@ static void test_l123_default_stretch(void) {
     /* a column item fills the width as before */
     lays("<div style='display:flex;flex-direction:column;width:100px'><div id=a>a</div><div id=b style='width:20px'>b</div></div>");
     BOX("a", 0, 0, 100, 10); BOX("b", 0, 10, 20, 10);
-    /* a wrapping column stretches its items to their line (was 8 wide) */
-    lays("<div style='display:flex;flex-direction:column;flex-wrap:wrap;height:20px;width:100px'><div id=a>a</div><div id=b style='width:30px'>b</div><div id=c>c</div><div id=e style='align-self:flex-start'>e</div></div>");
+    /* a wrapping column stretches its items to their line (was 8 wide);
+     * Lot 124: align-content: flex-start keeps the lines at their content
+     * width (normal now stretches the lines to the container) */
+    lays("<div style='display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;height:20px;width:100px'><div id=a>a</div><div id=b style='width:30px'>b</div><div id=c>c</div><div id=e style='align-self:flex-start'>e</div></div>");
     BOX("a", 0, 0, 30, 10); BOX("b", 0, 10, 30, 10); BOX("c", 30, 0, 8, 10); BOX("e", 30, 10, 8, 10);
 }
 
@@ -129,9 +131,10 @@ static void test_l123_normal_keyword(void) {
     lays("<div style='display:flex;width:300px;justify-content:center;justify-content:normal;align-content:normal;justify-items:normal'><div id=a>a</div></div>");
     BOX("a", 0, 0, 8, 10);
     EQ_MSG(0, diag_count("alignment refused"), "container normal");
-    /* align-content normal is the initial packing, not stretch */
+    /* Lot 124: align-content normal now stretches the lines (Lot 123 pinned
+     * the initial packing here, 16x10 at y 0 and 10: the gap this lot fills) */
     lays("<div style='display:flex;flex-wrap:wrap;width:20px;height:40px;align-content:normal'><div id=a>aa</div><div id=b>bb</div></div>");
-    BOX("a", 0, 0, 16, 10); BOX("b", 0, 10, 16, 10);
+    BOX("a", 0, 0, 16, 20); BOX("b", 0, 20, 16, 20);
     /* align-self normal would mean stretch, not auto: still refused */
     lays("<div style='display:flex;width:300px;align-items:flex-start'><div id=a style='align-self:normal'>a</div><div id=b>b<br>b</div><div id=c style='justify-self:normal'>c</div></div>");
     BOX("a", 0, 0, 8, 10);

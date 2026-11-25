@@ -1835,6 +1835,12 @@ qemu-lot122: $(OS_IMAGE) pack-initrd disk
 qemu-lot123: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot123.py
 
+# Lot 124: align-content normal stretches flex lines, wrap-reverse items,
+# place-* normal, read with web-inspect (tests/scripts/test_qemu_lot124.py)
+.PHONY: qemu-lot124
+qemu-lot124: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot124.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

@@ -234,7 +234,8 @@ static void test_l56_clear_none_resets_left(void) {
 }
 
 static void test_l56_wrap_reverse_packs_lines_from_the_cross_end(void) {
-    lot52_render("<body style='margin:0'><div id=r style='display:flex;flex-wrap:wrap-reverse;width:80px;height:50px'>"
+    /* Lot 124: align-content: flex-start keeps the packed lines (normal now stretches them) */
+    lot52_render("<body style='margin:0'><div id=r style='display:flex;flex-wrap:wrap-reverse;align-content:flex-start;width:80px;height:50px'>"
         "<div id=a style='width:40px;height:10px;background:#ff0000'></div>"
         "<div id=b style='width:40px;height:10px;background:#0000ff'></div>"
         "<div id=c style='width:40px;height:10px;background:#008000'></div></div></body>", 320);
@@ -258,7 +259,8 @@ static void test_l56_wrap_reverse_single_line_uses_the_cross_end(void) {
 }
 
 static void test_l56_wrap_reverse_row_gap_mirrors_between_lines(void) {
-    lot52_render("<body style='margin:0'><div id=r style='display:flex;flex-wrap:wrap-reverse;width:40px;height:50px;row-gap:4px'>"
+    /* Lot 124: align-content: flex-start keeps the packed lines (normal now stretches them) */
+    lot52_render("<body style='margin:0'><div id=r style='display:flex;flex-wrap:wrap-reverse;align-content:flex-start;width:40px;height:50px;row-gap:4px'>"
         "<div id=a style='width:40px;height:10px'></div>"
         "<div id=b style='width:40px;height:10px'></div>"
         "<div id=c style='width:40px;height:10px'></div></div></body>", 320);
@@ -283,7 +285,8 @@ static void test_l56_wrap_reverse_align_end_packs_toward_the_start(void) {
 }
 
 static void test_l56_column_wrap_reverse_mirrors_x(void) {
-    lot52_render("<body style='margin:0'><div id=r style='display:flex;flex-direction:column;flex-wrap:wrap-reverse;width:80px;height:30px'>"
+    /* Lot 124: align-content: flex-start keeps the packed lines (normal now stretches them) */
+    lot52_render("<body style='margin:0'><div id=r style='display:flex;flex-direction:column;flex-wrap:wrap-reverse;align-content:flex-start;width:80px;height:30px'>"
         "<div id=a style='width:10px;height:20px;background:#ff0000'></div>"
         "<div id=b style='width:10px;height:20px;background:#0000ff'></div>"
         "<div id=c style='width:10px;height:20px;background:#008000'></div></div></body>", 320);

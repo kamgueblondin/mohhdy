@@ -5006,6 +5006,10 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         else {
             /* align-* axis allows stretch; justify-content does not. */
             first = parse_pack(v + a[0], lengths[0], distribution, 1);
+            /* Lot 124: normal, the initial value of the container longhands
+             * (Lot 123), on place-items and place-content; place-self still
+             * refuses it (normal would be stretch there, not auto) */
+            if (!w_eq(prop, "place-self") && value_is(v + a[0], lengths[0], "normal")) first = 0;
             if (w_eq(prop, "place-items") || w_eq(prop, "place-self")) {
                 if (value_is(v + a[0], lengths[0], "baseline") || value_is(v + a[0], lengths[0], "first baseline"))
                     first = WE_PACK_BASELINE;
@@ -5014,6 +5018,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
             if (w_eq(prop, "place-self") && value_is(v + a[0], lengths[0], "auto")) first = 0;
             if (c == 2) {
                 second = parse_pack(v + a[1], lengths[1], distribution, 1);
+                if (!w_eq(prop, "place-self") && value_is(v + a[1], lengths[1], "normal")) second = 0;
                 if (w_eq(prop, "place-self") && value_is(v + a[1], lengths[1], "auto")) second = 0;
             } else second = first;
             if (first < 0 || second < 0) diag(d, "place alignment refused", -1);
@@ -11309,7 +11314,7 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *work = &track_work[depth];
     int vertical = n->flex_dir != 0, main, cross_available, gap, cross_gap, lines, cross_total;
-    int k, extent = 0, wrap;
+    int k, extent = 0, wrap, stretch_lines;
     int group_first = WE_NO_BASELINE, group_last = WE_NO_BASELINE;
     int item_first = WE_NO_BASELINE, item_last = WE_NO_BASELINE;
     prepare_flex(d, idx, cw, depth, count);
@@ -11320,12 +11325,16 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
     lines = work->line_count;
     cross_total = work->cross_total;
     wrap = n->flex_wrap && main >= 0;
+    /* Lot 124: align-content normal (unset) behaves as stretch in a flex
+     * container (CSS Box Alignment 5.1, Flexbox 9.4 step 15): the free cross
+     * space goes to the lines of a wrapping row or column */
+    stretch_lines = n->align_content == WE_PACK_STRETCH || n->align_content == WE_PACK_UNSET;
     for (k = 0; k < lines; k++) {
         we_flex_line_t *line = &work->lines[k];
         int cross_free = cross_available > cross_total ? cross_available - cross_total : 0;
         int main_free = main > line->used ? main - line->used : 0;
-        int extra = n->align_content == WE_PACK_STRETCH ? cross_free * (k + 1) / lines - cross_free * k / lines : 0;
-        int cross_start = extent + (n->align_content == WE_PACK_STRETCH ? cross_free * k / lines :
+        int extra = stretch_lines ? cross_free * (k + 1) / lines - cross_free * k / lines : 0;
+        int cross_start = extent + (stretch_lines ? cross_free * k / lines :
             pack_distance(n->align_content, cross_free, k, lines));
         int j, line_cross = line->cross + extra;
         int line_autos = 0, auto_share = 0, auto_rem = 0;
@@ -11379,6 +11388,14 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
             else if (!vertical && align == WE_PACK_LAST_BASELINE) off = line_cross - line->ldescent - work->baseline[j];
             else if (align == WE_PACK_LAST_BASELINE) off = line_cross > cross ? line_cross - cross : 0;
             else off = pack_distance(align, line_cross - cross, 0, 1);
+            /* Lot 124: wrap-reverse swaps cross-start and cross-end (CSS
+             * Flexbox 5.2) for the items in their line as for the lines; a
+             * row baseline group sits against the far edge instead (8.3) */
+            if (n->flex_wrap == 2 && !cross_auto) {
+                if (stretch || align == WE_PACK_START || align == WE_PACK_END) off = line_cross - cross - off;
+                else if (!vertical && align == WE_PACK_BASELINE) off += line_cross - line->ascent - line->descent;
+                else if (!vertical && align == WE_PACK_LAST_BASELINE) off -= line_cross - line->lascent - line->ldescent;
+            }
             {
                 int cursor = 0, t, rem_left = auto_rem;
                 for (t = line->first; t < j; t++) {
