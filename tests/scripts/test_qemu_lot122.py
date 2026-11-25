@@ -15,6 +15,8 @@ bases: #i122 alone on line 1 (100), #j122 and #k122 share line 2 (78, 22).
 #x122, a row with justify-content inside the column #w122, is measured
 with the same bases and minimums: #y122 92 wide on two lines, #z122 at
 y 110.
+Lot 123: row items stretch to their line by default, so .n122 and #x122
+say align-items: flex-start to keep the content heights checked here.
 """
 from __future__ import print_function
 

@@ -83,11 +83,13 @@ static void test_l115_flex_and_relayout(void) {
 
 /* a plain flex row is laid out by the engine's legacy model (equal
  * shares, webeng_lot52 / lot64 tests): the scripts read what the GUI
- * paints, not what a browser would (said in docs/lot115_plan.md) */
+ * paints, not what a browser would (said in docs/lot115_plan.md).
+ * Lot 123: plain rows take the flex algorithm too; flex: 1 1 0 on the
+ * items gives the equal shares this test pins. */
 static void test_l115_flex_legacy_is_what_the_gui_paints(void) {
     wf_jspage_set_layout(wf_jslayout_engine, 0);
-    run("<body><div style='display:flex'><div id=a style='width:100px;height:30px'>A</div>"
-        "<div id=b style='width:50px;height:20px'>B</div></div><script>"
+    run("<body><div style='display:flex'><div id=a style='width:100px;height:30px;flex:1 1 0'>A</div>"
+        "<div id=b style='width:50px;height:20px;flex:1 1 0'>B</div></div><script>"
         "var a = document.getElementById('a'), b = document.getElementById('b');"
         "console.log(a.offsetLeft, b.offsetLeft, b.offsetTop);</script></body>");
     CHECK_STR("8 512 8\n", logtext());

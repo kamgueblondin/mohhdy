@@ -2,7 +2,9 @@
  * flex property, wrap or a modern alignment) an auto basis is the item's
  * max-content width, every item shrinks by the default factor 1, and a row
  * item with min-width auto keeps its min-content width as minimum (CSS
- * Flexbox 4.5, 7.2.3, 9.7). Plain rows keep their equal slots. Values
+ * Flexbox 4.5, 7.2.3, 9.7). Lot 123: plain rows take the same algorithm
+ * and row items stretch by default; cases that pin item heights or equal
+ * slots now say align-items: flex-start or flex: 1 1 0. Values
  * follow docs/lot122_plan.md (8 px glyphs, 10 px lines). */
 #include "../../framework/unity.h"
 #include <string.h>
@@ -69,7 +71,7 @@ static void test_l122_default_shrink(void) {
     lays("<div style='display:flex;width:100px'><div id=a style='flex-grow:1'>aa aa aa</div><div id=b style='flex-grow:1'>bb bb</div></div>");
     BOX("a", 0, 0, 61, 20); BOX("b", 61, 0, 39, 20);
     /* flex-shrink 0 holds */
-    lays("<div style='display:flex;width:100px'><div id=a style='flex-grow:1;flex-shrink:0'>aa aa aa aa</div><div id=b style='flex-grow:1'>bb bb bb bb</div></div>");
+    lays("<div style='display:flex;width:100px;align-items:flex-start'><div id=a style='flex-grow:1;flex-shrink:0'>aa aa aa aa</div><div id=b style='flex-grow:1'>bb bb bb bb</div></div>");
     BOX("a", 0, 0, 88, 10); BOX("b", 88, 0, 16, 40);
     /* a wrapped line alone shrinks too */
     lays("<div style='display:flex;flex-wrap:wrap;width:100px'><div id=a style='width:150px'>x</div><div id=b style='width:20px'>y</div></div>");
@@ -83,7 +85,7 @@ static void test_l122_auto_minimum(void) {
     BOX("a", 0, 0, 64, 10); BOX("b", 64, 0, 64, 10);
     EQ_MSG(1, diag_count("flex minimum prevents fit"), "overflow diag");
     /* the shrink goes on with the other item: 64 stays, 88 -> 36 */
-    lays("<div style='display:flex;width:100px'><div id=a>aaaaaaaa</div><div id=b style='flex-shrink:1'>bb bb bb bb</div></div>");
+    lays("<div style='display:flex;width:100px;align-items:flex-start'><div id=a>aaaaaaaa</div><div id=b style='flex-shrink:1'>bb bb bb bb</div></div>");
     BOX("a", 0, 0, 64, 10); BOX("b", 64, 0, 36, 40);
     EQ_MSG(0, (int)g_doc.ndiag, "fits");
     /* zero bases: a grower held at its min-content width is frozen */
@@ -100,7 +102,7 @@ static void test_l122_auto_minimum(void) {
     BOX("a", 0, 0, 20, 10); BOX("b", 20, 0, 80, 10);
     lays("<div style='display:flex;width:100px'><div id=a style='flex:1 1 0;width:20%'>aaaaaaaa</div><div id=b style='flex:1 1 0'>b</div></div>");
     BOX("a", 0, 0, 50, 10); BOX("b", 50, 0, 50, 10);
-    lays("<div style='display:flex;width:100px'><div id=a style='flex:1 1 0;width:min-content'>aaa aaa</div><div id=b style='flex:3 1 0'>b</div></div>");
+    lays("<div style='display:flex;width:100px;align-items:flex-start'><div id=a style='flex:1 1 0;width:min-content'>aaa aaa</div><div id=b style='flex:3 1 0'>b</div></div>");
     BOX("a", 0, 0, 25, 20); BOX("b", 25, 0, 75, 10);
     lays("<div style='display:flex;width:100px'><div id=a style='flex:1 1 0;width:calc(10px + 5px)'>aaaaaaaa</div><div id=b style='flex:5 1 0'>b</div></div>");
     BOX("a", 0, 0, 17, 10); BOX("b", 17, 0, 83, 10);
@@ -124,19 +126,19 @@ static void test_l122_auto_minimum(void) {
     /* padding, borders and margins count in the minimum */
     lays("<div style='display:flex;width:100px'><div id=a style='flex:1 1 0;padding:0 5px'>aaaaaaaa</div><div id=b style='flex:1 1 0'>b</div></div>");
     BOX("a", 0, 0, 74, 10); BOX("b", 74, 0, 26, 10);
-    lays("<div style='display:flex;width:100px'><div id=a style='flex:1 1 0;margin:0 3px;border:2px solid red'>aaaaaaaa</div><div id=b style='flex:1 1 0'>b</div></div>");
+    lays("<div style='display:flex;width:100px;align-items:flex-start'><div id=a style='flex:1 1 0;margin:0 3px;border:2px solid red'>aaaaaaaa</div><div id=b style='flex:1 1 0'>b</div></div>");
     BOX("a", 3, 0, 68, 14); BOX("b", 74, 0, 26, 10);
 }
 
 /* --- rows measured inside a column take the same sizes --- */
 static void test_l122_measured_rows(void) {
     /* a modern row: 92 + 8 (bases 152 and 8, minimum 8), two lines */
-    lays("<div style='display:flex;flex-direction:column;width:100px'><div id=r style='display:flex;justify-content:flex-start'><div id=a>aaaa aaaa aaaa aaaa</div><div id=b>b</div></div><div id=z>z</div></div>");
+    lays("<div style='display:flex;flex-direction:column;width:100px'><div id=r style='display:flex;justify-content:flex-start;align-items:flex-start'><div id=a>aaaa aaaa aaaa aaaa</div><div id=b>b</div></div><div id=z>z</div></div>");
     BOX("r", 0, 0, 100, 20); BOX("a", 0, 0, 92, 20); BOX("b", 92, 0, 8, 10); BOX("z", 0, 20, 100, 10);
-    /* a plain row keeps its equal slots, measured the same way: 50 + 50, four lines */
-    lays("<div style='display:flex;flex-direction:column;width:100px'><div id=r style='display:flex'><div id=a>aaaa aaaa aaaa aaaa</div><div id=b>b</div></div><div id=z>z</div></div>");
+    /* equal slots (Lot 123: from flex 1 1 0), measured the same way: 50 + 50, four lines */
+    lays("<div style='display:flex;flex-direction:column;width:100px'><div id=r style='display:flex;align-items:flex-start'><div id=a style='flex:1 1 0'>aaaa aaaa aaaa aaaa</div><div id=b style='flex:1 1 0'>b</div></div><div id=z>z</div></div>");
     BOX("r", 0, 0, 100, 40); BOX("a", 0, 0, 50, 40); BOX("b", 50, 0, 50, 10); BOX("z", 0, 40, 100, 10);
-    lays("<div style='display:flex;flex-direction:column;width:96px'><div id=r style='display:flex'><div id=a>aaa aaa</div><div id=b>b</div><div id=c>c</div></div><div id=z>z</div></div>");
+    lays("<div style='display:flex;flex-direction:column;width:96px'><div id=r style='display:flex;align-items:flex-start'><div id=a style='flex:1 1 0'>aaa aaa</div><div id=b style='flex:1 1 0'>b</div><div id=c style='flex:1 1 0'>c</div></div><div id=z>z</div></div>");
     BOX("a", 0, 0, 32, 20); BOX("b", 32, 0, 32, 10); BOX("c", 64, 0, 32, 10); BOX("z", 0, 20, 96, 10);
     /* a grower row measured: 88 + 8 shrink to fit 64, the text wraps */
     lays("<div style='display:flex;flex-direction:column;width:64px'><div id=r style='display:flex'><div id=a style='flex-grow:1'>aa aa aa aa</div><div id=b style='flex-grow:1'>b</div></div><div id=z>z</div></div>");

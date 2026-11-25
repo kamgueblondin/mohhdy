@@ -4986,6 +4986,9 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         if ((w_eq(prop, "align-items") || w_eq(prop, "align-self")) && value_is(v, vl, "last baseline"))
             value = WE_PACK_LAST_BASELINE;
         if ((w_eq(prop, "align-self") || w_eq(prop, "justify-self")) && value_is(v, vl, "auto")) value = 0;
+        /* Lot 123: normal is the initial value of the container properties;
+         * on align-self it would mean stretch, not auto, so it stays refused */
+        if (!w_eq(prop, "align-self") && !w_eq(prop, "justify-self") && value_is(v, vl, "normal")) value = 0;
         if (value < 0) diag(d, "alignment refused", -1);
         else if (w_eq(prop, "justify-content")) n->justify_content = (uint8_t)value;
         else if (w_eq(prop, "align-content")) n->align_content = (uint8_t)value;
@@ -11279,7 +11282,7 @@ static void prepare_flex(we_doc_t *d, int idx, int cw, int depth, int count) {
         }
         if (line->ascent + line->descent > line->cross) line->cross = line->ascent + line->descent;
         if (line->lascent + line->ldescent > line->cross) line->cross = line->lascent + line->ldescent;
-        if (!wrap && cross_available > line->cross) line->cross = cross_available;
+        if (!wrap && cross_available >= 0) line->cross = cross_available;   /* Lot 123: a single line is the definite cross size (9.4 step 15) */
         cross_total = limit_coord(cross_total + line->cross + (lines ? cross_gap : 0));
         lines++;
     }
@@ -11291,43 +11294,13 @@ static void prepare_flex(we_doc_t *d, int idx, int cw, int depth, int count) {
     work->cross_total = cross_total;
 }
 
-static void flex_modes(const we_doc_t *d, int idx, const we_track_work_t *work,
-                       int count, int *sizing, int *modern) {
-    const we_node_t *n = &d->nodes[idx];
-    int k;
-    /* Lot 121: a column always takes the flex algorithm (bases, grow, shrink
-     * by the default factor 1, automatic minimums); the old stacking path
-     * ignored percent and definite heights and auto bases. */
-    *sizing = n->flex_dir != 0;
-    *modern = n->justify_content || n->align_items || n->align_content || n->row_gap >= 0 || n->col_gap >= 0 || n->flex_reverse || n->flex_wrap == 2;
-    for (k = 0; k < count; k++) {
-        const we_node_t *child = &d->nodes[work->node[k]];
-        if (child->margin_auto) *modern = 1;
-        if (child->length[WE_LEN_WIDTH].count || child->length[WE_LEN_MIN_W].count || child->length[WE_LEN_MAX_W].count ||
-            child->min_width_kind || child->max_width_kind || child->basis_kind) *modern = 1;
-        if (child->align_self || child->basis_content || child->border_box || child->aspect_num || child->height_percent ||
-            child->min_height_percent || child->max_height_percent || child->width_kind) *modern = 1;
-        if (child->basis_set || child->flex_shrink >= 0) *sizing = 1;
-    }
-}
-
+/* Lot 123: every flex container takes the flex algorithm; plain rows (no
+ * flex property, no modern alignment) lost their equal slots. */
 static int measure_flex(we_doc_t *d, int idx, int width, int depth) {
     const we_node_t *n = &d->nodes[idx];
     we_track_work_t *work = &track_work[depth];
-    int count = collect_items(d, idx, work), sizing, modern, k, grow = 0;
-    int height = 0, gap = axis_gap(n, 0);
+    int count = collect_items(d, idx, work);
     if (!count) return 0;
-    flex_modes(d, idx, work, count, &sizing, &modern);
-    for (k = 0; k < count; k++) if (d->nodes[work->node[k]].flex_grow >= 0) grow = 1;
-    if (!sizing && !modern && !grow && !n->flex_wrap) {
-        int each = (width - (count - 1) * gap) / count;
-        if (each < WE_CHAR_W) each = WE_CHAR_W;
-        for (k = 0; k < count; k++) {
-            int value = measure_height(d, work->node[k], each, depth + 1);
-            if (value > height) height = value;
-        }
-        return height;
-    }
     prepare_flex(d, idx, width, depth, count);
     return n->flex_dir ? (work->main >= 0 ? work->main : work->lines[0].used) : work->cross_total;
 }
@@ -11389,10 +11362,14 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
             int cross_before = child->margin_auto & (vertical ? WE_AUTO_LEFT : WE_AUTO_TOP);
             int cross_after = child->margin_auto & (vertical ? WE_AUTO_RIGHT : WE_AUTO_BOTTOM);
             int cross_auto = cross_before || cross_after;
-            if (align == WE_PACK_STRETCH && !cross_auto) {
+            /* Lot 123: align-items normal (unset) stretches like stretch (CSS
+             * Flexbox 8.3): row items to their line's height, column items to
+             * their line's width (the container's for a single line). */
+            int stretch = align == WE_PACK_STRETCH || align == WE_PACK_UNSET;
+            if (stretch && !cross_auto) {
                 if (vertical && child->width < 0 && !child->width_pct && !child->width_kind)
                     cross = constrained_width(child, line_cross - flex_extra(child, 0), cw) + flex_extra(child, 0);
-                if (!vertical && child->height < 0 && !child->height_percent)
+                if (!vertical && child->height < 0 && (!child->height_percent || cross_available < 0))   /* an indefinite percentage is auto */
                     cross = height_constraint(d, work->node[j], line_cross - flex_extra(child, 1), cross_available) + flex_extra(child, 1);
             }
             if (cross_auto) {
@@ -11424,7 +11401,7 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
             x = cx + (vertical ? cross_start + off : main_start);
             y = cy + (vertical ? main_start : cross_start + off);
             width = vertical ? cross : work->size[j];
-            height = vertical ? work->size[j] : !cross_auto && align == WE_PACK_STRETCH && child->height < 0 && !child->height_percent ? cross : -1;
+            height = vertical ? work->size[j] : !cross_auto && stretch && child->height < 0 ? cross : -1;   /* else cross is its own height */
             if (vertical && wrap && (x - cx + width > cw || width < 0)) {
                 diag(d, "column wrap width exceeded", work->node[j]);
                 return main >= 0 ? main : 0;
@@ -11453,39 +11430,13 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
     return work->lines[0].used;
 }
 
-static void export_items(we_doc_t *d, int idx, const we_track_work_t *work, int count) {
-    if (count <= 0) return;
-    layout_first[idx] = (int16_t)item_baseline(d, work->node[0], 0);
-    layout_last[idx] = (int16_t)item_baseline(d, work->node[count - 1], 1);
-}
-
 static int layout_flex(we_doc_t* d, int idx, int cx, int cy, int cwidth, int depth) {
     we_node_t *n = &d->nodes[idx];
-    we_track_work_t *work = &track_work[depth];
-    int count, k, gap = axis_gap(n, 0), explicit_grow = 0, sizing = 0;
-    int modern = n->justify_content || n->align_items || n->align_content || n->row_gap >= 0 || n->col_gap >= 0;
+    int count;
     if (depth > WE_DEPTH_MAX) return 0;
     if (n->display == WE_DISP_GRID) return layout_grid(d, idx, cx, cy, cwidth, depth);
-    count = collect_items(d, idx, work);
+    count = collect_items(d, idx, &track_work[depth]);
     if (!count) return 0;
-    flex_modes(d, idx, work, count, &sizing, &modern);
-    if (modern) return layout_flex_tracks(d, idx, cx, cy, cwidth, depth, count);   /* a column has sizing set */
-    for (k = 0; k < count; k++) if (d->nodes[work->node[k]].flex_grow >= 0) explicit_grow = 1;
-    if (!explicit_grow && !n->flex_wrap && !sizing) {
-        int available = cwidth - (count - 1) * gap;
-        int each, x = cx, high = 0;
-        if (available < 0) available = 0;
-        each = available / count;
-        if (each < WE_CHAR_W) each = WE_CHAR_W;
-        for (k = 0; k < count; k++) {
-            int h = layout_block(d, work->node[k], x, cy, each, depth + 1);
-            if (h > high) high = h;
-            x += each + gap;
-        }
-        d->perf.flex_lines++;
-        export_items(d, idx, work, count);
-        return high;
-    }
     return layout_flex_tracks(d, idx, cx, cy, cwidth, depth, count);
 }
 

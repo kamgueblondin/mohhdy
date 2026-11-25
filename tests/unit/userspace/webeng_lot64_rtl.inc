@@ -53,15 +53,16 @@ static void test_l64_rtl_block_placement(void) {
     TEST_ASSERT_EQUAL(80, lot52_node("i")->x);
 }
 
+/* Lot 123: column-gap: 30px keeps the item positions of the former equal slots */
 static void test_l64_rtl_flex_grid_table(void) {
-    lot52_render(L64_BODY "<div id=f style='direction:rtl;display:flex;width:100px'><div id=a style='width:20px;height:4px;background:#ff0000'>a</div>"
+    lot52_render(L64_BODY "<div id=f style='direction:rtl;display:flex;width:100px;column-gap:30px'><div id=a style='width:20px;height:4px;background:#ff0000'>a</div>"
                  "<div id=b style='width:30px;height:4px;background:#00ff00'></div></div></body>", 320);
     l64_box("a", 80, 0, 20, 4);
     l64_box("b", 20, 0, 30, 4);
     l61_rect_at(80, 0, 20, 4, 0xFF0000);
     l61_rect_at(20, 0, 30, 4, 0x00FF00);
     l61_text_at("a", 92, 1);                                  /* moved with its item, right-aligned inside */
-    lot52_render(L64_BODY "<div style='direction:ltr;display:flex;width:100px'><div id=a style='width:20px;height:4px'></div>"
+    lot52_render(L64_BODY "<div style='direction:ltr;display:flex;width:100px;column-gap:30px'><div id=a style='width:20px;height:4px'></div>"
                  "<div id=b style='width:30px;height:4px'></div></div></body>", 320);
     TEST_ASSERT_EQUAL(0, lot52_node("a")->x);
     TEST_ASSERT_EQUAL(50, lot52_node("b")->x);
