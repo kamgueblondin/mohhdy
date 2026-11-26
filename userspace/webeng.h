@@ -268,7 +268,10 @@ enum { WE_PACK_UNSET, WE_PACK_START, WE_PACK_END, WE_PACK_CENTER,
        WE_PACK_LAST_BASELINE,
        /* Lot 125: flex-start / flex-end follow the flex axes; start / end
         * (WE_PACK_START / WE_PACK_END) follow the writing mode */
-       WE_PACK_FLEX_START, WE_PACK_FLEX_END };
+       WE_PACK_FLEX_START, WE_PACK_FLEX_END,
+       /* Lot 127: self-start / self-end follow the item's direction; left /
+        * right are physical (justify-* only), start off the inline axis */
+       WE_PACK_SELF_START, WE_PACK_SELF_END, WE_PACK_LEFT, WE_PACK_RIGHT };
 /* Lot 126: overflow position of an alignment property (CSS Box Alignment
  * 4.4), two bits per property in we_node_t.align_overflow, at the shift
  * 2 * WE_OVF_<property> */

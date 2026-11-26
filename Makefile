@@ -1855,6 +1855,13 @@ qemu-lot125: $(OS_IMAGE) pack-initrd disk
 qemu-lot126: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot126.py
 
+# Lot 127: self-start / self-end, left / right, fit-content width of column
+# flex items and grid items, read with web-inspect
+# (tests/scripts/test_qemu_lot127.py)
+.PHONY: qemu-lot127
+qemu-lot127: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot127.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

@@ -1311,6 +1311,41 @@ jobs:
           path: |
             test_logs/
 
+  # Lot 127: one boot of make qemu-lot127
+  lot127-engine-self-positions:
+    name: QEMU self-start self-end left and right alignment with fit-content column flex and grid items in the engine (Lot 127)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore apt package cache
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: .apt-cache
+          key: ci-apt-v1-${{ runner.os }}-${{ hashFiles('scripts/ci-install-deps.sh') }}
+
+      - name: Install dependencies
+        run: bash scripts/ci-install-deps.sh
+
+      - name: Build OS image
+        run: make all
+
+      - name: QEMU lot 127 boot
+        run: make qemu-lot127
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot127-engine-self-positions-logs
+          if-no-files-found: ignore
+          path: |
+            test_logs/
+
   # Lot 126: one boot of make qemu-lot126
   lot126-engine-safe-alignment:
     name: QEMU safe and unsafe alignment with true alignment of flex lines and grid tracks and stretched grid items in the engine (Lot 126)
