@@ -1697,6 +1697,27 @@ static int parse_pack(const char *v, int len, int distribution, int stretch) {
     return -1;
 }
 
+/* Lot 126: "safe <position>" / "unsafe <position>" (CSS Box Alignment 4.4):
+ * the keyword goes with a position only (start, end, flex-start, flex-end,
+ * center), not with stretch, a distribution, a baseline, normal or auto.
+ * Returns the token count it used (2) and sets *overflow, else 0. */
+static int parse_overflow(const char *v, const int *a, const int *l, int c, int at, int *value, int *overflow) {
+    int mode;
+    if (at + 1 >= c) return 0;
+    if (value_is(v + a[at], l[at], "safe")) *overflow = WE_OVF_SAFE;
+    else if (value_is(v + a[at], l[at], "unsafe")) *overflow = WE_OVF_UNSAFE;
+    else return 0;
+    mode = parse_pack(v + a[at + 1], l[at + 1], 0, 0);
+    *value = mode;
+    return 2;
+}
+
+static void set_overflow(we_node_t *n, int prop, int overflow) {
+    n->align_overflow = (uint16_t)((n->align_overflow & ~(3U << (2 * prop))) | ((unsigned)overflow << (2 * prop)));
+}
+
+static int overflow_of(const we_node_t *n, int prop) { return (n->align_overflow >> (2 * prop)) & 3; }
+
 /* Lot 109: a px value up to px_max (a percentage up to 2000) */
 static int parse_dim_max(const char *v, int len, int px_max, int *number, int *percent) {
     int end = len, h;
@@ -4983,7 +5004,14 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
                w_eq(prop, "align-items") || w_eq(prop, "align-self") ||
                w_eq(prop, "justify-items") || w_eq(prop, "justify-self")) {
         int distribution = w_eq(prop, "justify-content") || w_eq(prop, "align-content");
-        int value = parse_pack(v, vl, distribution, 1);
+        int value = parse_pack(v, vl, distribution, 1), overflow = WE_OVF_NONE;
+        int prop_id = w_eq(prop, "justify-content") ? WE_OVF_JC : w_eq(prop, "align-content") ? WE_OVF_AC :
+                      w_eq(prop, "align-items") ? WE_OVF_AI : w_eq(prop, "align-self") ? WE_OVF_AS :
+                      w_eq(prop, "justify-items") ? WE_OVF_JI : WE_OVF_JS;
+        {   /* Lot 126: safe / unsafe before a position */
+            int a[4], lengths[4], c = tokens(v, vl, a, lengths);
+            if (c == 2) parse_overflow(v, a, lengths, c, 0, &value, &overflow);   /* a refused value stores nothing */
+        }
         if ((w_eq(prop, "align-items") || w_eq(prop, "align-self")) &&
             (value_is(v, vl, "baseline") || value_is(v, vl, "first baseline"))) value = WE_PACK_BASELINE;
         if ((w_eq(prop, "align-items") || w_eq(prop, "align-self")) && value_is(v, vl, "last baseline"))
@@ -4993,22 +5021,28 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
          * on align-self it would mean stretch, not auto, so it stays refused */
         if (!w_eq(prop, "align-self") && !w_eq(prop, "justify-self") && value_is(v, vl, "normal")) value = 0;
         if (value < 0) diag(d, "alignment refused", -1);
-        else if (w_eq(prop, "justify-content")) n->justify_content = (uint8_t)value;
-        else if (w_eq(prop, "align-content")) n->align_content = (uint8_t)value;
-        else if (w_eq(prop, "align-items")) n->align_items = (uint8_t)value;
-        else if (w_eq(prop, "align-self")) n->align_self = (uint8_t)value;
-        else if (w_eq(prop, "justify-items")) n->justify_items = (uint8_t)value;
-        else n->justify_self = (uint8_t)value;
+        else {
+            set_overflow(n, prop_id, overflow);
+            if (prop_id == WE_OVF_JC) n->justify_content = (uint8_t)value;
+            else if (prop_id == WE_OVF_AC) n->align_content = (uint8_t)value;
+            else if (prop_id == WE_OVF_AI) n->align_items = (uint8_t)value;
+            else if (prop_id == WE_OVF_AS) n->align_self = (uint8_t)value;
+            else if (prop_id == WE_OVF_JI) n->justify_items = (uint8_t)value;
+            else n->justify_self = (uint8_t)value;
+        }
     } else if (w_eq(prop, "place-items") || w_eq(prop, "place-content") || w_eq(prop, "place-self")) {
         /* Lot 78: place-* sets the block axis then the inline axis; one
-         * keyword copies to both. place-content allows distribution. */
+         * keyword copies to both. place-content allows distribution.
+         * Lot 126: each value may carry safe / unsafe before a position. */
         int a[4], lengths[4], c = tokens(v, vl, a, lengths);
         int distribution = w_eq(prop, "place-content");
-        int first, second;
-        if (c < 1 || c > 2) { diag(d, "place alignment refused", -1); }
-        else {
+        int first, second = -1, o1 = WE_OVF_NONE, o2 = WE_OVF_NONE;
+        int used = parse_overflow(v, a, lengths, c, 0, &first, &o1), sidx = used ? 2 : 1;
+        if (c < 1 || c > 4 || tokens_more(v, vl, a, lengths, c) || sidx < c - 2) {
+            diag(d, "place alignment refused", -1);
+        } else {
             /* align-* axis allows stretch; justify-content does not. */
-            first = parse_pack(v + a[0], lengths[0], distribution, 1);
+            if (!used) first = parse_pack(v + a[0], lengths[0], distribution, 1);
             /* Lot 124: normal, the initial value of the container longhands
              * (Lot 123), on place-items and place-content; place-self still
              * refuses it (normal would be stretch there, not auto) */
@@ -5019,21 +5053,27 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
                 if (value_is(v + a[0], lengths[0], "last baseline")) first = WE_PACK_LAST_BASELINE;
             }
             if (w_eq(prop, "place-self") && value_is(v + a[0], lengths[0], "auto")) first = 0;
-            if (c == 2) {
-                second = parse_pack(v + a[1], lengths[1], distribution, 1);
-                if (!w_eq(prop, "place-self") && value_is(v + a[1], lengths[1], "normal")) second = 0;
-                if (w_eq(prop, "place-self") && value_is(v + a[1], lengths[1], "auto")) second = 0;
-            } else second = first;
+            if (sidx + 1 < c) {
+                /* two tokens left: a safe / unsafe value, else second stays refused */
+                parse_overflow(v, a, lengths, c, sidx, &second, &o2);
+            } else if (sidx < c) {
+                second = parse_pack(v + a[sidx], lengths[sidx], distribution, 1);
+                if (!w_eq(prop, "place-self") && value_is(v + a[sidx], lengths[sidx], "normal")) second = 0;
+                if (w_eq(prop, "place-self") && value_is(v + a[sidx], lengths[sidx], "auto")) second = 0;
+            } else { second = first; o2 = o1; }
             if (first < 0 || second < 0) diag(d, "place alignment refused", -1);
             else if (w_eq(prop, "place-items")) {
                 n->align_items = (uint8_t)first;
                 n->justify_items = (uint8_t)second;
+                set_overflow(n, WE_OVF_AI, o1); set_overflow(n, WE_OVF_JI, o2);
             } else if (w_eq(prop, "place-content")) {
                 n->align_content = (uint8_t)first;
                 n->justify_content = (uint8_t)second;
+                set_overflow(n, WE_OVF_AC, o1); set_overflow(n, WE_OVF_JC, o2);
             } else {
                 n->align_self = (uint8_t)first;
                 n->justify_self = (uint8_t)second;
+                set_overflow(n, WE_OVF_AS, o1); set_overflow(n, WE_OVF_JS, o2);
             }
         }
     } else if (w_eq(prop, "row-gap") || w_eq(prop, "column-gap")) {
@@ -5817,6 +5857,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->min_width_kind = n->max_width_kind = n->basis_kind = 0;
         n->justify_content = n->align_items = n->align_self = n->align_content = 0;
         n->justify_items = n->justify_self = 0;
+        n->align_overflow = 0;
         w_zero(n->line_names, sizeof(n->line_names));
         n->sub_names[0][0] = n->sub_names[1][0] = 0;
         n->auto_mode[0] = n->auto_mode[1] = n->tpl_count[0] = n->tpl_count[1] = 0;
@@ -5963,6 +6004,14 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
  * siblings and their descendants, and gives each generated box one text
  * child with the evaluated content. */
 static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo);
+
+/* Lot 126: replaced elements keep start under align-self normal in a grid */
+static int replaced_element(const we_node_t *e) {
+    static const char *const replaced[] = { "img", "input", "textarea", "select", "iframe", "video", "audio", "canvas", "object", 0 };
+    int k;
+    for (k = 0; replaced[k]; k++) if (w_eq(e->tag, replaced[k])) return 1;
+    return 0;
+}
 
 static int gen_allowed(const we_doc_t *d, int el) {
     static const char *const replaced[] = { "img", "input", "br", "textarea", "select", "iframe", "video", "audio", "canvas", "object", 0 };
@@ -10028,6 +10077,7 @@ static int collect_items(we_doc_t *d, int idx, we_track_work_t *work) {
 }
 
 static int pack_distance(int mode, int free, int index, int count);
+static int aligned_distance(int mode, int free, int index, int count, int overflow, int true_default);
 static int measure_area_height(we_doc_t *d, int idx, int outer, int depth);
 
 typedef struct {
@@ -10608,7 +10658,9 @@ static int column_geometry(we_doc_t *d, int idx, we_grid_work_t *work, int cols,
     position = cx;
     for (k = 0; k < cols; k++) {
         if (seen && !work->collapsed[0][k]) position += gx;
-        work->column_x[k] = limit_coord(position + pack_distance(n->justify_content, cw - used_width, k, cols));
+        /* Lot 126: true alignment of overflowing tracks unless safe */
+        work->column_x[k] = limit_coord(position + aligned_distance(n->justify_content, cw - used_width, k, cols,
+                                                                    overflow_of(n, WE_OVF_JC), 1));
         position += work->column[k];
         if (!work->collapsed[0][k]) seen = 1;
     }
@@ -10788,8 +10840,9 @@ static int prepare_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth)
                 receivers--;
             }
             if (seen && !(k < WE_TRACKS_MAX && work->collapsed[1][k])) position += gy;
-            work->row_y[k] = limit_coord(position + (stretch_rows ? 0 :
-                pack_distance(n->align_content, fixed_height - used_height, k, rows)));
+            work->row_y[k] = limit_coord(position + (stretch_rows ? 0 :   /* Lot 126: true unless safe */
+                aligned_distance(n->align_content, fixed_height >= 0 ? fixed_height - used_height : 0, k, rows,
+                                 overflow_of(n, WE_OVF_AC), 1)));
             work->height[k] += extra;
             position += work->height[k];
             if (!(k < WE_TRACKS_MAX && work->collapsed[1][k])) seen = 1;
@@ -10853,11 +10906,20 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
         int r = work->row[k], c = work->col[k], width, height, child_width, child_height;
         int horizontal = child->justify_self ? child->justify_self : n->justify_items;
         int vertical = child->align_self ? child->align_self : n->align_items;
+        /* Lot 126: unsafe aligns an overflowing grid item truly; without it
+         * the item stays at the start of its area */
+        int h_over = child->justify_self ? overflow_of(child, WE_OVF_JS) : overflow_of(n, WE_OVF_JI);
+        int v_over = child->align_self ? overflow_of(child, WE_OVF_AS) : overflow_of(n, WE_OVF_AI);
         int x, y, assigned_h = -1;
         if (r < 0) continue;
         /* A subgrid ignores self-alignment on its subgridded axes (columns:
          * grid_item_width keeps the full track width). */
         if (subgrid_on(items->node[k], 1)) vertical = WE_PACK_STRETCH;
+        /* Lot 126: align-self normal stretches a non-replaced grid item
+         * (CSS Box Alignment 6.1, Grid 11.3); its auto height takes the
+         * area below. A replaced element or an item with a preferred
+         * aspect ratio keeps start (Grid 6.2). */
+        else if (vertical == WE_PACK_UNSET && !replaced_element(child) && !child->aspect_num) vertical = WE_PACK_STRETCH;
         width = work->column_x[c + child->grid_col_span - 1] + work->column[c + child->grid_col_span - 1] - work->column_x[c];
         if (n->masonry == 2) width = work->item_w[k];
         height = work->row_y[r + child->grid_row_span - 1] + work->height[r + child->grid_row_span - 1] - work->row_y[r];
@@ -10874,7 +10936,7 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
         if (!(child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) && vertical == WE_PACK_STRETCH && child->height < 0 && !child->height_percent) assigned_h = child_height;
         x = (n->masonry == 2 ? work->item_x[k] : work->column_x[c]) + ((child->margin_auto & (WE_AUTO_LEFT | WE_AUTO_RIGHT)) ?
             horizontal_auto(child, width, child_width - child->margin[1] - child->margin[3], 0) :
-            pack_distance(horizontal, width - child_width, 0, 1));
+            aligned_distance(horizontal, width - child_width, 0, 1, h_over, 0));
         if (child->margin_auto & (WE_AUTO_TOP | WE_AUTO_BOTTOM)) {
             int free = height > child_height ? height - child_height : 0;
             y = work->row_y[r] + ((child->margin_auto & WE_AUTO_TOP) ?
@@ -10884,7 +10946,7 @@ static int layout_grid(we_doc_t *d, int idx, int cx, int cy, int cw, int depth) 
         else if (vertical == WE_PACK_LAST_BASELINE) {
             int end = r + child->grid_row_span - 1;
             y = work->row_y[end] + work->height[end] - work->ldescent[end] - work->baseline[k];
-        } else y = work->row_y[r] + pack_distance(vertical, height - child_height, 0, 1);
+        } else y = work->row_y[r] + aligned_distance(vertical, height - child_height, 0, 1, v_over, 0);
         {
             int child_idx = items->node[k];
             int16_t saved = containing_height[child_idx];
@@ -11075,6 +11137,16 @@ static int true_distance(int mode, int free, int index, int count) {
     if (free >= 0) return pack_distance(mode, free, index, count);
     if (mode == WE_PACK_CENTER) return free / 2;
     return mode == WE_PACK_END || mode == WE_PACK_FLEX_END ? free : 0;
+}
+
+/* Lot 126: the overflow position decides how an overflowing subject (free
+ * < 0) is aligned: safe falls back to start, unsafe aligns it truly; with
+ * neither keyword the default of the caller applies (true for flex items,
+ * flex lines and grid tracks, start for grid items). In a grid, offset 0
+ * is the start; flex callers turn safe into start before their mirrors. */
+static int aligned_distance(int mode, int free, int index, int count, int overflow, int true_default) {
+    if (free < 0 && (overflow == WE_OVF_SAFE || (overflow == WE_OVF_NONE && !true_default))) return 0;
+    return true_distance(mode, free, index, count);
 }
 
 static int measure_area_height(we_doc_t *d, int idx, int outer, int depth) {
@@ -11333,7 +11405,7 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
     we_node_t *n = &d->nodes[idx];
     we_track_work_t *work = &track_work[depth];
     int vertical = n->flex_dir != 0, main, cross_available, gap, cross_gap, lines, cross_total;
-    int k, extent = 0, wrap, stretch_lines, justify, pack_lines;
+    int k, extent = 0, wrap, stretch_lines, justify, pack_lines, cross_over;
     int group_first = WE_NO_BASELINE, group_last = WE_NO_BASELINE;
     int item_first = WE_NO_BASELINE, item_last = WE_NO_BASELINE;
     prepare_flex(d, idx, cw, depth, count);
@@ -11355,6 +11427,11 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
     if (n->flex_reverse && justify == WE_PACK_START) justify = WE_PACK_END;
     else if (n->flex_reverse && justify == WE_PACK_END) justify = WE_PACK_START;
     pack_lines = n->align_content;
+    /* Lot 126: the lines of a multi-line container with a definite cross
+     * size align truly when they overflow it (cross_over < 0); safe makes
+     * them start (before the wrap-reverse swap below) */
+    cross_over = n->flex_wrap && cross_available >= 0 && cross_total > cross_available ? cross_available - cross_total : 0;
+    if (cross_over < 0 && overflow_of(n, WE_OVF_AC) == WE_OVF_SAFE) pack_lines = WE_PACK_START;
     if (n->flex_wrap == 2 && pack_lines == WE_PACK_START) pack_lines = WE_PACK_END;
     else if (n->flex_wrap == 2 && pack_lines == WE_PACK_END) pack_lines = WE_PACK_START;
     for (k = 0; k < lines; k++) {
@@ -11363,10 +11440,11 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
         int main_free = main > line->used ? main - line->used : 0;
         int extra = stretch_lines ? cross_free * (k + 1) / lines - cross_free * k / lines : 0;
         int cross_start = extent + (stretch_lines ? cross_free * k / lines :
-            pack_distance(pack_lines, cross_free, k, lines));
+            true_distance(pack_lines, cross_over < 0 ? cross_over : cross_free, k, lines));
         int j, line_cross = line->cross + extra;
-        int line_autos = 0, auto_share = 0, auto_rem = 0;
-        if (n->flex_wrap == 2) {
+        int line_autos = 0, auto_share = 0, auto_rem = 0, line_justify;
+        if (n->flex_wrap == 2 && cross_over < 0) cross_start = cross_available - cross_start - line_cross;   /* Lot 126 */
+        else if (n->flex_wrap == 2) {
             int limit = cross_available > cross_total ? cross_available : cross_total;
             int used = cross_start + line_cross;
             if (limit < used) limit = used;
@@ -11387,6 +11465,11 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
             if (bits & before_bit) line_autos++;
             if (bits & after_bit) line_autos++;
         }
+        /* Lot 126: safe justify-content: an overflowing line starts at the
+         * start (swapped before the reverse mirror) */
+        line_justify = justify;
+        if (main >= 0 && main < line->used && overflow_of(n, WE_OVF_JC) == WE_OVF_SAFE)
+            line_justify = n->flex_reverse ? WE_PACK_END : WE_PACK_START;
         if (line_autos && main_free > 0) {
             auto_share = main_free / line_autos;
             auto_rem = main_free % line_autos;
@@ -11409,6 +11492,9 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
                 if (!vertical && child->height < 0 && (!child->height_percent || cross_available < 0))   /* an indefinite percentage is auto */
                     cross = height_constraint(d, work->node[j], line_cross - flex_extra(child, 1), cross_available) + flex_extra(child, 1);
             }
+            /* Lot 126: safe: an item larger than its line takes the start */
+            if (line_cross < cross && (child->align_self ? overflow_of(child, WE_OVF_AS) : overflow_of(n, WE_OVF_AI)) == WE_OVF_SAFE)
+                align = WE_PACK_START;
             if (cross_auto) {
                 int free = line_cross > cross ? line_cross - cross : 0;
                 off = cross_before ? (cross_after ? free / 2 : free) : 0;
@@ -11437,7 +11523,7 @@ static int layout_flex_tracks(we_doc_t *d, int idx, int cx, int cy, int cw, int 
                     uint8_t bits = child->margin_auto;
                     int before = 0;
                     if (bits & before_bit) { before = auto_share; if (rem_left) { before++; rem_left--; } }
-                    main_start = cursor + before + true_distance(justify, main >= 0 && main < line->used ? main - line->used : main_free,
+                    main_start = cursor + before + true_distance(line_justify, main >= 0 && main < line->used ? main - line->used : main_free,
                                                                  j - line->first, line->end - line->first);
                 }
             }
