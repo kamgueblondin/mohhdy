@@ -7,6 +7,18 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 127 (26 November 2026, base fdde1fb, PR not opened)
+
+US-031 partial, phase3_complete=false. Column flex items that do not
+stretch and grid items that do not fill their area take fit-content
+(capped by the space, not the full width under start nor an uncapped
+max-content), column items are measured at that width (their own width
+and max-width too), wrapping columns size their lines from their items, and
+self-start / self-end / left / right are parsed and resolved per axis
+and direction. QEMU page /web/lot127.html (`make qemu-lot127`, CI job
+lot127-engine-self-positions), host tests test_lot127_engine.c,
+docs/lot127_plan.md; no page converted.
+
 ### Lot 126 (26 November 2026, base 3179618, PR not opened)
 
 US-031 partial, phase3_complete=false. safe and unsafe are parsed on the

@@ -8,6 +8,16 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 127 (self-start, self-end, left and right, fit-content width of column flex items and grid items; base fdde1fb, PR not opened)
+
+- ETAT_REEL: a column flex item that does not stretch (start, flex-start, end, center, a baseline, self-start / self-end, an auto margin) takes fit-content, min(max-content, max(min-content, available)): "ab" under align-self: start in a 100 px column is 16 wide (was 100), a 112 px text under end in a 40 px column wraps within 40 px (was 112 wide at x -72). Grid items that do not fill their area take fit-content capped by the area (was max-content); place-items: baseline now keeps the grid items' own width (justify-items baseline, start fallback; they filled the area).
+- ETAT_REEL: the items of a wrapping column take fit-content too, so a line is as wide as its widest item (was one 8 px character).
+- ETAT_REEL: the height of a column flex item (auto basis, content keywords, automatic minimum) is measured at the width it is laid out at: an item with width: 30px and two lines of text is 20 high (was 10, its text overflowed), max-width likewise.
+- ETAT_REEL: self-start / self-end are parsed on align-items, align-self, justify-items, justify-self and place-items / place-self, left / right on justify-content, justify-items, justify-self and the second value of place-*, with safe / unsafe; self-* follow the item's direction on the inline axis, left / right are physical there and start on the block axis (justify-content of a column).
+- Not covered (honest): vertical writing modes for left / right and self-*; legacy keywords; the overflow default of grid items stays at the start; distributed fallbacks; column baselines in wrap-reverse; fractional flex factors; flex: inherit, unset, revert; aspect-ratio transferred minimum; osui_runtime web-theme keeps the US-041 resolver; calc-size, anchor, typed attr, margin collapsing.
+- we_node_t 4692 bytes and we_doc_t 875332 (unchanged; webeng.h gains four alignment enum values). Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false. QEMU page /web/lot127.html (`make qemu-lot127`, CI job lot127-engine-self-positions); no existing page changes.
+- Detail and gaps: docs/lot127_plan.md.
+
 ## Lot 126 (safe and unsafe alignment, true alignment of flex lines and grid tracks, grid items stretched by default; base 3179618, PR not opened)
 
 - ETAT_REEL: safe and unsafe are parsed before a position (start, end, flex-start, flex-end, center) on align-items, align-self, align-content, justify-content, justify-items, justify-self and place-*: safe puts an overflowing subject at the start (an item 60 high in a 40 px line under align-items: safe center stays at y 0), unsafe aligns it truly; with neither keyword flex items and lines keep the Lot 125 true alignment and grid items keep the start.

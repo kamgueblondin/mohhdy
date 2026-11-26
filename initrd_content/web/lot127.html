@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html id="p127">
+<head><title>Lot 127 self-start, self-end, left and right, fit-content of column flex and grid items</title>
+<style>
+body { margin: 0 }
+#c127 { display: flex; flex-direction: column; width: 100px; margin-top: 20px }
+#a127 { align-self: start }
+#b127 { align-self: self-start; direction: rtl }
+#w127 { display: flex; flex-direction: column; width: 40px; margin-top: 10px; margin-left: 40px }
+#d127 { align-self: end }
+#j127 { display: flex; width: 100px; margin-top: 10px; direction: rtl; justify-content: left }
+#h127 { width: 20px; height: 10px }
+#g127 { display: grid; width: 100px; margin-top: 10px; grid-template-columns: 30px 30px; justify-content: right }
+#f127 { justify-self: left }
+#k127 { justify-self: self-end; direction: rtl }
+#gi127 { display: grid; width: 40px; margin-top: 10px; grid-template-columns: 40px }
+#r127 { justify-self: start }
+#x127 { display: flex; flex-direction: column; flex-wrap: wrap; width: 100px; height: 20px; margin-top: 10px; align-content: start }
+#m127 { display: flex; flex-direction: column; width: 100px; margin-top: 10px }
+#n127 { width: 30px; min-height: 0px }
+#o127 { width: 30px; flex-basis: 0px }
+</style></head>
+<body id="q127">
+<div id="c127"><div id="a127">ab</div><div id="b127">ab</div></div>
+<div id="w127"><div id="d127">aaaa bbbb cccc</div></div>
+<div id="j127"><div id="h127"></div></div>
+<div id="g127"><div id="f127">f</div><div id="k127">k</div></div>
+<div id="gi127"><div id="r127">rrrr rrrr rrrr</div></div>
+<div id="x127"><div id="u127">ab</div><div id="v127">abcd</div><div id="y127">abcdef</div></div>
+<div id="m127"><div id="n127">aaaa bbbb</div><div id="o127">aaaa bbbb</div></div>
+</body>
+</html>
