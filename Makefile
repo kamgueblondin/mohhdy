@@ -1862,6 +1862,12 @@ qemu-lot126: $(OS_IMAGE) pack-initrd disk
 qemu-lot127: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot127.py
 
+# Lot 128: fractional flex-grow, flex-shrink and flex factors, factors
+# summing below 1, read with web-inspect (tests/scripts/test_qemu_lot128.py)
+.PHONY: qemu-lot128
+qemu-lot128: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot128.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

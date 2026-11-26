@@ -7,6 +7,16 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 128 (26 November 2026, base 7355829, PR not opened)
+
+US-031 partial, phase3_complete=false. flex-grow, flex-shrink and the
+flex shorthand take fractional factors (hundredths), and a line whose
+unfrozen factors sum below 1 uses only that fraction of its free space
+or overflow (CSS Flexbox 9.7 step 4b). QEMU page /web/lot128.html
+(`make qemu-lot128`, CI job lot128-engine-fractional-flex), host tests
+test_lot128_engine.c, docs/lot128_plan.md; no page converted, three
+host tests converted (lot52, lot53, lot121).
+
 ### Lot 127 (26 November 2026, base fdde1fb, PR not opened)
 
 US-031 partial, phase3_complete=false. Column flex items that do not

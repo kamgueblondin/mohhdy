@@ -4842,10 +4842,31 @@ static int mode_pass;   /* lot 64: 1 while only writing-mode/direction apply */
 static int font_pass;
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl);
 
-/* Lot 121: a flex factor, an integer 0..1000 as flex-grow and flex-shrink read */
-static int flex_factor(const char *v, int len, int *out) {
-    return bounded_uint(v, len, 1000, out) == 0 || math_integer(v, len, 0, 1000, out) == 0 ? 0 : -1;
+/* Lot 128: a flex factor (CSS Flexbox 7.3, a non-negative <number>) as a
+ * whole part 0..1000 and hundredths: digits, digits.digits or .digits;
+ * further decimals are cut. A math function still gives an integer (Lot
+ * 118, rounded half up). Returns 0, or -1 when the value is refused. */
+static int flex_factor(const char *v, int len, int *out, int *frac) {
+    int dot = 0, k, digits = 0, hundredths = 0;
+    *frac = 0;
+    if (math_integer(v, len, 0, 1000, out) == 0) return 0;
+    while (dot < len && v[dot] != '.') dot++;
+    if (dot == len) return bounded_uint(v, len, 1000, out);
+    if (dot == 0) *out = 0;
+    else if (bounded_uint(v, dot, 1000, out)) return -1;
+    for (k = dot + 1; k < len; k++) {
+        if (v[k] < '0' || v[k] > '9') return -1;
+        if (digits < 2) hundredths = hundredths * 10 + v[k] - '0';
+        digits++;
+    }
+    if (!digits) return -1;
+    *frac = digits == 1 ? hundredths * 10 : hundredths;
+    return 0;
 }
+
+/* Lot 128: the used factors in hundredths (flex-grow unset is 0, flex-shrink unset 1) */
+static int grow_factor(const we_node_t *n) { return n->flex_grow < 0 ? 0 : n->flex_grow * 100 + n->grow_frac; }
+static int shrink_factor(const we_node_t *n) { return n->flex_shrink < 0 ? 100 : n->flex_shrink * 100 + n->shrink_frac; }
 
 /* Lot 121: the flex shorthand (CSS Flexbox 7.1.1): none (0 0 auto),
  * initial (0 1 auto), or <grow> [<shrink>] || <basis> with the two factors
@@ -4854,7 +4875,7 @@ static int flex_factor(const char *v, int len, int *out) {
  * through the flex-basis declaration; nothing is set when a part is refused
  * (the longhand's own diagnostic is taken back). */
 static int flex_shorthand(we_doc_t *d, we_node_t *n, const char *v, int vl) {
-    int a[4], l[4], c = tokens(v, vl, a, l), k, nums = 0, factor[2] = { 1, 1 }, basis = -1, value;
+    int a[4], l[4], c = tokens(v, vl, a, l), k, nums = 0, factor[2] = { 1, 1 }, frac[2] = { 0, 0 }, basis = -1, value, part;
     uint32_t ndiag = d->ndiag, dropped = d->diag_dropped;
     const char *bv = "0";
     int bl = 1;
@@ -4865,8 +4886,9 @@ static int flex_shorthand(we_doc_t *d, we_node_t *n, const char *v, int vl) {
          * (two factors and one basis at most) */
         for (k = 0; k < c; k++) {
             int raw;
-            if (nums < 2 && flex_factor(v + a[k], l[k], &value) == 0) {
+            if (nums < 2 && flex_factor(v + a[k], l[k], &value, &part) == 0) {
                 if (nums == 1 && basis == k - 1) return -1;   /* grow <basis> shrink */
+                frac[nums] = part;
                 factor[nums++] = value;
             } else if (basis >= 0 || (bounded_uint(v + a[k], l[k], WE_LAYOUT_MAX, &raw) == 0 && raw)) return -1;   /* a unitless basis is 0 only */
             else basis = k;
@@ -4881,6 +4903,8 @@ static int flex_shorthand(we_doc_t *d, we_node_t *n, const char *v, int vl) {
     }
     n->flex_grow = (int16_t)factor[0];
     n->flex_shrink = (int16_t)factor[1];
+    n->grow_frac = (uint8_t)frac[0];
+    n->shrink_frac = (uint8_t)frac[1];
     return 0;
 }
 
@@ -5018,10 +5042,12 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     } else if (w_eq(prop, "flex-flow")) {
         if (flex_flow(n, v, vl)) diag(d, "flex-flow refused", -1);
     } else if (w_eq(prop, "flex-grow")) {
-        if (bounded_uint(v, vl, 1000, &px) == 0 || math_integer(v, vl, 0, 1000, &px) == 0) n->flex_grow = (int16_t)px;
+        int part;   /* Lot 128: fractional factors */
+        if (flex_factor(v, vl, &px, &part) == 0) { n->flex_grow = (int16_t)px; n->grow_frac = (uint8_t)part; }
         else diag(d, "flex-grow refused", -1);
     } else if (w_eq(prop, "flex-shrink")) {
-        if (bounded_uint(v, vl, 1000, &px) == 0 || math_integer(v, vl, 0, 1000, &px) == 0) n->flex_shrink = (int16_t)px;
+        int part;
+        if (flex_factor(v, vl, &px, &part) == 0) { n->flex_shrink = (int16_t)px; n->shrink_frac = (uint8_t)part; }
         else diag(d, "flex-shrink refused", -1);
     } else if (w_eq(prop, "flex-basis")) {
         int end = vl, value;
@@ -5893,6 +5919,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         w_zero(n->length, sizeof(n->length)); n->aspect_num = 0; n->aspect_den = 1;
         n->flex_grow = -1;
         n->flex_shrink = n->flex_basis = -1;
+        n->grow_frac = n->shrink_frac = 0;
         n->basis_pct = n->basis_set = 0;
         n->min_width = n->max_width = -1;
         n->min_height = n->max_height = -1;
@@ -10384,7 +10411,7 @@ static void grid_span_minimum(const we_node_t *n, int vertical, int start, int s
     }
 }
 
-static uint32_t flex_share(uint32_t a, uint32_t b, uint32_t denominator);
+static uint32_t flex_share(uint32_t a, uint32_t b, uint64_t denominator);
 
 static void fit_auto_columns(const we_node_t *n, int cols, int width, int gap,
                              const int *minimum, int *sizes) {
@@ -11054,39 +11081,48 @@ static int grow_limit(const we_node_t *n, int containing, int vertical) {
 /* Iterative water filling: a capped grow item gives its unused share to
  * the other positive growers. Integer remainder goes in source order. */
 static void grow_line(we_doc_t *d, we_track_work_t *work, int first, int end, int free, int containing, int vertical) {
-    int pass;
+    int pass, initial = free;
     for (pass = 0; free > 0 && pass <= WE_MAX_NODES; pass++) {
-        int k, weight = 0, given = 0;
+        int k, weight = 0, given = 0, grown = 0, avail = free;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
-            if (n->flex_grow > 0 && FLEX_BASE(work, k) >= 0 && work->size[k] < grow_limit(n, containing, vertical)) weight += n->flex_grow;
+            if (grow_factor(n) > 0 && FLEX_BASE(work, k) >= 0 && work->size[k] < grow_limit(n, containing, vertical)) {
+                weight += grow_factor(n);
+                grown += work->size[k] - FLEX_BASE(work, k);
+            }
         }
         if (!weight) break;
+        /* Lot 128: unfrozen factors summing below 1 get that fraction of
+         * the initial free space in all (CSS Flexbox 9.7 step 4b), less
+         * what they already took in an earlier pass */
+        if (weight < 100 && avail > (int)flex_share((uint32_t)initial, (uint32_t)weight, 100) - grown)
+            avail = (int)flex_share((uint32_t)initial, (uint32_t)weight, 100) - grown;
+        if (avail <= 0) break;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
             int room = grow_limit(n, containing, vertical) - work->size[k], take;
-            if (n->flex_grow <= 0 || FLEX_BASE(work, k) < 0 || room <= 0) continue;
-            take = free * n->flex_grow / weight;
+            if (grow_factor(n) <= 0 || FLEX_BASE(work, k) < 0 || room <= 0) continue;
+            take = (int)flex_share((uint32_t)avail, (uint32_t)grow_factor(n), (uint32_t)weight);
             if (take > room) take = room;
             work->size[k] += take;
             given += take;
         }
-        free -= given;
         if (!given) {
-            for (k = first; k < end && free; k++) {
+            for (k = first; k < end && given < avail; k++) {
                 const we_node_t *n = &d->nodes[work->node[k]];
-                if (n->flex_grow > 0 && FLEX_BASE(work, k) >= 0 && work->size[k] < grow_limit(n, containing, vertical)) {
+                if (grow_factor(n) > 0 && FLEX_BASE(work, k) >= 0 && work->size[k] < grow_limit(n, containing, vertical)) {
                     work->size[k]++;
-                    free--;
+                    given++;
                 }
             }
         }
+        free -= given;
     }
 }
 
 /* Exact product/division without a libgcc 64-bit division dependency.
  * b <= denominator, so the quotient fits in a and therefore uint32_t. */
-static uint32_t flex_share(uint32_t a, uint32_t b, uint32_t denominator) {
+static uint32_t flex_share(uint32_t a, uint32_t b, uint64_t denominator) {
     uint64_t product = (uint64_t)a * b, remainder = 0;
     uint32_t result = 0;
     int bit;
@@ -11124,7 +11160,7 @@ static void grow_floors(we_doc_t *d, we_track_work_t *work, int first, int end, 
     for (pass = 0; pass <= end - first; pass++) {
         int used = (end - first - 1) * gap, again = 0;
         for (k = first; k < end; k++) {
-            if (d->nodes[work->node[k]].flex_grow > 0 && FLEX_BASE(work, k) >= 0) work->size[k] = FLEX_BASE(work, k);
+            if (grow_factor(&d->nodes[work->node[k]]) > 0 && FLEX_BASE(work, k) >= 0) work->size[k] = FLEX_BASE(work, k);
             used += work->size[k];
         }
         if (main > used) grow_line(d, work, first, end, main - used, main, vertical);
@@ -11138,36 +11174,59 @@ static void grow_floors(we_doc_t *d, we_track_work_t *work, int first, int end, 
  * using the original scaled bases. At most one pass per node plus rounding. */
 static void shrink_line(we_doc_t *d, we_track_work_t *work, int first, int end,
                         int deficit, int containing, int vertical) {
-    int pass;
+    int pass, initial = deficit, capped = 0;
     for (pass = 0; deficit > 0 && pass <= WE_MAX_NODES; pass++) {
-        uint32_t weight = 0;
-        int k, taken = 0;
+        uint64_t weight = 0;   /* Lot 128: hundredths of a factor times a basis, summed */
+        int k, taken = 0, factors = 0, shrunk = 0, avail = deficit;
+        capped = 0;
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
-            if (work->size[k] > line_floor(work, k, n, containing, vertical)) weight += work->shrink_weight[k];
+            if (work->size[k] > line_floor(work, k, n, containing, vertical)) {
+                weight += work->shrink_weight[k];
+                factors += shrink_factor(n);
+                shrunk += FLEX_BASE(work, k) - work->size[k];
+            } else if (!work->shrink_weight[k] && !work->size[k]) factors += shrink_factor(n);   /* a 0 basis never violates: it stays unfrozen */
         }
         if (!weight) break;
+        /* Lot 128: unfrozen factors summing below 1 take off that fraction
+         * of the initial overflow in all (CSS Flexbox 9.7 step 4b), less
+         * what they already gave; the rest overflows, as intended. When
+         * they gave more (their shares follow basis * factor, the fraction
+         * only the factors), they restart from their bases (step 4). */
+        if (factors < 100 && avail > (int)flex_share((uint32_t)initial, (uint32_t)factors, 100) - shrunk) {
+            avail = (int)flex_share((uint32_t)initial, (uint32_t)factors, 100) - shrunk;
+            capped = 1;
+            if (avail < 0) {
+                for (k = first; k < end; k++) {
+                    const we_node_t *n = &d->nodes[work->node[k]];
+                    if (work->size[k] > line_floor(work, k, n, containing, vertical)) work->size[k] = FLEX_BASE(work, k);
+                }
+                deficit += shrunk;
+                avail += shrunk;
+            }
+            if (avail <= 0) break;
+        }
         for (k = first; k < end; k++) {
             const we_node_t *n = &d->nodes[work->node[k]];
             int room = work->size[k] - line_floor(work, k, n, containing, vertical), take;
             if (room <= 0 || !work->shrink_weight[k]) continue;
-            take = (int)flex_share((uint32_t)deficit, work->shrink_weight[k], weight);
+            take = (int)flex_share((uint32_t)avail, work->shrink_weight[k], weight);
             if (take > room) take = room;
             work->size[k] -= take;
             taken += take;
         }
-        deficit -= taken;
         if (!taken) {
-            for (k = first; k < end && deficit; k++) {
+            for (k = first; k < end && taken < avail; k++) {
                 const we_node_t *n = &d->nodes[work->node[k]];
                 if (work->shrink_weight[k] && work->size[k] > line_floor(work, k, n, containing, vertical)) {
                     work->size[k]--;
-                    deficit--;
+                    taken++;
                 }
             }
         }
+        deficit -= taken;
     }
-    if (deficit) diag(d, "flex minimum prevents fit", -1);
+    if (deficit && !capped) diag(d, "flex minimum prevents fit", -1);
 }
 
 static int pack_distance(int mode, int free, int index, int count) {
@@ -11353,7 +11412,7 @@ static void prepare_flex(we_doc_t *d, int idx, int cw, int depth, int count) {
     for (k = 0; k < count; k++) {
         we_node_t *child = &d->nodes[work->node[k]];
         int basis;
-        int factor = child->flex_shrink >= 0 ? child->flex_shrink : 1;
+        int factor = shrink_factor(child);   /* Lot 128: hundredths */
         /* Lot 127: a column item's height is measured at the outer width
          * it is laid out at (9.2 step 3E: fit-content when it does not
          * stretch, its own width when it has one), not the container's */
