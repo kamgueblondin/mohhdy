@@ -4841,6 +4841,7 @@ static int mode_pass;   /* lot 64: 1 while only writing-mode/direction apply */
  * lh in line-height against the parent's line height). */
 static int font_pass;
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl);
+static int replaced_element(const we_node_t *e);   /* Lot 131 */
 
 /* Lot 128: a flex factor (CSS Flexbox 7.3, a non-negative <number>) as a
  * whole part 0..1000 and hundredths: digits, digits.digits or .digits;
@@ -5129,7 +5130,18 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
         /* Lot 81: inline-level flex and grid containers. */
         else if (value_is(v, vl, "inline-flex")) { n->display = WE_DISP_FLEX; n->inline_outer = 2; }
         else if (value_is(v, vl, "inline-grid")) { n->display = WE_DISP_GRID; n->inline_outer = 2; }
+        /* Lot 131: contents makes no box: the engine keeps the element as a
+         * display none node flagged contents, and we_style hands its
+         * children to the parent (splice_contents). Replaced elements and
+         * controls have no children to hand over: none, as in CSS Display 3,
+         * 2.5. The root element keeps refusing it (no box tree above it). */
+        else if (value_is(v, vl, "contents")) {
+            if (n->parent == 0 && w_eq(n->tag, "html")) diag(d, "contents refused on the root", -1);
+            else { n->display = WE_DISP_NONE; n->contents = !(replaced_element(n) || w_eq(n->tag, "br")); }
+        }
         else diag(d, "display refused", -1);
+        /* Lot 131: any other accepted value is a box again */
+        if (n->display != WE_DISP_NONE || value_is(v, vl, "none")) n->contents = 0;
         /* 2 marks the value set by this declaration; any other accepted value clears it. */
         if (n->inline_outer == 2) n->inline_outer = 1;
         else if (n->display != WE_DISP_FLEX && n->display != WE_DISP_GRID) n->inline_outer = 0;
@@ -6144,6 +6156,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->border_style = n->collapse_cell = 0;
         border_edges_reset(n);
         style_reset_declared(n);
+        n->contents = 0;   /* Lot 131 */
         n->item_order = 0;
         n->inset_flags = 0;
         n->offset_x = n->offset_y = n->offset_r = n->offset_b = 0;
@@ -6252,7 +6265,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
             n->line_height = (int16_t)(h / 100); n->lh_frac = (uint8_t)(h % 100); n->lh_unitless = 0;
         }
         if (n->border && n->border_color == (p ? p->color : 0)) n->border_color = n->color;
-        if (p && p->display == WE_DISP_NONE) n->display = WE_DISP_NONE;
+        if (p && p->display == WE_DISP_NONE && !p->contents) n->display = WE_DISP_NONE;   /* Lot 131: a contents parent has no box to hide it */
         /* lot 73: an inline box adds its shift to its parent's; a block starts at 0 */
         {
             int shift = n->display == WE_DISP_INLINE ? n->vshift + n->vshift_own : 0;
@@ -6282,7 +6295,7 @@ static int gen_allowed(const we_doc_t *d, int el) {
     static const char *const replaced[] = { "img", "input", "br", "textarea", "select", "iframe", "video", "audio", "canvas", "object", 0 };
     const we_node_t *e = &d->nodes[el];
     int k;
-    if (e->is_text || e->pseudo_kind || e->display == WE_DISP_NONE) return 0;
+    if (e->is_text || e->pseudo_kind || (e->display == WE_DISP_NONE && !e->contents)) return 0;   /* Lot 131: a contents element still has its ::before / ::after */
     for (k = 0; replaced[k]; k++) if (w_eq(e->tag, replaced[k])) return 0;
     return 1;
 }
@@ -6365,7 +6378,7 @@ static void gen_fill(we_doc_t *d, int idx, we_gen_t *g) {
 
 static void gen_walk(we_doc_t *d, int idx, we_gen_t *g, int depth) {
     int c;
-    if (d->nodes[idx].is_text || d->nodes[idx].display == WE_DISP_NONE || depth > WE_DEPTH_MAX) return;
+    if (d->nodes[idx].is_text || (d->nodes[idx].display == WE_DISP_NONE && !d->nodes[idx].contents) || depth > WE_DEPTH_MAX) return;   /* Lot 131: counters run through a contents element */
     counter_ops(d, idx, g);
     if (d->nodes[idx].pseudo_kind) gen_fill(d, idx, g);
     for (c = d->nodes[idx].first; c >= 0; c = d->nodes[c].next) gen_walk(d, c, g, depth + 1);
@@ -6384,6 +6397,69 @@ static void generate_content(we_doc_t *d, int count) {
     }
     w_zero(&g, sizeof(g));
     gen_walk(d, 0, &g, 0);
+}
+
+/* Lot 131: display: contents (webeng.h, dom_link). The children of a
+ * contents element become children of the nearest ancestor with a box, in
+ * place and in order (the element itself stays before them as a display
+ * none leaf), so layout, geometry and scrolling see the box tree:
+ * percentage sizes, containing blocks, flex and grid items, inline runs and
+ * table parts all follow without a second code path. The style pass reads
+ * the DOM, so we_style restores the links first (unsplice_contents). */
+enum { DL_PARENT, DL_FIRST, DL_NEXT };
+
+static int box_children(we_doc_t *d, int p, int c, int last) {
+    for (; c >= 0; c = d->dom_link[c][DL_NEXT]) {
+        if (last >= 0) d->nodes[last].next = (int16_t)c;
+        d->nodes[c].parent = (int16_t)p;
+        last = c;
+        /* the contents element stays in the list as a display none leaf, so
+         * the white space that preceded it (html_space) still reaches the
+         * line; its children follow it (its first link is still the DOM
+         * one: it is cleared once every list is rebuilt) */
+        if (d->nodes[c].contents) last = box_children(d, p, d->nodes[c].first, last);
+    }
+    return last;
+}
+
+static void splice_contents(we_doc_t *d) {
+    int i, any = 0;
+    for (i = 0; i < (int)d->nnodes; i++) {
+        d->dom_link[i][DL_PARENT] = d->nodes[i].parent;
+        d->dom_link[i][DL_FIRST] = d->nodes[i].first;
+        d->dom_link[i][DL_NEXT] = d->nodes[i].next;
+        any |= d->nodes[i].contents;
+    }
+    if (!any) return;
+    d->spliced = 1;
+    for (i = 0; i < (int)d->nnodes; i++) {
+        int last;
+        if (d->nodes[i].contents) continue;
+        last = box_children(d, i, d->dom_link[i][DL_FIRST], -1);
+        d->nodes[i].last = (int16_t)last;
+    }
+    /* a contents element is a leaf of the box tree */
+    for (i = 0; i < (int)d->nnodes; i++) if (d->nodes[i].contents) d->nodes[i].first = d->nodes[i].last = -1;
+}
+
+/* the DOM links of a node, whether or not the box tree is spliced (HTML list
+ * numbering follows the DOM owner: an ol with display: contents still owns
+ * its items) */
+static int dom_parent(const we_doc_t *d, int i) { return d->spliced ? d->dom_link[i][DL_PARENT] : d->nodes[i].parent; }
+static int dom_first(const we_doc_t *d, int i) { return d->spliced ? d->dom_link[i][DL_FIRST] : d->nodes[i].first; }
+static int dom_next(const we_doc_t *d, int i) { return d->spliced ? d->dom_link[i][DL_NEXT] : d->nodes[i].next; }
+
+/* last is not saved: drop_generated, which follows, sets it again for every
+ * source node */
+static void unsplice_contents(we_doc_t *d) {
+    int i;
+    if (!d->spliced) return;
+    for (i = 0; i < (int)d->nnodes; i++) {
+        d->nodes[i].parent = d->dom_link[i][DL_PARENT];
+        d->nodes[i].first = d->dom_link[i][DL_FIRST];
+        d->nodes[i].next = d->dom_link[i][DL_NEXT];
+    }
+    d->spliced = 0;
 }
 
 /* Generated boxes are the first and last children past source_nodes. */
@@ -6406,6 +6482,7 @@ int we_style(we_doc_t* d) {
     if (!d->css_parsed) { parse_css(d); d->css_parsed = 1; }
     track_pool_doc = d; d->ntrack_pool = 0;
     d->style_diag = d->ndiag; d->style_dropped = d->diag_dropped;   /* Lot 119 */
+    unsplice_contents(d);   /* Lot 131 */
     if (d->source_nodes) drop_generated(d);
     count = d->source_nodes = (uint16_t)d->nnodes;
     d->source_pool = (uint16_t)d->pool_used;
@@ -6424,7 +6501,11 @@ int we_style(we_doc_t* d) {
     for (i = 0; i < d->nnodes; i++) {
         we_node_t* n = &d->nodes[i];
         int side;
-        if (n->parent >= 0 && d->nodes[n->parent].display == WE_DISP_NONE) n->display = WE_DISP_NONE;
+        /* Lot 131: a contents element has no box: its children are hidden by
+         * the nearest ancestor that has one */
+        { int hp = n->parent;
+          while (hp >= 0 && d->nodes[hp].contents) hp = d->nodes[hp].parent;
+          if (hp >= 0 && d->nodes[hp].display == WE_DISP_NONE) n->display = WE_DISP_NONE; }
         /* none and hidden draw no border in either model. */
         if (n->border_style == WE_BS_NONE || n->border_style == WE_BS_HIDDEN) n->border = 0;
         /* A collapsed table has no border box of its own: its edges join
@@ -6435,6 +6516,7 @@ int we_style(we_doc_t* d) {
             n->border = 0;
         }
     }
+    splice_contents(d);   /* Lot 131 */
     return 0;
 }
 
@@ -8124,14 +8206,15 @@ static int gradient_banded;
  * it (HTML list owner numbering, direct children only). */
 static int list_ordinal(const we_doc_t *d, int idx) {
     const we_node_t *n = &d->nodes[idx];
-    const we_node_t *owner = n->parent >= 0 ? &d->nodes[n->parent] : 0;
+    int op = dom_parent(d, idx);   /* Lot 131: the DOM owner */
+    const we_node_t *owner = op >= 0 ? &d->nodes[op] : 0;
     int sibling, number, step = owner && owner->list_reversed ? -1 : 1, count = 0;
     if (!owner) return n->list_value_set ? n->list_value : 1;
-    for (sibling = owner->first; sibling >= 0; sibling = d->nodes[sibling].next)
+    for (sibling = dom_first(d, op); sibling >= 0; sibling = dom_next(d, sibling))
         if (w_eq(d->nodes[sibling].tag, "li") && d->nodes[sibling].display != WE_DISP_NONE) count++;
     number = owner->list_value_set ? owner->list_value : step < 0 ? count : 1;
     number -= step;
-    for (sibling = owner->first; sibling >= 0; sibling = d->nodes[sibling].next) {
+    for (sibling = dom_first(d, op); sibling >= 0; sibling = dom_next(d, sibling)) {
         const we_node_t *s = &d->nodes[sibling];
         if (!w_eq(s->tag, "li") || s->display == WE_DISP_NONE) { if (sibling == idx) break; continue; }
         number = s->list_value_set ? s->list_value : number + step;
@@ -13688,7 +13771,7 @@ static void stack_items(we_doc_t *d) {
     static int8_t keys[WE_MAX_ITEMS][WE_STACK_KEY];
     int i, j, k, any = 0, flat = 0;
     for (i = 0; i < (int)d->nnodes; i++)
-        if (stack_context(&d->nodes[i]) && (!d->nodes[i].absolute || stack_z(&d->nodes[i]) < 0)) any = 1;
+        if (!d->nodes[i].contents && stack_context(&d->nodes[i]) && (!d->nodes[i].absolute || stack_z(&d->nodes[i]) < 0)) any = 1;   /* Lot 131: a contents element makes no stacking context */
     for (i = 0; i < (int)d->nitems; i++)
         flat |= stack_key(d, d->item_owner[i], d->items[i].pad & WE_ITEM_OUTLINE, d->items[i].kind, keys[i]);
     if (!any) { paint_order(d, keys); return; }
@@ -14293,7 +14376,7 @@ void we_dump_dom(const we_doc_t* d, we_out_fn out, void* ctx) {
         out(ctx, n->tag);
         if (n->id[0]) { out(ctx, "#"); out(ctx, n->id); }
         if (n->cls[0]) { out(ctx, " class="); out(ctx, n->cls); }
-        out(ctx, n->display == WE_DISP_NONE ? " none" : n->display == WE_DISP_BLOCK ? " block"
+        out(ctx, n->contents ? " contents" : n->display == WE_DISP_NONE ? " none" : n->display == WE_DISP_BLOCK ? " block"
             : n->display == WE_DISP_FLEX ? " flex" : n->display == WE_DISP_GRID ? " grid"
             : n->display == WE_DISP_TABLE ? " table" : n->display == WE_DISP_ROW ? " row"
             : n->display == WE_DISP_CELL ? " cell" : " inline");
@@ -14307,7 +14390,7 @@ void we_inspect(const we_doc_t* d, int node, we_out_fn out, void* ctx) {
     n = &d->nodes[node];
     out(ctx, "inspect "); out(ctx, n->is_text ? "#text" : n->tag);
     if (n->id[0]) { out(ctx, "#"); out(ctx, n->id); }
-    out(ctx, n->display == WE_DISP_NONE ? " display none" : n->display == WE_DISP_BLOCK ? " display block"
+    out(ctx, n->contents ? " display contents" : n->display == WE_DISP_NONE ? " display none" : n->display == WE_DISP_BLOCK ? " display block"
         : n->display == WE_DISP_FLEX ? " display flex" : n->display == WE_DISP_GRID ? " display grid"
         : n->display == WE_DISP_TABLE ? " display table" : n->display == WE_DISP_ROW ? " display row"
         : n->display == WE_DISP_CELL ? " display cell" : " display inline");
