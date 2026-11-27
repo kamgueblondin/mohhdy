@@ -199,13 +199,15 @@ static void test_l52_flex_all_zero_leaves_free_space(void) {
 }
 
 /* Lot 123: plain rows have no equal slots any more; width: 100% keeps the
- * full-width item of the two refusal tests below */
+ * full-width item of the two refusal tests below. Lot 128: 0.5 is a valid
+ * factor now (0 and 50 hundredths); "1." is still refused and keeps it. */
 static void test_l52_flex_fractional_grow_refused(void) {
     const char *html =
         "<body style='margin:0'><div style='display:flex'>"
-        "<div id=a style='height:10px;width:100%;flex-grow:0.5'></div></div></body>";
+        "<div id=a style='height:10px;width:100%;flex-grow:0.5;flex-grow:1.'></div></div></body>";
     lot52_render(html, 320);
-    TEST_ASSERT_EQUAL(-1, lot52_node("a")->flex_grow);
+    TEST_ASSERT_EQUAL(0, lot52_node("a")->flex_grow);
+    TEST_ASSERT_EQUAL(50, lot52_node("a")->grow_frac);
     TEST_ASSERT_TRUE(lot52_has_diag("flex-grow refused"));
     TEST_ASSERT_EQUAL(320, lot52_node("a")->w);
 }

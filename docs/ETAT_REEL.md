@@ -8,6 +8,14 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 128 (fractional flex-grow, flex-shrink and flex factors, factors summing below 1; base 7355829, PR not opened)
+
+- ETAT_REEL: flex-grow, flex-shrink and the flex shorthand accept fractional factors (0.5, 1.25, .75, kept to hundredths): flex-grow 0.5 and 1.5 on two empty items in a 100 px row give 25 and 75 (both were refused, 0 wide); flex: 0.5 is 0.5 1 0% (was refused as a whole); flex-shrink 0.5 and 1.5 on two 80 px items in 100 px give 65 and 35 (were 50 and 50).
+- ETAT_REEL: when the unfrozen factors of a line sum below 1, only that fraction of the initial free space (or overflow) is used (CSS Flexbox 9.7 step 4b): flex: 0.25 0 0 alone in 100 px is 25 wide; an item clamped by max-width freezes and the others keep their own fraction; an intended overflow raises no "flex minimum prevents fit".
+- Not covered (honest): fractions beyond hundredths are cut; a math function still gives an integer factor; vertical writing modes for left / right and self-*; legacy keywords; the overflow default of grid items stays at the start; column baselines in wrap-reverse; flex: inherit, unset, revert; aspect-ratio transferred minimum; osui_runtime web-theme keeps the US-041 resolver; calc-size, anchor, typed attr, margin collapsing.
+- we_node_t 4692 bytes and we_doc_t 875332 (unchanged; webeng.h gains two uint8_t fields in padding). Rights and ABI unchanged; fs/initrd.c INITRD_FILE_MAX 152 -> 160 (lot128.html is the 145th initrd entry). US-031 partial, phase3_complete=false. QEMU page /web/lot128.html (`make qemu-lot128`, CI job lot128-engine-fractional-flex); no existing page changes; three host tests converted (fractional values now accepted).
+- Detail and gaps: docs/lot128_plan.md.
+
 ## Lot 127 (self-start, self-end, left and right, fit-content width of column flex items and grid items; base fdde1fb, PR not opened)
 
 - ETAT_REEL: a column flex item that does not stretch (start, flex-start, end, center, a baseline, self-start / self-end, an auto margin) takes fit-content, min(max-content, max(min-content, available)): "ab" under align-self: start in a 100 px column is 16 wide (was 100), a 112 px text under end in a 40 px column wraps within 40 px (was 112 wide at x -72). Grid items that do not fill their area take fit-content capped by the area (was max-content); place-items: baseline now keeps the grid items' own width (justify-items baseline, start fallback; they filled the area).

@@ -71,7 +71,7 @@ static void test_l53_wrap_partitions_before_shrinking(void) {
 
 static void test_l53_invalid_values_do_not_replace_prior_declarations(void) {
     const char *html =
-        "<body><div style='display:flex'><div id=a style='flex-basis:80px;flex-basis:-1px;flex-shrink:2;flex-shrink:0.5'></div>"
+        "<body><div style='display:flex'><div id=a style='flex-basis:80px;flex-basis:-1px;flex-shrink:2;flex-shrink:-0.5'></div>"
         "<div id=b style='flex-basis:999999999999px;flex-shrink:1001'></div></div></body>";
     lot52_render(html, 320);
     TEST_ASSERT_EQUAL(80, lot52_node("a")->flex_basis);

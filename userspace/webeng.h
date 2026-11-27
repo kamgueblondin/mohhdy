@@ -427,6 +427,7 @@ typedef struct {
     int16_t flex_basis, basis_pct, flex_shrink;
     uint8_t basis_set;
     int16_t flex_grow;         /* -1: legacy equal flex slots, 0..1000 explicit */
+    uint8_t grow_frac, shrink_frac; /* Lot 128: hundredths of flex-grow / flex-shrink (0.5 is 0 and 50) */
     int16_t row_size[WE_TRACKS_MAX]; /* -1: 1fr, otherwise pixels */
     int16_t min_width, max_width;   /* -1: unset, content-box px */
     int16_t min_height, max_height; /* -1: unset; percent values use flags */
