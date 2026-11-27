@@ -6033,6 +6033,71 @@ static void font_pass_run(we_doc_t *d, we_node_t *n, int match, int pseudo, int 
     }
 }
 
+/* Lot 130: a second style pass (a container query re-style, a viewport unit
+ * re-style, wf_jslayout) must start from the same initial style as the first.
+ * Everything below was only ever written by a declaration, so the parse-time
+ * zero state hid the leak: a rule that matched in the first pass (an
+ * @container block that no longer matches after a resize) kept its margin,
+ * padding, border, background, flex and grid settings, shadows, transforms,
+ * gradients, counters and so on. Each field returns to its parse-time value. */
+static void style_reset_declared(we_node_t *n) {
+    static const we_transform_t no_tf;
+    static const we_shadow_t no_shadow;
+    int k, j;
+    w_zero(n->margin, sizeof(n->margin));
+    w_zero(n->padding, sizeof(n->padding));
+    n->border = 0;
+    n->gap = 0;
+    n->bg = 0;
+    n->has_bg = 0;
+    n->flex_dir = 0;
+    n->flex_wrap = 0;
+    n->float_side = 0;
+    n->grid_cols = 0;
+    n->grid_rows = 0;
+    n->own_edges = 0;
+    n->deco_clone = 0;
+    n->min_pct = 0;
+    n->max_pct = 0;
+    w_zero(n->auto_at, sizeof(n->auto_at));
+    w_zero(n->auto_count, sizeof(n->auto_count));
+    for (k = 0; k < 2; k++) for (j = 0; j < WE_TRACKS_MAX; j++) n->tpl_size[k][j] = 0;
+    for (k = 0; k < 2; k++) for (j = 0; j < WE_TRACKS_MAX; j++) n->tpl_floor[k][j] = 0;
+    for (k = 0; k < 2; k++) for (j = 0; j < WE_TRACKS_MAX; j++) n->tpl_cap[k][j] = 0;
+    w_zero(n->track_calc, sizeof(n->track_calc));
+    w_zero(n->areas, sizeof(n->areas));
+    for (k = 0; k < 4; k++) n->edge_color[k] = 0;
+    n->user_select = 0;
+    n->pointer_events = 0;
+    n->accent = 0;
+    n->caret_set = 0;
+    n->caret = 0;
+    n->scroll_m_set = 0;
+    n->scroll_p_set = 0;
+    w_zero(n->scroll_m, sizeof(n->scroll_m));
+    w_zero(n->scroll_p, sizeof(n->scroll_p));
+    for (k = 0; k < WE_TF_MAX; k++) n->tf[k] = no_tf;
+    n->outline_color = 0;
+    for (k = 0; k < WE_SHADOWS_MAX; k++) n->shadow[k] = no_shadow;
+    n->deco_color = 0;
+    for (k = 0; k < 8; k++) n->spacing_value[k] = 0;
+    n->grad_count = 0;
+    n->grad_shape = 0;
+    n->grad_corner = 0;
+    n->grad_frac = 0;
+    n->grad_repeat = 0;
+    n->grad_at_pct = 0;
+    n->grad_angle = 0;
+    w_zero(n->grad_at, sizeof(n->grad_at));
+    w_zero(n->grad_size, sizeof(n->grad_size));
+    w_zero(n->grad_pos, sizeof(n->grad_pos));
+    for (k = 0; k < WE_GRAD_STOPS; k++) n->grad_color[k] = 0;
+    n->content_off = 0;
+    n->content_len = 0;
+    w_zero(n->counter_off, sizeof(n->counter_off));
+    w_zero(n->counter_len, sizeof(n->counter_len));
+}
+
 static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) {
     {
         const we_node_t* p = n->parent >= 0 ? &d->nodes[n->parent] : 0;
@@ -6078,6 +6143,7 @@ static void style_node(we_doc_t *d, we_node_t *n, int i, int match, int pseudo) 
         n->table_fixed = 0; n->box_scroll_y = n->box_scroll_x = n->box_cw = 0; n->accent_set = n->appearance = 0;
         n->border_style = n->collapse_cell = 0;
         border_edges_reset(n);
+        style_reset_declared(n);
         n->item_order = 0;
         n->inset_flags = 0;
         n->offset_x = n->offset_y = n->offset_r = n->offset_b = 0;

@@ -8,6 +8,14 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 130 (a style pass starts from the full initial style, img padding divide error; base 209af85, PR not opened)
+
+- ETAT_REEL: every style pass after the first (container query settling, viewport-unit re-style, we_style called again by the page scripts) gives each node the bytes of a first pass: 52 fields that only a declaration wrote (margin, padding, border, gap, background, flex-direction and wrap, float, min and max width in percent, grid templates, shadows, transforms, gradients, edge colours, counters...) kept an earlier pass's value on 209af85. A page with nested container queries (an inner container sized by a rule on the outer one) kept the inner rule's margin, padding, background and flex settings: #z1 at 30 30, 40 x 20 instead of 0 0, 100 x 10.
+- ETAT_REEL: scroll_paint_x no longer divides by zero for a box narrower than its padding: an img (a 40 x 10 placeholder) with padding 0 25px or padding 5% stopped the guest with a divide error.
+- Not covered (honest): @media is evaluated once in parse_css (a repeated we_style after we_set_media keeps it); an img's padding does not enlarge its placeholder; revert-layer; the earlier lots' list (vertical writing modes for left / right and self-*, legacy keywords, grid overflow default, wrap-reverse column baselines, aspect-ratio transferred minimum).
+- we_node_t 4692 bytes and we_doc_t 875332 (unchanged, webeng.h unchanged). Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false. QEMU page /web/lot130.html (`make qemu-lot130`, CI job lot130-engine-restyle-initial-style); no existing page changes; no host test converted.
+- Detail and gaps: docs/lot130_plan.md.
+
 ## Lot 129 (CSS-wide keywords inherit, initial, unset and revert on the layout properties; base d644827, PR not opened)
 
 - ETAT_REEL: inherit, initial, unset and revert apply on flex, flex-grow, flex-shrink, flex-basis, flex-direction, flex-wrap, flex-flow, order, the six alignment longhands and place-*, gap, row-gap, column-gap, width, height, min-width, max-width, min-height, max-height and box-sizing (26 were refused with a diagnostic, width ignored): flex: inherit under flex: 2 3 4px gives 150 and 150 next to a 2 3 4px item (was 8 and 292); flex-flow: inherit under a column stacks (was a row); width: inherit takes the parent's 100 px (was auto, 8); max-width: revert is none (stayed 30 px); box-sizing: inherit keeps border-box.

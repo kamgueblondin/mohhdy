@@ -190,7 +190,10 @@ static void scroll_paint_x(we_doc_t *d, int idx, int ybar) {
     if (d->nitems + 2 > WE_MAX_ITEMS) return;
     view = scroll_view_w(n);
     content = n->box_cw;
-    if (content <= view || !scroll_xtrack(d, idx, ybar, &tx, &ty, &tw)) return;
+    /* Lot 130: content 0 is a box that does not scroll along x; a box narrower
+     * than its own padding (an img, a fixed 40 px placeholder with padding:0 25px)
+     * has a negative view, so content <= view alone let 0 through to the divide */
+    if (content <= 0 || content <= view || !scroll_xtrack(d, idx, ybar, &tx, &ty, &tw)) return;
     max_scroll = content - view;
     thumb_w = view * tw / content;
     if (thumb_w < 4) thumb_w = 4;

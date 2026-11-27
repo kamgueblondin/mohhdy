@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html id="p130">
+<head><title>Lot 130 a style pass restarts from the initial style</title>
+<style>
+body { margin: 0 }
+.x130 { container-type: inline-size }
+.y130 { container-type: inline-size }
+.h130 { height: 10px }
+#z3130 { display: flex }
+@container (min-width: 300px) { .y130 { width: 100px } }
+@container (min-width: 200px) {
+  #z1130 { margin: 30px; padding: 5px; background: #ff0000 }
+  #z2130 { border: 4px solid #0000ff; max-width: 50% }
+  #z3130 { flex-direction: column; gap: 8px }
+}
+#i130 { padding: 0 25px }
+</style></head>
+<body id="q130">
+<div id="x130" class="x130"><div id="y130" class="y130">
+<div id="z1130" class="h130"></div>
+<div id="z2130" class="h130"></div>
+<div id="z3130" class="h130"><div id="k1130" style="width:20px;height:10px"></div><div id="k2130" style="width:20px;height:10px"></div></div>
+</div></div>
+<img id="i130" alt="x">
+</body>
+</html>

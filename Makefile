@@ -1874,6 +1874,13 @@ qemu-lot128: $(OS_IMAGE) pack-initrd disk
 qemu-lot129: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot129.py
 
+# Lot 130: a style pass restarts from the full initial style (nested container
+# queries settling), and an img with padding wider than itself, read with
+# web-inspect (tests/scripts/test_qemu_lot130.py)
+.PHONY: qemu-lot130
+qemu-lot130: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot130.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py
