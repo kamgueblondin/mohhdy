@@ -7,6 +7,17 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 130 (27 November 2026, base 209af85, PR not opened)
+
+US-031 partial, phase3_complete=false. A style pass after the first
+(container query settling, viewport-unit re-style, we_style called
+again) starts from the full initial style: 52 fields only a declaration
+wrote kept an earlier pass's value. scroll_paint_x no longer divides by
+zero for an img with padding wider than itself. QEMU page
+/web/lot130.html (`make qemu-lot130`, CI job
+lot130-engine-restyle-initial-style), host tests test_lot130_engine.c,
+docs/lot130_plan.md; no page converted, no host test converted.
+
 ### Lot 129 (27 November 2026, base d644827, PR not opened)
 
 US-031 partial, phase3_complete=false. The CSS-wide keywords inherit,
