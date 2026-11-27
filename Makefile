@@ -1868,6 +1868,12 @@ qemu-lot127: $(OS_IMAGE) pack-initrd disk
 qemu-lot128: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot128.py
 
+# Lot 129: the CSS-wide keywords inherit, initial, unset and revert on the
+# layout properties, read with web-inspect (tests/scripts/test_qemu_lot129.py)
+.PHONY: qemu-lot129
+qemu-lot129: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot129.py
+
 .PHONY: qemu-lot76
 qemu-lot76: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot76.py

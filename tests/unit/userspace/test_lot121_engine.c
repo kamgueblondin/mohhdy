@@ -100,7 +100,7 @@ static void test_l121_flex_shorthand(void) {
 static void test_l121_flex_refused(void) {
     static const char *const bad[] = {
         "1 10px 2", "a", "1 2 3", "1 2 3px 4", "10px 20px", "none 1", "auto auto", "-1", "1001",
-        "1 1 1 1", "1 2 0 0", "1.", "red", "1 calc(1px + )", "0 0 0 0", "inherit", "unset"
+        "1 1 1 1", "1 2 0 0", "1.", "red", "1 calc(1px + )", "0 0 0 0", "revert-layer", "inherits"
     };
     unsigned k;
     for (k = 0; k < sizeof(bad) / sizeof(bad[0]); k++) {

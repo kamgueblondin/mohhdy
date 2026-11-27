@@ -8,6 +8,14 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 129 (CSS-wide keywords inherit, initial, unset and revert on the layout properties; base d644827, PR not opened)
+
+- ETAT_REEL: inherit, initial, unset and revert apply on flex, flex-grow, flex-shrink, flex-basis, flex-direction, flex-wrap, flex-flow, order, the six alignment longhands and place-*, gap, row-gap, column-gap, width, height, min-width, max-width, min-height, max-height and box-sizing (26 were refused with a diagnostic, width ignored): flex: inherit under flex: 2 3 4px gives 150 and 150 next to a 2 3 4px item (was 8 and 292); flex-flow: inherit under a column stacks (was a row); width: inherit takes the parent's 100 px (was auto, 8); max-width: revert is none (stayed 30 px); box-sizing: inherit keeps border-box.
+- ETAT_REEL: inherit copies the parent's computed fields (percentages resolve against the child's own containing block); initial is the initial value (flex 0 1 auto as flex: initial); none of these properties is inherited and the user agent sheet sets none of them, so unset and revert are initial.
+- Not covered (honest): revert-layer; the keywords on the other non-inherited properties (grid templates and placement, margins, padding, insets, display...); all: in the page engine; vertical writing modes for left / right and self-*; legacy keywords; the overflow default of grid items; column baselines in wrap-reverse; aspect-ratio transferred minimum; osui_runtime web-theme keeps the US-041 resolver; calc-size, anchor, typed attr, margin collapsing.
+- we_node_t 4692 bytes and we_doc_t 875332 (unchanged, webeng.h unchanged). Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false. QEMU page /web/lot129.html (`make qemu-lot129`, CI job lot129-engine-css-wide-keywords); no existing page changes; one host test converted (lot121: inherit and unset leave the refused flex list).
+- Detail and gaps: docs/lot129_plan.md.
+
 ## Lot 128 (fractional flex-grow, flex-shrink and flex factors, factors summing below 1; base 7355829, PR not opened)
 
 - ETAT_REEL: flex-grow, flex-shrink and the flex shorthand accept fractional factors (0.5, 1.25, .75, kept to hundredths): flex-grow 0.5 and 1.5 on two empty items in a 100 px row give 25 and 75 (both were refused, 0 wide); flex: 0.5 is 0.5 1 0% (was refused as a whole); flex-shrink 0.5 and 1.5 on two 80 px items in 100 px give 65 and 35 (were 50 and 50).
