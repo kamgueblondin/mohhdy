@@ -4927,6 +4927,130 @@ static int flex_flow(we_node_t *n, const char *v, int vl) {
     return 0;
 }
 
+/* Lot 129: the CSS-wide keywords on the layout properties. Each property
+ * names the groups of fields its value is stored in; inherit copies them
+ * from the parent (the initial values on the root), initial, unset and
+ * revert store the initial values (none of these properties is inherited
+ * and the user agent sheet sets none of them, so unset and revert are
+ * initial). revert-layer stays refused by the property itself. */
+enum {
+    WE_WIDE_GROW = 1 << 0, WE_WIDE_SHRINK = 1 << 1, WE_WIDE_BASIS = 1 << 2, WE_WIDE_DIR = 1 << 3,
+    WE_WIDE_WRAP = 1 << 4, WE_WIDE_ORDER = 1 << 5, WE_WIDE_JC = 1 << 6, WE_WIDE_AC = 1 << 7,
+    WE_WIDE_AI = 1 << 8, WE_WIDE_AS = 1 << 9, WE_WIDE_JI = 1 << 10, WE_WIDE_JS = 1 << 11,
+    WE_WIDE_ROW_GAP = 1 << 12, WE_WIDE_COL_GAP = 1 << 13, WE_WIDE_WIDTH = 1 << 14, WE_WIDE_HEIGHT = 1 << 15,
+    WE_WIDE_MIN_W = 1 << 16, WE_WIDE_MAX_W = 1 << 17, WE_WIDE_MIN_H = 1 << 18, WE_WIDE_MAX_H = 1 << 19,
+    WE_WIDE_BOX = 1 << 20
+};
+
+static uint32_t wide_groups(const char *prop) {
+    static const struct { const char *name; uint32_t groups; } table[] = {
+        { "flex", WE_WIDE_GROW | WE_WIDE_SHRINK | WE_WIDE_BASIS }, { "flex-grow", WE_WIDE_GROW },
+        { "flex-shrink", WE_WIDE_SHRINK }, { "flex-basis", WE_WIDE_BASIS },
+        { "flex-flow", WE_WIDE_DIR | WE_WIDE_WRAP }, { "flex-direction", WE_WIDE_DIR },
+        { "flex-wrap", WE_WIDE_WRAP }, { "order", WE_WIDE_ORDER },
+        { "justify-content", WE_WIDE_JC }, { "align-content", WE_WIDE_AC },
+        { "align-items", WE_WIDE_AI }, { "align-self", WE_WIDE_AS },
+        { "justify-items", WE_WIDE_JI }, { "justify-self", WE_WIDE_JS },
+        { "place-content", WE_WIDE_AC | WE_WIDE_JC }, { "place-items", WE_WIDE_AI | WE_WIDE_JI },
+        { "place-self", WE_WIDE_AS | WE_WIDE_JS },
+        { "gap", WE_WIDE_ROW_GAP | WE_WIDE_COL_GAP }, { "row-gap", WE_WIDE_ROW_GAP },
+        { "column-gap", WE_WIDE_COL_GAP }, { "width", WE_WIDE_WIDTH }, { "height", WE_WIDE_HEIGHT },
+        { "min-width", WE_WIDE_MIN_W }, { "max-width", WE_WIDE_MAX_W },
+        { "min-height", WE_WIDE_MIN_H }, { "max-height", WE_WIDE_MAX_H },
+        { "box-sizing", WE_WIDE_BOX }
+    };
+    unsigned k;
+    for (k = 0; k < sizeof(table) / sizeof(table[0]); k++) if (w_eq(prop, table[k].name)) return table[k].groups;
+    return 0;
+}
+
+/* the initial values: the flex factors and basis as flex: initial (0 1
+ * auto, Lot 121) stores them, the others as the style reset does */
+static void wide_initial(we_node_t *t) {
+    t->flex_grow = 0; t->grow_frac = 0;
+    t->flex_shrink = 1; t->shrink_frac = 0;
+    t->flex_basis = -1; t->basis_pct = 0; t->basis_set = 1; t->basis_content = 0; t->basis_kind = 0;
+    t->flex_dir = 0; t->flex_reverse = 0; t->flex_wrap = 0; t->item_order = 0;
+    t->justify_content = t->align_content = t->align_items = t->align_self = 0;
+    t->justify_items = t->justify_self = 0; t->align_overflow = 0;
+    t->row_gap = t->col_gap = -1; t->gap = 0; t->gap_set = 0; t->gap_pct[0] = t->gap_pct[1] = 0;
+    t->width = -1; t->width_pct = 0; t->width_kind = 0;
+    t->height = -1; t->height_pct = 0; t->height_percent = 0; t->height_intrinsic = 0;
+    t->min_width = -1; t->min_pct = 0; t->min_width_kind = 0;
+    t->max_width = -1; t->max_pct = 0; t->max_width_kind = 0;
+    t->min_height = -1; t->min_height_pct = 0; t->min_height_percent = 0;
+    t->max_height = -1; t->max_height_pct = 0; t->max_height_percent = 0;
+    t->border_box = 0;
+    w_zero(t->length, sizeof(t->length));
+}
+
+static int16_t wide_axis_gap(const we_node_t *n, const we_node_t *s, int value) {
+    if (value < 0 && s->gap != n->gap) value = s->gap > 0 ? s->gap : 0;
+    return (int16_t)value;
+}
+
+static void wide_copy(we_node_t *n, const we_node_t *s, uint32_t g) {
+    static const uint8_t ovf[6] = { WE_OVF_JC, WE_OVF_AC, WE_OVF_AI, WE_OVF_AS, WE_OVF_JI, WE_OVF_JS };
+    static const uint8_t slot[6] = { WE_LEN_WIDTH, WE_LEN_HEIGHT, WE_LEN_MIN_W, WE_LEN_MAX_W, WE_LEN_MIN_H, WE_LEN_MAX_H };
+    int k;
+    if (g & WE_WIDE_GROW) { n->flex_grow = s->flex_grow; n->grow_frac = s->grow_frac; }
+    if (g & WE_WIDE_SHRINK) { n->flex_shrink = s->flex_shrink; n->shrink_frac = s->shrink_frac; }
+    if (g & WE_WIDE_BASIS) {
+        n->flex_basis = s->flex_basis; n->basis_pct = s->basis_pct; n->basis_set = s->basis_set;
+        n->basis_content = s->basis_content; n->basis_kind = s->basis_kind; n->length[WE_LEN_BASIS] = s->length[WE_LEN_BASIS];
+    }
+    if (g & WE_WIDE_DIR) { n->flex_dir = s->flex_dir; n->flex_reverse = s->flex_reverse; }
+    if (g & WE_WIDE_WRAP) n->flex_wrap = s->flex_wrap;
+    if (g & WE_WIDE_ORDER) n->item_order = s->item_order;
+    if (g & WE_WIDE_JC) n->justify_content = s->justify_content;
+    if (g & WE_WIDE_AC) n->align_content = s->align_content;
+    if (g & WE_WIDE_AI) n->align_items = s->align_items;
+    if (g & WE_WIDE_AS) n->align_self = s->align_self;
+    if (g & WE_WIDE_JI) n->justify_items = s->justify_items;
+    if (g & WE_WIDE_JS) n->justify_self = s->justify_self;
+    for (k = 0; k < 6; k++) if (g & (WE_WIDE_JC << k)) set_overflow(n, ovf[k], overflow_of(s, ovf[k]));
+    /* an axis left at -1 takes the gap shorthand's value: the shorthand
+     * value goes with both axes, a single axis takes the source's value */
+    if ((g & WE_WIDE_ROW_GAP) && (g & WE_WIDE_COL_GAP)) n->gap = s->gap;
+    if (g & WE_WIDE_ROW_GAP) {
+        n->row_gap = wide_axis_gap(n, s, s->row_gap); n->gap_pct[1] = s->gap_pct[1];
+        n->gap_set = (uint8_t)((n->gap_set & ~2) | (s->gap_set & 2)); n->length[WE_LEN_ROW_GAP] = s->length[WE_LEN_ROW_GAP];
+    }
+    if (g & WE_WIDE_COL_GAP) {
+        n->col_gap = wide_axis_gap(n, s, s->col_gap); n->gap_pct[0] = s->gap_pct[0];
+        n->gap_set = (uint8_t)((n->gap_set & ~1) | (s->gap_set & 1)); n->length[WE_LEN_COL_GAP] = s->length[WE_LEN_COL_GAP];
+    }
+    if (g & WE_WIDE_WIDTH) { n->width = s->width; n->width_pct = s->width_pct; n->width_kind = s->width_kind; }
+    if (g & WE_WIDE_HEIGHT) {
+        n->height = s->height; n->height_pct = s->height_pct;
+        n->height_percent = s->height_percent; n->height_intrinsic = s->height_intrinsic;
+    }
+    if (g & WE_WIDE_MIN_W) { n->min_width = s->min_width; n->min_pct = s->min_pct; n->min_width_kind = s->min_width_kind; }
+    if (g & WE_WIDE_MAX_W) { n->max_width = s->max_width; n->max_pct = s->max_pct; n->max_width_kind = s->max_width_kind; }
+    if (g & WE_WIDE_MIN_H) {
+        n->min_height = s->min_height; n->min_height_pct = s->min_height_pct; n->min_height_percent = s->min_height_percent;
+    }
+    if (g & WE_WIDE_MAX_H) {
+        n->max_height = s->max_height; n->max_height_pct = s->max_height_pct; n->max_height_percent = s->max_height_percent;
+    }
+    for (k = 0; k < 6; k++) if (g & (WE_WIDE_WIDTH << k)) n->length[slot[k]] = s->length[slot[k]];
+    if (g & WE_WIDE_BOX) n->border_box = s->border_box;
+}
+
+static we_node_t wide_scratch;
+
+/* 1 when the value is a CSS-wide keyword that was applied */
+static int wide_keyword(we_doc_t *d, we_node_t *n, const char *prop, const char *v, int vl) {
+    uint32_t g;
+    if (!value_is(v, vl, "inherit") && !value_is(v, vl, "initial") &&
+        !value_is(v, vl, "unset") && !value_is(v, vl, "revert")) return 0;
+    g = wide_groups(prop);
+    if (!g) return 0;
+    if (value_is(v, vl, "inherit") && n->parent >= 0) wide_copy(n, &d->nodes[n->parent], g);
+    else { wide_initial(&wide_scratch); wide_copy(n, &wide_scratch, g); }
+    return 1;
+}
+
 static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const char* v, int vl) {
     char prop[40];
     int px, pct, k;
@@ -4940,6 +5064,7 @@ static void apply_decl(we_doc_t* d, we_node_t* n, const char* p, int pl, const c
     { const char *mapped = logical_property(n, prop); if (mapped != prop) w_cpy(prop, sizeof(prop), mapped, w_len(mapped)); }
     while (vl > 0 && w_space(v[vl - 1])) vl--;
     d->perf.decls_applied++;
+    if (wide_keyword(d, n, prop, v, vl)) return;   /* Lot 129 */
     if (w_eq(prop, "inset") || w_eq(prop, "inset-inline") || w_eq(prop, "inset-block") ||
         (math_slot(prop) >= WE_LEN_LEFT && math_slot(prop) <= WE_LEN_BOTTOM)) {
         if (inset_declaration(n, prop, v, vl))

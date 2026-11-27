@@ -7,6 +7,16 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 129 (27 November 2026, base d644827, PR not opened)
+
+US-031 partial, phase3_complete=false. The CSS-wide keywords inherit,
+initial, unset and revert apply on the flex, order, alignment, gap and
+box sizing properties (27 properties, refused or ignored before).
+QEMU page /web/lot129.html (`make qemu-lot129`, CI job
+lot129-engine-css-wide-keywords), host tests test_lot129_engine.c,
+docs/lot129_plan.md; no page converted, one host test converted
+(lot121).
+
 ### Lot 128 (26 November 2026, base 7355829, PR not opened)
 
 US-031 partial, phase3_complete=false. flex-grow, flex-shrink and the
