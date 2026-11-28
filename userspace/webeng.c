@@ -6422,8 +6422,85 @@ static int box_children(we_doc_t *d, int p, int c, int last) {
     return last;
 }
 
+/* Lot 132: a display: contents row or cell hands its children to a parent
+ * that cannot hold them (a table or a section gets cells, a row gets
+ * content): CSS Tables 3 9.1.2 wraps each run in an anonymous row or cell.
+ * Only what came through a contents element is wrapped (its DOM parent is
+ * not the box parent); stray children of a plain table stay refused. The
+ * anonymous boxes are nodes past the generated ones: the next we_style
+ * drops them with those (unsplice restores every list first). */
+#define ANON_PSEUDO 3   /* matches no rule, no UA default: only inheritance */
+enum { STRAY_CONTENT, STRAY_CELL };
+
+static int table_valid_child(const we_node_t *n) {
+    return n->display == WE_DISP_ROW || w_eq(n->tag, "tbody") || w_eq(n->tag, "thead") || w_eq(n->tag, "tfoot") ||
+           w_eq(n->tag, "caption") || w_eq(n->tag, "col") || w_eq(n->tag, "colgroup");
+}
+
+static int anon_skipped(const we_node_t *n) { return n->display == WE_DISP_NONE || n->absolute; }
+
+static int anon_stray(const we_doc_t *d, int p, int c, int n0, int kind, int row) {
+    const we_node_t *n = &d->nodes[c];
+    int from_contents = c >= n0 || d->dom_link[c][DL_PARENT] != p;
+    if (anon_skipped(n) || !from_contents) return 0;
+    if (kind == STRAY_CELL) return n->display == WE_DISP_CELL;
+    return n->display != WE_DISP_CELL && (row || !table_valid_child(n));
+}
+
+static int anon_node(we_doc_t *d, int p, int display) {
+    int a = new_node(d, -1);
+    if (a < 0) { diag(d, "table anonymous box budget", p); return -1; }
+    d->nodes[a].parent = (int16_t)p;
+    style_node(d, &d->nodes[a], a, p, ANON_PSEUDO);
+    d->nodes[a].display = (uint8_t)display;
+    return a;
+}
+
+/* wrap each run of strays of one kind among the children of p; what is
+ * skipped (none, absolute) between two strays goes with them. link is the
+ * slot that holds the current child (the parent's first or a sibling's next):
+ * a stray came through a contents element, whose leaf stays in the list just
+ * before it, but the walk does not rely on that */
+static void anon_wrap(we_doc_t *d, int p, int n0, int kind, int row, int display) {
+    int16_t *link = &d->nodes[p].first;
+    while (*link >= 0) {
+        int c = *link, first = c, lastc = c, after, a, k;
+        if (!anon_stray(d, p, c, n0, kind, row)) { link = &d->nodes[c].next; continue; }
+        for (;;) {
+            int q = d->nodes[lastc].next;
+            while (q >= 0 && anon_skipped(&d->nodes[q])) q = d->nodes[q].next;
+            if (q < 0 || !anon_stray(d, p, q, n0, kind, row)) break;
+            lastc = q;
+        }
+        after = d->nodes[lastc].next;
+        a = anon_node(d, p, display);
+        if (a < 0) { link = &d->nodes[lastc].next; continue; }
+        *link = (int16_t)a;
+        d->nodes[a].next = (int16_t)after;
+        if (after < 0) d->nodes[p].last = (int16_t)a;
+        d->nodes[a].first = (int16_t)first;
+        d->nodes[a].last = (int16_t)lastc;
+        d->nodes[lastc].next = -1;
+        for (k = first; k >= 0; k = d->nodes[k].next) d->nodes[k].parent = (int16_t)a;
+        link = &d->nodes[a].next;
+    }
+}
+
+static void anon_table_parts(we_doc_t *d, int n0) {
+    int i;
+    for (i = 0; i < n0; i++) {
+        const we_node_t *n = &d->nodes[i];
+        if (n->contents) continue;   /* its list runs on into the siblings of its parent */
+        if (n->display == WE_DISP_ROW) anon_wrap(d, i, n0, STRAY_CONTENT, 1, WE_DISP_CELL);
+        else if (n->display == WE_DISP_TABLE || w_eq(n->tag, "tbody") || w_eq(n->tag, "thead") || w_eq(n->tag, "tfoot")) {
+            anon_wrap(d, i, n0, STRAY_CONTENT, 0, WE_DISP_CELL);
+            anon_wrap(d, i, n0, STRAY_CELL, 0, WE_DISP_ROW);
+        }
+    }
+}
+
 static void splice_contents(we_doc_t *d) {
-    int i, any = 0;
+    int i, any = 0, n0 = (int)d->nnodes;
     for (i = 0; i < (int)d->nnodes; i++) {
         d->dom_link[i][DL_PARENT] = d->nodes[i].parent;
         d->dom_link[i][DL_FIRST] = d->nodes[i].first;
@@ -6438,6 +6515,7 @@ static void splice_contents(we_doc_t *d) {
         last = box_children(d, i, d->dom_link[i][DL_FIRST], -1);
         d->nodes[i].last = (int16_t)last;
     }
+    anon_table_parts(d, n0);   /* Lot 132 */
     /* a contents element is a leaf of the box tree */
     for (i = 0; i < (int)d->nnodes; i++) if (d->nodes[i].contents) d->nodes[i].first = d->nodes[i].last = -1;
 }

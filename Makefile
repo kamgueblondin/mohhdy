@@ -1881,6 +1881,13 @@ qemu-lot129: $(OS_IMAGE) pack-initrd disk
 qemu-lot130: $(OS_IMAGE) pack-initrd disk
 	@python3 tests/scripts/test_qemu_lot130.py
 
+# Lot 132: display: contents on table parts (a contents row or cell hands its
+# cells or content to anonymous boxes), read with web-inspect
+# (tests/scripts/test_qemu_lot132.py)
+.PHONY: qemu-lot132
+qemu-lot132: $(OS_IMAGE) pack-initrd disk
+	@python3 tests/scripts/test_qemu_lot132.py
+
 # Lot 131: display: contents (the wrapper has no box, its children belong to
 # its parent), read with web-inspect (tests/scripts/test_qemu_lot131.py)
 .PHONY: qemu-lot131
