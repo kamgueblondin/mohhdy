@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 132 (display: contents on table parts; base 845be6c, PR not opened)
+
+- ETAT_REEL: a `tr`, `td` or `th` with `display: contents` works (cells of a contents row were refused with "table child refused", the content of a contents cell with "table cell refused"): what it hands over is wrapped in anonymous rows and cells (CSS Tables 3 9.1.2), consecutive contents rows make one anonymous row, an anonymous cell has no padding and no border. Only what came through a contents element is wrapped: the stray children of a plain table stay refused.
+- Not covered (honest): anonymous boxes cannot be inspected by id; the budget is the node table (160, diagnostic "table anonymous box budget"); a whitespace-only text node before a closing tag is dropped by the parser for every element; revert-layer in an unlayered rule; @media is still evaluated once per parse; the Lot 131 list.
+- we_node_t 4692 bytes and we_doc_t 876296, both unchanged, under 1 MiB. webeng.h unchanged. Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false. QEMU page /web/lot132.html (`make qemu-lot132`, CI job lot132-engine-table-contents); no existing page changes; no host test converted.
+- Detail and gaps: docs/lot132_plan.md.
+
 ## Lot 131 (display: contents; base 0b15d23, PR not opened)
 
 - ETAT_REEL: `display: contents` is supported (it was refused with "display refused"): the element has no box, its children belong to its parent (flex and grid items, inline runs, block flow, percentages, containing blocks, table sections); its ::before and ::after and counters still work; the list owner of an `ol` stays the DOM parent. Replaced elements, controls and br compute to display none; the root element keeps refusing it ("contents refused on the root").

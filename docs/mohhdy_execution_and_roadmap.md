@@ -7,6 +7,15 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 132 (28 November 2026, base 845be6c, PR not opened)
+
+US-031 partial, phase3_complete=false. `display: contents` on a tr, td or th
+(cells and content were refused before): anonymous rows and cells are built
+for what the contents element hands over, at the end of splice_contents,
+dropped by the next pass. QEMU page /web/lot132.html (`make qemu-lot132`, CI
+job lot132-engine-table-contents), host tests test_lot132_engine.c,
+docs/lot132_plan.md; no page converted, no host test converted.
+
 ### Lot 131 (28 November 2026, base 0b15d23, PR not opened)
 
 US-031 partial, phase3_complete=false. `display: contents` (refused
