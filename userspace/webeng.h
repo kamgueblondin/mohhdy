@@ -595,6 +595,7 @@ typedef struct {
     int16_t list_value;
     uint8_t list_value_set, list_reversed, list_type_attr;
     uint8_t dir_attr;               /* lot 64: dir= hint, 0 none, 1 ltr, 2 rtl */
+    uint8_t contents;               /* Lot 131: display: contents (display is WE_DISP_NONE: no box; the children are the parent's) */
     /* Lot 62: border radii, corners top-left, top-right, bottom-right,
      * bottom-left; horizontal then vertical, px or percent of the border
      * box width / height (rad_pct bit c for x, bit 4 + c for y). */
@@ -773,6 +774,14 @@ typedef struct {
      * canvas_bg that color, painted by the first item */
     int16_t root_html, canvas_from;
     uint32_t canvas_bg;
+    /* Lot 131: display: contents. After we_style the box tree has no
+     * contents element in the way: its children hang from the nearest
+     * ancestor with a box. dom_link keeps the DOM parent, first child and
+     * next sibling of every node while spliced is 1; the next we_style
+     * restores them first (the style pass reads the DOM: selectors,
+     * inheritance). */
+    int16_t dom_link[WE_MAX_NODES][3];
+    uint8_t spliced;
 } we_doc_t;
 typedef char we_document_is_bounded[sizeof(we_doc_t) <= WE_DOCUMENT_MAX ? 1 : -1];
 

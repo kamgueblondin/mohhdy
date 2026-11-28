@@ -8,6 +8,13 @@
 
 **Role :** cette page decrit uniquement les fonctions observables dans le code et les tests **du guest**. Elle prevaut sur les diagnostics historiques et sur les specs de vision pour tout ce qui concerne QEMU i386. Les paragraphes historiques conservent les compteurs de leur livraison ; l'encadre ci-dessous decrit l'etat courant. Lexique : [vocabulaire.md](vocabulaire.md).
 
+## Lot 131 (display: contents; base 0b15d23, PR not opened)
+
+- ETAT_REEL: `display: contents` is supported (it was refused with "display refused"): the element has no box, its children belong to its parent (flex and grid items, inline runs, block flow, percentages, containing blocks, table sections); its ::before and ::after and counters still work; the list owner of an `ol` stays the DOM parent. Replaced elements, controls and br compute to display none; the root element keeps refusing it ("contents refused on the root").
+- Not covered (honest): a tr with display: contents leaves its cells directly under the table ("table child refused"); writing-mode or direction set on the contents element itself; scroller, sticky or fixed on it; @media is still evaluated once per parse; revert-layer; the earlier lots' list.
+- we_node_t 4692 bytes (a flag in padding), we_doc_t 875332 -> 876296 (DOM link table for the splice; webeng.h gains two fields), under 1 MiB. Kernel, rights and ABI unchanged. US-031 partial, phase3_complete=false. QEMU page /web/lot131.html (`make qemu-lot131`, CI job lot131-engine-display-contents); no existing page changes; no host test converted.
+- Detail and gaps: docs/lot131_plan.md.
+
 ## Lot 130 (a style pass starts from the full initial style, img padding divide error; base 209af85, PR not opened)
 
 - ETAT_REEL: every style pass after the first (container query settling, viewport-unit re-style, we_style called again by the page scripts) gives each node the bytes of a first pass: 52 fields that only a declaration wrote (margin, padding, border, gap, background, flex-direction and wrap, float, min and max width in percent, grid templates, shadows, transforms, gradients, edge colours, counters...) kept an earlier pass's value on 209af85. A page with nested container queries (an inner container sized by a rule on the outer one) kept the inner rule's margin, padding, background and flex settings: #z1 at 30 30, 40 x 20 instead of 0 0, 100 x 10.

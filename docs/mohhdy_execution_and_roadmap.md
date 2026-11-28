@@ -7,6 +7,15 @@ Le projet **MOHHDY OS** a été récupéré, compilé et validé sur l'environne
 ### Compilation
 - `make all` génère l'image binaire du noyau 32-bit Multiboot (`build/mohhdy.bin`), l'archive initrd (`my_initrd.tar`) et le disque overlay d'extension (`build/overlay.img`).
 
+### Lot 131 (28 November 2026, base 0b15d23, PR not opened)
+
+US-031 partial, phase3_complete=false. `display: contents` (refused
+before): the element makes no box and its children belong to its
+parent; splice at the end of we_style, DOM links restored by the next
+pass. QEMU page /web/lot131.html (`make qemu-lot131`, CI job
+lot131-engine-display-contents), host tests test_lot131_engine.c,
+docs/lot131_plan.md; no page converted, no host test converted.
+
 ### Lot 130 (27 November 2026, base 209af85, PR not opened)
 
 US-031 partial, phase3_complete=false. A style pass after the first
